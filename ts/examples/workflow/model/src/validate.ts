@@ -57,6 +57,11 @@ function validateScope(
 ): void {
     const nodeIds = new Set(Object.keys(nodes));
 
+    // NOTE: Binding name uniqueness is intentionally NOT validated.
+    // Duplicate bindings are a deliberate design pattern used for
+    // onError recovery (both paths produce the same binding name)
+    // and sequential overwrites.
+
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
 
@@ -123,6 +128,18 @@ function validateScope(
                 true,
             );
             validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
+
+            // W6: Verify that the loop body contains at least one
+            // branch/task target referencing @iterate or @exit.
+            // Skip this check when the loop has an onError handler,
+            // since the body may intentionally fail every iteration.
+            if (!node.onError && !bodyScopeHasSentinel(node.body.nodes)) {
+                errors.push({
+                    path: `${path}.body`,
+                    message: `Loop body must contain at least one reference to @iterate or @exit.`,
+                });
+            }
+
             if (node.next && !nodeIds.has(node.next)) {
                 errors.push({
                     path: `${path}.next`,
@@ -131,6 +148,27 @@ function validateScope(
             }
         }
     }
+}
+
+/**
+ * Check whether a set of nodes contains at least one reference to a
+ * loop sentinel (@iterate or @exit). This catches loop bodies that
+ * will always fail at runtime because they terminate without a sentinel.
+ */
+function bodyScopeHasSentinel(nodes: Record<string, WorkflowNode>): boolean {
+    for (const node of Object.values(nodes)) {
+        if (node.kind === "branch") {
+            for (const target of Object.values(node.cases)) {
+                if (target === "@iterate" || target === "@exit") return true;
+            }
+            if (node.default === "@iterate" || node.default === "@exit") {
+                return true;
+            }
+        } else if (node.kind === "task") {
+            if (node.next === "@iterate" || node.next === "@exit") return true;
+        }
+    }
+    return false;
 }
 
 // ---- Static schema compatibility ----
@@ -193,6 +231,7 @@ function checkSchemaCompat(
     producerSchema: JSONSchema,
     path: (string | number)[] | undefined,
     refDesc: string,
+    consumerType?: string | string[],
 ): string | undefined {
     if (!path || path.length === 0) {
         // Reference to the whole output; compatible by definition
@@ -203,7 +242,27 @@ function checkSchemaCompat(
     if (resolved === undefined) {
         return `${refDesc}: path ${JSON.stringify(path)} not declared in producer outputSchema`;
     }
+    // Type compatibility check: if the consumer declares a type and the
+    // producer declares a type, verify they overlap.
+    if (consumerType && resolved.type) {
+        const producerTypes = normalizeTypeSet(resolved.type);
+        const consumerTypes = normalizeTypeSet(consumerType);
+        const overlap = consumerTypes.some((ct) => producerTypes.includes(ct));
+        if (!overlap) {
+            return (
+                `${refDesc}: type mismatch: producer declares ` +
+                `${JSON.stringify(resolved.type)} but consumer expects ${JSON.stringify(consumerType)}`
+            );
+        }
+    }
     return undefined;
+}
+
+/** Normalize a JSON Schema type (string or array) to an array of type strings. */
+function normalizeTypeSet(type: unknown): string[] {
+    if (Array.isArray(type)) return type as string[];
+    if (typeof type === "string") return [type];
+    return [];
 }
 
 /**
@@ -316,6 +375,13 @@ function validateSchemaCompat(
 
         if (!inputs) continue;
 
+        // Resolve consumer types from the node's inputSchema for
+        // type compatibility checking on direct input properties.
+        const consumerInputSchema =
+            node.kind === "task" || node.kind === "loop"
+                ? node.inputSchema
+                : undefined;
+
         const refs = collectScopeRefs(inputs, `${path}.inputs`);
         for (const ref of refs) {
             const producerSchema = bindings.get(ref.name);
@@ -325,10 +391,36 @@ function validateSchemaCompat(
                 // runtime will catch unresolved refs.
                 continue;
             }
+            // Extract consumer expected type from inputSchema.
+            // Only for direct (non-nested) input properties where the
+            // entire value is a scope ref (e.g., inputs.a = { $from: ... }).
+            // Nested refs like inputs.vars.diff can't be checked because
+            // the consumer schema is for "vars" (object), not "vars.diff".
+            let consumerType: string | string[] | undefined;
+            const inputsPrefix = `${path}.inputs.`;
+            if (
+                consumerInputSchema &&
+                ref.templatePath.startsWith(inputsPrefix)
+            ) {
+                const remainder = ref.templatePath.slice(inputsPrefix.length);
+                // Only check when remainder is a simple property name (no dots)
+                if (!remainder.includes(".") && !remainder.includes("[")) {
+                    const props = consumerInputSchema.properties as
+                        | Record<string, JSONSchema>
+                        | undefined;
+                    if (props && remainder in props) {
+                        consumerType = props[remainder].type as
+                            | string
+                            | string[]
+                            | undefined;
+                    }
+                }
+            }
             const err = checkSchemaCompat(
                 producerSchema,
                 ref.path,
                 `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+                consumerType,
             );
             if (err) {
                 errors.push({ path: ref.templatePath, message: err });

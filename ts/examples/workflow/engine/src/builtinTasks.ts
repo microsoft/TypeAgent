@@ -13,7 +13,7 @@
 
 import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, resolve, relative } from "node:path";
+import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
@@ -257,6 +257,15 @@ export const llmGenerate: TaskDefinition<
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
         const model = openai.createChatModel(input.endpoint);
+        if (!model) {
+            return {
+                kind: "fail",
+                error: {
+                    message:
+                        "llm.generate requires an endpoint parameter or a configured default model",
+                },
+            };
+        }
         const result = await model.complete(input.prompt);
         if (!result.success) {
             return {
@@ -383,6 +392,30 @@ export const httpGet: TaskDefinition<
     async execute(input, ctx) {
         const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024; // 10MB
         try {
+            // Validate URL to prevent SSRF against internal services.
+            const parsed = new URL(input.url);
+            const hostname = parsed.hostname?.toLowerCase();
+            if (
+                hostname === "localhost" ||
+                hostname === "127.0.0.1" ||
+                hostname === "::1" ||
+                hostname === "0.0.0.0" ||
+                hostname === "169.254.169.254" ||
+                hostname === "[::1]" ||
+                hostname?.startsWith("10.") ||
+                hostname?.startsWith("192.168.") ||
+                hostname?.startsWith("172.16.") ||
+                hostname?.endsWith(".internal") ||
+                parsed.protocol === "file:"
+            ) {
+                return {
+                    kind: "fail",
+                    error: {
+                        message: `URL "${input.url}" references a private or reserved address`,
+                    },
+                };
+            }
+
             const resp = await fetch(input.url, {
                 ...(input.headers ? { headers: input.headers } : {}),
                 signal: ctx.signal,
@@ -401,7 +434,12 @@ export const httpGet: TaskDefinition<
                 totalBytes += value.byteLength;
                 if (totalBytes > maxBytes) {
                     reader.cancel();
-                    break;
+                    return {
+                        kind: "fail",
+                        error: {
+                            message: `Response exceeded maximum size of ${maxBytes} bytes`,
+                        },
+                    };
                 }
                 chunks.push(value);
             }
@@ -433,7 +471,7 @@ function validateFilePath(filePath: string): string {
     const allowedRoots = [process.cwd(), homedir(), tmpdir()];
     const isAllowed = allowedRoots.some((root) => {
         const rel = relative(root, resolved);
-        return !rel.startsWith("..") && !rel.startsWith("/");
+        return !rel.startsWith("..") && !isAbsolute(rel);
     });
     if (!isAllowed) {
         throw new Error(

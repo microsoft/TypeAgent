@@ -374,4 +374,224 @@ describe("validateWorkflowIR", () => {
         expect(result.valid).toBe(false);
         expect(result.errors[0].path).toContain("nodes.start");
     });
+
+    it("rejects loop body without sentinel when no onError", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    inputSchema: { type: "object" },
+                    state: {
+                        i: {
+                            schema: { type: "integer" },
+                            initial: 0,
+                        },
+                    },
+                    body: {
+                        entry: "step",
+                        nodes: {
+                            step: {
+                                kind: "task",
+                                task: "noop",
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                            },
+                        },
+                    },
+                    iterateState: {},
+                    output: { $from: "state", name: "i" },
+                    outputSchema: { type: "integer" },
+                    maxIterations: 10,
+                    bind: "out",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes("@iterate or @exit")),
+        ).toBe(true);
+    });
+
+    it("allows loop body without sentinel when onError is set", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    inputSchema: { type: "object" },
+                    state: {
+                        i: {
+                            schema: { type: "integer" },
+                            initial: 0,
+                        },
+                    },
+                    body: {
+                        entry: "step",
+                        nodes: {
+                            step: {
+                                kind: "task",
+                                task: "noop",
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                            },
+                        },
+                    },
+                    iterateState: {},
+                    output: null,
+                    outputSchema: { type: "null" },
+                    maxIterations: 10,
+                    onError: "recover",
+                    bind: "out",
+                } as any,
+                recover: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {},
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(true);
+    });
+
+    it("detects type mismatch between producer and consumer", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                producer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: { value: { type: "string" } },
+                    },
+                    inputs: {},
+                    next: "consumer",
+                    bind: "data",
+                },
+                consumer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: {
+                        type: "object",
+                        required: ["x"],
+                        properties: { x: { type: "integer" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: {
+                            $from: "scope",
+                            name: "data",
+                            path: ["value"],
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "producer",
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes("type mismatch")),
+        ).toBe(true);
+        expect(result.errors.some((e) => e.message.includes("string"))).toBe(
+            true,
+        );
+        expect(result.errors.some((e) => e.message.includes("integer"))).toBe(
+            true,
+        );
+    });
+
+    it("passes when producer and consumer types are compatible", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                producer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: { value: { type: "integer" } },
+                    },
+                    inputs: {},
+                    next: "consumer",
+                    bind: "data",
+                },
+                consumer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: {
+                        type: "object",
+                        required: ["x"],
+                        properties: { x: { type: "integer" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: {
+                            $from: "scope",
+                            name: "data",
+                            path: ["value"],
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "producer",
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(true);
+    });
+
+    it("allows type union overlap (producer: [string, null], consumer: string)", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                producer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: {
+                            value: { type: ["string", "null"] },
+                        },
+                    },
+                    inputs: {},
+                    next: "consumer",
+                    bind: "data",
+                },
+                consumer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: {
+                        type: "object",
+                        required: ["x"],
+                        properties: { x: { type: "string" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: {
+                            $from: "scope",
+                            name: "data",
+                            path: ["value"],
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "producer",
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(true);
+    });
 });

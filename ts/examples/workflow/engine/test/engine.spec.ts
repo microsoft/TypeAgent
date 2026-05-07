@@ -3350,10 +3350,10 @@ describe("WorkflowEngine (IR v1)", () => {
     });
 
     describe("http.get maxResponseBytes", () => {
-        it("truncates response body exceeding maxResponseBytes", async () => {
-            // Build a large body string
-            const bigBody = "X".repeat(500);
-
+        it("fails when response exceeds maxResponseBytes", async () => {
+            // The real http.get now returns fail (not truncated ok) when
+            // the response exceeds maxResponseBytes. Use a mock that
+            // matches the updated behavior.
             const mockHttpGet: TaskDefinition = {
                 name: "http.get",
                 inputSchema: {
@@ -3373,13 +3373,19 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 async execute(input: any) {
-                    // Simulate the streaming truncation logic:
-                    // if maxResponseBytes is set, truncate.
                     const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024;
-                    const truncated = bigBody.slice(0, maxBytes);
+                    const bodySize = 500;
+                    if (bodySize > maxBytes) {
+                        return {
+                            kind: "fail" as const,
+                            error: {
+                                message: `Response exceeded maximum size of ${maxBytes} bytes`,
+                            },
+                        };
+                    }
                     return {
                         kind: "ok" as const,
-                        output: { body: truncated, status: 200 },
+                        output: { body: "X".repeat(bodySize), status: 200 },
                     };
                 },
             };
@@ -3428,10 +3434,8 @@ describe("WorkflowEngine (IR v1)", () => {
                 input: {},
                 policy: allowAllPolicy,
             });
-            expect(result.success).toBe(true);
-            const output = result.output as { body: string; status: number };
-            expect(output.body.length).toBeLessThanOrEqual(100);
-            expect(output.status).toBe(200);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("exceeded maximum size");
         });
     });
 
@@ -4688,6 +4692,766 @@ describe("WorkflowEngine (IR v1)", () => {
                 $from: "scope",
                 name: "shouldNotResolve",
             });
+        });
+    });
+
+    describe("http.get SSRF protection", () => {
+        it("rejects localhost URLs", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "ssrfTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "http://localhost:8080/admin" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("private or reserved");
+        });
+
+        it("rejects cloud metadata endpoint", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "ssrfMetadata",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "http://169.254.169.254/latest/meta-data/" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("private or reserved");
+        });
+
+        it("rejects 127.0.0.1 addresses", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "ssrf127",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "http://127.0.0.1/secret" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("private or reserved");
+        });
+
+        it("rejects private network addresses (192.168.x)", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "ssrf192",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "http://192.168.1.1/config" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("private or reserved");
+        });
+
+        it("rejects file:// protocol", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "ssrfFile",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "file:///etc/passwd" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("private or reserved");
+        });
+    });
+
+    describe("http.get response size enforcement", () => {
+        it("returns fail when response exceeds maxResponseBytes", async () => {
+            // Use a mock that simulates a streaming response.
+            // The real http.get code streams and checks byte count.
+            // We test via the builtinTasks import directly.
+            const { httpGet } = await import("../src/builtinTasks.js");
+
+            // Mock a global fetch that returns a large streaming body
+            const originalFetch = globalThis.fetch;
+            const largeBody = "X".repeat(200);
+            const encoder = new TextEncoder();
+            const encoded = encoder.encode(largeBody);
+
+            globalThis.fetch = (async () => ({
+                status: 200,
+                body: new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(encoded);
+                        controller.close();
+                    },
+                }),
+            })) as any;
+
+            try {
+                const result = await httpGet.execute(
+                    {
+                        url: "https://example.com/large",
+                        maxResponseBytes: 50,
+                    },
+                    {
+                        runId: "test",
+                        nodeId: "test",
+                        scopePath: [],
+                        signal: new AbortController().signal,
+                    },
+                );
+                expect(result.kind).toBe("fail");
+                if (result.kind === "fail") {
+                    expect(result.error.message).toContain(
+                        "exceeded maximum size",
+                    );
+                }
+            } finally {
+                globalThis.fetch = originalFetch;
+            }
+        });
+    });
+
+    describe("error object structure", () => {
+        it("onError handler receives structured error with code/message/source", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "broken" },
+                    };
+                },
+            };
+            const captureTask: TaskDefinition = {
+                name: "test.capture",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return { kind: "ok" as const, output: input };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                captureTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "errorStructure",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "capture",
+                    },
+                    capture: {
+                        kind: "task",
+                        task: "test.capture",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            const errorObj = (result.output as any).error;
+            expect(errorObj).toBeDefined();
+            expect(errorObj.code).toBe("TASK_ERROR");
+            expect(errorObj.message).toBe("broken");
+            expect(errorObj.source).toBe("task");
+            expect(errorObj.task).toBe("test.fail");
+            expect(errorObj.node).toBe("step");
+        });
+
+        it("runtime errors have RUNTIME_ERROR code", async () => {
+            const throwTask: TaskDefinition = {
+                name: "test.throw",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    throw new Error("unexpected crash");
+                },
+            };
+            const captureTask: TaskDefinition = {
+                name: "test.capture",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return { kind: "ok" as const, output: input };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                throwTask,
+                captureTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "runtimeError",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.throw",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "capture",
+                    },
+                    capture: {
+                        kind: "task",
+                        task: "test.capture",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            const errorObj = (result.output as any).error;
+            expect(errorObj.code).toBe("RUNTIME_ERROR");
+            expect(errorObj.message).toBe("unexpected crash");
+            expect(errorObj.source).toBe("runtime");
+        });
+    });
+
+    describe("static schema type checking", () => {
+        it("detects type mismatch (producer: string, consumer: integer)", async () => {
+            const { validateWorkflowIR } = await import("workflow-model");
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "typeMismatch",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["label"],
+                            properties: { label: { type: "string" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["label"],
+                            } as Template,
+                            b: 1 as Template,
+                        },
+                        bind: "final",
+                    },
+                },
+                entry: "producer",
+                output: { $from: "scope", name: "final" } as Template,
+            };
+
+            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const validation = validateWorkflowIR(ir, tasks);
+            expect(validation.valid).toBe(false);
+            expect(validation.errors[0].message).toContain("type mismatch");
+        });
+    });
+
+    describe("loop sentinel validation", () => {
+        it("rejects loop body without sentinel at validation time", async () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "noSentinel",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                        },
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "int.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["a", "b"],
+                                        properties: {
+                                            a: { type: "integer" },
+                                            b: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["result"],
+                                        properties: {
+                                            result: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        a: 1 as Template,
+                                        b: 1 as Template,
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                        },
+                        iterateState: {},
+                        output: 0 as Template,
+                        outputSchema: { type: "integer" },
+                        maxIterations: 10,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await engine.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("@iterate or @exit");
+        });
+    });
+
+    describe("unresolved $from reference", () => {
+        it("fails with clear error for missing scope binding", async () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "missingRef",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "scope",
+                                name: "doesNotExist",
+                            } as Template,
+                            b: 1 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await engine.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("unresolved");
+            expect(result.error?.message).toContain("doesNotExist");
+        });
+    });
+
+    describe("unknown $from namespace", () => {
+        it("fails with clear error for invalid namespace", async () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "badNamespace",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "magic",
+                                name: "x",
+                            } as Template,
+                            b: 1 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await engine.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Unknown $from namespace");
+        });
+    });
+
+    describe("path projection failures", () => {
+        it("fails when projecting into a non-object value", async () => {
+            const numTask: TaskDefinition = {
+                name: "test.num",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "integer" } },
+                },
+                async execute() {
+                    return { kind: "ok" as const, output: { value: 42 } };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, numTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "badProjection",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    first: {
+                        kind: "task",
+                        task: "test.num",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: { type: "integer" } },
+                        },
+                        inputs: {},
+                        bind: "data",
+                        next: "second",
+                    },
+                    second: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value", "nested"],
+                            } as Template,
+                            b: 1 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "first",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            // Static validator catches invalid path before runtime
+            expect(result.error?.message).toContain("not declared in producer");
+        });
+    });
+
+    describe("multiple task failures without recovery", () => {
+        it("propagates first failure and includes nodeId", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "task crashed" },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, failTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "unhandledFail",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("task crashed");
+            expect(result.error?.nodeId).toBe("step");
         });
     });
 });

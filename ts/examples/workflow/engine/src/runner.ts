@@ -561,18 +561,24 @@ export class WorkflowEngine {
             let result: TaskResult;
             if (taskTimeoutMs !== undefined) {
                 let timeoutId: ReturnType<typeof setTimeout>;
+                let completed = false;
                 const timeout = new Promise<never>((_, reject) => {
                     timeoutId = setTimeout(() => {
-                        taskAbortController!.abort("Task timed out");
-                        reject(
-                            new EngineError(
-                                `Task "${node.task}" at "${nodeId}" timed out after ${taskTimeoutMs}ms`,
-                            ),
-                        );
+                        if (!completed) {
+                            taskAbortController!.abort("Task timed out");
+                            reject(
+                                new EngineError(
+                                    `Task "${node.task}" at "${nodeId}" timed out after ${taskTimeoutMs}ms`,
+                                ),
+                            );
+                        }
                     }, taskTimeoutMs);
                 });
                 result = await Promise.race([
-                    task.execute(resolvedInput, ctx),
+                    task.execute(resolvedInput, ctx).then((r) => {
+                        completed = true;
+                        return r;
+                    }),
                     timeout,
                 ]).finally(() => clearTimeout(timeoutId));
             } else {
