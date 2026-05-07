@@ -1,18 +1,28 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displayWarn } from "@typeagent/agent-sdk/helpers/display";
+import { displayStatus, displayWarn } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     CollisionEvent,
     CollisionEventKind,
     getRecentCollisionEvents,
 } from "../../collisionTelemetry.js";
+import {
+    ActionSimilarityPair,
+    ActionSimilarityScanInput,
+    ActionSimilarityScanResult,
+    ActionVectorKey,
+    computeActionSimilarity,
+} from "../../../translation/actionSimilarity.js";
+import { getAppAgentName } from "../../../translation/agentTranslators.js";
 
 // ---------------------------------------------------------------------------
 // `@collision events` — show recent events captured in the in-memory ring
@@ -344,12 +354,336 @@ function truncate(s: string, max: number): string {
     return s.slice(0, max - 1) + "…";
 }
 
+// ===========================================================================
+// `@collision similar` — multi-vector pairwise action similarity (S1 of the
+// soft-rollout plan).  Surfaces semantic collisions that the grammar / NFA
+// path can't see — actions that are the same kind of operation even when
+// their `.agr` patterns don't overlap.
+// ===========================================================================
+
+const SIMILARITY_CACHE_RELATIVE = path.join(
+    "agentCache",
+    "actionSimilarity",
+    "embeddings.json",
+);
+
+class CollisionSimilarCommandHandler implements CommandHandler {
+    public readonly description =
+        "Find semantically similar actions across agents (multi-vector embedding similarity)";
+    public readonly parameters = {
+        flags: {
+            threshold: {
+                description:
+                    "Aggregate-score threshold (0–1.3 effective range; default 0.7)",
+                char: "t",
+                type: "number",
+                default: 0.7,
+            },
+            top: {
+                description: "Maximum number of pairs to render (default 50)",
+                char: "n",
+                type: "number",
+                default: 50,
+            },
+            json: {
+                description:
+                    "Write the structured scan result to this path as JSON (in addition to rendering)",
+                type: "string",
+                optional: true,
+            },
+            "no-cache": {
+                description:
+                    "Skip the on-disk embedding cache (forces re-embed)",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const configs = systemContext.agents.getActionConfigs();
+
+        // Build inputs from every loaded action config.  Skip configs
+        // whose schema file fails to load (rare; agent registration
+        // would normally have already errored).  The embedding model is
+        // lazily created inside the engine if not provided here.
+        const inputs: ActionSimilarityScanInput[] = [];
+        const skipped: { schemaName: string; reason: string }[] = [];
+        for (const config of configs) {
+            try {
+                const actionSchemaFile =
+                    systemContext.agents.getActionSchemaFileForConfig(config);
+                inputs.push({
+                    schemaName: config.schemaName,
+                    agentName: getAppAgentName(config.schemaName),
+                    actionSchemaFile,
+                });
+            } catch (err) {
+                skipped.push({
+                    schemaName: config.schemaName,
+                    reason:
+                        err instanceof Error ? err.message : String(err),
+                });
+            }
+        }
+
+        if (inputs.length === 0) {
+            displayWarn(
+                "No agent action schemas available to scan.",
+                context,
+            );
+            return;
+        }
+
+        const cachePath = params.flags["no-cache"]
+            ? undefined
+            : resolveSimilarityCachePath(systemContext);
+
+        const compileHeader = "Embedding action vectors";
+        const scoreHeader = "Pairwise similarity";
+        displayStatus(
+            `${compileHeader}\n[0/${inputs.length}] preparing…`,
+            context,
+        );
+
+        const result = await computeActionSimilarity(inputs, {
+            threshold: params.flags.threshold ?? 0.7,
+            cachePath,
+            onProgress: (phase, index, total, label) => {
+                const header =
+                    phase === "embedding" ? compileHeader : scoreHeader;
+                displayStatus(
+                    `${header}\n[${index}/${total}]${label ? ` ${label}` : ""}`,
+                    context,
+                );
+            },
+        });
+
+        if (params.flags.json) {
+            try {
+                const absPath = path.resolve(params.flags.json);
+                fs.writeFileSync(
+                    absPath,
+                    JSON.stringify(result, null, 2),
+                );
+            } catch (err) {
+                displayWarn(
+                    `Failed to write JSON scan result to ${params.flags.json}: ${err instanceof Error ? err.message : String(err)}`,
+                    context,
+                );
+            }
+        }
+
+        const top = Math.max(1, params.flags.top ?? 50);
+        const html = renderActionSimilarityHTML(result, skipped, top);
+        const text = renderActionSimilarityText(result, skipped, top);
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: html,
+            alternates: [{ type: "text", content: text }],
+        });
+    }
+}
+
+/**
+ * Resolve the cache path for the multi-vector embeddings.  Lives under
+ * the dispatcher's instance dir so it survives session resets and is
+ * shared across sessions on the same profile (the embeddings only
+ * depend on action shape, not session state).
+ */
+function resolveSimilarityCachePath(
+    ctx: CommandHandlerContext,
+): string | undefined {
+    const root = ctx.instanceDir;
+    if (!root) return undefined;
+    return path.join(root, SIMILARITY_CACHE_RELATIVE);
+}
+
+// ---- HTML rendering ------------------------------------------------------
+
+function renderActionSimilarityHTML(
+    result: ActionSimilarityScanResult,
+    skipped: { schemaName: string; reason: string }[],
+    top: number,
+): string {
+    const C_MUTED = "#777";
+    const wrap = `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:1100px;">`;
+    const header = `<h3 style="margin:0 0 6px;font-size:14px;">Semantic action similarity (multi-vector)</h3>`;
+
+    const summaryLines = [
+        `Scanned <b>${result.actionCount}</b> action(s) across <b>${result.schemaCount}</b> schema(s)`,
+        `threshold=<code style="background:#f5f5f5;padding:1px 4px;border-radius:2px;">${result.threshold.toFixed(2)}</code>`,
+        `pairs above threshold: <b>${result.pairs.length}</b>`,
+    ].join(" · ");
+
+    const skipNote =
+        skipped.length > 0
+            ? `<div style="color:#c80;font-size:11px;margin:4px 0;">${skipped.length} schema(s) failed to load: ${skipped
+                  .map((s) => `<code>${escapeHtml(s.schemaName)}</code>`)
+                  .join(", ")}</div>`
+            : "";
+
+    if (result.pairs.length === 0) {
+        return (
+            wrap +
+            header +
+            `<div style="color:${C_MUTED};font-size:12px;margin-bottom:8px;">${summaryLines}</div>` +
+            skipNote +
+            `<div style="color:#999;font-style:italic;padding:16px 0;">No action pairs above threshold ${result.threshold.toFixed(2)}.</div>` +
+            `</div>`
+        );
+    }
+
+    const shown = result.pairs.slice(0, top);
+    const truncated =
+        result.pairs.length > shown.length
+            ? `<div style="color:${C_MUTED};font-size:11px;margin-top:6px;">…${result.pairs.length - shown.length} more pair(s) above threshold not shown (use <code>--top &lt;n&gt;</code> to see more, <code>--json &lt;path&gt;</code> for full export).</div>`
+            : "";
+
+    let cards = "";
+    for (const pair of shown) {
+        cards += renderPairCardHTML(pair);
+    }
+
+    return (
+        wrap +
+        header +
+        `<div style="color:${C_MUTED};font-size:12px;margin-bottom:8px;">${summaryLines}</div>` +
+        skipNote +
+        cards +
+        truncated +
+        `<div style="color:${C_MUTED};font-size:11px;margin-top:8px;">Per-vector score badges: <b>D</b> = description, <b>P</b> = parameters, <b>C</b> = combined description+parameters. Aggregate score weights the strongest signal heavily, with a small bonus when other signals also align.</div>` +
+        `</div>`
+    );
+}
+
+function renderPairCardHTML(pair: ActionSimilarityPair): string {
+    const accent = aggregateAccent(pair.aggregateScore);
+    const cardStyle =
+        `border:1px solid #e0e0e0;border-left:4px solid ${accent};` +
+        `border-radius:4px;padding:8px 12px;margin-bottom:8px;background:#fff;`;
+
+    const aggregateBadge =
+        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+        `font-family:monospace;font-size:12px;font-weight:600;color:#fff;background:${accent};">` +
+        pair.aggregateScore.toFixed(3) +
+        `</span>`;
+
+    const vectorBadges = (["desc", "params", "combined"] as ActionVectorKey[])
+        .map((k) => {
+            const score = pair.scores[k];
+            if (score === undefined) {
+                return `<span title="${k} vector absent on at least one side" style="display:inline-block;padding:1px 6px;border-radius:8px;font-family:monospace;font-size:10px;font-weight:600;color:#bbb;background:#f5f5f5;">${vectorLabel(k)}=—</span>`;
+            }
+            const color = vectorScoreColor(score);
+            return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-family:monospace;font-size:10px;font-weight:600;color:#fff;background:${color};">${vectorLabel(k)}=${score.toFixed(2)}</span>`;
+        })
+        .join(" ");
+
+    const headerLine =
+        `<div style="margin-bottom:6px;">${aggregateBadge} ${vectorBadges}</div>`;
+
+    const aHTML = renderSideHTML(pair.keyA, pair.descriptionA);
+    const bHTML = renderSideHTML(pair.keyB, pair.descriptionB);
+
+    return (
+        `<div style="${cardStyle}">${headerLine}` +
+        `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">${aHTML}${bHTML}</div>` +
+        `</div>`
+    );
+}
+
+function renderSideHTML(
+    key: { schemaName: string; actionName: string },
+    description: string | undefined,
+): string {
+    const C_MUTED = "#777";
+    const schema = schemaBadge(key.schemaName);
+    const action = `<code style="font-family:monospace;font-size:12px;color:#333;">${escapeHtml(key.actionName)}</code>`;
+    const desc = description
+        ? `<div style="color:#444;font-size:12px;margin-top:4px;">${escapeHtml(description)}</div>`
+        : `<div style="color:${C_MUTED};font-size:11px;font-style:italic;margin-top:4px;">(no description)</div>`;
+    return (
+        `<div style="min-width:0;">${schema} ${action}${desc}</div>`
+    );
+}
+
+function aggregateAccent(score: number): string {
+    if (score >= 1.0) return "#c44"; // very strong agreement — likely real overlap
+    if (score >= 0.85) return "#c80"; // strong
+    if (score >= 0.75) return "#36c"; // moderate
+    return "#888"; // weak (just above threshold)
+}
+
+function vectorScoreColor(score: number): string {
+    if (score >= 0.85) return "#080";
+    if (score >= 0.7) return "#36c";
+    if (score >= 0.55) return "#c80";
+    return "#aaa";
+}
+
+function vectorLabel(k: ActionVectorKey): string {
+    return k === "desc" ? "D" : k === "params" ? "P" : "C";
+}
+
+function renderActionSimilarityText(
+    result: ActionSimilarityScanResult,
+    skipped: { schemaName: string; reason: string }[],
+    top: number,
+): string[] {
+    const lines: string[] = [];
+    lines.push(
+        `Semantic action similarity: ${result.actionCount} actions / ${result.schemaCount} schemas, threshold=${result.threshold.toFixed(2)}, ${result.pairs.length} pair(s) above threshold`,
+    );
+    if (skipped.length > 0) {
+        lines.push(
+            `  (${skipped.length} schema(s) skipped: ${skipped.map((s) => s.schemaName).join(", ")})`,
+        );
+    }
+    if (result.pairs.length === 0) {
+        return lines;
+    }
+    lines.push("");
+    const shown = result.pairs.slice(0, top);
+    for (const pair of shown) {
+        const scoreParts = (
+            ["desc", "params", "combined"] as ActionVectorKey[]
+        )
+            .map((k) =>
+                pair.scores[k] !== undefined
+                    ? `${vectorLabel(k)}=${pair.scores[k]!.toFixed(2)}`
+                    : `${vectorLabel(k)}=-`,
+            )
+            .join(" ");
+        lines.push(
+            `[${pair.aggregateScore.toFixed(3)}] ${scoreParts}  ${pair.keyA.schemaName}.${pair.keyA.actionName}  ⇄  ${pair.keyB.schemaName}.${pair.keyB.actionName}`,
+        );
+        if (pair.descriptionA)
+            lines.push(`  ${pair.keyA.schemaName}: ${truncate(pair.descriptionA, 80)}`);
+        if (pair.descriptionB)
+            lines.push(`  ${pair.keyB.schemaName}: ${truncate(pair.descriptionB, 80)}`);
+        lines.push("");
+    }
+    if (result.pairs.length > shown.length) {
+        lines.push(
+            `…${result.pairs.length - shown.length} more pair(s) not shown (--top to extend, --json for full export).`,
+        );
+    }
+    return lines;
+}
+
 export function getCollisionCommandHandlers(): CommandHandlerTable {
     return {
-        description: "Inspect collision detection telemetry",
+        description:
+            "Inspect collision detection telemetry and run static collision analyses",
         defaultSubCommand: "events",
         commands: {
             events: new CollisionEventsCommandHandler(),
+            similar: new CollisionSimilarCommandHandler(),
         },
     };
 }
