@@ -55,7 +55,8 @@ const debug = registerDebug("typeagent:osNotifications");
 // agent-enable timestamp. Slightly fuzzy to tolerate clock skew.
 const NEW_ONLY_GRACE_MS = 2_000;
 
-type AgentContext = {
+// Exported for unit tests. The agent doesn't need this type elsewhere.
+export type AgentContext = {
     config: OsNotificationsConfig;
     watcher: OsNotificationWatcher | undefined;
     enabledAt: number;
@@ -77,6 +78,34 @@ type AgentContext = {
     // Add-AppxPackage in parallel, which corrupts the publish output.
     buildInProgress: boolean;
 };
+
+// Pure decision function for readiness — split out from the agent's
+// checkReadiness hook so it can be unit-tested without mocking
+// process.platform or the watcher module.
+//   - non-Windows: ready (no helper needed; we can still test-inject and
+//     use the linux watcher).
+//   - Windows + helper present: ready.
+//   - Windows + helper missing: setup-required, with a hint.
+//
+// Exported for unit tests.
+export function evaluateReadiness(
+    platform: NodeJS.Platform,
+    helperBuilt: boolean,
+): ReadinessReport {
+    if (platform !== "win32") {
+        return { state: "ready" };
+    }
+    if (helperBuilt) {
+        return { state: "ready" };
+    }
+    return {
+        state: "setup-required",
+        message:
+            "OS notification helper exe (OsNotificationListener.exe) hasn't been built yet.",
+        details:
+            "Setup runs `dotnet publish` + signs + registers a sparse WinAppSDK package; ~30–60 seconds first time.",
+    };
+}
 
 // ============================================================================
 // Action handlers — invoked via natural language ("sync os notifications" /
@@ -183,7 +212,9 @@ function offerHelperBuild(
 // dispatcher creates one when responding to a choice). Display goes via
 // actionIO.appendDisplay; the final ActionResult is what the dispatcher
 // renders as the closing message.
-async function buildAndRetrySync(
+// Exported for unit tests — they verify the mutex early-return path
+// without invoking the heavy build pipeline.
+export async function buildAndRetrySync(
     actionContext: ActionContext<AgentContext>,
 ): Promise<ActionResult> {
     const sessionContext = actionContext.sessionContext;
@@ -394,24 +425,11 @@ export function instantiate(): AppAgent {
         // Cheap probe: file existence + platform check. The dispatcher
         // calls this right after the agent is enabled, after setup, and
         // on @config agent refresh. The result is cached.
-        //   - non-Windows: ready (no helper needed; we can still test-
-        //     inject and use the linux watcher).
-        //   - Windows + helper present: ready.
-        //   - Windows + helper missing: setup-required, with a hint.
         async checkReadiness(): Promise<ReadinessReport> {
-            if (process.platform !== "win32") {
-                return { state: "ready" };
-            }
-            if (isWindowsHelperBuilt()) {
-                return { state: "ready" };
-            }
-            return {
-                state: "setup-required",
-                message:
-                    "OS notification helper exe (OsNotificationListener.exe) hasn't been built yet.",
-                details:
-                    "Setup runs `dotnet publish` + signs + registers a sparse WinAppSDK package; ~30–60 seconds first time.",
-            };
+            return evaluateReadiness(
+                process.platform,
+                isWindowsHelperBuilt(),
+            );
         },
 
         // Returns the same yes/no card the agent used to offer when

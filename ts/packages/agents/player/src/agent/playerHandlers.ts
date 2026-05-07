@@ -63,7 +63,9 @@ export function instantiate(): AppAgent {
 // first action. No `setup` hook — this is a manual-config case (edit
 // .env, restart the agent server); the dispatcher's setup-required
 // error points the user at @config agent refresh once they've fixed it.
-async function checkPlayerReadiness(): Promise<ReadinessReport> {
+//
+// Exported for unit tests.
+export async function checkPlayerReadiness(): Promise<ReadinessReport> {
     const missing: string[] = [];
     if (!process.env.SPOTIFY_APP_CLI) missing.push("SPOTIFY_APP_CLI");
     if (!process.env.SPOTIFY_APP_CLISEC) missing.push("SPOTIFY_APP_CLISEC");

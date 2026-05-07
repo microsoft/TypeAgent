@@ -88,7 +88,8 @@ export function getSchemaNamePrefix(
 //
 // Agents that don't implement checkReadiness default to `ready` and never
 // trip this check — see appAgentManager.getReadiness().
-async function checkAgentReady(
+// Exported for unit tests.
+export async function checkAgentReady(
     appAgentName: string,
     systemContext: CommandHandlerContext,
     actionContext: ActionContext<unknown>,
