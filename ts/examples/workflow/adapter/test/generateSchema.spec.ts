@@ -1,11 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { generateDynamicSchema, toTypeName } from "../src/generateSchema.js";
 import {
-    generateDynamicSchemaText,
-    toTypeName,
-} from "../src/generateSchema.js";
+    fromJSONParsedActionSchema,
+    ParsedActionSchemaJSON,
+} from "@typeagent/action-schema";
 import { WorkflowIR } from "workflow-model";
+
+function parsePasContent(content: string) {
+    return fromJSONParsedActionSchema(
+        JSON.parse(content) as ParsedActionSchemaJSON,
+    );
+}
 
 describe("toTypeName", () => {
     it("converts hyphenated names to PascalCase + Action", () => {
@@ -22,14 +29,13 @@ describe("toTypeName", () => {
     });
 });
 
-describe("generateDynamicSchemaText", () => {
-    it("returns placeholder for empty map", () => {
-        const result = generateDynamicSchemaText(new Map());
-        expect(result).toContain("noWorkflowsLoaded");
-        expect(result).toContain("export type WorkflowAction");
+describe("generateDynamicSchema", () => {
+    it("returns undefined for empty map", () => {
+        const result = generateDynamicSchema(new Map());
+        expect(result).toBeUndefined();
     });
 
-    it("generates typed action for a workflow with string params", () => {
+    it("generates pas schema for a workflow with string params", () => {
         const ir: WorkflowIR = {
             kind: "workflow",
             name: "d4-commit-summary",
@@ -52,15 +58,14 @@ describe("generateDynamicSchemaText", () => {
         };
 
         const workflows = new Map([["d4-commit-summary", ir]]);
-        const result = generateDynamicSchemaText(workflows);
+        const result = generateDynamicSchema(workflows)!;
 
-        expect(result).toContain("export type D4CommitSummaryAction");
-        expect(result).toContain('actionName: "d4-commit-summary"');
-        expect(result).toContain("repoPath: string;");
-        expect(result).toContain("// Absolute path to the git repo.");
-        expect(result).toContain("// Generate a commit message");
-        expect(result).toContain("export type WorkflowAction =");
-        expect(result).toContain("| D4CommitSummaryAction;");
+        expect(result.format).toBe("pas");
+        const parsed = parsePasContent(result.content);
+        expect(parsed.entry.action?.name).toBe("WorkflowAction");
+        expect(parsed.actionSchemas.has("d4-commit-summary")).toBe(true);
+        const action = parsed.actionSchemas.get("d4-commit-summary")!;
+        expect(action.name).toBe("D4CommitSummaryAction");
     });
 
     it("marks optional parameters correctly", () => {
@@ -89,10 +94,20 @@ describe("generateDynamicSchemaText", () => {
         };
 
         const workflows = new Map([["d5-code-review-prep", ir]]);
-        const result = generateDynamicSchemaText(workflows);
+        const result = generateDynamicSchema(workflows)!;
 
-        expect(result).toContain("repoPath: string;");
-        expect(result).toContain("baseBranch?: string;");
+        expect(result.format).toBe("pas");
+        const parsed = parsePasContent(result.content);
+        const action = parsed.actionSchemas.get("d5-code-review-prep")!;
+        expect(action.type.type).toBe("object");
+        if (action.type.type === "object") {
+            const params = action.type.fields["parameters"];
+            expect(params).toBeDefined();
+            if (params && params.type.type === "object") {
+                expect(params.type.fields["repoPath"].optional).toBeFalsy();
+                expect(params.type.fields["baseBranch"].optional).toBe(true);
+            }
+        }
     });
 
     it("handles array types", () => {
@@ -122,13 +137,21 @@ describe("generateDynamicSchemaText", () => {
         };
 
         const workflows = new Map([["d1-standup-prep", ir]]);
-        const result = generateDynamicSchemaText(workflows);
+        const result = generateDynamicSchema(workflows)!;
 
-        expect(result).toContain("repos: string[];");
-        expect(result).toContain("author: string;");
+        expect(result.format).toBe("pas");
+        const parsed = parsePasContent(result.content);
+        const action = parsed.actionSchemas.get("d1-standup-prep")!;
+        if (action.type.type === "object") {
+            const params = action.type.fields["parameters"];
+            if (params && params.type.type === "object") {
+                expect(params.type.fields["repos"].type.type).toBe("array");
+                expect(params.type.fields["author"].type.type).toBe("string");
+            }
+        }
     });
 
-    it("generates union for multiple workflows", () => {
+    it("generates schema for multiple workflows", () => {
         const ir1: WorkflowIR = {
             kind: "workflow",
             name: "wf-a",
@@ -160,12 +183,14 @@ describe("generateDynamicSchemaText", () => {
             ["wf-a", ir1],
             ["wf-b", ir2],
         ]);
-        const result = generateDynamicSchemaText(workflows);
+        const result = generateDynamicSchema(workflows)!;
 
-        expect(result).toContain("| WfAAction");
-        expect(result).toContain("| WfBAction;");
-        expect(result).toContain("x?: number;");
-        expect(result).toContain("y?: boolean;");
+        expect(result.format).toBe("pas");
+        const parsed = parsePasContent(result.content);
+        expect(parsed.actionSchemas.has("wf-a")).toBe(true);
+        expect(parsed.actionSchemas.has("wf-b")).toBe(true);
+        expect(parsed.actionSchemas.get("wf-a")!.name).toBe("WfAAction");
+        expect(parsed.actionSchemas.get("wf-b")!.name).toBe("WfBAction");
     });
 
     it("handles number and integer types", () => {
@@ -188,9 +213,19 @@ describe("generateDynamicSchemaText", () => {
         };
 
         const workflows = new Map([["test-nums", ir]]);
-        const result = generateDynamicSchemaText(workflows);
+        const result = generateDynamicSchema(workflows)!;
 
-        expect(result).toContain("count: number;");
-        expect(result).toContain("ratio?: number;");
+        expect(result.format).toBe("pas");
+        const parsed = parsePasContent(result.content);
+        const action = parsed.actionSchemas.get("test-nums")!;
+        if (action.type.type === "object") {
+            const params = action.type.fields["parameters"];
+            if (params && params.type.type === "object") {
+                expect(params.type.fields["count"].type.type).toBe("number");
+                expect(params.type.fields["count"].optional).toBeFalsy();
+                expect(params.type.fields["ratio"].type.type).toBe("number");
+                expect(params.type.fields["ratio"].optional).toBe(true);
+            }
+        }
     });
 });

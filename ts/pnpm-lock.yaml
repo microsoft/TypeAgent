@@ -893,6 +893,9 @@ importers:
 
   examples/workflow/adapter:
     dependencies:
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../../../packages/actionSchema
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../../packages/agentSdk

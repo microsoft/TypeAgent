@@ -28,6 +28,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "workflow-engine": "workspace:*",
     "workflow-model": "workspace:*"

@@ -19,7 +19,7 @@ import {
 } from "workflow-engine";
 import { WorkflowIR } from "workflow-model";
 import { discoverWorkflows } from "./workflowDiscovery.js";
-import { generateDynamicSchemaText } from "./generateSchema.js";
+import { generateDynamicSchema } from "./generateSchema.js";
 
 // ---- Agent context ----
 
@@ -204,10 +204,7 @@ export function instantiate(): AppAgent {
 
         async getDynamicSchema(_context: SessionContext, _schemaName: string) {
             if (!agentContext) return undefined;
-            return {
-                format: "ts" as const,
-                content: generateDynamicSchemaText(agentContext.workflows),
-            };
+            return generateDynamicSchema(agentContext.workflows);
         },
 
         async getDynamicDisplay(
