@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grammar Tools UI - Dev Harness</title>
+    <style>
+      :root {
+        --vscode-font-family: "Segoe UI", sans-serif;
+        --vscode-font-size: 13px;
+        --vscode-foreground: #cccccc;
+        --vscode-editor-background: #1e1e1e;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #1e1e1e;
+        color: #cccccc;
+        font-family: var(--vscode-font-family);
+      }
+      h1 {
+        font-size: 1.2em;
+        margin-top: 2em;
+      }
+      section {
+        border: 1px solid #333;
+        padding: 12px;
+        margin: 8px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>gt-rule-list</h1>
+    <section><gt-rule-list></gt-rule-list></section>
+
+    <h1>gt-source-view</h1>
+    <section><gt-source-view></gt-source-view></section>
+
+    <h1>gt-completion-panel</h1>
+    <section><gt-completion-panel></gt-completion-panel></section>
+
+    <h1>gt-trace-timeline</h1>
+    <section><gt-trace-timeline></gt-trace-timeline></section>
+
+    <h1>gt-coverage-heatmap</h1>
+    <section><gt-coverage-heatmap></gt-coverage-heatmap></section>
+
+    <h1>gt-diff-view</h1>
+    <section><gt-diff-view></gt-diff-view></section>
+
+    <script type="module" src="../src/index.ts"></script>
+  </body>
+</html>

@@ -11,7 +11,7 @@ export type LoadGrammarRulesOptions = {
     start?: string; // Optional start symbol (default: "Start")
     startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
     schemaLoader?: SchemaLoader; // Optional loader for resolving .ts type imports
-    enableValueExpressions?: boolean; // Enable JavaScript-like value expressions (default: false)
+    enableValueExpressions?: boolean; // Enable JavaScript-like value expressions (default: true)
     /** Compile-time AST optimizations.  All optimizations default to off. */
     optimizations?: GrammarOptimizationOptions;
 };
@@ -38,7 +38,7 @@ function parseAndCompileGrammar(
 
     const start = options?.start ?? "Start";
     const startValueRequired = options?.startValueRequired ?? true;
-    const enableValueExpressions = options?.enableValueExpressions ?? false;
+    const enableValueExpressions = options?.enableValueExpressions ?? true;
     const parseResult = parseGrammarRules(
         displayPath,
         content,
