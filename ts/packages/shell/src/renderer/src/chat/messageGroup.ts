@@ -127,12 +127,19 @@ export class MessageGroup {
             );
         } else {
             // statusMessage may be undefined when the dispatcher rendered
-            // straight into agent bubbles (the consolidated path) — only
-            // call complete() if it exists. Always scroll: updateMetrics
-            // ran above and may have grown the last bubble's height by
-            // inserting the metrics row, which can land below the viewport.
-            this.statusMessage?.complete();
+            // straight into agent bubbles (the consolidated path). The
+            // per-container complete() calls below handle both shapes.
             this.chatView.updateScroll();
+        }
+        // Complete every bubble we created. complete() flushes pending TTS,
+        // removes any trailing temporary content, and reconciles divState
+        // (hide if empty / show if not). Without this, the consolidated
+        // agent-bubble path leaves TTS un-flushed (audio truncated) and any
+        // mid-stream "temporary" appendMode payload stays orphaned in the
+        // DOM. Pre-existing behavior surfaced by Rob during PR #2291 review.
+        this.statusMessage?.complete();
+        for (const agentMessage of this.agentMessages) {
+            agentMessage?.complete();
         }
         this.chatView.onRequestComplete?.();
     }
@@ -143,6 +150,14 @@ export class MessageGroup {
             { message: `Processing Error: ${error}`, source: "shell" },
             false,
         );
+        // Same lifecycle reasoning as requestCompleted — flush TTS /
+        // temporary content / divState on every bubble we created so an
+        // exception mid-stream doesn't leave audio playing or temporary
+        // payload visible.
+        this.statusMessage?.complete();
+        for (const agentMessage of this.agentMessages) {
+            agentMessage?.complete();
+        }
         this.chatView.onRequestComplete?.();
     }
 
