@@ -74,6 +74,18 @@ jobs:
           echo "---"
           gh api repos/${{ github.repository }}/dependabot/alerts?per_page=1 --jq 'length' || echo "API call failed with exit $?"
 
+      # Install ts/ dependencies once before the per-workspace loop.
+      # The fix-dependabot-alerts.mjs script lives under ts/tools/scripts/ and
+      # imports node modules (chalk, etc.) from ts/node_modules. Without this
+      # step, when the per-workspace loop processes a non-ts workspace first
+      # (e.g. docs/), Node fails with ERR_MODULE_NOT_FOUND for chalk and the
+      # workflow silently logs "No valid analysis for <ws> — skipping".
+      - name: Install script dependencies (ts workspace)
+        working-directory: ts
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
       # ── Analyse and fix alerts across workspaces ──────────────────────
       #
       # Auto-discovers which workspaces have open alerts by querying the
@@ -94,8 +106,10 @@ jobs:
           ALL_ROLLED_BACK=""
           ALL_BLOCKED_PACKAGES=""
           ALL_NO_PATCH_PACKAGES=""
+          ALL_FAILED_WORKSPACES=""
           TOTAL_RESOLVED=0
           TOTAL_BLOCKED=0
+          TOTAL_NO_PATCH=0
           TOTAL_FAILED=0
 
           # Discover workspaces with open npm alerts from the Dependabot API
@@ -107,6 +121,7 @@ jobs:
             echo "No open npm Dependabot alerts found 🎉"
             echo "resolved=0" >> "$GITHUB_OUTPUT"
             echo "blocked=0" >> "$GITHUB_OUTPUT"
+            echo "no_patch=0" >> "$GITHUB_OUTPUT"
             echo "failed=0" >> "$GITHUB_OUTPUT"
             echo "changes=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -119,10 +134,16 @@ jobs:
             echo "=========================================="
             cd "$GITHUB_WORKSPACE/$WS_DIR"
 
-            # Install dependencies for this workspace
+            # Install dependencies for this workspace.
+            # The `ts` workspace was already installed in the "Install script
+            # dependencies (ts workspace)" step — re-running pnpm install here
+            # re-triggers postinstall scripts (e.g. better-sqlite3 copy/restore)
+            # which can segfault on the second pass. Skip the redundant install.
             echo "::group::Installing $WS_DIR dependencies"
             corepack enable
-            if ! pnpm install --frozen-lockfile 2>&1; then
+            if [ "$WS_DIR" = "ts" ]; then
+              echo "ts dependencies already installed in setup step; skipping redundant install"
+            elif ! pnpm install --frozen-lockfile 2>&1; then
               echo "::warning::Dependency install failed for $WS_DIR — skipping (analysis would be unreliable)"
               echo "::endgroup::"
               continue
@@ -134,8 +155,19 @@ jobs:
             node "$SCRIPT" --dry-run --json --skip-install > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
             if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
-              echo "No valid analysis for $WS_DIR — skipping"
+              echo "::warning::No valid analysis for $WS_DIR — see log below"
               cat /tmp/dep-analysis.log || true
+              # Surface to job summary so the failure isn't silent across runs.
+              {
+                echo "### ⚠️ Analysis failed for \`$WS_DIR\`"
+                echo ""
+                echo '```'
+                tail -30 /tmp/dep-analysis.log 2>/dev/null || echo "(no log captured)"
+                echo '```'
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+              # Track for the PR body / final summary.
+              ALL_FAILED_WORKSPACES="${ALL_FAILED_WORKSPACES:+$ALL_FAILED_WORKSPACES, }$WS_DIR"
               echo "::endgroup::"
               continue
             fi
@@ -152,6 +184,7 @@ jobs:
 
             # Accumulate blocked/no-patch
             TOTAL_BLOCKED=$((TOTAL_BLOCKED + WS_BLOCKED))
+            TOTAL_NO_PATCH=$((TOTAL_NO_PATCH + WS_NO_PATCH))
             [ -n "$BLOCKED_PKGS" ] && ALL_BLOCKED_PACKAGES="${ALL_BLOCKED_PACKAGES:+$ALL_BLOCKED_PACKAGES, }$BLOCKED_PKGS"
             [ -n "$NO_PATCH_PKGS" ] && ALL_NO_PATCH_PACKAGES="${ALL_NO_PATCH_PACKAGES:+$ALL_NO_PATCH_PACKAGES, }$NO_PATCH_PKGS"
 
@@ -256,11 +289,13 @@ jobs:
           # ── Step 3: Report results ──────────────────────────────────
           echo "resolved=$TOTAL_RESOLVED" >> "$GITHUB_OUTPUT"
           echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
+          echo "no_patch=$TOTAL_NO_PATCH" >> "$GITHUB_OUTPUT"
           echo "failed=$TOTAL_FAILED" >> "$GITHUB_OUTPUT"
           echo "applied_packages=$ALL_APPLIED" >> "$GITHUB_OUTPUT"
           echo "rolled_back_packages=$ALL_ROLLED_BACK" >> "$GITHUB_OUTPUT"
           echo "blocked_packages=$ALL_BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
           echo "no_patch_packages=$ALL_NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "failed_workspaces=$ALL_FAILED_WORKSPACES" >> "$GITHUB_OUTPUT"
 
           cd "$GITHUB_WORKSPACE"
           if git diff --quiet; then
@@ -339,10 +374,13 @@ jobs:
           BODY="$BODY
           - **Applied ($RESOLVED):**$APPLIED
           - **Blocked ($BLOCKED):**${BLOCKED_PKGS:- (none)}
-          - **No patch available:**${NO_PATCH_PKGS:- (none)}
+          - **No patch available (${{ steps.fix.outputs.no_patch }}):**${NO_PATCH_PKGS:- (none)}
           - **Rolled back ($FAILED):**${ROLLED:- (none)}
+          - **Workspaces with analysis failures:**${{ steps.fix.outputs.failed_workspaces && format(' {0}', steps.fix.outputs.failed_workspaces) || ' (none)' }}
           - **Build:** ✅ Passed
           - **Shell packaging:** ${{ steps.shell.outputs.shell_ok == 'true' && '✅ Passed' || '⚠️ Skipped' }}
+
+          > _Note: the analysis source (\`fix-dependabot-alerts.mjs\`) is broader than the GitHub Dependabot REST API — it also audits the lockfile directly. Some packages listed above may not have a corresponding open Dependabot alert, and vice versa._
 
           ### How this works
           1. Analyses all open Dependabot alerts
@@ -372,6 +410,7 @@ jobs:
           echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Applied | ${{ steps.fix.outputs.resolved || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Blocked | ${{ steps.fix.outputs.blocked || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| No patch available | ${{ steps.fix.outputs.no_patch || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Rolled back | ${{ steps.fix.outputs.failed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${{ steps.fix.outputs.applied_packages }}" ]; then
@@ -379,6 +418,9 @@ jobs:
           fi
           if [ -n "${{ steps.fix.outputs.rolled_back_packages }}" ]; then
             echo "**Rolled back:**${{ steps.fix.outputs.rolled_back_packages }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "${{ steps.fix.outputs.failed_workspaces }}" ]; then
+            echo "**⚠️ Analysis failed for workspaces:** ${{ steps.fix.outputs.failed_workspaces }}" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.fix.outputs.changes }}" == "true" ]; then
