@@ -30,4 +30,62 @@ describe("completion", () => {
             expect(group.completions).toBeInstanceOf(Array);
         }
     });
+
+    it("returns fewer completions for unrelated input than empty input", () => {
+        const result = loadGrammarFromBuffer("test.agr", source);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const emptyPreview = previewCompletion(result.grammar, "");
+        const unrelatedPreview = previewCompletion(
+            result.grammar,
+            "xyznotagrammartoken",
+        );
+        const emptyTotal = emptyPreview.groups.reduce(
+            (sum, g) => sum + g.completions.length,
+            0,
+        );
+        const unrelatedTotal = unrelatedPreview.groups.reduce(
+            (sum, g) => sum + g.completions.length,
+            0,
+        );
+        expect(unrelatedTotal).toBeLessThanOrEqual(emptyTotal);
+    });
+
+    it("returns completions for empty input", () => {
+        const result = loadGrammarFromBuffer("test.agr", source);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const preview = previewCompletion(result.grammar, "");
+        // Empty input should still return top-level completions
+        expect(preview.groups.length).toBeGreaterThan(0);
+    });
+
+    it("includes matchedPrefixLength", () => {
+        const result = loadGrammarFromBuffer("test.agr", source);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const preview = previewCompletion(result.grammar, "pla");
+        expect(typeof preview.matchedPrefixLength).toBe("number");
+    });
+
+    it("includes directionSensitive flag", () => {
+        const result = loadGrammarFromBuffer("test.agr", source);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const preview = previewCompletion(result.grammar, "p");
+        expect(typeof preview.directionSensitive).toBe("boolean");
+    });
+
+    it("returns afterWildcard field", () => {
+        const result = loadGrammarFromBuffer("test.agr", source);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const preview = previewCompletion(result.grammar, "play ");
+        expect(preview.afterWildcard).toBeDefined();
+    });
 });

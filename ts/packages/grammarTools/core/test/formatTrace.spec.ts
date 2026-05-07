@@ -103,4 +103,36 @@ describe("formatTrace", () => {
             expect(true).toBe(true);
         }
     });
+
+    it("handles empty events array", () => {
+        const emptyTrace = {
+            input: "test",
+            events: [] as readonly import("action-grammar").TraceEvent[],
+            result: "noMatch" as const,
+        };
+        const output = formatTrace(emptyTrace);
+        expect(output).toContain("result: noMatch");
+        // Should produce header but no event lines
+        const lines = output.split("\n").filter((l) => l.trim().length > 0);
+        // Only header lines
+        expect(lines.length).toBeLessThanOrEqual(2);
+    });
+
+    it("combines showSeq and showPos options", () => {
+        const trace = traceMatch(load(), "pause");
+        const output = formatTrace(trace, { showSeq: true, showPos: true });
+        // Should have both seq markers and position info
+        expect(output).toMatch(/\[\d+\]/);
+        expect(output).toContain("@");
+    });
+
+    it("handles header: false with showSeq: true", () => {
+        const trace = traceMatch(load(), "pause");
+        const output = formatTrace(trace, {
+            header: false,
+            showSeq: true,
+        });
+        expect(output).not.toContain("input:");
+        expect(output).toMatch(/\[\d+\]/);
+    });
 });
