@@ -92,7 +92,13 @@ function buildSignature(def: RuleDefinition): string {
     if (def.valueType && def.valueType.length > 0) {
         parts.push(": " + def.valueType.map((t) => t.name).join(" | "));
     }
-    parts.push(" = ... (" + def.rules.length + " alternative" + (def.rules.length === 1 ? "" : "s") + ")");
+    parts.push(
+        " = ... (" +
+            def.rules.length +
+            " alternative" +
+            (def.rules.length === 1 ? "" : "s") +
+            ")",
+    );
     return parts.join("");
 }
 

@@ -3854,9 +3854,15 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.0
+        version: 29.5.14
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.25
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       rimraf:
         specifier: ^5.0.5
         version: 5.0.10

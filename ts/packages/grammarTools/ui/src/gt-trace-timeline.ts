@@ -13,10 +13,16 @@ export class GtTraceTimeline extends LitElement {
     static override styles = css`
         :host {
             display: block;
-            font-family: var(--gt-font-family, var(--vscode-font-family, sans-serif));
+            font-family: var(
+                --gt-font-family,
+                var(--vscode-font-family, sans-serif)
+            );
             font-size: var(--gt-font-size, var(--vscode-font-size, 13px));
             color: var(--gt-foreground, var(--vscode-foreground, #cccccc));
-            background: var(--gt-background, var(--vscode-editor-background, #1e1e1e));
+            background: var(
+                --gt-background,
+                var(--vscode-editor-background, #1e1e1e)
+            );
         }
     `;
 
