@@ -213,11 +213,16 @@ export class AgentServerBridge {
             // os.userInfo() can throw on some configurations; ignore
         }
 
-        // Send current status
+        // Send current status. Note: the webview's message listener may
+        // not be wired up yet at this point (especially during VSIX
+        // hot-reload, where the webview is restored from cache before
+        // its bundle re-runs). The webview re-requests this state by
+        // posting `connect` once it's ready — see hydrateWebview().
         this.postToWebview(webview, {
             type: "status",
             connected: this.isConnected,
             sessionId: this.session?.sessionId,
+            sessionName: this.session ? this.getDisplayName() : undefined,
         });
 
         return {
@@ -823,6 +828,67 @@ export class AgentServerBridge {
         this.flushReplayBuffer();
     }
 
+    /**
+     * Re-send userInfo, current status, and replayed history to a single
+     * webview that has just (re-)attached its message listener. Triggered
+     * by the webview posting `connect` while the bridge is already
+     * connected — typically a VSIX hot-reload or webview restore where
+     * the webview missed the eager broadcasts from registerWebview().
+     *
+     * Posts directly to the requesting webview only so peer webviews
+     * don't see duplicate userInfo/status/history messages.
+     */
+    private hydrateWebview(webview: vscode.Webview): void {
+        try {
+            const name = os.userInfo().username;
+            if (name) {
+                this.postToWebview(webview, { type: "userInfo", name });
+            }
+        } catch {
+            // os.userInfo() can throw on some configurations; ignore
+        }
+
+        this.postToWebview(webview, {
+            type: "status",
+            connected: this.isConnected,
+            sessionId: this.session?.sessionId,
+            sessionName: this.session ? this.getDisplayName() : undefined,
+        });
+
+        const session = this.session;
+        if (!session) return;
+
+        // Fire-and-forget: fetch history and post to this webview only.
+        // We deliberately do NOT engage the replay buffer here — peers
+        // are mid-conversation and shouldn't have their live events
+        // paused for a single webview's reload hydration.
+        void (async () => {
+            this.postToWebview(webview, {
+                type: "historyLoading",
+                loading: true,
+            });
+            try {
+                const entries = await session.dispatcher.getDisplayHistory();
+                if (entries.length > 0) {
+                    this.postToWebview(
+                        webview,
+                        toHistoryReplayMessage(entries),
+                    );
+                }
+            } catch (e) {
+                console.warn(
+                    "[agentServerBridge] hydrateWebview replay failed:",
+                    e,
+                );
+            } finally {
+                this.postToWebview(webview, {
+                    type: "historyLoading",
+                    loading: false,
+                });
+            }
+        })();
+    }
+
     private flushReplayBuffer(): void {
         const buf = this.replayBuffer;
         this.replayBuffer = undefined;
@@ -872,7 +938,17 @@ export class AgentServerBridge {
                 }
                 break;
             case "connect":
-                await this.connect();
+                // The webview posts `connect` once it has wired up its
+                // message listener — this is also our cue that it's ready
+                // to receive state. On a webview reload the bridge is
+                // already connected, so connect() is a no-op; we still
+                // need to (re-)hydrate the just-loaded webview with
+                // userInfo, current status, and replayed history.
+                if (this.isConnected && this.session) {
+                    this.hydrateWebview(_webview);
+                } else {
+                    await this.connect();
+                }
                 break;
             case "disconnect":
                 await this.disconnect();
