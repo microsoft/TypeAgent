@@ -11,6 +11,11 @@
 
 import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
+import type {
+    PhaseTiming,
+    CompletionUsageStats,
+    NotifyExplainedData,
+} from "@typeagent/dispatcher-types";
 import { setContent } from "./setContent.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
@@ -88,28 +93,12 @@ export interface DynamicDisplayResult {
     nextRefreshMs: number;
 }
 
-// Local mirror of dispatcher-types PhaseTiming — kept here to avoid
-// pulling the full dispatcher-types dependency into chat-ui.
-export interface PhaseTiming {
-    duration?: number;
-    marks?: Record<string, { duration: number; count: number }>;
-}
-
-// Local mirror of dispatcher-types CompletionUsageStats.
-export interface CompletionUsageStats {
-    completion_tokens: number;
-    prompt_tokens: number;
-    total_tokens: number;
-}
-
-// Local mirror of dispatcher-types NotifyExplainedData — kept here to avoid
-// pulling the full dispatcher-types dependency into chat-ui.
-export interface NotifyExplainedData {
-    error?: string | undefined;
-    fromCache: "construction" | "grammar" | false;
-    fromUser: boolean;
-    time: string;
-}
+// Re-exported from @typeagent/dispatcher-types so consumers of chat-ui that
+// already have a dispatcher-types dependency get a single canonical type
+// (and so we don't drift). Previously these were locally mirrored to avoid
+// pulling dispatcher-types in; the rationale is stale now that
+// dispatcher-types is a small, dependency-free types package.
+export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData };
 
 /**
  * One entry in a session history transcript replayed via
