@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { matchGrammar } from "action-grammar";
-import type { TraceCallback } from "action-grammar";
-import type { LoadedGrammar, MatchTrace, TraceEvent } from "./types.js";
+import type { TraceCallback, TraceEvent } from "action-grammar";
+import type { LoadedGrammar, MatchTrace } from "./types.js";
 
 /**
  * Run the grammar matcher with tracing enabled and return the full

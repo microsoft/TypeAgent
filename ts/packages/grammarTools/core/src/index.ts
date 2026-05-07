@@ -37,14 +37,14 @@ export type {
     CompletionPreview,
     // Trace
     TraceEventKind,
-    TraceEventBase,
+    TraceEvent,
+    TraceCallback,
     RuleEnteredEvent,
     RuleExitedEvent,
     PartAttemptedEvent,
     PartMatchedEvent,
     PartFailedEvent,
     BacktrackEvent,
-    TraceEvent,
     MatchTrace,
     // Snapshot
     GrammarSnapshot,

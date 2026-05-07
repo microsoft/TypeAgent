@@ -3,15 +3,22 @@
 
 import type { Grammar } from "action-grammar";
 
-// Re-export Grammar type that callers need
+// Re-export types from action-grammar that callers need
 export type { Grammar } from "action-grammar";
+export type {
+    RuleId,
+    PartId,
+    TraceEvent,
+    TraceCallback,
+    RuleEnteredEvent,
+    RuleExitedEvent,
+    PartAttemptedEvent,
+    PartMatchedEvent,
+    PartFailedEvent,
+    BacktrackEvent,
+} from "action-grammar";
 
-// ---------------------------------------------------------------------------
-// Identifiers
-// ---------------------------------------------------------------------------
-
-export type RuleId = string;
-export type PartId = number;
+import type { RuleId, PartId, TraceEvent } from "action-grammar";
 
 // ---------------------------------------------------------------------------
 // Source positions
@@ -144,69 +151,8 @@ export interface CompletionPreview {
 // Match trace
 // ---------------------------------------------------------------------------
 
-export type TraceEventKind =
-    | "ruleEntered"
-    | "ruleExited"
-    | "partAttempted"
-    | "partMatched"
-    | "partFailed"
-    | "backtrack";
-
-export interface TraceEventBase {
-    readonly seq: number;
-    readonly inputPos: number;
-}
-
-export interface RuleEnteredEvent extends TraceEventBase {
-    readonly kind: "ruleEntered";
-    readonly rule: RuleId;
-    readonly depth: number;
-}
-
-export interface RuleExitedEvent extends TraceEventBase {
-    readonly kind: "ruleExited";
-    readonly rule: RuleId;
-    readonly result: "matched" | "failed";
-}
-
-export interface PartAttemptedEvent extends TraceEventBase {
-    readonly kind: "partAttempted";
-    readonly rule: RuleId;
-    readonly part: PartId;
-    readonly partKind: string;
-}
-
-export interface PartMatchedEvent extends TraceEventBase {
-    readonly kind: "partMatched";
-    readonly rule: RuleId;
-    readonly part: PartId;
-    readonly endPos: number;
-}
-
-export interface PartFailedEvent extends TraceEventBase {
-    readonly kind: "partFailed";
-    readonly rule: RuleId;
-    readonly part: PartId;
-}
-
-export interface BacktrackEvent extends TraceEventBase {
-    readonly kind: "backtrack";
-    readonly origin:
-        | "wildcard"
-        | "optional"
-        | "alternation"
-        | "repeat"
-        | "memoMarker"
-        | "memoReplay";
-}
-
-export type TraceEvent =
-    | RuleEnteredEvent
-    | RuleExitedEvent
-    | PartAttemptedEvent
-    | PartMatchedEvent
-    | PartFailedEvent
-    | BacktrackEvent;
+/** Convenience union of all TraceEvent kind discriminators. */
+export type TraceEventKind = TraceEvent["kind"];
 
 export interface MatchTrace {
     readonly input: string;

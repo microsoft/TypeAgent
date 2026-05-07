@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { MatchTrace, TraceEvent } from "./types.js";
+import type { TraceEvent } from "action-grammar";
+import type { MatchTrace } from "./types.js";
 
 export interface FormatTraceOptions {
     /** Include the input string and result summary header. Default: true. */

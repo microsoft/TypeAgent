@@ -100,6 +100,11 @@ Promote into "Queued actions" when scheduling.
   coverage analysis for the NFA/DFA compile paths as well. Lower
   priority since the rule-level matcher is the primary matching backend
   for authoring/debugging; NFA/DFA are production-optimized paths.
+- **B.3 coverage / B.4 diff implementation.** Stubs (`runCoverage`,
+  `diffGrammars`) removed during self-review (2026-05-07) to avoid
+  shipping dead code. Types (`CoverageReport`, `RuleCoverage`, etc.)
+  remain in `types.ts` as the agreed shape. Implement when Track A.5
+  (`GrammarDebugInfo` emission) lands.
 
 ## Out of scope for this pass
 
