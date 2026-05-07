@@ -134,10 +134,16 @@ jobs:
             echo "=========================================="
             cd "$GITHUB_WORKSPACE/$WS_DIR"
 
-            # Install dependencies for this workspace
+            # Install dependencies for this workspace.
+            # The `ts` workspace was already installed in the "Install script
+            # dependencies (ts workspace)" step — re-running pnpm install here
+            # re-triggers postinstall scripts (e.g. better-sqlite3 copy/restore)
+            # which can segfault on the second pass. Skip the redundant install.
             echo "::group::Installing $WS_DIR dependencies"
             corepack enable
-            if ! pnpm install --frozen-lockfile 2>&1; then
+            if [ "$WS_DIR" = "ts" ]; then
+              echo "ts dependencies already installed in setup step; skipping redundant install"
+            elif ! pnpm install --frozen-lockfile 2>&1; then
               echo "::warning::Dependency install failed for $WS_DIR — skipping (analysis would be unreliable)"
               echo "::endgroup::"
               continue
