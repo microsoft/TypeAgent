@@ -10,7 +10,7 @@ as the corresponding A.\* / B.\* item lands rather than as a single
 batch.
 
 > Directory: `packages/grammarTools/cli`. Package name (in `package.json`
-> and `pnpm --filter`): `grammar-studio`. Lives alongside `core` and
+> and `pnpm --filter`): `grammar-tools-cli`. Lives alongside `core` and
 > `ui` in the `grammarTools` family.
 
 ## TL;DR
@@ -55,7 +55,7 @@ the CLI does not ship its own fixtures.
 ## Open questions
 
 - ~~New package vs extending `schemaStudio`?~~ New package
-  (`packages/grammarTools/cli`, kebab name `grammar-studio`).
+  (`packages/grammarTools/cli`, kebab name `grammar-tools-cli`).
 - ~~Output format - human only, or `--json` mode for scripts?~~ Both;
   `--json` mandatory from E.0.
 - REPL detail (history, multi-line input, `help`) - decide during E.0
@@ -65,6 +65,6 @@ the CLI does not ship its own fixtures.
 
 ## Verification
 
-- `pnpm --filter grammar-studio start` opens the REPL.
+- `pnpm --filter grammar-tools-cli start` opens the REPL.
 - `grammar match "play "` against the player grammar matches
   Jest expectations.

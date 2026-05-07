@@ -1,5 +1,5 @@
 {
-  "name": "grammar-studio",
+  "name": "grammar-tools-cli",
   "version": "0.0.1",
   "private": true,
   "description": "CLI tool for grammar exploration, completion preview, and trace visualization.",
@@ -13,7 +13,7 @@
   "author": "Microsoft",
   "type": "module",
   "bin": {
-    "grammar-studio": "./dist/cli.js"
+    "grammar-tools": "./dist/cli.js"
   },
   "scripts": {
     "build": "npm run tsc",

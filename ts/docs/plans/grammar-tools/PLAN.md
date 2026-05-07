@@ -52,7 +52,7 @@ nested packages, e.g. `packages/memory/conversation` →
   `packages/grammarTools/cli`.
 - **Package names** (in `package.json` `name` field, and `pnpm --filter`
   arguments) are kebab-case: `grammar-tools-core`, `grammar-tools-ui`,
-  `grammar-tools-explorer`, `grammar-studio`.
+  `grammar-tools-explorer`, `grammar-tools-cli`.
 - `pnpm-workspace.yaml` will need a new glob entry
   `packages/grammarTools/*` alongside the existing
   `packages/memory/*`, `packages/agents/*`, etc.
@@ -208,7 +208,7 @@ D.1–D.5 are mutually independent.
 ### Track E - CLI (parallel after 0c, ships alongside core)
 
 E.0 Scaffold `packages/grammarTools/cli` (package name
-`grammar-studio`). Lives alongside `core` and `ui` in the
+`grammar-tools-cli`). Lives alongside `core` and `ui` in the
 `grammarTools` family. `--json` output mode is mandatory from
 E.0 so each later command is CI-pipeable on the day it lands.
 E.1 `grammar load`. _Needs A.1._
@@ -407,7 +407,7 @@ on them.
    completion preview, confirm Monaco LSP features active.
 4. **Shell**: `pnpm run shell`, enable the debug panel flag, confirm the
    live grammar appears and completion preview matches the chat input.
-5. **CLI**: `pnpm --filter grammar-studio start` then
+5. **CLI**: `pnpm --filter grammar-tools-cli start` then
    `grammar match "play "` against the player grammar - output matches
    Jest expectations.
 6. **Lint / format**: `pnpm run prettier` clean across new packages.

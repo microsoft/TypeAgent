@@ -25,13 +25,13 @@ function run(
     });
 }
 
-describe("grammar-studio CLI", () => {
+describe("grammar-tools CLI", () => {
     let tmpDir: string;
     let validFile: string;
     let invalidFile: string;
 
     beforeAll(() => {
-        tmpDir = mkdtempSync(join(tmpdir(), "grammar-studio-test-"));
+        tmpDir = mkdtempSync(join(tmpdir(), "grammar-tools-test-"));
         validFile = join(tmpDir, "test.agr");
         writeFileSync(
             validFile,
@@ -57,7 +57,7 @@ describe("grammar-studio CLI", () => {
     it("shows usage on help", async () => {
         const { stdout, code } = await run(["help"]);
         expect(code).toBe(0);
-        expect(stdout).toContain("grammar-studio");
+        expect(stdout).toContain("grammar-tools");
         expect(stdout).toContain("Usage:");
     });
 

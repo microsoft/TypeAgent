@@ -17,14 +17,14 @@ const command = positionals[0];
 function usage(): void {
     console.log(
         [
-            "grammar-studio - Grammar exploration CLI",
+            "grammar-tools - Grammar exploration CLI",
             "",
             "Usage:",
-            "  grammar-studio load <file.agr>            Load and validate a grammar file",
-            "  grammar-studio complete <file> <input>    Preview completions for input",
-            "  grammar-studio format <file.agr>          Format a grammar file",
-            "  grammar-studio trace <file> <input>       Trace matcher execution on input",
-            "  grammar-studio help                       Show this help",
+            "  grammar-tools load <file.agr>            Load and validate a grammar file",
+            "  grammar-tools complete <file> <input>    Preview completions for input",
+            "  grammar-tools format <file.agr>          Format a grammar file",
+            "  grammar-tools trace <file> <input>       Trace matcher execution on input",
+            "  grammar-tools help                       Show this help",
             "",
             "Options:",
             "  --json    Output as JSON (machine-readable)",
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
             const file = positionals[1];
             const input = positionals.slice(2).join(" ");
             if (!file || !input) {
-                console.error("Usage: grammar-studio trace <file.agr> <input>");
+                console.error("Usage: grammar-tools trace <file.agr> <input>");
                 process.exit(1);
             }
             const result = await loadGrammarFromFile(path.resolve(file));
