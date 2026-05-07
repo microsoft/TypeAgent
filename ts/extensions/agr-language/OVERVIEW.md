@@ -5,7 +5,7 @@
 
 ## What Was Created
 
-A VS Code extension providing syntax highlighting for Action Grammar (.agr) files used in the TypeAgent project.
+A VS Code extension providing syntax highlighting and language intelligence for Action Grammar (.agr) files used in the TypeAgent project. Includes a Language Server (LSP) powered by `grammar-tools-core`.
 
 ## File Structure
 
@@ -15,8 +15,11 @@ extensions/agr-language/
 ├── language-configuration.json     # Bracket matching and auto-closing pairs
 ├── syntaxes/
 │   └── agr.tmLanguage.json        # TextMate grammar definition
+├── src/
+│   ├── client.ts                  # LSP client (launches the server)
+│   └── server.ts                  # LSP server (diagnostics, definitions, etc.)
 ├── README.md                       # User documentation
-├── INSTALLATION.md                 # Installation instructions
+├── OVERVIEW.md                     # This file
 └── .vscodeignore                   # Files to exclude from packaging
 ```
 
@@ -63,6 +66,17 @@ extensions/agr-language/
 - Bracket matching for all bracket types
 - Auto-closing for quotes
 - Comment toggling support
+
+### 3. Language Server Features
+
+The LSP server (`src/server.ts`) provides:
+
+- **Diagnostics**: Parse errors and warnings reported inline on every keystroke
+- **Go to Definition**: Navigate from a `<RuleName>` reference to its definition
+- **Find References**: Find all usages of a rule in the file
+- **Hover**: Display rule signatures and alternative counts
+- **Document Formatting**: Format `.agr` files via parse-and-rewrite round-trip
+- **Document Symbols**: Outline view listing all rule definitions
 
 ## Technical Implementation
 
@@ -139,8 +153,11 @@ Expected highlighting:
 
 Potential improvements:
 
-- Semantic highlighting for rule references (detect undefined rules)
-- IntelliSense for rule names
-- Grammar validation
+- ~~Semantic highlighting for rule references (detect undefined rules)~~ (implemented: diagnostics)
+- ~~IntelliSense for rule names~~ (partially: go-to-definition, find-references)
+- ~~Grammar validation~~ (implemented: diagnostics)
 - Code folding for multi-line rules
-- Hover information for captures and rule references
+- ~~Hover information for captures and rule references~~ (implemented: hover)
+- Completions for rule names
+- Rename symbol support
+- Code actions (quick fixes for common errors)
