@@ -40,5 +40,25 @@
   },
   "engines": {
     "vscode": "^1.90.0"
-  }
+  },
+  "main": "./dist/client.js",
+  "activationEvents": [
+    "onLanguage:agr"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "grammar-tools-core": "workspace:*",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.4.5"
+  },
+  "type": "module"
 }

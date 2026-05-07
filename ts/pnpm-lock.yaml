@@ -891,6 +891,31 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
+  extensions/agr-language:
+    dependencies:
+      grammar-tools-core:
+        specifier: workspace:*
+        version: link:../../packages/grammarTools/core
+      vscode-languageclient:
+        specifier: ^9.0.1
+        version: 9.0.1
+      vscode-languageserver:
+        specifier: ^9.0.1
+        version: 9.0.1
+      vscode-languageserver-textdocument:
+        specifier: ^1.0.11
+        version: 1.0.12
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.90.0
+        version: 1.100.0
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/actionGrammar:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -14787,6 +14812,10 @@ packages:
     resolution: {integrity: sha512-kdjOSJ2lLIn7r1rtrMbbNCHjyMPfRnowdKjBQ+mGq6NAW5QY2bEZC/khaC5OR8svbbjvLEaIXkOq45e2X9BIbQ==}
     engines: {node: '>=14.0.0'}
 
+  vscode-languageclient@9.0.1:
+    resolution: {integrity: sha512-JZiimVdvimEuHh5olxhxkht09m3JzUGwggb5eRUkzzJhZ2KjCN0nh55VfiED9oez9DyF8/fz1g1iBV3h+0Z2EA==}
+    engines: {vscode: ^1.82.0}
+
   vscode-languageserver-protocol@3.17.5:
     resolution: {integrity: sha512-mb1bvRJN8SVznADSGWM9u/b07H7Ecg0I3OgXDuLdn307rl/J3A9YD6/eYOssqhecL27hK1IPZAsaqh00i/Jljg==}
 
@@ -28286,6 +28315,12 @@ snapshots:
   vscode-jsonrpc@8.2.0: {}
 
   vscode-jsonrpc@8.2.1: {}
+
+  vscode-languageclient@9.0.1:
+    dependencies:
+      minimatch: 5.1.9
+      semver: 7.7.4
+      vscode-languageserver-protocol: 3.17.5
 
   vscode-languageserver-protocol@3.17.5:
     dependencies:
