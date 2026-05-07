@@ -2266,24 +2266,7 @@ export function finalizeNestedRule(
                     // Live = continue (drill deeper); backtrack = stop
                     // (snapshot of state past the repeat).
                     const stopSnapshot = forkMatchState(state);
-                    // Restore continue state via explicit field writes.
-                    state.name = continueState.name;
-                    state.parts = continueState.parts;
-                    state.value = continueState.value;
-                    state.partIndex = continueState.partIndex;
-                    state.valueIds = continueState.valueIds;
-                    state.nextValueId = continueState.nextValueId;
-                    state.values = continueState.values;
-                    state.parent = continueState.parent;
-                    state.nestedLevel = continueState.nestedLevel;
-                    state.suppressOptionalFork =
-                        continueState.suppressOptionalFork;
-                    state.leadingSpacingMode = continueState.leadingSpacingMode;
-                    state.spacingMode = continueState.spacingMode;
-                    state.index = continueState.index;
-                    state.pendingWildcard = continueState.pendingWildcard;
-                    state.lastMatchedPartInfo =
-                        continueState.lastMatchedPartInfo;
+                    restoreSnapshot(state, continueState);
                     pushBacktrack(state, stopSnapshot, "repeat");
                 } else {
                     // Default / nonGreedy: live = stop; backtrack = continue.
@@ -2895,23 +2878,7 @@ export function matchState(state: MatchState, request: string) {
                 // iteration, so it cannot leak onto subsequent parts.
                 const takeSnapshot = forkMatchState(state);
                 takeSnapshot.suppressOptionalFork = true;
-                // Restore skip state via explicit field writes
-                // instead of Object.assign.
-                state.name = skipState.name;
-                state.parts = skipState.parts;
-                state.value = skipState.value;
-                state.partIndex = skipState.partIndex;
-                state.valueIds = skipState.valueIds;
-                state.nextValueId = skipState.nextValueId;
-                state.values = skipState.values;
-                state.parent = skipState.parent;
-                state.nestedLevel = skipState.nestedLevel;
-                state.suppressOptionalFork = skipState.suppressOptionalFork;
-                state.leadingSpacingMode = skipState.leadingSpacingMode;
-                state.spacingMode = skipState.spacingMode;
-                state.index = skipState.index;
-                state.pendingWildcard = skipState.pendingWildcard;
-                state.lastMatchedPartInfo = skipState.lastMatchedPartInfo;
+                restoreSnapshot(state, skipState);
                 pushBacktrack(state, takeSnapshot, "optional");
                 continue;
             }

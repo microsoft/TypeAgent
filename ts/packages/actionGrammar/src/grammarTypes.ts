@@ -432,7 +432,7 @@ export function createStringPart(
     return {
         type: "string",
         optional: undefined,
-        variable: variable ?? undefined,
+        variable,
         value,
     };
 }
@@ -491,7 +491,7 @@ export function createPhraseSetPart(
     return {
         type: "phraseSet",
         optional: undefined,
-        variable: variable ?? undefined,
+        variable,
         matcherName,
     };
 }
