@@ -340,7 +340,11 @@ async function executeCodeAction(
     // handled locally and routed back to the originating extension webview
     // via takeAction. All other code sub-schemas are forwarded to the Coda
     // VS Code extension over the WebSocket bridge below.
-    if (action.schemaName === "code-vscode-shell") {
+    //
+    // Note: sub-schema names are dot-prefixed with the parent agent name by
+    // the dispatcher (see actionConfig.collectActionConfigs), so the runtime
+    // schemaName here is "code.code-vscode-shell", not "code-vscode-shell".
+    if (action.schemaName === "code.code-vscode-shell") {
         return executeConversationAction(
             action as VSCodeConversationActions,
             context,
