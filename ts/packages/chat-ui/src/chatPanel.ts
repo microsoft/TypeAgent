@@ -1243,14 +1243,20 @@ export class ChatPanel {
         // via setDisplayInfo, use those when creating the bubble — even
         // if the first message routed into it is the dispatcher's own
         // transient "[X] Executing action ..." status (source="dispatcher",
-        // no icon). Without this, the bubble would be created with the
-        // dispatcher robot avatar and stay that way (subsequent setMessage
-        // calls only update the name label, not the icon).
+        // sourceIcon="🤖"). Without this, the bubble would be created with
+        // the dispatcher robot avatar and stay that way (subsequent
+        // setMessage calls only update the name label, not the icon).
+        //
+        // When pending source info is present we treat it as authoritative:
+        // even though setDisplayInfo doesn't carry sourceIcon, we resolve
+        // the icon from pending.source via iconForSource so the dispatcher's
+        // 🤖 from the "Executing action ..." caller doesn't win the fallback
+        // chain.
         const effectiveSource = this.pendingDisplayInfo?.source ?? source;
-        const effectiveIcon =
-            this.pendingDisplayInfo?.sourceIcon ??
-            sourceIcon ??
-            this.iconForSource(effectiveSource);
+        const effectiveIcon = this.pendingDisplayInfo
+            ? (this.pendingDisplayInfo.sourceIcon ??
+              this.iconForSource(effectiveSource))
+            : (sourceIcon ?? this.iconForSource(effectiveSource));
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
