@@ -16,6 +16,7 @@ import {
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
+    ReadinessReport,
     TypeAgentAction,
     ResolveEntityResult,
 } from "@typeagent/agent-sdk";
@@ -52,6 +53,37 @@ export function instantiate(): AppAgent {
         getDynamicDisplay: getPlayerDynamicDisplay,
         ...getPlayerCommandInterface(),
         getActionCompletion: getPlayerActionCompletion,
+        checkReadiness: checkPlayerReadiness,
+    };
+}
+
+// Cheap probe for the env vars the token provider requires. Spotify
+// integration is impossible without these, so we surface the missing
+// configuration up front instead of letting the user discover it on the
+// first action. No `setup` hook — this is a manual-config case (edit
+// .env, restart the agent server); the dispatcher's setup-required
+// error points the user at @config agent refresh once they've fixed it.
+async function checkPlayerReadiness(): Promise<ReadinessReport> {
+    const missing: string[] = [];
+    if (!process.env.SPOTIFY_APP_CLI) missing.push("SPOTIFY_APP_CLI");
+    if (!process.env.SPOTIFY_APP_CLISEC) missing.push("SPOTIFY_APP_CLISEC");
+    const port = process.env.SPOTIFY_APP_PORT;
+    if (!port) {
+        missing.push("SPOTIFY_APP_PORT");
+    } else if (parseInt(port).toString() !== port) {
+        return {
+            state: "setup-required",
+            message: `SPOTIFY_APP_PORT has invalid port number "${port}".`,
+            details:
+                "Set SPOTIFY_APP_PORT to an integer in ts/.env (the redirect port your Spotify app is registered with).",
+        };
+    }
+    if (missing.length === 0) return { state: "ready" };
+    return {
+        state: "setup-required",
+        message: `Spotify env vars not set: ${missing.join(", ")}.`,
+        details:
+            "Set them in ts/.env. SPOTIFY_APP_CLI and SPOTIFY_APP_CLISEC come from the Spotify developer dashboard for your app; SPOTIFY_APP_PORT is the redirect port you registered there.",
     };
 }
 

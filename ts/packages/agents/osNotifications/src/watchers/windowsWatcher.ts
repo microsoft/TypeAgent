@@ -166,6 +166,13 @@ export function startWindowsWatcher(
 const HELPER_PUBLISH_SUBDIR = "publish";
 const HELPER_EXE_NAME = "OsNotificationListener.exe";
 
+// Public probe used by checkReadiness — same exe-presence check the watcher
+// does at startup, but split out so the agent's readiness hook doesn't have
+// to spin up the full watcher to find out whether setup has been run.
+export function isWindowsHelperBuilt(): boolean {
+    return resolveHelperPath() !== undefined;
+}
+
 function resolveHelperPath(): string | undefined {
     // After build, postbuild copies bin/** -> dist/bin/**, and this module is
     // in dist/watchers/. Resolve relative to import.meta.url.

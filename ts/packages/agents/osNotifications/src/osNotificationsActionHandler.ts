@@ -9,6 +9,7 @@ import {
     AppAgentEvent,
     DisplayContent,
     ParsedCommandParams,
+    ReadinessReport,
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -43,6 +44,7 @@ import { startWatcher } from "./watchers/index.js";
 import {
     HelperNotBuiltError,
     buildWindowsHelper,
+    isWindowsHelperBuilt,
 } from "./watchers/windowsWatcher.js";
 
 const debug = registerDebug("typeagent:osNotifications");
@@ -67,6 +69,13 @@ type AgentContext = {
     // Manages yes/no choice callbacks (build prompt, etc.). Required for the
     // createYesNoChoiceResult / handleChoice pattern from autoShell.
     choiceManager: ChoiceManager;
+    // Mutex on the heavy build/sign/register work. The dispatcher's setup
+    // re-entrancy guard only covers the synchronous setup() call; the
+    // actual work runs later via the choice card's callback, which is a
+    // separate context. Two clients each clicking "Yes" on their own
+    // build cards would otherwise run dotnet publish + signtool +
+    // Add-AppxPackage in parallel, which corrupts the publish output.
+    buildInProgress: boolean;
 };
 
 // ============================================================================
@@ -103,11 +112,14 @@ async function performSync(
             "Sync requested. Existing notifications will be forwarded as toasts shortly.",
         );
     } catch (e: any) {
-        // Windows-specific: helper exe hasn't been built yet. Offer to
-        // build it now via an in-chat yes/no card. Pattern matches the
-        // desktop agent's autoShell build flow (PR #2294).
+        // Defense-in-depth: with the readiness gate this branch
+        // shouldn't fire (the dispatcher pre-flights checkReadiness),
+        // but the cache could be stale if the exe was deleted under us.
+        // Surface a plain error pointing the user at setup.
         if (e instanceof HelperNotBuiltError) {
-            return offerHelperBuild(actionContext);
+            return createActionResultFromError(
+                "OS notification helper exe not found. Run `@config agent setup osNotifications` to build it.",
+            );
         }
         return createActionResultFromError(`Sync failed: ${e?.message ?? e}`);
     }
@@ -177,6 +189,17 @@ async function buildAndRetrySync(
     const sessionContext = actionContext.sessionContext;
     const ctx = sessionContext.agentContext;
 
+    // See AgentContext.buildInProgress — the dispatcher's setup-window
+    // mutex only covers the synchronous setup() call, not the deferred
+    // work behind the yes/no choice card. This catches two clients each
+    // confirming their own build prompt before either build completes.
+    if (ctx.buildInProgress) {
+        return createActionResultFromError(
+            "Build is already in progress (another client is running it). Wait for it to finish, then re-run sync.",
+        );
+    }
+    ctx.buildInProgress = true;
+
     actionContext.actionIO.appendDisplay(
         {
             type: "text",
@@ -199,8 +222,10 @@ async function buildAndRetrySync(
             },
         });
     } catch (e: any) {
+        ctx.buildInProgress = false;
         return createActionResultFromError(`Build failed: ${e?.message ?? e}`);
     }
+    ctx.buildInProgress = false;
 
     // Restart the watcher so the freshly-built exe is picked up. The current
     // watcher is the no-helper stub; stopping it is a no-op, but we tear it
@@ -313,6 +338,7 @@ export function instantiate(): AppAgent {
                 recentEmits: [],
                 errorReported: false,
                 choiceManager: new ChoiceManager(),
+                buildInProgress: false,
             };
         },
 
@@ -363,6 +389,41 @@ export function instantiate(): AppAgent {
             const ctx = (context as ActionContext<AgentContext>).sessionContext
                 .agentContext;
             return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
+
+        // Cheap probe: file existence + platform check. The dispatcher
+        // calls this right after the agent is enabled, after setup, and
+        // on @config agent refresh. The result is cached.
+        //   - non-Windows: ready (no helper needed; we can still test-
+        //     inject and use the linux watcher).
+        //   - Windows + helper present: ready.
+        //   - Windows + helper missing: setup-required, with a hint.
+        async checkReadiness(): Promise<ReadinessReport> {
+            if (process.platform !== "win32") {
+                return { state: "ready" };
+            }
+            if (isWindowsHelperBuilt()) {
+                return { state: "ready" };
+            }
+            return {
+                state: "setup-required",
+                message:
+                    "OS notification helper exe (OsNotificationListener.exe) hasn't been built yet.",
+                details:
+                    "Setup runs `dotnet publish` + signs + registers a sparse WinAppSDK package; ~30–60 seconds first time.",
+            };
+        },
+
+        // Returns the same yes/no card the agent used to offer when
+        // syncNow threw HelperNotBuiltError — promoted to a first-class
+        // setup hook so it works through the standard
+        // `@config agent setup` path. The user clicks Yes/No on the card;
+        // the build runs (mutex-protected by AgentContext.buildInProgress)
+        // in the choice callback.
+        setup: async (actionContext) => {
+            return offerHelperBuild(
+                actionContext as ActionContext<AgentContext>,
+            );
         },
     };
 }

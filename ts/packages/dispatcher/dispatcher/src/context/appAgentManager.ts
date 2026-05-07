@@ -197,6 +197,15 @@ export class AppAgentManager implements ActionConfigProvider {
         return this.readiness.get(appAgentName) ?? { state: "ready" };
     }
 
+    // True if the agent implements an in-chat setup hook. The dispatcher's
+    // pre-flight gate uses this to phrase the "needs setup" error
+    // correctly — for agents without a hook (typically manual-config
+    // cases like missing env vars), pointing at @config agent setup
+    // would be a dead end, so we point at refresh instead.
+    public hasSetup(appAgentName: string): boolean {
+        return this.agents.get(appAgentName)?.appAgent?.setup !== undefined;
+    }
+
     // List enabled agents that aren't ready (state != "ready"). Used by
     // `@config agent` to surface a warning icon and by
     // `@config agent setup` (no-name form) to drive bulk setup.

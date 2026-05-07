@@ -114,8 +114,14 @@ async function checkAgentReady(
         }
         // No setup hook — fall through to the friendly throw below.
     }
+    // Different hint depending on whether the agent can be configured
+    // from chat. Without a hook (manual config case), `@config agent
+    // setup` would just bounce the user; point at `refresh` instead.
+    const hint = systemContext.agents.hasSetup(appAgentName)
+        ? `Run \`@config agent setup ${appAgentName}\` to configure it.`
+        : `After fixing the underlying issue, run \`@config agent refresh ${appAgentName}\` to re-check.`;
     throw new Error(
-        `Agent '${appAgentName}' needs setup before it can be used: ${reason} Run \`@config agent setup ${appAgentName}\` to configure it.`,
+        `Agent '${appAgentName}' needs configuration before it can be used: ${reason} ${hint}`,
     );
 }
 

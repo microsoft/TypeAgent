@@ -617,10 +617,21 @@ class AgentSetupCommandHandler implements CommandHandler {
         // setup-required — invoke the agent's setup hook (if any).
         const result = await agents.runSetup(name, context);
         if (result === undefined) {
-            displayWarn(
-                `Agent '${name}' needs setup but does not implement a setup hook${report.message ? `: ${report.message}` : ""}`,
-                context,
+            // Agent reports setup-required but doesn't implement a setup
+            // hook — typically a manual-config case (env vars, files
+            // outside the agent's reach). Show the readiness message as
+            // the primary content and point at @config agent refresh so
+            // the user can re-check after fixing the underlying issue.
+            const lines = [
+                `Agent '${name}' needs configuration before it can be used.`,
+            ];
+            if (report.message) lines.push("", report.message);
+            if (report.details) lines.push("", report.details);
+            lines.push(
+                "",
+                `This agent does not have an in-chat setup flow. After fixing the underlying issue, run \`@config agent refresh ${name}\` to re-check.`,
             );
+            displayWarn(lines.join("\n"), context);
             return;
         }
         return result;
