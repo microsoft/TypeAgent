@@ -7,9 +7,5 @@
     "types": ["node", "jest"]
   },
   "include": ["./**/*"],
-  "references": [
-    { "path": "../src" },
-    { "path": "../../model/src" },
-    { "path": "../../engine/src" }
-  ]
+  "references": [{ "path": "../src" }]
 }

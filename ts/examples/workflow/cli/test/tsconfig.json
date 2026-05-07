@@ -8,9 +8,5 @@
   "ts-node": {
     "esm": true
   },
-  "references": [
-    { "path": "../src" },
-    { "path": "../../model/src" },
-    { "path": "../../engine/src" }
-  ]
+  "references": [{ "path": "../src" }]
 }
