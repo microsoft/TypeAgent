@@ -1086,6 +1086,15 @@ export type MatchState = PendingMatchState & {
     // `tryNextBacktrack` restores.  See `MemoCache`.
     memoCache: MemoCache;
 
+    // When true, the matcher writes `lastMatchedPartInfo` on each
+    // successful string/number part match.  Only the completion
+    // system reads this field; the non-completion `matchGrammar`
+    // path sets this to `false` to avoid 4-6 object allocations
+    // per match attempt and skip the associated memoization delta
+    // bookkeeping (which becomes a no-op when the field stays
+    // `undefined` throughout).
+    trackLastMatchedPart: boolean;
+
     // Opt-in trace hook.  Set once at `initialMatchState` time.
     // Zero cost when undefined (single `if` guard).  Not in
     // PendingMatchState/SnapshotState - persists across backtracks.
@@ -1330,6 +1339,7 @@ function restoreSnapshot(state: MatchState, snap: SnapshotState) {
 }
 
 export function tryNextBacktrack(state: MatchState): boolean {
+    const debugEnabled = state.debugEnabled;
     while (true) {
         const frame = state.backtracks;
         if (frame === undefined) {
@@ -1358,7 +1368,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
             // value, spacingMode) are written from `rule` directly
             // after restoring the shared base.
             restoreSnapshot(state, base);
-            state.name = state.debugEnabled ? `${frame.namePrefix}[${i}]` : "";
+            state.name = debugEnabled ? `${frame.namePrefix}[${i}]` : "";
             state.parts = rule.parts;
             state.value = rule.value;
             state.spacingMode = rule.spacingMode;
@@ -1404,7 +1414,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     state.memoCache.set(frame.rules, inner);
                 }
                 inner.set(key, "failed");
-                if (state.debugEnabled) {
+                if (debugEnabled) {
                     debugMatchRaw(
                         `memoMarker: cached intrinsic failure for rules@${key}`,
                     );
@@ -1420,7 +1430,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     // soundness condition documented on
                     // `MemoCache`.
                     inner.set(key, frame.successes);
-                    if (state.debugEnabled) {
+                    if (debugEnabled) {
                         debugMatchRaw(
                             `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
                         );
@@ -2330,6 +2340,7 @@ function matchStringPartWithWildcard(
     part: StringPart,
     state: MatchState,
 ) {
+    const debugEnabled = state.debugEnabled;
     regExp.lastIndex = state.index;
     while (true) {
         const match = regExp.exec(request);
@@ -2339,7 +2350,7 @@ function matchStringPartWithWildcard(
         const wildcardEnd = match.index;
         const newIndex = wildcardEnd + match[0].length;
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            if (state.debugEnabled) {
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -2361,18 +2372,16 @@ function matchStringPartWithWildcard(
             if (requiresValue(state, part)) {
                 addValue(state, part.variable, getJoinedValue(part));
             }
-            // Always replaced (never mutated in place):
-            // `captureSuccessDelta` relies on pointer inequality
-            // with `marker.lastMatchedPartInfoAtEntry` to detect
-            // whether this field changed during the sub-rule.
-            state.lastMatchedPartInfo = {
-                type: "string",
-                start: wildcardEnd,
-                part,
-                afterWildcard: true,
-                matchedSpacingMode: state.spacingMode,
-            };
-            if (state.debugEnabled) {
+            if (state.trackLastMatchedPart) {
+                state.lastMatchedPartInfo = {
+                    type: "string",
+                    start: wildcardEnd,
+                    part,
+                    afterWildcard: true,
+                    matchedSpacingMode: state.spacingMode,
+                };
+            }
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -2380,7 +2389,7 @@ function matchStringPartWithWildcard(
             }
             return true;
         }
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
@@ -2395,6 +2404,7 @@ function matchStringPartWithoutWildcard(
     part: StringPart,
     state: MatchState,
 ) {
+    const debugEnabled = state.debugEnabled;
     const curr = state.index;
     regExp.lastIndex = curr;
     if (!regExp.test(request)) {
@@ -2402,7 +2412,7 @@ function matchStringPartWithoutWildcard(
     }
     const newIndex = regExp.lastIndex;
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `Rejected non-separated matched string ${part.value.join(" ")}`,
@@ -2411,7 +2421,7 @@ function matchStringPartWithoutWildcard(
         return false;
     }
 
-    if (state.debugEnabled) {
+    if (debugEnabled) {
         debugMatch(
             state,
             `Matched string ${part.value.join(" ")} to ${newIndex}`,
@@ -2421,17 +2431,15 @@ function matchStringPartWithoutWildcard(
     if (requiresValue(state, part)) {
         addValue(state, part.variable, getJoinedValue(part));
     }
-    // Always replaced (never mutated in place):
-    // `captureSuccessDelta` relies on pointer inequality
-    // with `marker.lastMatchedPartInfoAtEntry` to detect
-    // whether this field changed during the sub-rule.
-    state.lastMatchedPartInfo = {
-        type: "string",
-        start: curr,
-        part,
-        afterWildcard: false,
-        matchedSpacingMode: state.spacingMode,
-    };
+    if (state.trackLastMatchedPart) {
+        state.lastMatchedPartInfo = {
+            type: "string",
+            start: curr,
+            part,
+            afterWildcard: false,
+            matchedSpacingMode: state.spacingMode,
+        };
+    }
     state.index = newIndex;
     return true;
 }
@@ -2564,7 +2572,8 @@ function getJoinedValue(part: StringPart): string {
 }
 
 function matchStringPart(request: string, state: MatchState, part: StringPart) {
-    if (state.debugEnabled) {
+    const debugEnabled = state.debugEnabled;
+    if (debugEnabled) {
         debugMatch(
             state,
             `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
@@ -2587,6 +2596,7 @@ function matchVarNumberPartWithWildcard(
     state: MatchState,
     part: VarNumberPart,
 ) {
+    const debugEnabled = state.debugEnabled;
     const curr = state.index;
     const re =
         leadingSpacingMode(state) === "none"
@@ -2607,7 +2617,7 @@ function matchVarNumberPartWithWildcard(
         const newIndex = wildcardEnd + match[0].length;
 
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            if (state.debugEnabled) {
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Rejected non-separated matched number at ${wildcardEnd}`,
@@ -2617,7 +2627,7 @@ function matchVarNumberPartWithWildcard(
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex)) {
-            if (state.debugEnabled) {
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Matched number at ${wildcardEnd} to ${newIndex}`,
@@ -2627,19 +2637,19 @@ function matchVarNumberPartWithWildcard(
             const valueId = addValueId(state, part.variable);
             if (valueId !== undefined) {
                 addValueWithId(state, valueId, n, false);
-                // Always replaced (never mutated in place):
-                // `captureSuccessDelta` relies on pointer inequality.
-                state.lastMatchedPartInfo = {
-                    type: "number",
-                    start: wildcardEnd,
-                    valueId,
-                    afterWildcard: true,
-                    matchedSpacingMode: state.spacingMode,
-                };
+                if (state.trackLastMatchedPart) {
+                    state.lastMatchedPartInfo = {
+                        type: "number",
+                        start: wildcardEnd,
+                        valueId,
+                        afterWildcard: true,
+                        matchedSpacingMode: state.spacingMode,
+                    };
+                }
             }
             return true;
         }
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `Rejected match number at ${wildcardEnd} to ${newIndex} with empty wildcard`,
@@ -2658,6 +2668,7 @@ function matchVarNumberPartWithoutWildcard(
     state: MatchState,
     part: VarNumberPart,
 ) {
+    const debugEnabled = state.debugEnabled;
     const curr = state.index;
     const re =
         leadingSpacingMode(state) === "none"
@@ -2676,28 +2687,28 @@ function matchVarNumberPartWithoutWildcard(
     const newIndex = curr + m[0].length;
 
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(state, `Rejected non-separated matched number`);
         }
         return false;
     }
 
-    if (state.debugEnabled) {
+    if (debugEnabled) {
         debugMatch(state, `Matched number to ${newIndex}`);
     }
 
     const valueId = addValueId(state, part.variable);
     if (valueId !== undefined) {
         addValueWithId(state, valueId, n, false);
-        // Always replaced (never mutated in place):
-        // `captureSuccessDelta` relies on pointer inequality.
-        state.lastMatchedPartInfo = {
-            type: "number",
-            start: curr,
-            valueId,
-            afterWildcard: false,
-            matchedSpacingMode: state.spacingMode,
-        };
+        if (state.trackLastMatchedPart) {
+            state.lastMatchedPartInfo = {
+                type: "number",
+                start: curr,
+                valueId,
+                afterWildcard: false,
+                matchedSpacingMode: state.spacingMode,
+            };
+        }
     }
     state.index = newIndex;
     return true;
@@ -2708,7 +2719,8 @@ function matchVarNumberPart(
     state: MatchState,
     part: VarNumberPart,
 ) {
-    if (state.debugEnabled) {
+    const debugEnabled = state.debugEnabled;
+    if (debugEnabled) {
         debugMatch(
             state,
             `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
@@ -2828,6 +2840,7 @@ function enterTailAlternation(
 
 export function matchState(state: MatchState, request: string) {
     const trace = state.trace;
+    const debugEnabled = state.debugEnabled;
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
@@ -2879,7 +2892,7 @@ export function matchState(state: MatchState, request: string) {
         }
 
         const part = parts[partIndex];
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
@@ -3003,13 +3016,13 @@ export function matchState(state: MatchState, request: string) {
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
-                if (state.debugEnabled) {
+                if (debugEnabled) {
                     debugMatch(
                         state,
                         `expanding ${part.alternatives.length} rules`,
                     );
                 }
-                const namePrefix = state.debugEnabled
+                const namePrefix = debugEnabled
                     ? part.name
                         ? `<${part.name}>`
                         : getStateName(state)
@@ -3561,6 +3574,7 @@ export function initialMatchState(
         index: 0,
         pendingWildcard: undefined,
         lastMatchedPartInfo: undefined,
+        trackLastMatchedPart: false,
         backtracks: undefined,
         wildcardPolicy,
         optionalPolicy,

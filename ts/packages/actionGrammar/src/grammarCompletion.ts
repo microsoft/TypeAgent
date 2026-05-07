@@ -1180,6 +1180,7 @@ function collectCandidates(
     if (state === undefined) {
         return ctx;
     }
+    state.trackLastMatchedPart = true;
 
     const wildcardShortest = state.wildcardPolicy === "shortest";
 
