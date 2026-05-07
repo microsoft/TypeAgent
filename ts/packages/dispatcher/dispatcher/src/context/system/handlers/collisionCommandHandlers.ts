@@ -16,11 +16,15 @@ import {
     getRecentCollisionEvents,
 } from "../../collisionTelemetry.js";
 import {
-    ActionSimilarityPair,
+    ActionCluster,
     ActionSimilarityScanInput,
     ActionSimilarityScanResult,
-    ActionVectorKey,
+    AppliedStrategy,
+    VectorKey,
+    applyStrategy,
     computeActionSimilarity,
+    getStrategy,
+    listStrategies,
 } from "../../../translation/actionSimilarity.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 
@@ -369,25 +373,45 @@ const SIMILARITY_CACHE_RELATIVE = path.join(
 
 class CollisionSimilarCommandHandler implements CommandHandler {
     public readonly description =
-        "Find semantically similar actions across agents (multi-vector embedding similarity)";
+        "Find semantically similar actions across agents (multi-vector embedding similarity, clusters by default)";
     public readonly parameters = {
         flags: {
             threshold: {
                 description:
-                    "Aggregate-score threshold (0–1.3 effective range; default 0.7)",
+                    "Per-strategy score threshold (default 0.75)",
                 char: "t",
                 type: "number",
-                default: 0.7,
+                default: 0.75,
+            },
+            strategy: {
+                description:
+                    "Named scoring strategy (use `@collision similar list-strategies` to see all). Default: balanced",
+                char: "s",
+                type: "string",
+                default: "balanced",
+            },
+            "all-strategies": {
+                description:
+                    "Run every strategy and render a comparison view",
+                type: "boolean",
+                default: false,
+            },
+            pairs: {
+                description:
+                    "Render pairwise (legacy view) instead of clusters",
+                type: "boolean",
+                default: false,
             },
             top: {
-                description: "Maximum number of pairs to render (default 50)",
+                description:
+                    "Maximum clusters / pairs to render (default 50)",
                 char: "n",
                 type: "number",
                 default: 50,
             },
             json: {
                 description:
-                    "Write the structured scan result to this path as JSON (in addition to rendering)",
+                    "Write the structured scan result + applied-strategy data to this path as JSON",
                 type: "string",
                 optional: true,
             },
@@ -407,19 +431,32 @@ class CollisionSimilarCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const configs = systemContext.agents.getActionConfigs();
 
-        // Build inputs from every loaded action config.  Skip configs
-        // whose schema file fails to load (rare; agent registration
-        // would normally have already errored).  The embedding model is
-        // lazily created inside the engine if not provided here.
+        // Build inputs.  Pull the agent manifest description so the
+        // agent-context strategies have something richer than just the
+        // schema name token — manifests like "Calendar agent that keeps
+        // track of important dates and events…" carry more semantic
+        // signal than action JSDoc often does.
         const inputs: ActionSimilarityScanInput[] = [];
         const skipped: { schemaName: string; reason: string }[] = [];
         for (const config of configs) {
             try {
                 const actionSchemaFile =
                     systemContext.agents.getActionSchemaFileForConfig(config);
+                const agentName = getAppAgentName(config.schemaName);
+                let agentDescription: string | undefined;
+                try {
+                    agentDescription =
+                        systemContext.agents.getAppAgentDescription(agentName);
+                } catch {
+                    // Some configs (e.g. ad-hoc dynamic schemas) may not
+                    // have a registered agent record; agent context just
+                    // won't be embeddable for them.
+                    agentDescription = undefined;
+                }
                 inputs.push({
                     schemaName: config.schemaName,
-                    agentName: getAppAgentName(config.schemaName),
+                    agentName,
+                    agentDescription,
                     actionSchemaFile,
                 });
             } catch (err) {
@@ -450,8 +487,7 @@ class CollisionSimilarCommandHandler implements CommandHandler {
             context,
         );
 
-        const result = await computeActionSimilarity(inputs, {
-            threshold: params.flags.threshold ?? 0.7,
+        const scan = await computeActionSimilarity(inputs, {
             cachePath,
             onProgress: (phase, index, total, label) => {
                 const header =
@@ -463,12 +499,38 @@ class CollisionSimilarCommandHandler implements CommandHandler {
             },
         });
 
+        const threshold = Math.max(0, params.flags.threshold ?? 0.75);
+        const top = Math.max(1, params.flags.top ?? 50);
+
+        // Apply one or more strategies to the scan.
+        let applied: AppliedStrategy[];
+        if (params.flags["all-strategies"]) {
+            applied = listStrategies().map((s) =>
+                applyStrategy(scan, s, threshold),
+            );
+        } else {
+            const strategyName = params.flags.strategy ?? "balanced";
+            const strategy = getStrategy(strategyName);
+            if (!strategy) {
+                displayWarn(
+                    `Unknown strategy "${strategyName}". Run \`@collision similar list-strategies\` to see all.`,
+                    context,
+                );
+                return;
+            }
+            applied = [applyStrategy(scan, strategy, threshold)];
+        }
+
         if (params.flags.json) {
             try {
                 const absPath = path.resolve(params.flags.json);
                 fs.writeFileSync(
                     absPath,
-                    JSON.stringify(result, null, 2),
+                    JSON.stringify(
+                        { scan, applied, skipped, threshold },
+                        null,
+                        2,
+                    ),
                 );
             } catch (err) {
                 displayWarn(
@@ -478,14 +540,56 @@ class CollisionSimilarCommandHandler implements CommandHandler {
             }
         }
 
-        const top = Math.max(1, params.flags.top ?? 50);
-        const html = renderActionSimilarityHTML(result, skipped, top);
-        const text = renderActionSimilarityText(result, skipped, top);
+        const html = params.flags["all-strategies"]
+            ? renderAllStrategiesHTML(scan, applied, skipped, top)
+            : renderSingleStrategyHTML(
+                  scan,
+                  applied[0],
+                  skipped,
+                  top,
+                  params.flags.pairs,
+              );
+        const text = params.flags["all-strategies"]
+            ? renderAllStrategiesText(scan, applied, skipped)
+            : renderSingleStrategyText(
+                  scan,
+                  applied[0],
+                  skipped,
+                  top,
+                  params.flags.pairs,
+              );
         context.actionIO.appendDisplay({
             type: "html",
             content: html,
             alternates: [{ type: "text", content: text }],
         });
+    }
+}
+
+class CollisionSimilarListStrategiesCommandHandler implements CommandHandler {
+    public readonly description =
+        "List the named strategies available for `@collision similar -s <name>`";
+    public readonly parameters = {} as const;
+
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const C_MUTED = "#777";
+        const rows = listStrategies()
+            .map(
+                (s) =>
+                    `<tr>
+                        <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-family:monospace;font-weight:600;color:#36c;">${escapeHtml(s.name)}</td>
+                        <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;">${escapeHtml(s.description)}</td>
+                    </tr>`,
+            )
+            .join("");
+        const html =
+            `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:920px;">` +
+            `<h3 style="margin:0 0 8px;font-size:14px;">Action similarity strategies</h3>` +
+            `<div style="color:${C_MUTED};font-size:12px;margin-bottom:8px;">Pick one with <code>@collision similar -s &lt;name&gt;</code>, or compare all with <code>@collision similar --all-strategies</code>.</div>` +
+            `<table style="border-collapse:collapse;width:100%;font-size:12px;">` +
+            `<thead><tr style="background:#fafafa;"><th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;color:#555;">Name</th><th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;color:#555;">What it does</th></tr></thead>` +
+            `<tbody>${rows}</tbody></table></div>`;
+        context.actionIO.appendDisplay({ type: "html", content: html });
     }
 }
 
@@ -505,118 +609,24 @@ function resolveSimilarityCachePath(
 
 // ---- HTML rendering ------------------------------------------------------
 
-function renderActionSimilarityHTML(
-    result: ActionSimilarityScanResult,
-    skipped: { schemaName: string; reason: string }[],
-    top: number,
-): string {
-    const C_MUTED = "#777";
-    const wrap = `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:1100px;">`;
-    const header = `<h3 style="margin:0 0 6px;font-size:14px;">Semantic action similarity (multi-vector)</h3>`;
+const C_SIM_MUTED = "#777";
+const C_SIM_DIM = "#999";
 
-    const summaryLines = [
-        `Scanned <b>${result.actionCount}</b> action(s) across <b>${result.schemaCount}</b> schema(s)`,
-        `threshold=<code style="background:#f5f5f5;padding:1px 4px;border-radius:2px;">${result.threshold.toFixed(2)}</code>`,
-        `pairs above threshold: <b>${result.pairs.length}</b>`,
-    ].join(" · ");
-
-    const skipNote =
-        skipped.length > 0
-            ? `<div style="color:#c80;font-size:11px;margin:4px 0;">${skipped.length} schema(s) failed to load: ${skipped
-                  .map((s) => `<code>${escapeHtml(s.schemaName)}</code>`)
-                  .join(", ")}</div>`
-            : "";
-
-    if (result.pairs.length === 0) {
-        return (
-            wrap +
-            header +
-            `<div style="color:${C_MUTED};font-size:12px;margin-bottom:8px;">${summaryLines}</div>` +
-            skipNote +
-            `<div style="color:#999;font-style:italic;padding:16px 0;">No action pairs above threshold ${result.threshold.toFixed(2)}.</div>` +
-            `</div>`
-        );
+function vectorLabel(k: VectorKey): string {
+    switch (k) {
+        case "desc":
+            return "D";
+        case "params":
+            return "P";
+        case "combined":
+            return "C";
+        case "nameShape":
+            return "N";
+        case "agentContext":
+            return "A";
+        case "agentAndAction":
+            return "A+";
     }
-
-    const shown = result.pairs.slice(0, top);
-    const truncated =
-        result.pairs.length > shown.length
-            ? `<div style="color:${C_MUTED};font-size:11px;margin-top:6px;">…${result.pairs.length - shown.length} more pair(s) above threshold not shown (use <code>--top &lt;n&gt;</code> to see more, <code>--json &lt;path&gt;</code> for full export).</div>`
-            : "";
-
-    let cards = "";
-    for (const pair of shown) {
-        cards += renderPairCardHTML(pair);
-    }
-
-    return (
-        wrap +
-        header +
-        `<div style="color:${C_MUTED};font-size:12px;margin-bottom:8px;">${summaryLines}</div>` +
-        skipNote +
-        cards +
-        truncated +
-        `<div style="color:${C_MUTED};font-size:11px;margin-top:8px;">Per-vector score badges: <b>D</b> = description, <b>P</b> = parameters, <b>C</b> = combined description+parameters. Aggregate score weights the strongest signal heavily, with a small bonus when other signals also align.</div>` +
-        `</div>`
-    );
-}
-
-function renderPairCardHTML(pair: ActionSimilarityPair): string {
-    const accent = aggregateAccent(pair.aggregateScore);
-    const cardStyle =
-        `border:1px solid #e0e0e0;border-left:4px solid ${accent};` +
-        `border-radius:4px;padding:8px 12px;margin-bottom:8px;background:#fff;`;
-
-    const aggregateBadge =
-        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
-        `font-family:monospace;font-size:12px;font-weight:600;color:#fff;background:${accent};">` +
-        pair.aggregateScore.toFixed(3) +
-        `</span>`;
-
-    const vectorBadges = (["desc", "params", "combined"] as ActionVectorKey[])
-        .map((k) => {
-            const score = pair.scores[k];
-            if (score === undefined) {
-                return `<span title="${k} vector absent on at least one side" style="display:inline-block;padding:1px 6px;border-radius:8px;font-family:monospace;font-size:10px;font-weight:600;color:#bbb;background:#f5f5f5;">${vectorLabel(k)}=—</span>`;
-            }
-            const color = vectorScoreColor(score);
-            return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-family:monospace;font-size:10px;font-weight:600;color:#fff;background:${color};">${vectorLabel(k)}=${score.toFixed(2)}</span>`;
-        })
-        .join(" ");
-
-    const headerLine =
-        `<div style="margin-bottom:6px;">${aggregateBadge} ${vectorBadges}</div>`;
-
-    const aHTML = renderSideHTML(pair.keyA, pair.descriptionA);
-    const bHTML = renderSideHTML(pair.keyB, pair.descriptionB);
-
-    return (
-        `<div style="${cardStyle}">${headerLine}` +
-        `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">${aHTML}${bHTML}</div>` +
-        `</div>`
-    );
-}
-
-function renderSideHTML(
-    key: { schemaName: string; actionName: string },
-    description: string | undefined,
-): string {
-    const C_MUTED = "#777";
-    const schema = schemaBadge(key.schemaName);
-    const action = `<code style="font-family:monospace;font-size:12px;color:#333;">${escapeHtml(key.actionName)}</code>`;
-    const desc = description
-        ? `<div style="color:#444;font-size:12px;margin-top:4px;">${escapeHtml(description)}</div>`
-        : `<div style="color:${C_MUTED};font-size:11px;font-style:italic;margin-top:4px;">(no description)</div>`;
-    return (
-        `<div style="min-width:0;">${schema} ${action}${desc}</div>`
-    );
-}
-
-function aggregateAccent(score: number): string {
-    if (score >= 1.0) return "#c44"; // very strong agreement — likely real overlap
-    if (score >= 0.85) return "#c80"; // strong
-    if (score >= 0.75) return "#36c"; // moderate
-    return "#888"; // weak (just above threshold)
 }
 
 function vectorScoreColor(score: number): string {
@@ -626,51 +636,318 @@ function vectorScoreColor(score: number): string {
     return "#aaa";
 }
 
-function vectorLabel(k: ActionVectorKey): string {
-    return k === "desc" ? "D" : k === "params" ? "P" : "C";
+function aggregateAccent(score: number): string {
+    if (score >= 1.0) return "#c44";
+    if (score >= 0.85) return "#c80";
+    if (score >= 0.75) return "#36c";
+    return "#888";
 }
 
-function renderActionSimilarityText(
-    result: ActionSimilarityScanResult,
+function renderVectorBadges(
+    scores: Partial<Record<VectorKey, number>>,
+    keys: readonly VectorKey[],
+): string {
+    return keys
+        .map((k) => {
+            const score = scores[k];
+            if (score === undefined) {
+                return `<span title="${k} vector absent on at least one side" style="display:inline-block;padding:1px 6px;border-radius:8px;font-family:monospace;font-size:10px;font-weight:600;color:#bbb;background:#f5f5f5;">${vectorLabel(k)}=—</span>`;
+            }
+            const color = vectorScoreColor(score);
+            return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-family:monospace;font-size:10px;font-weight:600;color:#fff;background:${color};">${vectorLabel(k)}=${score.toFixed(2)}</span>`;
+        })
+        .join(" ");
+}
+
+function renderScanSummary(
+    scan: ActionSimilarityScanResult,
+    applied: AppliedStrategy[],
+    skipped: { schemaName: string; reason: string }[],
+): string {
+    const items = [
+        `<b>${scan.actionCount}</b> action(s)`,
+        `<b>${scan.schemaCount}</b> schema(s)`,
+        `<b>${scan.pairs.length}</b> kept pair(s)`,
+    ];
+    if (applied.length === 1) {
+        items.push(
+            `strategy=<code style="background:#f5f5f5;padding:1px 4px;border-radius:2px;">${escapeHtml(applied[0].strategy.name)}</code>`,
+        );
+        items.push(
+            `threshold=<code style="background:#f5f5f5;padding:1px 4px;border-radius:2px;">${applied[0].threshold.toFixed(2)}</code>`,
+        );
+    } else {
+        items.push(`comparing <b>${applied.length}</b> strategies`);
+        items.push(
+            `threshold=<code style="background:#f5f5f5;padding:1px 4px;border-radius:2px;">${applied[0].threshold.toFixed(2)}</code>`,
+        );
+    }
+    const summary = items.join(" · ");
+    const skipNote =
+        skipped.length > 0
+            ? `<div style="color:#c80;font-size:11px;margin:4px 0;">${skipped.length} schema(s) failed to load: ${skipped
+                  .map((s) => `<code>${escapeHtml(s.schemaName)}</code>`)
+                  .join(", ")}</div>`
+            : "";
+    return `<div style="color:${C_SIM_MUTED};font-size:12px;margin-bottom:8px;">${summary}</div>${skipNote}`;
+}
+
+// ---- Single-strategy view -----------------------------------------------
+
+function renderSingleStrategyHTML(
+    scan: ActionSimilarityScanResult,
+    applied: AppliedStrategy,
     skipped: { schemaName: string; reason: string }[],
     top: number,
+    showPairs: boolean,
+): string {
+    const wrap = `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:1100px;">`;
+    const header = `<h3 style="margin:0 0 6px;font-size:14px;">Semantic action similarity (multi-vector)</h3>`;
+    const strategyHeader = `<div style="font-size:12px;color:${C_SIM_MUTED};margin-bottom:6px;"><b>${escapeHtml(applied.strategy.name)}</b> — ${escapeHtml(applied.strategy.description)}</div>`;
+
+    const summary = renderScanSummary(scan, [applied], skipped);
+
+    const view = showPairs
+        ? renderPairsView(applied, top)
+        : renderClustersView(applied, top);
+
+    return wrap + header + strategyHeader + summary + view + `</div>`;
+}
+
+function renderClustersView(applied: AppliedStrategy, top: number): string {
+    if (applied.clusters.length === 0) {
+        return `<div style="color:${C_SIM_DIM};font-style:italic;padding:16px 0;">No clusters at threshold ${applied.threshold.toFixed(2)} (${applied.pairs.length} surviving pair(s) — try <code>--pairs</code> to see them).</div>`;
+    }
+    const shown = applied.clusters.slice(0, top);
+    const truncated =
+        applied.clusters.length > shown.length
+            ? `<div style="color:${C_SIM_MUTED};font-size:11px;margin-top:6px;">…${applied.clusters.length - shown.length} more cluster(s) not shown.</div>`
+            : "";
+    let cards = "";
+    for (const cluster of shown) {
+        cards += renderClusterCardHTML(cluster);
+    }
+    return cards + truncated;
+}
+
+function renderClusterCardHTML(cluster: ActionCluster): string {
+    const accent = aggregateAccent(cluster.topPair.aggregateScore);
+    const cardStyle =
+        `border:1px solid #e0e0e0;border-left:4px solid ${accent};` +
+        `border-radius:4px;padding:10px 12px;margin-bottom:10px;background:#fff;`;
+    const sizeBadge =
+        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+        `font-size:11px;font-weight:600;color:#fff;background:${accent};">${cluster.members.length} members</span>`;
+    const topBadge = `<span style="font-family:monospace;font-size:11px;color:${C_SIM_MUTED};margin-left:6px;">top score ${cluster.topPair.aggregateScore.toFixed(3)}</span>`;
+    const headerLine = `<div style="margin-bottom:6px;">${sizeBadge}${topBadge}</div>`;
+
+    // Group members by schema so the membership reads as "browser:
+    // openWebPage; desktop: openFile; …"
+    const bySchema = new Map<string, string[]>();
+    for (const m of cluster.members) {
+        const list = bySchema.get(m.schemaName) ?? [];
+        list.push(m.actionName);
+        bySchema.set(m.schemaName, list);
+    }
+    const memberLines: string[] = [];
+    for (const [schemaName, actions] of bySchema) {
+        const actionsHTML = actions
+            .map(
+                (a) =>
+                    `<code style="font-family:monospace;font-size:12px;color:#333;">${escapeHtml(a)}</code>`,
+            )
+            .join(" · ");
+        memberLines.push(
+            `<div style="margin:2px 0;">${schemaBadge(schemaName)} ${actionsHTML}</div>`,
+        );
+    }
+
+    // Show a sample description if any cluster member has one — gives
+    // the reader a foothold for what the cluster is actually about.
+    const sampleDesc = cluster.members.find((m) => m.description)?.description;
+    const descLine = sampleDesc
+        ? `<div style="margin-top:8px;color:#444;font-size:12px;font-style:italic;">↳ ${escapeHtml(truncate(sampleDesc, 200))}</div>`
+        : "";
+
+    return `<div style="${cardStyle}">${headerLine}<div>${memberLines.join("")}</div>${descLine}</div>`;
+}
+
+function renderPairsView(applied: AppliedStrategy, top: number): string {
+    if (applied.pairs.length === 0) {
+        return `<div style="color:${C_SIM_DIM};font-style:italic;padding:16px 0;">No pairs above threshold ${applied.threshold.toFixed(2)}.</div>`;
+    }
+    const shown = applied.pairs.slice(0, top);
+    const truncated =
+        applied.pairs.length > shown.length
+            ? `<div style="color:${C_SIM_MUTED};font-size:11px;margin-top:6px;">…${applied.pairs.length - shown.length} more pair(s) not shown.</div>`
+            : "";
+    const allKeys: readonly VectorKey[] = [
+        "desc",
+        "params",
+        "nameShape",
+        "agentContext",
+        "agentAndAction",
+    ];
+    let cards = "";
+    for (const pair of shown) {
+        const accent = aggregateAccent(pair.aggregateScore);
+        const cardStyle =
+            `border:1px solid #e0e0e0;border-left:4px solid ${accent};` +
+            `border-radius:4px;padding:8px 12px;margin-bottom:8px;background:#fff;`;
+        const aggBadge =
+            `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+            `font-family:monospace;font-size:12px;font-weight:600;color:#fff;background:${accent};">${pair.aggregateScore.toFixed(3)}</span>`;
+        const vectorBadges = renderVectorBadges(pair.scores, allKeys);
+        const headerLine = `<div style="margin-bottom:6px;">${aggBadge} ${vectorBadges}</div>`;
+        const aHTML = renderSideHTML(pair.keyA, pair.descriptionA);
+        const bHTML = renderSideHTML(pair.keyB, pair.descriptionB);
+        cards += `<div style="${cardStyle}">${headerLine}<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">${aHTML}${bHTML}</div></div>`;
+    }
+    return cards + truncated;
+}
+
+function renderSideHTML(
+    key: { schemaName: string; actionName: string },
+    description: string | undefined,
+): string {
+    const schema = schemaBadge(key.schemaName);
+    const action = `<code style="font-family:monospace;font-size:12px;color:#333;">${escapeHtml(key.actionName)}</code>`;
+    const desc = description
+        ? `<div style="color:#444;font-size:12px;margin-top:4px;">${escapeHtml(description)}</div>`
+        : `<div style="color:${C_SIM_MUTED};font-size:11px;font-style:italic;margin-top:4px;">(no description)</div>`;
+    return `<div style="min-width:0;">${schema} ${action}${desc}</div>`;
+}
+
+// ---- Multi-strategy comparison view -------------------------------------
+
+function renderAllStrategiesHTML(
+    scan: ActionSimilarityScanResult,
+    applied: AppliedStrategy[],
+    skipped: { schemaName: string; reason: string }[],
+    top: number,
+): string {
+    const wrap = `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:1100px;">`;
+    const header = `<h3 style="margin:0 0 6px;font-size:14px;">Action similarity — strategy comparison</h3>`;
+    const summary = renderScanSummary(scan, applied, skipped);
+
+    // Comparison table: one row per strategy with totals.
+    const headStyle =
+        "padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
+    const cellStyle = "padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
+    let rows = "";
+    for (const a of applied) {
+        rows += `<tr>
+            <td style="${cellStyle}font-family:monospace;font-weight:600;color:#36c;">${escapeHtml(a.strategy.name)}</td>
+            <td style="${cellStyle}font-family:monospace;text-align:right;">${a.scoredPairs}</td>
+            <td style="${cellStyle}font-family:monospace;text-align:right;">${a.pairs.length}</td>
+            <td style="${cellStyle}font-family:monospace;text-align:right;">${a.clusters.length}</td>
+            <td style="${cellStyle}font-family:monospace;text-align:right;">${a.clusters[0]?.members.length ?? "—"}</td>
+            <td style="${cellStyle}color:${C_SIM_MUTED};font-size:11px;">${escapeHtml(a.strategy.description)}</td>
+        </tr>`;
+    }
+    const table =
+        `<table style="border-collapse:collapse;width:100%;font-size:12px;margin-bottom:12px;">` +
+        `<thead><tr style="background:#fafafa;">` +
+        `<th style="${headStyle}">Strategy</th>` +
+        `<th style="${headStyle}">Scored</th>` +
+        `<th style="${headStyle}">Above thr.</th>` +
+        `<th style="${headStyle}">Clusters</th>` +
+        `<th style="${headStyle}">Largest</th>` +
+        `<th style="${headStyle}">Description</th>` +
+        `</tr></thead><tbody>${rows}</tbody></table>`;
+
+    // Top clusters per strategy (small previews).  Helps the operator
+    // judge which strategy is producing the most useful signal.
+    let topPerStrat = "";
+    for (const a of applied) {
+        if (a.clusters.length === 0) continue;
+        topPerStrat += `<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;"><b>${escapeHtml(a.strategy.name)}</b> — top ${Math.min(top, a.clusters.length)} of ${a.clusters.length} clusters</summary>`;
+        topPerStrat += renderClustersView(a, top);
+        topPerStrat += `</details>`;
+    }
+
+    return wrap + header + summary + table + topPerStrat + `</div>`;
+}
+
+// ---- Text alternates ----------------------------------------------------
+
+function renderSingleStrategyText(
+    scan: ActionSimilarityScanResult,
+    applied: AppliedStrategy,
+    skipped: { schemaName: string; reason: string }[],
+    top: number,
+    showPairs: boolean,
 ): string[] {
     const lines: string[] = [];
     lines.push(
-        `Semantic action similarity: ${result.actionCount} actions / ${result.schemaCount} schemas, threshold=${result.threshold.toFixed(2)}, ${result.pairs.length} pair(s) above threshold`,
+        `Action similarity (${applied.strategy.name}, threshold=${applied.threshold.toFixed(2)}): ${scan.actionCount} actions / ${scan.schemaCount} schemas, ${applied.pairs.length} pair(s) above threshold, ${applied.clusters.length} cluster(s)`,
     );
     if (skipped.length > 0) {
         lines.push(
             `  (${skipped.length} schema(s) skipped: ${skipped.map((s) => s.schemaName).join(", ")})`,
         );
     }
-    if (result.pairs.length === 0) {
+    if (showPairs) {
+        lines.push("");
+        lines.push("PAIRS:");
+        const shown = applied.pairs.slice(0, top);
+        for (const pair of shown) {
+            lines.push(
+                `[${pair.aggregateScore.toFixed(3)}] ${pair.keyA.schemaName}.${pair.keyA.actionName} ⇄ ${pair.keyB.schemaName}.${pair.keyB.actionName}`,
+            );
+        }
+        if (applied.pairs.length > shown.length) {
+            lines.push(
+                `…${applied.pairs.length - shown.length} more pair(s) not shown.`,
+            );
+        }
+        return lines;
+    }
+    if (applied.clusters.length === 0) {
+        lines.push("");
+        lines.push(`No clusters at this threshold.`);
         return lines;
     }
     lines.push("");
-    const shown = result.pairs.slice(0, top);
-    for (const pair of shown) {
-        const scoreParts = (
-            ["desc", "params", "combined"] as ActionVectorKey[]
-        )
-            .map((k) =>
-                pair.scores[k] !== undefined
-                    ? `${vectorLabel(k)}=${pair.scores[k]!.toFixed(2)}`
-                    : `${vectorLabel(k)}=-`,
-            )
-            .join(" ");
+    lines.push("CLUSTERS:");
+    const shown = applied.clusters.slice(0, top);
+    for (const cluster of shown) {
+        const members = cluster.members
+            .map((m) => `${m.schemaName}.${m.actionName}`)
+            .join(", ");
         lines.push(
-            `[${pair.aggregateScore.toFixed(3)}] ${scoreParts}  ${pair.keyA.schemaName}.${pair.keyA.actionName}  ⇄  ${pair.keyB.schemaName}.${pair.keyB.actionName}`,
+            `[${cluster.members.length} members, top ${cluster.topPair.aggregateScore.toFixed(3)}] ${members}`,
         );
-        if (pair.descriptionA)
-            lines.push(`  ${pair.keyA.schemaName}: ${truncate(pair.descriptionA, 80)}`);
-        if (pair.descriptionB)
-            lines.push(`  ${pair.keyB.schemaName}: ${truncate(pair.descriptionB, 80)}`);
-        lines.push("");
     }
-    if (result.pairs.length > shown.length) {
+    if (applied.clusters.length > shown.length) {
         lines.push(
-            `…${result.pairs.length - shown.length} more pair(s) not shown (--top to extend, --json for full export).`,
+            `…${applied.clusters.length - shown.length} more cluster(s) not shown.`,
+        );
+    }
+    return lines;
+}
+
+function renderAllStrategiesText(
+    scan: ActionSimilarityScanResult,
+    applied: AppliedStrategy[],
+    skipped: { schemaName: string; reason: string }[],
+): string[] {
+    const lines: string[] = [];
+    lines.push(
+        `Action similarity — strategy comparison: ${scan.actionCount} actions / ${scan.schemaCount} schemas`,
+    );
+    if (skipped.length > 0) {
+        lines.push(
+            `  (${skipped.length} schema(s) skipped: ${skipped.map((s) => s.schemaName).join(", ")})`,
+        );
+    }
+    lines.push("");
+    lines.push(
+        `${"strategy".padEnd(20)} ${"scored".padStart(8)} ${"above thr".padStart(10)} ${"clusters".padStart(10)} ${"largest".padStart(8)}`,
+    );
+    for (const a of applied) {
+        lines.push(
+            `${a.strategy.name.padEnd(20)} ${String(a.scoredPairs).padStart(8)} ${String(a.pairs.length).padStart(10)} ${String(a.clusters.length).padStart(10)} ${String(a.clusters[0]?.members.length ?? "—").padStart(8)}`,
         );
     }
     return lines;
@@ -684,6 +961,8 @@ export function getCollisionCommandHandlers(): CommandHandlerTable {
         commands: {
             events: new CollisionEventsCommandHandler(),
             similar: new CollisionSimilarCommandHandler(),
+            "list-strategies":
+                new CollisionSimilarListStrategiesCommandHandler(),
         },
     };
 }
