@@ -344,7 +344,7 @@ export type BacktrackOrigin =
 // Persistent linked-list of unexplored DFS branches (most recent
 // push at head).  Each frame snapshots a sibling parse path or a
 // wildcard refinement point.  Restoring a frame replaces the live
-// state via `Object.assign` (see `tryNextBacktrack`).
+// state via `restoreSnapshot` (see `tryNextBacktrack`).
 //
 // This IS the explicit DFS stack: `matchState` walks parts
 // left-to-right mutating the live state in place; whenever a fork
@@ -900,7 +900,7 @@ type MemoMarkerBacktrack = {
 // previous N-1 per-delta linked-list frames: it holds the full
 // `SuccessDelta[]` array and an advancing `cursor` index (starts
 // at 1; delta 0 was applied live).  On each `tryNextBacktrack`
-// pop the cursor `Object.assign`s `snapshot` (the pre-entry outer
+// pop the cursor `restoreSnapshot`s `snapshot` (the pre-entry outer
 // state) and invokes `applyDelta(deltas[cursor])`.  The frame
 // stays at the chain head until all deltas have been consumed;
 // new frames pushed during the restored delta's suffix sit on top
@@ -927,7 +927,7 @@ type MemoReplayBacktrack = {
 // Strict variant of `PendingMatchState` used as the snapshot payload
 // inside `Backtrack`.  The `-?` mapped modifier forces every
 // optional field to be a required own property so that
-// `Object.assign` in `tryNextBacktrack` reliably resets fields
+// `restoreSnapshot` in `tryNextBacktrack` reliably resets fields
 // that may have been assigned AFTER the snapshot was taken (e.g.
 // `values` after the captured wildcard is committed, or `parent`
 // after entering a nested rule).
@@ -1044,7 +1044,7 @@ export type MatchState = PendingMatchState & {
 
     // Per-axis policies.  Set once at `initialMatchState` time and
     // never changed.  Deliberately NOT in `PendingMatchState` /
-    // `SnapshotState` - `Object.assign` of a snapshot won't overwrite
+    // `SnapshotState` - `restoreSnapshot` of a snapshot won't overwrite
     // them, so they persist across `tryNextBacktrack` restores.
     wildcardPolicy: WildcardPolicy;
     optionalPolicy: OptionalPolicy;
@@ -1123,7 +1123,7 @@ function captureSnapshot(state: MatchState): SnapshotState {
 // nested-rule alternatives, repeat continuation, wildcard
 // extension) use `forkMatchState` instead - that returns a
 // `SnapshotState` with no policies, suitable for restoration via
-// `Object.assign` without disturbing the live state's policies.
+// `restoreSnapshot` without disturbing the live state's policies.
 export function cloneMatchState(state: MatchState): MatchState {
     // Single-allocation clone: drop only `backtracks` (live-state
     // mutation surface) and keep everything else - including the
@@ -1162,7 +1162,7 @@ export function forkMatchState(state: MatchState): SnapshotState {
 //
 // Single-owner invariant: SnapshotState omits the `backtracks`
 // field, so the snapshot cannot smuggle a parallel chain in.  When
-// `tryNextBacktrack` restores via `Object.assign`, the live
+// `tryNextBacktrack` restores via `restoreSnapshot`, the live
 // state's `backtracks` is preserved (and explicitly advanced
 // to `frame.prev`).
 export function pushBacktrack(
@@ -1271,7 +1271,7 @@ function pushMemoMarker(
 
 // Pop the most-recently-pushed (rightmost / deepest in DFS order)
 // unexplored sibling and restore it onto `state`, mutating in
-// place via `Object.assign`.  Returns true if a frame was
+// place via `restoreSnapshot`.  Returns true if a frame was
 // restored, false if the chain is empty.
 //
 // This is the backtrack step of the explicit-stack DFS: the live
@@ -1331,12 +1331,10 @@ export function tryNextBacktrack(state: MatchState): boolean {
             const i = frame.cursor;
             const rule = frame.rules[i];
             const base = frame.base;
-            // Explicit field writes instead of Object.assign:
-            // V8 emits monomorphic inline caches for direct
-            // property stores, which are faster than the generic
-            // Object.assign path.  The 4 per-rule fields (name,
-            // parts, value, spacingMode) are written from `rule`
-            // directly after restoring the shared base.
+            // restoreSnapshot replaces the 15 PendingMatchState
+            // fields, then the 4 per-rule fields (name, parts,
+            // value, spacingMode) are written from `rule` directly
+            // after restoring the shared base.
             restoreSnapshot(state, base);
             state.name = state.debugEnabled ? `${frame.namePrefix}[${i}]` : "";
             state.parts = rule.parts;

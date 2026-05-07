@@ -202,14 +202,14 @@ export type StringPart = {
      * allocation that the previous string-keyed Map incurred on
      * every match attempt.
      */
-    regexpCache?: Array<StringPartRegExpEntry | undefined>;
+    regexpCache?: Array<StringPartRegExpEntry | undefined> | undefined;
 
     /**
      * Cached result of `value.join(" ")`.  Populated lazily by
      * `getJoinedValue` in the matcher to avoid repeated
      * `Array.prototype.join` calls on every successful match.
      */
-    joinedCache?: string;
+    joinedCache?: string | undefined;
 };
 
 export type VarStringPart = {
@@ -434,6 +434,8 @@ export function createStringPart(
         optional: undefined,
         variable,
         value,
+        regexpCache: undefined,
+        joinedCache: undefined,
     };
 }
 
