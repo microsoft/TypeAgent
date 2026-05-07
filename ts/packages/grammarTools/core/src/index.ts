@@ -78,5 +78,7 @@ export { getSymbolIndex, offsetToPosition } from "./symbols.js";
 export { format } from "./format.js";
 export { previewCompletion } from "./completion.js";
 export { traceMatch } from "./trace.js";
+export { formatTrace } from "./formatTrace.js";
+export type { FormatTraceOptions } from "./formatTrace.js";
 export { runCoverage } from "./coverage.js";
 export { diffGrammars } from "./diff.js";
