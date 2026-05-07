@@ -2,10 +2,13 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
+    ActionResult,
     AppAgent,
     SessionContext,
     AppAgentManifest,
     AppAgentInitSettings,
+    ReadinessReport,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
@@ -126,6 +129,12 @@ export class AppAgentManager implements ActionConfigProvider {
     private readyWaiters: Array<() => void> = [];
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
+    // Cached per-agent readiness state. Populated by checkReadiness() right
+    // after the agent's session context is created. Agents that don't
+    // implement checkReadiness have no entry, and getReadiness() returns
+    // {state: "ready"} for them. Cleared on agent disable; re-populated by
+    // setup() and explicit refresh().
+    private readonly readiness = new Map<string, ReadinessReport>();
     public constructor(
         cacheDir: string | undefined,
         private readonly allowSharedLocalView?: string[],
@@ -161,6 +170,89 @@ export class AppAgentManager implements ActionConfigProvider {
     public getAppAgentEmoji(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         return record.manifest.emojiChar;
+    }
+
+    // ===== Readiness =====
+    // Agents that don't implement checkReadiness, or whose session context
+    // hasn't been initialized yet, are reported as `ready`. This is the
+    // safe default — only agents that explicitly opt in can block
+    // execution.
+    public getReadiness(appAgentName: string): ReadinessReport {
+        return this.readiness.get(appAgentName) ?? { state: "ready" };
+    }
+
+    // List enabled agents that aren't ready (state != "ready"). Used by
+    // `@config agent` to surface a warning icon and by
+    // `@config agent setup` (no-name form) to drive bulk setup.
+    public getNotReadyAgents(): { name: string; report: ReadinessReport }[] {
+        const out: { name: string; report: ReadinessReport }[] = [];
+        for (const [name, report] of this.readiness) {
+            if (report.state !== "ready") out.push({ name, report });
+        }
+        return out;
+    }
+
+    // Re-runs the agent's checkReadiness and updates the cache. Returns the
+    // fresh report. No-op (returns {state: "ready"}) for agents that don't
+    // implement checkReadiness or whose session context isn't initialized.
+    public async refreshReadiness(
+        appAgentName: string,
+    ): Promise<ReadinessReport> {
+        const record = this.agents.get(appAgentName);
+        if (
+            record === undefined ||
+            record.appAgent === undefined ||
+            record.sessionContext === undefined ||
+            record.appAgent.checkReadiness === undefined
+        ) {
+            // Nothing to refresh — preserve any existing entry (could be
+            // stale, but we have no way to update it).
+            return this.getReadiness(appAgentName);
+        }
+        try {
+            const report = await record.appAgent.checkReadiness(
+                record.sessionContext,
+            );
+            this.readiness.set(appAgentName, report);
+            return report;
+        } catch (e: any) {
+            const report: ReadinessReport = {
+                state: "setup-required",
+                message: `checkReadiness threw: ${e?.message ?? String(e)}`,
+            };
+            this.readiness.set(appAgentName, report);
+            return report;
+        }
+    }
+
+    // Runs the agent's `setup` (if it implements one), then refreshes the
+    // cached readiness so callers see the new state. The agent's setup is
+    // responsible for the in-chat UX (yes/no card, progress, etc.) via the
+    // returned ActionResult.
+    //
+    // Returns:
+    //   - undefined if the agent doesn't implement setup (caller should
+    //     surface the agent's readiness message instead).
+    //   - The agent's ActionResult otherwise — the dispatcher's command
+    //     pipeline runs the standard post-execution processing on it.
+    public async runSetup(
+        appAgentName: string,
+        actionContext: ActionContext<unknown>,
+    ): Promise<ActionResult | undefined> {
+        const record = this.agents.get(appAgentName);
+        if (record?.appAgent?.setup === undefined) {
+            return undefined;
+        }
+        try {
+            const result = await record.appAgent.setup(actionContext);
+            return result;
+        } finally {
+            // Always re-check readiness after setup, success or failure —
+            // setup may have made partial progress (e.g. cert installed but
+            // package register failed) and the cache should reflect the
+            // current truth.
+            await this.refreshReadiness(appAgentName);
+        }
     }
 
     public getLocalHostPort(appAgentName: string) {
@@ -1164,6 +1256,27 @@ export class AppAgentManager implements ActionConfigProvider {
             );
             debug(`Background tasks started for ${record.name}`);
         }
+
+        // Initial readiness probe. Cheap if implemented; no-op if not. Errors
+        // become a "setup-required" entry rather than crashing the agent —
+        // a misbehaving checkReadiness shouldn't deny the user the agent.
+        if (appAgent.checkReadiness !== undefined) {
+            try {
+                const report = await appAgent.checkReadiness(
+                    record.sessionContext!,
+                );
+                this.readiness.set(record.name, report);
+                debug(
+                    `Readiness for ${record.name}: ${report.state}` +
+                        (report.message ? ` (${report.message})` : ""),
+                );
+            } catch (e: any) {
+                this.readiness.set(record.name, {
+                    state: "setup-required",
+                    message: `checkReadiness threw: ${e?.message ?? String(e)}`,
+                });
+            }
+        }
         return record.sessionContext;
     }
 
@@ -1174,6 +1287,9 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     private async closeSessionContext(record: AppAgentRecord) {
         if (record.sessionContextP !== undefined) {
+            // Drop cached readiness — the session is going away, the next
+            // enable will repopulate via initializeSessionContext.
+            this.readiness.delete(record.name);
             const sessionContext = await record.sessionContextP;
             record.sessionContext = undefined;
             record.sessionContextP = undefined;

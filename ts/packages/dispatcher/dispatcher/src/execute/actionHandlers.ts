@@ -70,6 +70,55 @@ export function getSchemaNamePrefix(
     return `[${config.emojiChar} ${schemaName}] `;
 }
 
+// Pre-flight readiness gate. Looks up the agent's cached ReadinessReport
+// (populated when the agent's session context was initialized; refreshed
+// after setup).
+//
+// Behavior:
+//   - state "ready": returns undefined; the caller proceeds with the action
+//     or command.
+//   - state "setup-required" with `execution.setupOnFirstUse` enabled and
+//     the agent implements `setup`: invokes setup and returns its
+//     ActionResult so the caller can surface it (yes/no card included) in
+//     place of the user's original request. The original action/command is
+//     NOT auto-retried — the user re-runs it after setup completes.
+//   - state "setup-required" otherwise: throws a friendly Error with a
+//     `@config agent setup <name>` hint.
+//   - state "unsupported": always throws.
+//
+// Agents that don't implement checkReadiness default to `ready` and never
+// trip this check — see appAgentManager.getReadiness().
+async function checkAgentReady(
+    appAgentName: string,
+    systemContext: CommandHandlerContext,
+    actionContext: ActionContext<unknown>,
+): Promise<ActionResult | undefined> {
+    const report = systemContext.agents.getReadiness(appAgentName);
+    if (report.state === "ready") {
+        return undefined;
+    }
+    const reason = report.message ?? "Agent is not ready.";
+    if (report.state === "unsupported") {
+        throw new Error(
+            `Agent '${appAgentName}' is not supported in this environment: ${reason}`,
+        );
+    }
+    // setup-required
+    if (systemContext.session.getConfig().execution.setupOnFirstUse) {
+        const setupResult = await systemContext.agents.runSetup(
+            appAgentName,
+            actionContext,
+        );
+        if (setupResult !== undefined) {
+            return setupResult;
+        }
+        // No setup hook — fall through to the friendly throw below.
+    }
+    throw new Error(
+        `Agent '${appAgentName}' needs setup before it can be used: ${reason} Run \`@config agent setup ${appAgentName}\` to configure it.`,
+    );
+}
+
 function getStreamingActionContext(
     appAgentName: string,
     actionIndex: number,
@@ -178,11 +227,26 @@ export async function executeAction(
                     `Agent '${appAgentName}' does not support executeAction.`,
                 );
             }
-            result =
-                (await appAgent.executeAction(action, actionContext)) ??
-                createActionResult(
-                    `Action ${getFullActionName(executableAction)} completed.`,
-                );
+            // Pre-flight readiness check — runs as late as possible, right
+            // before we invoke the agent. Agents that don't implement
+            // checkReadiness are reported as `ready` and never block here.
+            // When `setupOnFirstUse` is enabled and setup runs, its
+            // ActionResult replaces the user's original action — the
+            // caller is expected to re-run after setup completes.
+            const setupResult = await checkAgentReady(
+                appAgentName,
+                systemContext,
+                actionContext,
+            );
+            if (setupResult !== undefined) {
+                result = setupResult;
+            } else {
+                result =
+                    (await appAgent.executeAction(action, actionContext)) ??
+                    createActionResult(
+                        `Action ${getFullActionName(executableAction)} completed.`,
+                    );
+            }
         }
     } catch (e: any) {
         if (e.name === "AbortError") {
@@ -651,6 +715,30 @@ export async function executeCommand(
         );
 
         try {
+            // Pre-flight readiness check — runs as late as possible, right
+            // before invoking the command handler. The system agent (where
+            // @config agent setup/refresh live) doesn't implement
+            // checkReadiness, so it's always `ready` — no chicken-and-egg.
+            // When `setupOnFirstUse` is on and setup runs, its ActionResult
+            // is surfaced in place of the user's original command — the
+            // caller is expected to re-run after setup completes.
+            const setupResult = await checkAgentReady(
+                appAgentName,
+                context,
+                actionContext,
+            );
+            if (setupResult !== undefined) {
+                emitActionResult(
+                    setupResult,
+                    actionContext,
+                    context,
+                    getRequestId(context),
+                    appAgentName,
+                    0,
+                    appAgentName,
+                );
+                return;
+            }
             // Command handlers MAY return an ActionResult — when they do,
             // we run the same post-processing the action pipeline uses
             // (display content / pendingChoice / dynamicDisplayId). Returning

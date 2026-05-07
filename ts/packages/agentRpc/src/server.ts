@@ -276,6 +276,18 @@ export function createAgentRpcServer(
                 param.schemaName,
             );
         },
+        async checkReadiness(param) {
+            if (agent.checkReadiness === undefined) {
+                throw new Error("Invalid invocation of checkReadiness");
+            }
+            return agent.checkReadiness(getSessionContextShim(param));
+        },
+        async setup(param) {
+            if (agent.setup === undefined) {
+                throw new Error("Invalid invocation of setup");
+            }
+            return agent.setup(getActionContextShim(param));
+        },
     };
 
     const agentCallHandlers: AgentCallFunctions = {

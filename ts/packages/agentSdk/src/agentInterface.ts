@@ -98,6 +98,32 @@ export type ResolveEntityResult = {
     entities: Entity[];
 };
 
+// Reports whether an agent is set up and able to execute actions/commands.
+// Cached by the dispatcher; refreshed on enable, after `setup` runs, and on
+// explicit `@config agent refresh`. Agents that don't implement
+// `checkReadiness` are treated as `ready`.
+//
+// State semantics:
+//   "ready"          — actions/commands can run normally
+//   "setup-required" — actions/commands are blocked; pre-flight either
+//                      surfaces the message or (when setupOnFirstUse is on)
+//                      offers to run `setup`
+//   "unsupported"    — actions/commands are permanently blocked on this
+//                      machine (e.g. macOS for osNotifications). `setup` is
+//                      not offered.
+export type ReadinessState = "ready" | "setup-required" | "unsupported";
+
+export type ReadinessReport = {
+    state: ReadinessState;
+    // One-line reason. Shown next to the agent in `@config agent` listings
+    // and in pre-flight error messages. Required when state is anything
+    // other than "ready".
+    message?: string;
+    // Optional longer explanation (markdown OK). Shown in per-agent detail
+    // views and could include hyperlinks to relevant docs / portals.
+    details?: string;
+};
+
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
     initializeAgentContext?(settings?: AppAgentInitSettings): Promise<unknown>;
@@ -107,6 +133,23 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         schemaName: string, // for sub-action schemas
     ): Promise<void>;
     closeAgentContext?(context: SessionContext): Promise<void>;
+
+    // Readiness — the agent reports whether it's set up and ready to execute
+    // actions/commands. The dispatcher pre-flights this immediately before
+    // calling executeAction / executeCommand. Agents that don't implement
+    // are treated as `ready`. See ReadinessReport for state semantics.
+    //
+    // checkReadiness should be CHEAP (file-existence / env-var read level).
+    // Expensive probes (network, child processes) belong in `setup`.
+    checkReadiness?(context: SessionContext<unknown>): Promise<ReadinessReport>;
+
+    // Idempotent setup that brings the agent from `setup-required` to `ready`.
+    // Returns ActionResult so it can use the in-chat yes/no card pattern
+    // (createYesNoChoiceResult) for confirmation, progress display, etc.
+    // After setup runs (success or failure), the dispatcher re-calls
+    // checkReadiness to update the cached state — agents don't get to
+    // self-report readiness.
+    setup?(context: ActionContext<unknown>): Promise<ActionResult | undefined>;
 
     // Background lifecycle for agent-initiated work (timers, watchers,
     // external-event subscriptions). startBackgroundTasks runs once per

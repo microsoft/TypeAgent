@@ -24,6 +24,8 @@ export {
     AppAgentInitSettings,
     ResolveEntityResult,
     ActivityCacheSpec,
+    ReadinessReport,
+    ReadinessState,
 } from "./agentInterface.js";
 
 export {

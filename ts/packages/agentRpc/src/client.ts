@@ -673,6 +673,14 @@ export async function createAgentRpcClient(
                 schemaName,
             });
         },
+        checkReadiness(context: SessionContext<ShimContext>) {
+            return rpc.invoke("checkReadiness", getContextParam(context));
+        },
+        setup(context: ActionContext<ShimContext>) {
+            return withActionContextAsync(context, (contextParams) =>
+                rpc.invoke("setup", { ...contextParams }),
+            );
+        },
     };
 
     // Now pick out the one that is actually implemented

@@ -26,6 +26,7 @@ import {
     ResolveEntityResult,
     SchemaContent,
     GrammarContent,
+    ReadinessReport,
 } from "@typeagent/agent-sdk";
 import { AgentInterfaceFunctionName } from "./server.js";
 
@@ -260,6 +261,12 @@ export type AgentInvokeFunctions = {
     getDynamicGrammar(
         param: Partial<ContextParams> & { schemaName: string },
     ): Promise<GrammarContent | undefined>;
+    checkReadiness(
+        param: Partial<ContextParams>,
+    ): Promise<ReadinessReport>;
+    setup(
+        param: Partial<ActionContextParams>,
+    ): Promise<ActionResult | undefined>;
 };
 
 export type ContextParams = {
