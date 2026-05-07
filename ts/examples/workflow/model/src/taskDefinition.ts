@@ -28,6 +28,25 @@ export interface TaskContext {
 
     /** Signal for cooperative cancellation. */
     signal: AbortSignal;
+
+    /**
+     * Engine-level constraints passed from RunOptions.
+     * Task implementations should check these to enforce caller restrictions.
+     */
+    constraints?: TaskConstraints;
+}
+
+/**
+ * Engine-level restrictions that callers can set via RunOptions.
+ * Tasks are responsible for reading and enforcing these.
+ */
+export interface TaskConstraints {
+    /** If set, only these commands may be executed by shell.exec. */
+    allowedCommands?: string[];
+    /** Additional hostnames to block (extends the built-in SSRF blocklist). */
+    blockedHosts?: string[];
+    /** If set, only these hostnames may be accessed by http.get. */
+    allowedHosts?: string[];
 }
 
 /**

@@ -16,6 +16,7 @@ export {
 export {
     TaskResult,
     TaskContext,
+    TaskConstraints,
     TaskDefinition,
     TaskPolicyMode,
     TaskPolicy,

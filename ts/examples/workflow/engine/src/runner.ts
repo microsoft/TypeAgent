@@ -11,6 +11,7 @@ import {
     TaskNode,
     LoopNode,
     TaskContext,
+    TaskConstraints,
     TaskResult,
     TaskPolicy,
     TaskPolicyMode,
@@ -200,9 +201,16 @@ export interface RunOptions {
     /**
      * Maximum time in milliseconds a single task execution may take.
      * When exceeded, the task is aborted via AbortSignal.
-     * If not set, tasks run until completion or workflow-level cancellation.
+     * Defaults to 60000 (60 seconds). Set to 0 or Infinity to disable.
      */
     taskTimeoutMs?: number;
+    /**
+     * Constraints passed to task implementations for enforcement.
+     * - allowedCommands: restrict which binaries shell.exec can run
+     * - blockedHosts: additional hostnames to block in http.get
+     * - allowedHosts: if set, only these hostnames are permitted in http.get
+     */
+    constraints?: TaskConstraints;
 }
 
 export interface RunResult {
@@ -259,7 +267,15 @@ export class WorkflowEngine {
         const policy = options?.policy;
         const approve = options?.approve;
         const abortSignalArg = options?.signal;
-        const taskTimeoutMs = options?.taskTimeoutMs;
+        const constraints = options?.constraints;
+
+        // Default timeout: 60 seconds. 0 or Infinity disables.
+        const DEFAULT_TIMEOUT_MS = 60_000;
+        const rawTimeout = options?.taskTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+        const taskTimeoutMs =
+            rawTimeout === 0 || rawTimeout === Infinity
+                ? undefined
+                : rawTimeout;
 
         // Validate
         const validation = validateWorkflowIR(ir, this.registry.all());
@@ -280,9 +296,9 @@ export class WorkflowEngine {
         debug("run %s started (workflow: %s)", runId, ir.name);
 
         // Validate workflow input against inputSchema.
-        if (ir.inputSchema && input) {
+        if (ir.inputSchema) {
             const validate = this.getValidator(ir.inputSchema);
-            if (!validate(input)) {
+            if (!validate(input ?? {})) {
                 const msg = this.ajv.errorsText(validate.errors);
                 return {
                     runId: "",
@@ -339,6 +355,7 @@ export class WorkflowEngine {
                 policy,
                 approve,
                 taskTimeoutMs,
+                constraints,
             );
 
             const output = resolveTemplate(ir.output, scope);
@@ -378,6 +395,7 @@ export class WorkflowEngine {
         policy?: TaskPolicy,
         approve?: ApprovalFn,
         taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
     ): Promise<ScopeExit> {
         let currentId: string | undefined = entryId;
         let pendingError:
@@ -429,6 +447,7 @@ export class WorkflowEngine {
                         policy,
                         approve,
                         taskTimeoutMs,
+                        constraints,
                     );
                     break;
 
@@ -467,6 +486,7 @@ export class WorkflowEngine {
                         policy,
                         approve,
                         taskTimeoutMs,
+                        constraints,
                     );
                     break;
             }
@@ -490,6 +510,7 @@ export class WorkflowEngine {
         policy?: TaskPolicy,
         approveFn?: ApprovalFn,
         taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
@@ -556,6 +577,7 @@ export class WorkflowEngine {
                 nodeId,
                 scopePath: [...scopePath],
                 signal: taskSignal,
+                ...(constraints ? { constraints } : {}),
             };
 
             let result: TaskResult;
@@ -688,6 +710,7 @@ export class WorkflowEngine {
         policy?: TaskPolicy,
         approve?: ApprovalFn,
         taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
@@ -745,6 +768,7 @@ export class WorkflowEngine {
                     policy,
                     approve,
                     taskTimeoutMs,
+                    constraints,
                 );
 
                 if (exit.kind === "terminal") {

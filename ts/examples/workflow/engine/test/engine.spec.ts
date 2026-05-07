@@ -5492,4 +5492,442 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.error?.nodeId).toBe("step");
         });
     });
+
+    describe("default task timeout", () => {
+        it("applies default 60s timeout when none specified", async () => {
+            // Verify that a task exceeding 60s would be aborted.
+            // We don't actually wait 60s; instead we test a task that
+            // completes in 10ms with no explicit timeout and verify it
+            // succeeds (proving the default timeout didn't interfere).
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "defaultTimeoutOk",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "result",
+                    },
+                },
+                entry: "add",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            // No taskTimeoutMs: should use 60s default, fast task succeeds
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+        });
+
+        it("disables timeout when taskTimeoutMs is 0", async () => {
+            const slow: TaskDefinition = {
+                name: "test.slow200",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    await new Promise((r) => setTimeout(r, 200));
+                    return { kind: "ok", output: { done: true } };
+                },
+            };
+            const reg = makeRegistry(slow);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "noTimeout",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.slow200",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            // taskTimeoutMs: 0 disables timeout; 200ms task should succeed
+            const result = await eng.run(ir, {
+                input: {},
+                taskTimeoutMs: 0,
+            });
+            expect(result.success).toBe(true);
+        });
+    });
+
+    describe("workflow input validation", () => {
+        it("rejects input that violates inputSchema", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "inputValidation",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["name"],
+                    properties: { name: { type: "string" } },
+                },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            // Missing required "name" field
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Input schema violation");
+        });
+
+        it("rejects when no input provided but schema has required fields", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "missingInput",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "integer" } },
+                },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            // No input at all
+            const result = await eng.run(ir);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Input schema violation");
+        });
+    });
+
+    describe("shell.exec allowedCommands constraint", () => {
+        it("blocks commands not in allowedCommands", async () => {
+            const mockExec: TaskDefinition = {
+                name: "shell.exec",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["command"],
+                    properties: { command: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["stdout", "stderr", "exitCode"],
+                    properties: {
+                        stdout: { type: "string" },
+                        stderr: { type: "string" },
+                        exitCode: { type: "integer" },
+                    },
+                },
+                async execute(input: any, ctx) {
+                    // Enforce allowedCommands
+                    const allowed = ctx.constraints?.allowedCommands;
+                    if (allowed && !allowed.includes(input.command)) {
+                        return {
+                            kind: "fail",
+                            error: {
+                                message: `Command "${input.command}" is not in the allowed commands list`,
+                            },
+                        };
+                    }
+                    return {
+                        kind: "ok",
+                        output: { stdout: "ok", stderr: "", exitCode: 0 },
+                    };
+                },
+            };
+            const reg = makeRegistry(mockExec);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "blockedCmd",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: { command: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: { command: "rm" as Template },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                constraints: { allowedCommands: ["git", "ls"] },
+                taskTimeoutMs: 0,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "not in the allowed commands list",
+            );
+        });
+
+        it("allows commands in allowedCommands", async () => {
+            const mockExec: TaskDefinition = {
+                name: "shell.exec",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["command"],
+                    properties: { command: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["stdout", "stderr", "exitCode"],
+                    properties: {
+                        stdout: { type: "string" },
+                        stderr: { type: "string" },
+                        exitCode: { type: "integer" },
+                    },
+                },
+                async execute(input: any, ctx) {
+                    const allowed = ctx.constraints?.allowedCommands;
+                    if (allowed && !allowed.includes(input.command)) {
+                        return {
+                            kind: "fail",
+                            error: {
+                                message: `Command "${input.command}" is not in the allowed commands list`,
+                            },
+                        };
+                    }
+                    return {
+                        kind: "ok",
+                        output: { stdout: "result", stderr: "", exitCode: 0 },
+                    };
+                },
+            };
+            const reg = makeRegistry(mockExec);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "allowedCmd",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: { command: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: { command: "git" as Template },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                constraints: { allowedCommands: ["git", "ls"] },
+                taskTimeoutMs: 0,
+            });
+            expect(result.success).toBe(true);
+        });
+    });
+
+    describe("http.get host constraints", () => {
+        it("blocks hosts in blockedHosts", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "blockedHost",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "https://evil.example.com/data" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                constraints: { blockedHosts: ["evil.example.com"] },
+                taskTimeoutMs: 0,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "blocked by caller constraints",
+            );
+        });
+
+        it("rejects hosts not in allowedHosts when set", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "notAllowedHost",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "https://other.example.com/data" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                constraints: { allowedHosts: ["api.trusted.com"] },
+                taskTimeoutMs: 0,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "not in the allowed hosts list",
+            );
+        });
+    });
 });

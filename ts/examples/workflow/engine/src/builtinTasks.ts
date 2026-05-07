@@ -192,6 +192,18 @@ export const shellExec: TaskDefinition<
     async execute(input, ctx) {
         const { command, args = [], cwd } = input;
         const maxBuffer = input.maxBuffer ?? 1024 * 1024; // 1MB default
+
+        // Enforce allowedCommands constraint
+        const allowed = ctx.constraints?.allowedCommands;
+        if (allowed && !allowed.includes(command)) {
+            return {
+                kind: "fail",
+                error: {
+                    message: `Command "${command}" is not in the allowed commands list`,
+                },
+            };
+        }
+
         return new Promise((resolve) => {
             execFile(
                 command,
@@ -423,6 +435,43 @@ export const httpGet: TaskDefinition<
                         message: `URL "${input.url}" references a private or reserved address`,
                     },
                 };
+            }
+
+            // Enforce caller-supplied blockedHosts
+            const blocked = ctx.constraints?.blockedHosts;
+            if (
+                blocked &&
+                hostname &&
+                blocked.some(
+                    (h) =>
+                        hostname === h.toLowerCase() ||
+                        hostname.endsWith("." + h.toLowerCase()),
+                )
+            ) {
+                return {
+                    kind: "fail",
+                    error: {
+                        message: `Host "${hostname}" is blocked by caller constraints`,
+                    },
+                };
+            }
+
+            // Enforce caller-supplied allowedHosts (allowlist overrides)
+            const allowedHosts = ctx.constraints?.allowedHosts;
+            if (allowedHosts && hostname) {
+                const isAllowed = allowedHosts.some(
+                    (h) =>
+                        hostname === h.toLowerCase() ||
+                        hostname.endsWith("." + h.toLowerCase()),
+                );
+                if (!isAllowed) {
+                    return {
+                        kind: "fail",
+                        error: {
+                            message: `Host "${hostname}" is not in the allowed hosts list`,
+                        },
+                    };
+                }
             }
 
             const resp = await fetch(input.url, {
