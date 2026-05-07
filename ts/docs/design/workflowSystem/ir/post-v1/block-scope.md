@@ -38,19 +38,19 @@ refactor (block + document boundary = sub-workflow).
 The IR already treats "scope" as an abstract concept with a small
 contract. A new scope kind only specifies the cells in this table:
 
-| Scope contract piece      | Workflow root   | Loop body            | Sub-workflow (post-v1)   | Block (this doc)     |
-| ------------------------- | --------------- | -------------------- | ------------------------ | -------------------- |
-| Has its own `entry`       | yes             | yes                  | yes                      | yes                  |
-| Has its own `nodes` map   | yes             | yes                  | yes                      | yes                  |
-| Carries declared `inputs` | yes             | yes (loop-level)     | yes                      | yes                  |
-| Carries `state`           | no              | yes                  | optional                 | no (proposed)        |
-| Carries `constants`       | yes             | no                   | yes                      | no (proposed)        |
-| Carries `outputs`         | `output` | `outputs` on `@exit` | yes                      | yes                  |
-| Allowed sentinels         | none            | `@iterate`, `@exit`  | none                     | `@exit` only         |
-| `next: null` legality     | yes             | no                   | yes (terminates the sub) | no (use `@exit`)     |
-| Cross-scope visibility    | n/a             | only outer constants | only declared `inputs`   | only outer constants |
-| Handlers / `onError` work | yes             | yes                  | yes                      | yes                  |
-| DDG dominator check       | within scope    | within scope         | within scope             | within scope         |
+| Scope contract piece      | Workflow root | Loop body            | Sub-workflow (post-v1)   | Block (this doc)     |
+| ------------------------- | ------------- | -------------------- | ------------------------ | -------------------- |
+| Has its own `entry`       | yes           | yes                  | yes                      | yes                  |
+| Has its own `nodes` map   | yes           | yes                  | yes                      | yes                  |
+| Carries declared `inputs` | yes           | yes (loop-level)     | yes                      | yes                  |
+| Carries `state`           | no            | yes                  | optional                 | no (proposed)        |
+| Carries `constants`       | yes           | no                   | yes                      | no (proposed)        |
+| Carries `outputs`         | `output`      | `outputs` on `@exit` | yes                      | yes                  |
+| Allowed sentinels         | none          | `@iterate`, `@exit`  | none                     | `@exit` only         |
+| `next: null` legality     | yes           | no                   | yes (terminates the sub) | no (use `@exit`)     |
+| Cross-scope visibility    | n/a           | only outer constants | only declared `inputs`   | only outer constants |
+| Handlers / `onError` work | yes           | yes                  | yes                      | yes                  |
+| DDG dominator check       | within scope  | within scope         | within scope             | within scope         |
 
 Implementation cost is roughly: define the JSON shape, add it to the
 scope-kinds set the validator iterates, document. No new dominator math,

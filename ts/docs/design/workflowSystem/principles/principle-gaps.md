@@ -142,7 +142,6 @@ With this in place, §1.3.2 (uniformity) is "P3's representation-surface axis ap
 
 **Lesson (reinforces the previous two).** Three principle sharpenings now follow the same pattern: a principle's scope was framed too narrowly (control-flow only, then intra-IR only, now graph-level only). Each time, a decision that "almost" derived from a principle turned out to derive from an unstated axis of that principle. The pattern is established: when a decision converges by style choice or analysis without a principle drive, check whether a principle's scope needs widening, not whether a new style choice is needed.
 
-
 ---
 
 ## Deployment and Evolution
@@ -161,7 +160,7 @@ Deferred from v1. Key areas (incremental migration, safe-change analysis, IR ide
 | Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                                                                                                          |
 | Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.                                                                                              |
 | Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                                                                                                                    |
-| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [IR](../ir/ir-v1.md) (§3.4).                                                                                                     |
+| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [IR](../ir/ir-v1.md) (§3.4).                                                                                                      |
 | Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                                                                                                                        |
 | Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.                                                                                                    |
 | IR identity across versions   | No (tooling)                | Resolved     | Migration mapping is external tooling.                                                                                                                                 |
