@@ -97,7 +97,8 @@ export interface DynamicDisplayResult {
 // already have a dispatcher-types dependency get a single canonical type
 // (and so we don't drift). Previously these were locally mirrored to avoid
 // pulling dispatcher-types in; the rationale is stale now that
-// dispatcher-types is a small, dependency-free types package.
+// dispatcher-types is a small types package with minimal dependencies (just
+// @typeagent/agent-sdk, which chat-ui already depends on).
 export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData };
 
 /**

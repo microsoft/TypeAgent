@@ -17,5 +17,9 @@ export function clientIdOf(
 ): string | undefined {
     if (rid === undefined || rid === null) return undefined;
     if (typeof rid === "string") return rid;
-    return (rid as { clientRequestId?: string }).clientRequestId;
+    // RequestId.clientRequestId is typed as `unknown` upstream — only return
+    // it when it's actually a usable string so downstream map keys / string
+    // comparisons don't silently coerce non-string values.
+    const cid = (rid as { clientRequestId?: unknown }).clientRequestId;
+    return typeof cid === "string" ? cid : undefined;
 }
