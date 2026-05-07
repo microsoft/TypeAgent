@@ -1005,6 +1005,266 @@ function renderAllStrategiesText(
     return lines;
 }
 
+// ===========================================================================
+// `@collision probe` — given a hand-crafted user utterance, return the top-K
+// candidate actions ranked by `semanticSearchActionSchema` (the same ranker
+// the LLM-select detection point uses).  Lets the operator test whether
+// embedding-similarity clusters from `@collision similar` are *real dispatch
+// collisions* or just semantic neighbors that the ranker would still
+// disambiguate cleanly.
+//
+// This is a manual, single-phrase probe.  The full S3 corpus-replay tool
+// will wrap this same engine in a batch flow once we have a corpus.
+// ===========================================================================
+
+const LLM_SELECT_DELTA_DEFAULT = 0.05;
+
+class CollisionProbeCommandHandler implements CommandHandler {
+    public readonly description =
+        "Probe what action(s) a hand-crafted utterance would route to via the embedding ranker (top-K with cosine deltas)";
+    public readonly parameters = {
+        flags: {
+            top: {
+                description:
+                    "Top-K candidates to render (default 5)",
+                char: "n",
+                type: "number",
+                default: 5,
+            },
+            expected: {
+                description:
+                    'Expected target as "schema.actionName" — flagged in the output if the top-1 candidate matches',
+                char: "e",
+                type: "string",
+                optional: true,
+            },
+            delta: {
+                description:
+                    "Score delta below which the top two are flagged ambiguous (default 0.05, matches llmSelect.scoreDeltaThreshold)",
+                type: "number",
+                default: LLM_SELECT_DELTA_DEFAULT,
+            },
+            "include-inactive": {
+                description:
+                    "Include schemas that aren't currently active in this session",
+                type: "boolean",
+                default: false,
+            },
+        },
+        args: {
+            phrase: {
+                description:
+                    'The utterance to probe, e.g. "turn on wifi"',
+                type: "string",
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const phrase = params.args.phrase.trim();
+        if (!phrase) {
+            displayWarn(
+                "Probe phrase must be non-empty.",
+                context,
+            );
+            return;
+        }
+        const top = Math.max(1, params.flags.top ?? 5);
+        const delta = Math.max(0, params.flags.delta ?? LLM_SELECT_DELTA_DEFAULT);
+        const expected = params.flags.expected?.trim() || undefined;
+        const filter = params.flags["include-inactive"]
+            ? () => true
+            : (schemaName: string) =>
+                  systemContext.agents.isSchemaActive(schemaName);
+
+        const results = await systemContext.agents.semanticSearchActionSchema(
+            phrase,
+            top,
+            filter,
+        );
+        if (!results || results.length === 0) {
+            displayWarn(
+                `No action schemas matched "${phrase}".  Are the agents loaded?`,
+                context,
+            );
+            return;
+        }
+
+        const html = renderProbeHTML(phrase, results, expected, delta);
+        const text = renderProbeText(phrase, results, expected, delta);
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: html,
+            alternates: [{ type: "text", content: text }],
+        });
+    }
+}
+
+interface ProbeRow {
+    rank: number;
+    schemaName: string;
+    actionName: string;
+    score: number;
+    /** Score delta to the next-rank candidate (positive number). undefined for last row. */
+    deltaToNext?: number | undefined;
+    description?: string | undefined;
+    isExpected?: boolean | undefined;
+}
+
+function buildProbeRows(
+    results: { score: number; item: any }[],
+    expected: string | undefined,
+): ProbeRow[] {
+    const rows: ProbeRow[] = results.map((r, i) => {
+        const schemaName = r.item.actionSchemaFile.schemaName as string;
+        const actionName = r.item.definition.name as string;
+        return {
+            rank: i + 1,
+            schemaName,
+            actionName,
+            score: r.score,
+            description:
+                (r.item.definition.comments?.[0] as string | undefined) ||
+                undefined,
+            isExpected: expected
+                ? `${schemaName}.${actionName}` === expected
+                : undefined,
+        };
+    });
+    for (let i = 0; i < rows.length - 1; i++) {
+        rows[i].deltaToNext = rows[i].score - rows[i + 1].score;
+    }
+    return rows;
+}
+
+function renderProbeHTML(
+    phrase: string,
+    results: { score: number; item: any }[],
+    expected: string | undefined,
+    delta: number,
+): string {
+    const rows = buildProbeRows(results, expected);
+    const top1 = rows[0];
+
+    // Verdict logic:
+    //   - If `expected` matches top1: PASS
+    //   - If top-1 to top-2 delta < threshold: AMBIGUOUS (real dispatch collision risk)
+    //   - Else CLEAN
+    let verdict: { color: string; label: string; detail: string };
+    if (expected && top1.isExpected) {
+        const ambiguous =
+            top1.deltaToNext !== undefined && top1.deltaToNext < delta;
+        if (ambiguous) {
+            verdict = {
+                color: "#c80",
+                label: "PASS but ambiguous",
+                detail: `top-1 matches expected target, but #2 is within ${delta.toFixed(2)} cosine — llmSelect would flag this as a collision.`,
+            };
+        } else {
+            verdict = {
+                color: "#080",
+                label: "CLEAN",
+                detail: `top-1 matches expected target with delta ≥ ${delta.toFixed(2)} — no dispatch ambiguity at this threshold.`,
+            };
+        }
+    } else if (expected && !top1.isExpected) {
+        verdict = {
+            color: "#c44",
+            label: "FAIL",
+            detail: `top-1 is <code>${escapeHtml(top1.schemaName + "." + top1.actionName)}</code>, expected <code>${escapeHtml(expected)}</code>.`,
+        };
+    } else if (
+        top1.deltaToNext !== undefined &&
+        top1.deltaToNext < delta
+    ) {
+        verdict = {
+            color: "#c80",
+            label: "AMBIGUOUS",
+            detail: `top-1 vs #2 delta ${top1.deltaToNext.toFixed(3)} &lt; ${delta.toFixed(2)} — llmSelect would flag this.`,
+        };
+    } else {
+        verdict = {
+            color: "#080",
+            label: "CLEAN",
+            detail: `top-1 vs #2 delta ${(top1.deltaToNext ?? 0).toFixed(3)} ≥ ${delta.toFixed(2)} — no dispatch ambiguity at this threshold.`,
+        };
+    }
+
+    const verdictBadge =
+        `<span style="display:inline-block;padding:2px 10px;border-radius:10px;` +
+        `font-size:11px;font-weight:700;letter-spacing:0.04em;color:#fff;background:${verdict.color};">${escapeHtml(verdict.label)}</span>`;
+
+    const headStyle =
+        "padding:6px 8px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
+    const cellStyle = "padding:6px 8px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
+    let rowsHTML = "";
+    for (const row of rows) {
+        const ambiguous =
+            row.deltaToNext !== undefined && row.deltaToNext < delta;
+        const rankStyle = row.isExpected
+            ? `font-family:monospace;font-weight:700;color:#080;`
+            : `font-family:monospace;color:${C_SIM_MUTED};`;
+        const expectedMarker = row.isExpected
+            ? ` <span title="matches --expected" style="color:#080;">✓</span>`
+            : "";
+        const deltaCell =
+            row.deltaToNext !== undefined
+                ? `<code style="font-family:monospace;color:${ambiguous ? "#c80" : C_SIM_MUTED};">${row.deltaToNext.toFixed(3)}${ambiguous ? " ⚠" : ""}</code>`
+                : "—";
+        const desc = row.description
+            ? `<div style="color:#444;font-size:11px;margin-top:2px;">${escapeHtml(truncate(row.description, 120))}</div>`
+            : `<div style="color:${C_SIM_MUTED};font-size:11px;font-style:italic;margin-top:2px;">(no description)</div>`;
+        rowsHTML += `<tr>
+            <td style="${cellStyle}${rankStyle}">${row.rank}${expectedMarker}</td>
+            <td style="${cellStyle}font-family:monospace;color:${vectorScoreColor(row.score)};font-weight:600;">${row.score.toFixed(3)}</td>
+            <td style="${cellStyle}">${deltaCell}</td>
+            <td style="${cellStyle}">${schemaBadge(row.schemaName)}<code style="font-family:monospace;font-size:12px;color:#333;margin-left:4px;">${escapeHtml(row.actionName)}</code>${desc}</td>
+        </tr>`;
+    }
+
+    return (
+        `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:1000px;">` +
+        `<h3 style="margin:0 0 6px;font-size:14px;">Embedding probe</h3>` +
+        `<div style="margin-bottom:8px;">${verdictBadge} <span style="color:${C_SIM_MUTED};font-size:12px;margin-left:4px;">${verdict.detail}</span></div>` +
+        `<div style="margin-bottom:10px;font-size:12px;color:#555;">phrase: <code style="background:#f5f5f5;padding:2px 6px;border-radius:3px;">${escapeHtml(phrase)}</code>${expected ? ` · expected: <code style="background:#e8f0ff;color:#36c;padding:2px 6px;border-radius:3px;">${escapeHtml(expected)}</code>` : ""}</div>` +
+        `<table style="border-collapse:collapse;width:100%;font-size:12px;">` +
+        `<thead><tr style="background:#fafafa;">` +
+        `<th style="${headStyle}">#</th>` +
+        `<th style="${headStyle}">Score</th>` +
+        `<th style="${headStyle}">Δ to next</th>` +
+        `<th style="${headStyle}">Action</th>` +
+        `</tr></thead><tbody>${rowsHTML}</tbody></table>` +
+        `</div>`
+    );
+}
+
+function renderProbeText(
+    phrase: string,
+    results: { score: number; item: any }[],
+    expected: string | undefined,
+    delta: number,
+): string[] {
+    const rows = buildProbeRows(results, expected);
+    const lines: string[] = [];
+    lines.push(`Probe: "${phrase}"${expected ? ` (expected: ${expected})` : ""}`);
+    lines.push("");
+    for (const row of rows) {
+        const flag = row.isExpected ? " ✓" : "";
+        const deltaPart =
+            row.deltaToNext !== undefined
+                ? `  Δ${row.deltaToNext.toFixed(3)}${row.deltaToNext < delta ? " ⚠" : ""}`
+                : "";
+        lines.push(
+            `  ${row.rank}. [${row.score.toFixed(3)}]${deltaPart}  ${row.schemaName}.${row.actionName}${flag}`,
+        );
+    }
+    return lines;
+}
+
 export function getCollisionCommandHandlers(): CommandHandlerTable {
     return {
         description:
@@ -1013,6 +1273,7 @@ export function getCollisionCommandHandlers(): CommandHandlerTable {
         commands: {
             events: new CollisionEventsCommandHandler(),
             similar: new CollisionSimilarCommandHandler(),
+            probe: new CollisionProbeCommandHandler(),
             "list-strategies":
                 new CollisionSimilarListStrategiesCommandHandler(),
         },
