@@ -1,6 +1,7 @@
-import { createStringPart, createWildcardPart } from "../src/grammarTypes.js";
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
+import { createStringPart, createWildcardPart } from "../src/grammarTypes.js";
 
 /**
  * Tests for AST-based DFA matching (matchDFAToAST + evaluateMatchAST)
