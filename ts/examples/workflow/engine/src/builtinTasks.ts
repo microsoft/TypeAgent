@@ -12,7 +12,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { TaskDefinition } from "workflow-model";
@@ -274,13 +274,14 @@ export const llmGenerate: TaskDefinition<
     },
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
-        const model = openai.createChatModel(input.endpoint);
-        if (!model) {
+        let model;
+        try {
+            model = openai.createChatModel(input.endpoint);
+        } catch (err) {
             return {
                 kind: "fail",
                 error: {
-                    message:
-                        "llm.generate requires an endpoint parameter or a configured default model",
+                    message: err instanceof Error ? err.message : String(err),
                 },
             };
         }
@@ -545,13 +546,24 @@ function validateFilePath(filePath: string): string {
     return resolved;
 }
 
-export const fileRead: TaskDefinition<{ path: string }, { content: string }> = {
+const DEFAULT_MAX_FILE_READ_BYTES = 10 * 1024 * 1024; // 10 MB
+
+export const fileRead: TaskDefinition<
+    { path: string; maxBytes?: number },
+    { content: string }
+> = {
     name: "file.read",
     sideEffects: true,
     inputSchema: {
         type: "object",
         required: ["path"],
-        properties: { path: { type: "string" } },
+        properties: {
+            path: { type: "string" },
+            maxBytes: {
+                type: "integer",
+                description: "Max file size in bytes (default 10MB)",
+            },
+        },
     },
     outputSchema: {
         type: "object",
@@ -559,8 +571,18 @@ export const fileRead: TaskDefinition<{ path: string }, { content: string }> = {
         properties: { content: { type: "string" } },
     },
     async execute(input) {
+        const maxBytes = input.maxBytes ?? DEFAULT_MAX_FILE_READ_BYTES;
         try {
             const safePath = validateFilePath(input.path);
+            const info = await stat(safePath);
+            if (info.size > maxBytes) {
+                return {
+                    kind: "fail",
+                    error: {
+                        message: `File is ${info.size} bytes, exceeding the ${maxBytes} byte limit`,
+                    },
+                };
+            }
             const content = await readFile(safePath, "utf8");
             return { kind: "ok", output: { content } };
         } catch (err) {
