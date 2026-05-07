@@ -1441,7 +1441,19 @@ export class ChatPanel {
             (requestId && this.agentContainersByRequestId.get(requestId)) ||
             this.currentAgentContainer;
         if (target) {
-            target.updateSource(source, sourceIcon);
+            // Fall back to the avatar map when the host doesn't pass an
+            // icon — matches the create-path in getOrCreateAgentContainer
+            // (effectiveIcon ?? iconForSource(effectiveSource)). Without
+            // this, a bubble that was first created by the dispatcher's
+            // "Translating ..." / "Executing action ..." status (source
+            // "dispatcher", icon 🤖) and is later re-tagged via
+            // setDisplayInfo to the real agent source would keep the
+            // robot icon — updateSource is a no-op on icon when called
+            // with undefined.
+            target.updateSource(
+                source,
+                sourceIcon ?? this.iconForSource(source),
+            );
             if (action !== undefined) {
                 target.setActionData(action);
             }
