@@ -1,0 +1,101 @@
+<Start> = <GetUser>
+    | <CreateGuild>
+    | <GetGuild>
+    | <GetChannel>
+    | <ModifyChannel>
+    | <SetVoiceChannelStatus>
+    | <DeleteChannel>
+    | <EditChannelPermissions>
+    | <GetChannelInvites>
+    | <CreateChannelInvite>
+    | <DeleteChannelPermission>
+    | <FollowAnnouncementChannel>
+    | <TriggerTypingIndicator>
+    | <GroupDMAddRecipient>
+    | <GroupDMRemoveRecipient>
+    | <StartThreadFromMessage>
+    | <StartThreadWithoutMessage>
+    | <StartThreadInForumOrMediaChannel>
+    | <JoinThread>
+    | <AddThreadMember>
+    | <LeaveThread>
+    | <RemoveThreadMember>
+    | <GetThreadMember>
+    | <ListThreadMembers>
+    | <ListPublicArchivedThreads>
+    | <ListPrivateArchivedThreads>
+    | <ListJoinedPrivateArchivedThreads>
+    | <GetInvite>
+    | <DeleteInvite>
+    | <GetTargetUsers>
+    | <UpdateTargetUsers>
+    | <GetTargetUsersJobStatus>
+    | <CreateWebhook>
+    | <GetChannelWebhooks>
+    | <GetGuildWebhooks>
+    | <GetWebhook>
+    | <GetWebhookWithToken>
+    | <ModifyWebhook>
+    | <ModifyWebhookWithToken>
+    | <DeleteWebhook>
+    | <DeleteWebhookWithToken>
+    | <ExecuteWebhook>
+    | <ExecuteSlackCompatibleWebhook>;
+
+<GetChannelWebhooks> = (Can you|Please|I need you to|Could you) (show|get|fetch|retrieve) (the|all) webhooks for (the|channel) (with ID|ID) $(channelId:word) -> {
+  actionName: "getChannelWebhooks",
+  parameters: {
+    channelId
+  }
+};
+
+<GetGuildWebhooks> = (Can you|Please|I need you to|Could you) (show|get|fetch|retrieve) (the|all) webhooks for (the|guild|server) (with ID|ID) $(guildId:word) -> {
+  actionName: "getGuildWebhooks",
+  parameters: {
+    guildId
+  }
+};
+
+<GetWebhookWithToken> = (Can you|Please|I need you to|Could you) (fetch|get|retrieve|show) (the|webhook) (details|information|object|data) using (this|the) token $(token:wildcard) -> {
+  actionName: "getWebhookWithToken",
+  parameters: {
+    token
+  }
+};
+
+<ModifyWebhook> = (Can you|Please|I need you to|Could you) (update|modify|change) (the|webhook) (with ID|ID) $(webhookId:word) (to|and) (change|update) (the|its) (name|avatar) -> {
+  actionName: "modifyWebhook",
+  parameters: {
+    webhookId
+  }
+};
+
+<ModifyWebhookWithToken> = (Can you|Please|I need you to|Could you) (update|modify|change) (the|webhook) (with ID|ID) $(webhookId:word) (to|and) (change|update) (the|its) (name|avatar) using (this|the) token $(token:wildcard) -> {
+  actionName: "modifyWebhookWithToken",
+  parameters: {
+    webhookId,
+    token
+  }
+};
+
+<DeleteWebhook> = (Can you|Please|I need you to|Could you) (delete|remove|get rid of) (the|webhook) (with ID|ID) $(webhookId:word) -> {
+  actionName: "deleteWebhook",
+  parameters: {
+    webhookId
+  }
+};
+
+<DeleteWebhookWithToken> = (Can you|Please|I need you to|Could you) (delete|remove|get rid of) (the|webhook) (with ID|ID) $(webhookId:word) using (this|the) token $(token:wildcard) -> {
+  actionName: "deleteWebhookWithToken",
+  parameters: {
+    webhookId,
+    token
+  }
+};
+
+<ExecuteSlackCompatibleWebhook> = (Can you|Please|I need you to|Could you) (trigger|execute|run|activate) (the Slack\-compatible webhook|Slack webhook) $(threadId:wildcard) -> {
+  actionName: "executeSlackCompatibleWebhook",
+  parameters: {
+    threadId
+  }
+};

@@ -1,0 +1,68 @@
+{
+  "emojiChar": "🔎",
+  "description": "Discord messaging and server management integration",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Discord agent actions",
+    "originalSchemaFile": "./discordSchema.ts",
+    "schemaFile": "../dist/discordSchema.pas.json",
+    "grammarFile": "../dist/discordSchema.ag.json",
+    "schemaType": "DiscordActions"
+  },
+  "subActionManifests": {
+    "userManagement": {
+      "schema": {
+        "description": "Actions related to managing users and their roles.",
+        "originalSchemaFile": "./actions/userManagementActionsSchema.ts",
+        "schemaFile": "../dist/actions/userManagementActionsSchema.pas.json",
+        "grammarFile": "../dist/actions/userManagementActionsSchema.ag.json",
+        "schemaType": "UserManagementActions"
+      }
+    },
+    "messageManagement": {
+      "schema": {
+        "description": "Actions related to creating and managing messages and webhooks.",
+        "originalSchemaFile": "./actions/messageManagementActionsSchema.ts",
+        "schemaFile": "../dist/actions/messageManagementActionsSchema.pas.json",
+        "grammarFile": "../dist/actions/messageManagementActionsSchema.ag.json",
+        "schemaType": "MessageManagementActions"
+      }
+    },
+    "guildManagement": {
+      "schema": {
+        "description": "Actions related to creating and managing guilds.",
+        "originalSchemaFile": "./actions/guildManagementActionsSchema.ts",
+        "schemaFile": "../dist/actions/guildManagementActionsSchema.pas.json",
+        "grammarFile": "../dist/actions/guildManagementActionsSchema.ag.json",
+        "schemaType": "GuildManagementActions"
+      }
+    },
+    "channelManagement": {
+      "schema": {
+        "description": "Actions related to creating, modifying, and managing channels.",
+        "originalSchemaFile": "./actions/channelManagementActionsSchema.ts",
+        "schemaFile": "../dist/actions/channelManagementActionsSchema.pas.json",
+        "grammarFile": "../dist/actions/channelManagementActionsSchema.ag.json",
+        "schemaType": "ChannelManagementActions"
+      }
+    },
+    "threadManagement": {
+      "schema": {
+        "description": "Actions related to creating and managing threads within channels.",
+        "originalSchemaFile": "./actions/threadManagementActionsSchema.ts",
+        "schemaFile": "../dist/actions/threadManagementActionsSchema.pas.json",
+        "grammarFile": "../dist/actions/threadManagementActionsSchema.ag.json",
+        "schemaType": "ThreadManagementActions"
+      }
+    },
+    "inviteManagement": {
+      "schema": {
+        "description": "Actions related to creating and managing invites.",
+        "originalSchemaFile": "./actions/inviteManagementActionsSchema.ts",
+        "schemaFile": "../dist/actions/inviteManagementActionsSchema.pas.json",
+        "grammarFile": "../dist/actions/inviteManagementActionsSchema.ag.json",
+        "schemaType": "InviteManagementActions"
+      }
+    }
+  }
+}

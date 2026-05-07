@@ -1,0 +1,42 @@
+{
+  "name": "discord-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent agent for discord",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/discordManifest.json",
+    "./agent/handlers": "./dist/discordActionHandler.js"
+  },
+  "scripts": {
+    "asc": "asc -i ./src/discordSchema.ts -o ./dist/discordSchema.pas.json -t DiscordActions",
+    "agc": "agc -i ./src/discordSchema.agr -o ./dist/discordSchema.ag.json",
+    "tsc": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "asc:userManagement": "asc -i ./src/actions/userManagementActionsSchema.ts -o ./dist/actions/userManagementActionsSchema.pas.json -t UserManagementActions",
+    "agc:userManagement": "agc -i ./src/actions/userManagementActionsSchema.agr -o ./dist/actions/userManagementActionsSchema.ag.json",
+    "asc:messageManagement": "asc -i ./src/actions/messageManagementActionsSchema.ts -o ./dist/actions/messageManagementActionsSchema.pas.json -t MessageManagementActions",
+    "agc:messageManagement": "agc -i ./src/actions/messageManagementActionsSchema.agr -o ./dist/actions/messageManagementActionsSchema.ag.json",
+    "asc:guildManagement": "asc -i ./src/actions/guildManagementActionsSchema.ts -o ./dist/actions/guildManagementActionsSchema.pas.json -t GuildManagementActions",
+    "agc:guildManagement": "agc -i ./src/actions/guildManagementActionsSchema.agr -o ./dist/actions/guildManagementActionsSchema.ag.json",
+    "asc:channelManagement": "asc -i ./src/actions/channelManagementActionsSchema.ts -o ./dist/actions/channelManagementActionsSchema.pas.json -t ChannelManagementActions",
+    "agc:channelManagement": "agc -i ./src/actions/channelManagementActionsSchema.agr -o ./dist/actions/channelManagementActionsSchema.ag.json",
+    "asc:threadManagement": "asc -i ./src/actions/threadManagementActionsSchema.ts -o ./dist/actions/threadManagementActionsSchema.pas.json -t ThreadManagementActions",
+    "agc:threadManagement": "agc -i ./src/actions/threadManagementActionsSchema.agr -o ./dist/actions/threadManagementActionsSchema.ag.json",
+    "asc:inviteManagement": "asc -i ./src/actions/inviteManagementActionsSchema.ts -o ./dist/actions/inviteManagementActionsSchema.pas.json -t InviteManagementActions",
+    "agc:inviteManagement": "agc -i ./src/actions/inviteManagementActionsSchema.agr -o ./dist/actions/inviteManagementActionsSchema.ag.json",
+    "build": "concurrently npm:tsc npm:asc npm:agc npm:asc:userManagement npm:agc:userManagement npm:asc:messageManagement npm:agc:messageManagement npm:asc:guildManagement npm:agc:guildManagement npm:asc:channelManagement npm:agc:channelManagement npm:asc:threadManagement npm:agc:threadManagement npm:asc:inviteManagement npm:agc:inviteManagement"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
