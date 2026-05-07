@@ -182,8 +182,8 @@ export interface RunOptions {
     /**
      * Per-task policy for side-effecting tasks.
      * Keys are task names; values are "allow", "prompt", or "deny".
-     * Tasks with sideEffects=true default to "prompt" if not specified.
-     * Tasks without sideEffects are always allowed.
+     * All tasks default to "prompt" unless marked sideEffects: false.
+     * Tasks with sideEffects: false bypass policy entirely.
      *
      * Secure-by-default: callers must explicitly allow side-effecting tasks
      * via policy or an approval callback.
@@ -509,10 +509,10 @@ export class WorkflowEngine {
                 );
             }
 
-            // Policy check for side-effecting tasks.
-            // Secure-by-default: side-effecting tasks are ALWAYS gated.
-            // Callers must explicitly allow them via policy or approval.
-            if (task.sideEffects) {
+            // Policy check: secure-by-default.
+            // ALL tasks are gated unless explicitly marked sideEffects: false.
+            // This ensures new or third-party tasks cannot bypass policy.
+            if (task.sideEffects !== false) {
                 const mode: TaskPolicyMode = policy?.[task.name] ?? "prompt";
                 if (mode === "deny") {
                     throw new EngineError(

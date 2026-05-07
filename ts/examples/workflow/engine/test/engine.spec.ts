@@ -28,17 +28,17 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 
-// Policy that allows all side-effecting builtins (for tests exercising tasks).
-const allowAllPolicy: TaskPolicy = Object.fromEntries(
-    allBuiltinTasks
-        .filter((t) => t.sideEffects)
-        .map((t) => [t.name, "allow" as const]),
-);
+// Policy that allows all tasks (for tests not specifically exercising policy).
+// Uses a Proxy so any task name returns "allow", matching secure-by-default.
+const allowAllPolicy: TaskPolicy = new Proxy({} as TaskPolicy, {
+    get: () => "allow" as const,
+});
 
 // ---- Mock domain tasks ----
 
 const emailFetchUnread: TaskDefinition = {
     name: "email.fetchUnread",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["max"],
@@ -60,6 +60,7 @@ const emailFetchUnread: TaskDefinition = {
 
 const calendarToday: TaskDefinition = {
     name: "calendar.today",
+    sideEffects: false,
     inputSchema: { type: "object", properties: {} },
     outputSchema: {
         type: "object",
@@ -76,6 +77,7 @@ const calendarToday: TaskDefinition = {
 
 const gitFetchCommits: TaskDefinition = {
     name: "git.fetchCommits",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["repo", "max"],
@@ -101,6 +103,7 @@ const gitFetchCommits: TaskDefinition = {
 
 const textRenderSection: TaskDefinition = {
     name: "text.renderSection",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["section", "items"],
@@ -124,6 +127,7 @@ const textRenderSection: TaskDefinition = {
 
 const textPlaceholderSection: TaskDefinition = {
     name: "text.placeholderSection",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["section", "reason"],
@@ -152,6 +156,7 @@ const textPlaceholderSection: TaskDefinition = {
 
 const markdownCompose: TaskDefinition = {
     name: "markdown.compose",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["emailSection", "calendarSection", "repoSections"],
@@ -1437,6 +1442,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("runs with mock shell.exec against two repos", async () => {
             const mockShellExec: TaskDefinition = {
                 name: "shell.exec",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["command"],
@@ -1533,6 +1539,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("runs with mock shell.exec and mock llm.generate", async () => {
             const mockShellExec: TaskDefinition = {
                 name: "shell.exec",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["command"],
@@ -1568,6 +1575,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const mockLlmGenerate: TaskDefinition = {
                 name: "llm.generate",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
@@ -1755,6 +1763,7 @@ describe("WorkflowEngine (IR v1)", () => {
             let callCount = 0;
             const mockShellExec: TaskDefinition = {
                 name: "shell.exec",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["command"],
@@ -1806,6 +1815,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const summaries: string[] = [];
             const mockLlmGenerate: TaskDefinition = {
                 name: "llm.generate",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
@@ -1868,6 +1878,7 @@ describe("WorkflowEngine (IR v1)", () => {
             // Instead, just use a mock to verify the shape.
             const mockHttpGet: TaskDefinition = {
                 name: "http.get",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["url"],
@@ -2078,6 +2089,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const mockHttpGet: TaskDefinition = {
                 name: "http.get",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["url"],
@@ -2104,6 +2116,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const mockLlm: TaskDefinition = {
                 name: "llm.generate",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
@@ -2127,6 +2140,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const mockFileWrite: TaskDefinition = {
                 name: "file.write",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["path", "content"],
@@ -2184,6 +2198,7 @@ describe("WorkflowEngine (IR v1)", () => {
             let fetchAttempts = 0;
             const mockHttpGet: TaskDefinition = {
                 name: "http.get",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["url"],
@@ -2217,6 +2232,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const mockLlm: TaskDefinition = {
                 name: "llm.generate",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
@@ -2237,6 +2253,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const mockFileWrite: TaskDefinition = {
                 name: "file.write",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["path", "content"],
@@ -2525,6 +2542,7 @@ describe("WorkflowEngine (IR v1)", () => {
             // A task that returns output not matching its declared schema.
             const badTask: TaskDefinition = {
                 name: "bad.output",
+                sideEffects: false,
                 inputSchema: { type: "object", properties: {} },
                 outputSchema: {
                     type: "object",
@@ -2573,6 +2591,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("passes when output conforms to schema", async () => {
             const goodTask: TaskDefinition = {
                 name: "good.output",
+                sideEffects: false,
                 inputSchema: { type: "object", properties: {} },
                 outputSchema: {
                     type: "object",
@@ -3002,6 +3021,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("dispatches to error handler when loop body fails", async () => {
             const failTask: TaskDefinition = {
                 name: "test.fail",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -3084,6 +3104,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("aborts a task that exceeds taskTimeoutMs", async () => {
             const slowTask: TaskDefinition = {
                 name: "test.slow",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute(_input, ctx) {
@@ -3356,6 +3377,7 @@ describe("WorkflowEngine (IR v1)", () => {
             // matches the updated behavior.
             const mockHttpGet: TaskDefinition = {
                 name: "http.get",
+                sideEffects: false,
                 inputSchema: {
                     type: "object",
                     required: ["url"],
@@ -3661,6 +3683,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("cancels a running workflow via signal", async () => {
             const slowTask: TaskDefinition = {
                 name: "test.slow",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute(_input, ctx) {
@@ -3721,6 +3744,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("cancels during loop iteration", async () => {
             const counterTask: TaskDefinition = {
                 name: "test.counter",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: {
                     type: "object",
@@ -4057,6 +4081,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("emits nodeFailed when a task fails with onError", async () => {
             const failTask: TaskDefinition = {
                 name: "test.fail",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -4068,6 +4093,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
             const noopTask: TaskDefinition = {
                 name: "test.noop",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -4125,6 +4151,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("emits runFailed when workflow fails", async () => {
             const failTask: TaskDefinition = {
                 name: "test.fail",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -4344,6 +4371,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("handles onError handler itself failing (propagates)", async () => {
             const failTask: TaskDefinition = {
                 name: "test.fail",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -4355,6 +4383,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
             const failRecovery: TaskDefinition = {
                 name: "test.failRecovery",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -4411,6 +4440,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("returns null for optional $from reference to missing binding", async () => {
             const echoTask: TaskDefinition = {
                 name: "test.echo",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute(input: any) {
@@ -4459,6 +4489,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("returns null for optional path projection on null", async () => {
             const echoTask: TaskDefinition = {
                 name: "test.echo",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: {
                     type: "object",
@@ -4647,6 +4678,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("passes $literal content verbatim without resolving", async () => {
             const echoTask: TaskDefinition = {
                 name: "test.echo",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute(input: any) {
@@ -4974,6 +5006,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("onError handler receives structured error with code/message/source", async () => {
             const failTask: TaskDefinition = {
                 name: "test.fail",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -4985,6 +5018,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
             const captureTask: TaskDefinition = {
                 name: "test.capture",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute(input: any) {
@@ -5046,6 +5080,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("runtime errors have RUNTIME_ERROR code", async () => {
             const throwTask: TaskDefinition = {
                 name: "test.throw",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {
@@ -5054,6 +5089,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
             const captureTask: TaskDefinition = {
                 name: "test.capture",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute(input: any) {
@@ -5339,6 +5375,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("fails when projecting into a non-object value", async () => {
             const numTask: TaskDefinition = {
                 name: "test.num",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: {
                     type: "object",
@@ -5415,6 +5452,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("propagates first failure and includes nodeId", async () => {
             const failTask: TaskDefinition = {
                 name: "test.fail",
+                sideEffects: false,
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 async execute() {

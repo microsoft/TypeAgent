@@ -45,7 +45,10 @@ export interface TaskDefinition<I = unknown, O = unknown> {
 
     /**
      * Whether this task has side effects (network, filesystem, shell, etc.).
-     * When true, the engine's task policy is consulted before execution.
+     * Defaults to true (secure-by-default): the engine's task policy is
+     * consulted before execution unless this is explicitly set to false.
+     * Pure computational tasks (arithmetic, string ops, list transforms)
+     * should set sideEffects: false to bypass policy checks.
      *
      * NOTE: This is a temporary, minimal guardrail. A formal capability/
      * permission model should be designed when there is a concrete trigger
@@ -61,8 +64,8 @@ export interface TaskDefinition<I = unknown, O = unknown> {
 /**
  * Policy for controlling execution of side-effecting tasks.
  *
- * - "allow": execute without prompting (default for tasks without sideEffects)
- * - "prompt": call the approval callback before executing
+ * - "allow": execute without prompting
+ * - "prompt": call the approval callback before executing (default)
  * - "deny": fail immediately without executing
  *
  * NOTE: Temporary guardrail. See TaskDefinition.sideEffects.

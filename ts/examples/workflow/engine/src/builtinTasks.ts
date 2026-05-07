@@ -23,6 +23,7 @@ export const intAdd: TaskDefinition<
     { result: number }
 > = {
     name: "int.add",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["a", "b"],
@@ -43,6 +44,7 @@ export const intLessThan: TaskDefinition<
     { result: boolean }
 > = {
     name: "int.lessThan",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["a", "b"],
@@ -63,6 +65,7 @@ export const listLength: TaskDefinition<
     { length: number }
 > = {
     name: "list.length",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["list"],
@@ -83,6 +86,7 @@ export const listElementAt: TaskDefinition<
     { element: unknown }
 > = {
     name: "list.elementAt",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["list", "index"],
@@ -106,6 +110,7 @@ export const listAppend: TaskDefinition<
     { list: unknown[] }
 > = {
     name: "list.append",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["list", "item"],
@@ -126,6 +131,7 @@ export const boolToLabel: TaskDefinition<
     { label: string }
 > = {
     name: "bool.toLabel",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["value", "ifTrue", "ifFalse"],
@@ -284,6 +290,7 @@ export const textTemplate: TaskDefinition<
     { text: string }
 > = {
     name: "text.template",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["template", "vars"],
@@ -311,6 +318,7 @@ export const stringJoin: TaskDefinition<
     { text: string }
 > = {
     name: "string.join",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["list", "delimiter"],
@@ -337,6 +345,7 @@ export const stringSplit: TaskDefinition<
     { list: string[] }
 > = {
     name: "string.split",
+    sideEffects: false,
     inputSchema: {
         type: "object",
         required: ["text", "delimiter"],
