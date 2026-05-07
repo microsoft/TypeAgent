@@ -24,6 +24,37 @@
       },
       "label": "pnpm install",
       "detail": "pnpm install"
+    },
+    {
+      "type": "shell",
+      "command": "pnpm run deploy:local",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/coda"
+      },
+      "problemMatcher": [],
+      "label": "TypeAgent: Install Coda extension (local)",
+      "detail": "Package and install the agent-coda VS Code extension from packages/coda"
+    },
+    {
+      "type": "shell",
+      "command": "pnpm run deploy:local",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/vscode-shell"
+      },
+      "problemMatcher": [],
+      "label": "TypeAgent: Install VS Code Shell extension (local)",
+      "detail": "Package and install the vscode-shell extension from packages/vscode-shell"
+    },
+    {
+      "type": "shell",
+      "label": "TypeAgent: Install local extensions",
+      "detail": "Install both the Coda and VS Code Shell extensions from this workspace",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "TypeAgent: Install Coda extension (local)",
+        "TypeAgent: Install VS Code Shell extension (local)"
+      ],
+      "problemMatcher": []
     }
   ]
 }

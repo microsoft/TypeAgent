@@ -27,7 +27,7 @@ const sharedPatterns = (config.env.sharedPatterns ?? []).map(
 );
 let paramSharedVault = undefined;
 let paramPrivateVault = undefined;
-let paramCommit = false;
+let paramCommit = true;
 let paramVerbose = false;
 
 function nowHHMMSS() {
@@ -638,12 +638,12 @@ const commands = ["push", "pull", "help"];
         }
 
         if (arg === "--commit") {
+            // Explicit no-op; commit is the default.
             paramCommit = true;
             continue;
         }
 
         if (arg === "--dry-run") {
-            // Explicit no-op; dry-run is the default.
             paramCommit = false;
             continue;
         }
