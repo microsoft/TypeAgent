@@ -74,7 +74,6 @@ export {
     loadGrammarFromAgent,
     loadGrammarFromSnapshot,
 } from "./loader.js";
-export { getDiagnostics } from "./diagnostics.js";
 export { getSymbolIndex, offsetToPosition } from "./symbols.js";
 export { format } from "./format.js";
 export { previewCompletion } from "./completion.js";

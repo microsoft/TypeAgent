@@ -81,7 +81,11 @@ Promote into "Queued actions" when scheduling.
   one pass (e.g. skip to next `;` after a parse failure and continue).
   Also add a `returnPartial` option to `loadGrammarRulesNoThrow` that
   returns the `Grammar` even when errors are present (best-effort) so
-  symbol navigation continues working on incomplete files.
+  symbol navigation continues working on incomplete files. Semantic
+  analysis (unused rules, unreachable alternatives) should also be a
+  flag on `loadGrammarRulesNoThrow` rather than a separate function,
+  since the compiler already has access to the full AST and symbol
+  table at compile time.
 - **Extension bundling.** Consider esbuild/rollup for the agr-language
   extension to produce a single-file bundle for faster activation and
   smaller install size. Not blocking for dev, but desirable before

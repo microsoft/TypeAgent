@@ -23,7 +23,6 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
     loadGrammarFromBuffer,
-    getDiagnostics,
     getSymbolIndex,
     format,
     type LoadResult,
@@ -75,14 +74,11 @@ function validateDocument(doc: TextDocument): void {
     const diagnostics: LspDiagnostic[] = [];
 
     if (!result.ok) {
-        // Report load-time diagnostics
         for (const d of result.diagnostics) {
             diagnostics.push(toLspDiagnostic(d, doc));
         }
-    } else {
-        // Run grammar-tools-core diagnostics
-        const coreDiags = getDiagnostics(result.grammar);
-        for (const d of coreDiags) {
+    } else if (result.diagnostics) {
+        for (const d of result.diagnostics) {
             diagnostics.push(toLspDiagnostic(d, doc));
         }
     }
