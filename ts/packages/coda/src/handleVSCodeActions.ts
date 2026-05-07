@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import * as path from "path";
 import { ActionResult } from "./helpers";
 import { handleWorkbenchActions } from "./handleWorkBenchActions";
 import { handleDebugActions } from "./handleDebugActions";
@@ -267,13 +268,75 @@ export async function handleBaseEditorActions(
         action.actionName ?? action.fullActionName.split(".").at(-1);
 
     switch (actionName) {
-        case "newFile": {
-            const document = await vscode.workspace.openTextDocument({
-                language: actionData.language,
-                content: actionData.content,
-            });
-            await vscode.window.showTextDocument(document);
-            actionResult.message = "New file created";
+        case "newCodeFile":
+        case "newMarkdownFile":
+        case "newTextFile": {
+            const fileName: string | undefined = actionData.fileName;
+            const content: string = actionData.content ?? "";
+            // For markdown/text the schema declares the language implicitly
+            // via the action name; for newCodeFile the LLM picks from the
+            // CodeFileLanguage enum and passes it through `language`.
+            const language: string | undefined =
+                actionName === "newMarkdownFile"
+                    ? "markdown"
+                    : actionName === "newTextFile"
+                      ? "plaintext"
+                      : actionData.language;
+
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const hasRealName =
+                typeof fileName === "string" &&
+                fileName.trim().length > 0 &&
+                fileName.trim().toLowerCase() !== "untitled";
+
+            if (workspaceFolder && hasRealName) {
+                const fileUri = vscode.Uri.joinPath(
+                    workspaceFolder.uri,
+                    fileName!.trim(),
+                );
+                // Reject any path that escapes the workspace root via
+                // `..` traversal or absolute components — vscode.Uri
+                // .joinPath happily resolves them and we'd otherwise
+                // overwrite arbitrary files on disk.
+                const root = workspaceFolder.uri.fsPath;
+                const target = fileUri.fsPath;
+                const rootWithSep = root.endsWith(path.sep)
+                    ? root
+                    : root + path.sep;
+                const insideWorkspace =
+                    target === root || target.startsWith(rootWithSep);
+                if (!insideWorkspace) {
+                    actionResult.message = `Refused to create file outside workspace: ${fileName}`;
+                    actionResult.handled = false;
+                    break;
+                }
+                try {
+                    await vscode.workspace.fs.stat(fileUri);
+                    actionResult.message = `File ${fileName} already exists`;
+                    actionResult.handled = false;
+                    break;
+                } catch {
+                    // File does not exist — proceed to create it.
+                }
+                const encoder = new TextEncoder();
+                await vscode.workspace.fs.writeFile(
+                    fileUri,
+                    encoder.encode(content),
+                );
+                const document =
+                    await vscode.workspace.openTextDocument(fileUri);
+                await vscode.window.showTextDocument(document);
+                actionResult.message = `Created ${fileName}`;
+            } else {
+                const document = await vscode.workspace.openTextDocument({
+                    language,
+                    content,
+                });
+                await vscode.window.showTextDocument(document);
+                actionResult.message = hasRealName
+                    ? `Opened untitled file (no workspace open to save ${fileName})`
+                    : "New untitled file created";
+            }
             break;
         }
 

@@ -75,7 +75,11 @@ export type MinimizeWindowAction = {
     };
 };
 
-// Sets focus to a program window on a Windows Desktop
+// Sets focus to a program window on a Windows Desktop.
+//
+// Example:
+// User: switch to Chrome
+// Agent: { actionName: "SwitchTo", parameters: { name: "Chrome" } }
 export type SwitchToWindowAction = {
     actionName: "SwitchTo";
     parameters: {
@@ -135,11 +139,23 @@ export type ChangeThemeModeAction = {
     };
 };
 
-// Applies a Windows theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or file path. Use this when the user wants to switch to a specific named theme.
+// Apply a Windows desktop theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or .theme
+// file path. Affects the Windows wallpaper / sounds / cursors / window chrome.
+//
+// Example:
+// User: change my windows theme to Glow
+// Agent: { actionName: "ApplyTheme", parameters: { filePath: "Glow", themeName: "Glow" } }
 export type ApplyThemeAction = {
     actionName: "ApplyTheme";
     parameters: {
-        filePath: string; // The theme name or .theme file path to apply (use "previous" to revert)
+        // The Windows theme name or .theme file path to apply (use
+        // "previous" to revert).
+        filePath: string;
+        // Optional theme name parroted by the LLM when the user mentions a
+        // specific theme; never read by the action — exists only to give the
+        // model a slot for the name so it doesn't squeeze a VS Code editor
+        // theme into `filePath`.
+        themeName?: string;
     };
 };
 

@@ -29,7 +29,12 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { optimizeGrammar } from "../src/grammarOptimizer.js";
-import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    GrammarRule,
+    RulesPart,
+    createStringPart,
+} from "../src/grammarTypes.js";
 import {
     findDispatchPart,
     getDispatchAllTokenMap,
@@ -245,15 +250,16 @@ describe("Grammar Optimizer - multi-key dispatch classifier", () => {
         const cyclingAlts: GrammarRule[] = [];
         const recursivePart: RulesPart = {
             type: "rules",
+            variable: undefined,
             alternatives: cyclingAlts,
             optional: true,
         };
         cyclingAlts.push({
-            parts: [recursivePart, { type: "string", value: ["alpha"] }],
+            parts: [recursivePart, createStringPart(["alpha"])],
             value: { type: "literal", value: "a" },
         });
         cyclingAlts.push({
-            parts: [{ type: "string", value: ["beta"] }],
+            parts: [createStringPart(["beta"])],
             value: { type: "literal", value: "b" },
         });
         const grammar: Grammar = { alternatives: cyclingAlts };

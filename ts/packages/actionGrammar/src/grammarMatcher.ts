@@ -16,6 +16,7 @@ import {
     VarNumberPart,
     VarStringPart,
     DispatchModeBucket,
+    createRulesPart,
 } from "./grammarTypes.js";
 import { wordBoundaryScriptRe } from "./spacingScripts.js";
 import {
@@ -23,6 +24,7 @@ import {
     getDispatchMergedSingle,
     getDispatchMergedMulti,
 } from "./dispatchHelpers.js";
+import type { TraceCallback } from "./traceEvents.js";
 
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
@@ -60,29 +62,33 @@ const wildcardTrimRegExp = new RegExp(
 // Decimal digits are not part of any word-space script, but two adjacent
 // digit characters must still be separated: "123456" is a different token from
 // "123 456", so concatenating two digit segments without a separator is ambiguous.
-const digitRe = /[0-9]/;
 
 // In auto mode (undefined), a separator is required between two segments only
 // if both adjacent characters belong to a word-boundary script. This allows users
 // to omit separators when the scripts differ (e.g. Latin followed by CJK),
 // while still requiring them when both sides use word spaces
 // (e.g. Latin followed by Latin).
-function isWordBoundaryScript(c: string): boolean {
-    // Fast path: all ASCII characters are handled here without the regex.
-    // ASCII letters are Latin-script (boundary required).
-    // ASCII digits, punctuation, and space return false
-    // (digits are handled separately by digitRe, punctuation/space never need a boundary).
-    const code = c.charCodeAt(0);
-    if (code < 128) {
-        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122); // A-Z, a-z
-    }
-    return wordBoundaryScriptRe.test(c);
-}
 export function needsSeparatorInAutoMode(a: string, b: string): boolean {
-    if (digitRe.test(a) && digitRe.test(b)) {
+    const codeA = a.charCodeAt(0);
+    const codeB = b.charCodeAt(0);
+    // Fast digit check: two adjacent digits require a separator.
+    // Avoids the regex call in digitRe.test() for the common
+    // non-digit path.
+    if (codeA >= 48 && codeA <= 57 && codeB >= 48 && codeB <= 57) {
         return true;
     }
-    return isWordBoundaryScript(a) && isWordBoundaryScript(b);
+    // Inline the isWordBoundaryScript check to avoid redundant
+    // charCodeAt calls (the function also starts with charCodeAt).
+    const wbA =
+        codeA < 128
+            ? (codeA >= 65 && codeA <= 90) || (codeA >= 97 && codeA <= 122)
+            : wordBoundaryScriptRe.test(a);
+    if (!wbA) return false;
+    const wbB =
+        codeB < 128
+            ? (codeB >= 65 && codeB <= 90) || (codeB >= 97 && codeB <= 122)
+            : wordBoundaryScriptRe.test(b);
+    return wbB;
 }
 export function requiresSeparator(
     a: string,
@@ -289,6 +295,13 @@ export type GrammarMatchOptions = {
      * behavior to the pre-memoization matcher.
      */
     memoization?: boolean;
+
+    /**
+     * Opt-in trace callback. When provided, the matcher emits
+     * {@link TraceEvent}s as it progresses through the grammar.
+     * Zero overhead when absent (single `if` guard on the hot path).
+     */
+    trace?: TraceCallback;
 };
 
 // Origin tag carried on each Backtrack frame.  Used by
@@ -339,7 +352,7 @@ export type BacktrackOrigin =
 // Persistent linked-list of unexplored DFS branches (most recent
 // push at head).  Each frame snapshots a sibling parse path or a
 // wildcard refinement point.  Restoring a frame replaces the live
-// state via `Object.assign` (see `tryNextBacktrack`).
+// state via `restoreSnapshot` (see `tryNextBacktrack`).
 //
 // This IS the explicit DFS stack: `matchState` walks parts
 // left-to-right mutating the live state in place; whenever a fork
@@ -364,9 +377,9 @@ export type BacktrackOrigin =
 //     each carry a full `SnapshotState` and unlink on restore.
 // See `pushBacktrack` / `pushAlternation` / `tryNextBacktrack`.
 type SingleBacktrack = {
-    readonly snapshot: SnapshotState;
     readonly origin: "wildcard" | "optional" | "repeat";
     readonly prev: Backtrack | undefined;
+    readonly snapshot: SnapshotState;
 };
 
 // Per-alternative state at one alternation fork point is fully
@@ -380,6 +393,7 @@ type SingleBacktrack = {
 // pushes 1 frame + 1 base snapshot regardless of N.
 type AlternationBacktrack = {
     readonly origin: "alternation";
+    readonly prev: Backtrack | undefined;
     readonly base: SnapshotState;
     readonly rules: ReadonlyArray<GrammarRule>;
     readonly namePrefix: string; // debug name = `${namePrefix}[${cursor}]`
@@ -389,7 +403,6 @@ type AlternationBacktrack = {
     // live alternative); the frame unlinks once `cursor` reaches
     // `rules.length`.
     cursor: number;
-    readonly prev: Backtrack | undefined;
 };
 
 type Backtrack =
@@ -834,6 +847,7 @@ function applyDelta(state: MatchState, delta: SuccessDelta) {
 // chain; only the live state observes its mutation.
 type MemoMarkerBacktrack = {
     readonly origin: "memoMarker";
+    readonly prev: Backtrack | undefined;
     readonly rules: ReadonlyArray<GrammarRule>;
     readonly index: number;
     readonly leading: CompiledSpacingMode;
@@ -887,7 +901,6 @@ type MemoMarkerBacktrack = {
     // `"failed"`).  Captured for observation in Phase 1; replay
     // is wired in Phase 2.
     readonly successes: SuccessDelta[];
-    readonly prev: Backtrack | undefined;
 };
 
 // Replay cursor for SUCCESS memoization.  See the `"memoReplay"`
@@ -895,13 +908,14 @@ type MemoMarkerBacktrack = {
 // previous N-1 per-delta linked-list frames: it holds the full
 // `SuccessDelta[]` array and an advancing `cursor` index (starts
 // at 1; delta 0 was applied live).  On each `tryNextBacktrack`
-// pop the cursor `Object.assign`s `snapshot` (the pre-entry outer
+// pop the cursor `restoreSnapshot`s `snapshot` (the pre-entry outer
 // state) and invokes `applyDelta(deltas[cursor])`.  The frame
 // stays at the chain head until all deltas have been consumed;
 // new frames pushed during the restored delta's suffix sit on top
 // and resolve before the next cursor advance.
 type MemoReplayBacktrack = {
     readonly origin: "memoReplay";
+    readonly prev: Backtrack | undefined;
     readonly snapshot: SnapshotState;
     readonly deltas: SuccessDelta[];
     // Mutable cursor advanced by `tryNextBacktrack` on each
@@ -916,13 +930,12 @@ type MemoReplayBacktrack = {
     // fail identically.  Lossless: only provably-doomed
     // branches are pruned.
     readonly failedSuffixKeys: Set<number>;
-    readonly prev: Backtrack | undefined;
 };
 
 // Strict variant of `PendingMatchState` used as the snapshot payload
 // inside `Backtrack`.  The `-?` mapped modifier forces every
 // optional field to be a required own property so that
-// `Object.assign` in `tryNextBacktrack` reliably resets fields
+// `restoreSnapshot` in `tryNextBacktrack` reliably resets fields
 // that may have been assigned AFTER the snapshot was taken (e.g.
 // `values` after the captured wildcard is committed, or `parent`
 // after entering a nested rule).
@@ -1039,11 +1052,18 @@ export type MatchState = PendingMatchState & {
 
     // Per-axis policies.  Set once at `initialMatchState` time and
     // never changed.  Deliberately NOT in `PendingMatchState` /
-    // `SnapshotState` - `Object.assign` of a snapshot won't overwrite
+    // `SnapshotState` - `restoreSnapshot` of a snapshot won't overwrite
     // them, so they persist across `tryNextBacktrack` restores.
     wildcardPolicy: WildcardPolicy;
     optionalPolicy: OptionalPolicy;
     repeatPolicy: RepeatPolicy;
+
+    // Cached copy of `debugMatchRaw.enabled`.  The `debug` package
+    // implements `.enabled` as a getter that re-evaluates on every
+    // access; caching here avoids ~29 getter calls per match.
+    // Set once at `initialMatchState` time; same lifecycle as the
+    // other policy fields.
+    debugEnabled: boolean;
 
     // When false, `enterRulesAlternation` skips the memo marker
     // push entirely - no failure caching, no success capture, no
@@ -1065,6 +1085,12 @@ export type MatchState = PendingMatchState & {
     // policy fields - not snapshotted, persists across
     // `tryNextBacktrack` restores.  See `MemoCache`.
     memoCache: MemoCache;
+
+    // Opt-in trace hook.  Set once at `initialMatchState` time.
+    // Zero cost when undefined (single `if` guard).  Not in
+    // PendingMatchState/SnapshotState - persists across backtracks.
+    trace?: TraceCallback | undefined;
+    traceSeq: number;
 };
 
 // Explicit per-field copy of `state`.  Single source of truth
@@ -1111,7 +1137,7 @@ function captureSnapshot(state: MatchState): SnapshotState {
 // nested-rule alternatives, repeat continuation, wildcard
 // extension) use `forkMatchState` instead - that returns a
 // `SnapshotState` with no policies, suitable for restoration via
-// `Object.assign` without disturbing the live state's policies.
+// `restoreSnapshot` without disturbing the live state's policies.
 export function cloneMatchState(state: MatchState): MatchState {
     // Single-allocation clone: drop only `backtracks` (live-state
     // mutation surface) and keep everything else - including the
@@ -1150,7 +1176,7 @@ export function forkMatchState(state: MatchState): SnapshotState {
 //
 // Single-owner invariant: SnapshotState omits the `backtracks`
 // field, so the snapshot cannot smuggle a parallel chain in.  When
-// `tryNextBacktrack` restores via `Object.assign`, the live
+// `tryNextBacktrack` restores via `restoreSnapshot`, the live
 // state's `backtracks` is preserved (and explicitly advanced
 // to `frame.prev`).
 export function pushBacktrack(
@@ -1159,9 +1185,9 @@ export function pushBacktrack(
     origin: SingleBacktrack["origin"],
 ) {
     state.backtracks = {
-        snapshot: alternative,
         origin,
         prev: state.backtracks,
+        snapshot: alternative,
     };
 }
 
@@ -1194,17 +1220,72 @@ function pushAlternation(
 ) {
     state.backtracks = {
         origin: "alternation",
+        prev: state.backtracks,
         base,
         rules,
         namePrefix,
         cursor: 1,
-        prev: state.backtracks,
     };
+}
+
+// Push a memo-replay cursor frame covering `deltas[1..N-1]`.
+// Delta 0 is applied live by the caller; the cursor advances
+// forward through the remaining deltas on each `tryNextBacktrack`
+// pop (same pattern as the alternation cursor).
+function pushMemoReplay(
+    state: MatchState,
+    snapshot: SnapshotState,
+    deltas: SuccessDelta[],
+    failedSuffixKeys: Set<number>,
+) {
+    state.backtracks = {
+        origin: "memoReplay",
+        prev: state.backtracks,
+        snapshot,
+        deltas,
+        cursor: 1,
+        failedSuffixKeys,
+    };
+}
+
+// Push a memo-marker sentinel frame for failure (and optionally
+// success) memoization.  Pushed BEFORE the alternation cursor so
+// the cursor sits on top; when all body frames drain the marker
+// becomes head and `tryNextBacktrack` pops it, populating the
+// failure cache if no member ever flipped `anyMemberFinalized`.
+function pushMemoMarker(
+    state: MatchState,
+    rules: ReadonlyArray<GrammarRule>,
+    leading: CompiledSpacingMode,
+    pendingWildcardActive: boolean,
+    carrier: boolean,
+    requireValue: boolean,
+    noSuccessCache: boolean,
+): MemoMarkerBacktrack {
+    const marker: MemoMarkerBacktrack = {
+        origin: "memoMarker",
+        prev: state.backtracks,
+        rules,
+        index: state.index,
+        leading,
+        pendingWildcardActive,
+        anyMemberFinalized: false,
+        valuesAtEntry: state.values,
+        valueIdsAtEntry: state.valueIds,
+        nextValueIdAtEntry: state.nextValueId,
+        lastMatchedPartInfoAtEntry: state.lastMatchedPartInfo,
+        carrier,
+        requireValue,
+        noSuccessCache,
+        successes: [],
+    };
+    state.backtracks = marker;
+    return marker;
 }
 
 // Pop the most-recently-pushed (rightmost / deepest in DFS order)
 // unexplored sibling and restore it onto `state`, mutating in
-// place via `Object.assign`.  Returns true if a frame was
+// place via `restoreSnapshot`.  Returns true if a frame was
 // restored, false if the chain is empty.
 //
 // This is the backtrack step of the explicit-stack DFS: the live
@@ -1226,11 +1307,41 @@ function pushAlternation(
 //       const matched = matchState(state, request);
 //       // ...process attempt...
 //   } while (tryNextBacktrack(state));
+// Restore all `PendingMatchState` fields from a snapshot onto the
+// live state.  Shared by `tryNextBacktrack` (memoReplay, single,
+// and alternation branches) to avoid duplicating the 15-field
+// write block.
+function restoreSnapshot(state: MatchState, snap: SnapshotState) {
+    state.name = snap.name;
+    state.parts = snap.parts;
+    state.value = snap.value;
+    state.partIndex = snap.partIndex;
+    state.valueIds = snap.valueIds;
+    state.nextValueId = snap.nextValueId;
+    state.values = snap.values;
+    state.parent = snap.parent;
+    state.nestedLevel = snap.nestedLevel;
+    state.suppressOptionalFork = snap.suppressOptionalFork;
+    state.leadingSpacingMode = snap.leadingSpacingMode;
+    state.spacingMode = snap.spacingMode;
+    state.index = snap.index;
+    state.pendingWildcard = snap.pendingWildcard;
+    state.lastMatchedPartInfo = snap.lastMatchedPartInfo;
+}
+
 export function tryNextBacktrack(state: MatchState): boolean {
     while (true) {
         const frame = state.backtracks;
         if (frame === undefined) {
             return false;
+        }
+        if (state.trace !== undefined) {
+            state.trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "backtrack",
+                origin: frame.origin,
+            });
         }
         if (frame.origin === "alternation") {
             // Cursor frame: restore the shared base, then overlay the
@@ -1241,8 +1352,13 @@ export function tryNextBacktrack(state: MatchState): boolean {
             // resolve before) this cursor.
             const i = frame.cursor;
             const rule = frame.rules[i];
-            Object.assign(state, frame.base);
-            state.name = `${frame.namePrefix}[${i}]`;
+            const base = frame.base;
+            // restoreSnapshot replaces the 15 PendingMatchState
+            // fields, then the 4 per-rule fields (name, parts,
+            // value, spacingMode) are written from `rule` directly
+            // after restoring the shared base.
+            restoreSnapshot(state, base);
+            state.name = state.debugEnabled ? `${frame.namePrefix}[${i}]` : "";
             state.parts = rule.parts;
             state.value = rule.value;
             state.spacingMode = rule.spacingMode;
@@ -1252,6 +1368,15 @@ export function tryNextBacktrack(state: MatchState): boolean {
                 state.backtracks = frame.prev;
             }
             debugMatch(state, `Restoring local backtrack (alternation)`);
+            if (state.trace !== undefined) {
+                state.trace({
+                    seq: state.traceSeq++,
+                    inputPos: state.index,
+                    kind: "ruleEntered",
+                    rule: state.name,
+                    depth: state.nestedLevel,
+                });
+            }
             return true;
         }
         if (frame.origin === "memoMarker") {
@@ -1279,9 +1404,11 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     state.memoCache.set(frame.rules, inner);
                 }
                 inner.set(key, "failed");
-                debugMatchRaw(
-                    `memoMarker: cached intrinsic failure for rules@${key}`,
-                );
+                if (state.debugEnabled) {
+                    debugMatchRaw(
+                        `memoMarker: cached intrinsic failure for rules@${key}`,
+                    );
+                }
             } else if (!frame.noSuccessCache && frame.successes.length > 0) {
                 if (inner === undefined) {
                     inner = new Map();
@@ -1293,9 +1420,11 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     // soundness condition documented on
                     // `MemoCache`.
                     inner.set(key, frame.successes);
-                    debugMatchRaw(
-                        `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
-                    );
+                    if (state.debugEnabled) {
+                        debugMatchRaw(
+                            `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
+                        );
+                    }
                 }
             }
             state.backtracks = frame.prev;
@@ -1326,7 +1455,8 @@ export function tryNextBacktrack(state: MatchState): boolean {
             // at head until fully consumed.  New frames pushed
             // during this delta's suffix sit on top and resolve
             // before the next cursor advance.
-            Object.assign(state, frame.snapshot);
+            const snap = frame.snapshot;
+            restoreSnapshot(state, snap);
             if (frame.cursor >= deltas.length) {
                 // Last delta: unlink the cursor frame.
                 state.backtracks = frame.prev;
@@ -1337,9 +1467,10 @@ export function tryNextBacktrack(state: MatchState): boolean {
             debugMatch(state, `Restoring memoReplay cursor [${i}]`);
             return true;
         }
-        // The snapshot omits `backtracks`, so Object.assign won't
-        // overwrite it - explicitly advance the head pointer to `prev`.
-        Object.assign(state, frame.snapshot);
+        // Explicit per-field restore: the snapshot omits
+        // `backtracks`, so we advance the head pointer separately.
+        const snap = frame.snapshot;
+        restoreSnapshot(state, snap);
         state.backtracks = frame.prev;
         debugMatch(
             state,
@@ -1827,10 +1958,10 @@ export function nextNonSeparatorIndex(request: string, index: number) {
         return request.length;
     }
 
-    // Detect trailing separators
+    // Skip leading separators using test() + lastIndex to avoid
+    // allocating the match result array that exec() would produce.
     separatorRegExp.lastIndex = index;
-    const match = separatorRegExp.exec(request);
-    return match === null ? index : index + match[0].length;
+    return separatorRegExp.test(request) ? separatorRegExp.lastIndex : index;
 }
 
 // Sticky-anchored regex for scanning a contiguous run of non-separator
@@ -2040,10 +2171,12 @@ function finalizeMatch(
     if (!finalizeState(state, request)) {
         return false;
     }
-    debugMatch(
-        state,
-        `Matched at end of input. Matched ids: ${JSON.stringify(state.valueIds)}, values: ${JSON.stringify(state.values)}'`,
-    );
+    if (state.debugEnabled) {
+        debugMatch(
+            state,
+            `Matched at end of input. Matched ids: ${JSON.stringify(state.valueIds)}, values: ${JSON.stringify(state.values)}'`,
+        );
+    }
 
     const wildcardPropertyNames: string[] = [];
     const matchResult: GrammarMatchResult = {
@@ -2073,6 +2206,15 @@ export function finalizeNestedRule(
     const parent = state.parent;
     if (parent !== undefined) {
         debugMatch(state, `finished nested`);
+        if (state.trace !== undefined) {
+            state.trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "ruleExited",
+                rule: state.name,
+                result: "matched",
+            });
+        }
 
         // Reuse state
         const { valueIds, value: value } = state;
@@ -2154,16 +2296,15 @@ export function finalizeNestedRule(
             // deduplication or nullable-completer caching.
             if (state.index !== parent.repeatStartIndex) {
                 // Build the CONTINUE alternative (re-enter the group).
-                const continueState: SnapshotState = {
-                    ...forkMatchState(state),
-                    partIndex: parent.repeatPartIndex,
-                    suppressOptionalFork: true,
-                };
+                // Mutate fields directly instead of spreading.
+                const continueState = forkMatchState(state);
+                continueState.partIndex = parent.repeatPartIndex;
+                continueState.suppressOptionalFork = true;
                 if (state.repeatPolicy === "greedy") {
                     // Live = continue (drill deeper); backtrack = stop
                     // (snapshot of state past the repeat).
                     const stopSnapshot = forkMatchState(state);
-                    Object.assign(state, continueState);
+                    restoreSnapshot(state, continueState);
                     pushBacktrack(state, stopSnapshot, "repeat");
                 } else {
                     // Default / nonGreedy: live = stop; backtrack = continue.
@@ -2198,10 +2339,12 @@ function matchStringPartWithWildcard(
         const wildcardEnd = match.index;
         const newIndex = wildcardEnd + match[0].length;
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            debugMatch(
-                state,
-                `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
-            );
+            if (state.debugEnabled) {
+                debugMatch(
+                    state,
+                    `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
+                );
+            }
             continue;
         }
 
@@ -2216,7 +2359,7 @@ function matchStringPartWithWildcard(
             // assignment and cause "No value assign to variable" at
             // finalizeNestedRule time.
             if (requiresValue(state, part)) {
-                addValue(state, part.variable, part.value.join(" "));
+                addValue(state, part.variable, getJoinedValue(part));
             }
             // Always replaced (never mutated in place):
             // `captureSuccessDelta` relies on pointer inequality
@@ -2229,16 +2372,20 @@ function matchStringPartWithWildcard(
                 afterWildcard: true,
                 matchedSpacingMode: state.spacingMode,
             };
-            debugMatch(
-                state,
-                `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
-            );
+            if (state.debugEnabled) {
+                debugMatch(
+                    state,
+                    `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
+                );
+            }
             return true;
         }
-        debugMatch(
-            state,
-            `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
-        );
+        if (state.debugEnabled) {
+            debugMatch(
+                state,
+                `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
+            );
+        }
     }
 }
 
@@ -2250,23 +2397,29 @@ function matchStringPartWithoutWildcard(
 ) {
     const curr = state.index;
     regExp.lastIndex = curr;
-    const match = regExp.exec(request);
-    if (match === null) {
+    if (!regExp.test(request)) {
         return false;
     }
-    const newIndex = match.index + match[0].length;
+    const newIndex = regExp.lastIndex;
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
+        if (state.debugEnabled) {
+            debugMatch(
+                state,
+                `Rejected non-separated matched string ${part.value.join(" ")}`,
+            );
+        }
+        return false;
+    }
+
+    if (state.debugEnabled) {
         debugMatch(
             state,
-            `Rejected non-separated matched string ${part.value.join(" ")}`,
+            `Matched string ${part.value.join(" ")} to ${newIndex}`,
         );
-        return false;
     }
 
-    debugMatch(state, `Matched string ${part.value.join(" ")} to ${newIndex}`);
-
     if (requiresValue(state, part)) {
-        addValue(state, part.variable, part.value.join(" "));
+        addValue(state, part.variable, getJoinedValue(part));
     }
     // Always replaced (never mutated in place):
     // `captureSuccessDelta` relies on pointer inequality
@@ -2397,11 +2550,26 @@ function getStringPartRegExp(
     return entry;
 }
 
+// Lazily compute and cache the joined string for a StringPart.
+// `part.value` is immutable after grammar construction, so the
+// cached result is safe to reuse.  Avoids calling
+// `Array.prototype.join` on every successful match.
+function getJoinedValue(part: StringPart): string {
+    let joined = part.joinedCache;
+    if (joined === undefined) {
+        joined = part.value.join(" ");
+        part.joinedCache = joined;
+    }
+    return joined;
+}
+
 function matchStringPart(request: string, state: MatchState, part: StringPart) {
-    debugMatch(
-        state,
-        `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
-    );
+    if (state.debugEnabled) {
+        debugMatch(
+            state,
+            `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
+        );
+    }
     const leadingIsNone = leadingSpacingMode(state) === "none";
     const entry = getStringPartRegExp(part, state.spacingMode, leadingIsNone);
     return state.pendingWildcard !== undefined
@@ -2439,18 +2607,22 @@ function matchVarNumberPartWithWildcard(
         const newIndex = wildcardEnd + match[0].length;
 
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            debugMatch(
-                state,
-                `Rejected non-separated matched number at ${wildcardEnd}`,
-            );
+            if (state.debugEnabled) {
+                debugMatch(
+                    state,
+                    `Rejected non-separated matched number at ${wildcardEnd}`,
+                );
+            }
             continue;
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex)) {
-            debugMatch(
-                state,
-                `Matched number at ${wildcardEnd} to ${newIndex}`,
-            );
+            if (state.debugEnabled) {
+                debugMatch(
+                    state,
+                    `Matched number at ${wildcardEnd} to ${newIndex}`,
+                );
+            }
 
             const valueId = addValueId(state, part.variable);
             if (valueId !== undefined) {
@@ -2467,10 +2639,12 @@ function matchVarNumberPartWithWildcard(
             }
             return true;
         }
-        debugMatch(
-            state,
-            `Rejected match number at ${wildcardEnd} to ${newIndex} with empty wildcard`,
-        );
+        if (state.debugEnabled) {
+            debugMatch(
+                state,
+                `Rejected match number at ${wildcardEnd} to ${newIndex} with empty wildcard`,
+            );
+        }
     }
 }
 
@@ -2502,11 +2676,15 @@ function matchVarNumberPartWithoutWildcard(
     const newIndex = curr + m[0].length;
 
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        debugMatch(state, `Rejected non-separated matched number`);
+        if (state.debugEnabled) {
+            debugMatch(state, `Rejected non-separated matched number`);
+        }
         return false;
     }
 
-    debugMatch(state, `Matched number to ${newIndex}`);
+    if (state.debugEnabled) {
+        debugMatch(state, `Matched number to ${newIndex}`);
+    }
 
     const valueId = addValueId(state, part.variable);
     if (valueId !== undefined) {
@@ -2530,10 +2708,12 @@ function matchVarNumberPart(
     state: MatchState,
     part: VarNumberPart,
 ) {
-    debugMatch(
-        state,
-        `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
-    );
+    if (state.debugEnabled) {
+        debugMatch(
+            state,
+            `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
+        );
+    }
     return state.pendingWildcard !== undefined
         ? matchVarNumberPartWithWildcard(request, state, part)
         : matchVarNumberPartWithoutWildcard(request, state, part);
@@ -2586,7 +2766,11 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // would otherwise check (rules.length >= 2, no
     // repeat/optional/variable, member spacingMode matches parent's)
     // are caught at construction time at the offending site.
-    const namePrefix = part.name ? `<${part.name}>` : getStateName(state);
+    const namePrefix = state.debugEnabled
+        ? part.name
+            ? `<${part.name}>`
+            : getStateName(state)
+        : "";
     enterTailAlternation(state, part, part.alternatives, namePrefix);
 }
 
@@ -2609,7 +2793,7 @@ function enterTailAlternation(
     namePrefix: string,
 ): void {
     state.leadingSpacingMode = leadingSpacingMode(state);
-    state.name = getNestedStateName(state, part, 0);
+    state.name = state.debugEnabled ? getNestedStateName(state, part, 0) : "";
     state.parts = rules[0].parts;
     state.value = rules[0].value;
     state.partIndex = 0;
@@ -2643,6 +2827,7 @@ function enterTailAlternation(
 }
 
 export function matchState(state: MatchState, request: string) {
+    const trace = state.trace;
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
@@ -2694,10 +2879,12 @@ export function matchState(state: MatchState, request: string) {
         }
 
         const part = parts[partIndex];
-        debugMatch(
-            state,
-            `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
-        );
+        if (state.debugEnabled) {
+            debugMatch(
+                state,
+                `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
+            );
+        }
 
         // Consume the single-use suppression flag exactly once per
         // part iteration: read it into a local and clear immediately.
@@ -2711,10 +2898,10 @@ export function matchState(state: MatchState, request: string) {
         if (part.optional && !suppressOptionalFork) {
             // Build the SKIP alternative (advance past the optional
             // part, with `undefined` recorded for any variable).
-            const skipState: SnapshotState = {
-                ...forkMatchState(state),
-                partIndex: state.partIndex + 1,
-            };
+            // Mutate partIndex directly instead of spreading a new
+            // object: avoids a second allocation per optional part.
+            const skipState = forkMatchState(state);
+            skipState.partIndex = state.partIndex + 1;
             if (part.variable) {
                 addValue(skipState, part.variable, undefined);
             }
@@ -2728,11 +2915,9 @@ export function matchState(state: MatchState, request: string) {
                 // another take frame in an infinite loop.  The flag
                 // is consumed by the local capture above on the next
                 // iteration, so it cannot leak onto subsequent parts.
-                const takeSnapshot: SnapshotState = {
-                    ...forkMatchState(state),
-                    suppressOptionalFork: true,
-                };
-                Object.assign(state, skipState);
+                const takeSnapshot = forkMatchState(state);
+                takeSnapshot.suppressOptionalFork = true;
+                restoreSnapshot(state, skipState);
                 pushBacktrack(state, takeSnapshot, "optional");
                 continue;
             }
@@ -2740,27 +2925,74 @@ export function matchState(state: MatchState, request: string) {
             pushBacktrack(state, skipState, "optional");
         }
 
+        if (trace !== undefined) {
+            trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "partAttempted",
+                rule: state.name,
+                part: partIndex,
+                partKind: part.type,
+            });
+        }
+
         switch (part.type) {
             case "string":
                 if (!matchStringPart(request, state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
 
             case "number":
                 if (!matchVarNumberPart(request, state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
             case "wildcard":
                 // string variable, wildcard
                 if (!matchVarStringPart(state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
             case "rules": {
                 if (part.dispatch !== undefined) {
                     if (!enterDispatchPart(state, part, request)) {
+                        if (trace !== undefined) {
+                            trace({
+                                seq: state.traceSeq++,
+                                inputPos: state.index,
+                                kind: "partFailed",
+                                rule: state.name,
+                                part: partIndex,
+                            });
+                        }
                         return false;
                     }
                     // continue the loop (without incrementing partIndex)
@@ -2771,13 +3003,17 @@ export function matchState(state: MatchState, request: string) {
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
-                debugMatch(
-                    state,
-                    `expanding ${part.alternatives.length} rules`,
-                );
-                const namePrefix = part.name
-                    ? `<${part.name}>`
-                    : getStateName(state);
+                if (state.debugEnabled) {
+                    debugMatch(
+                        state,
+                        `expanding ${part.alternatives.length} rules`,
+                    );
+                }
+                const namePrefix = state.debugEnabled
+                    ? part.name
+                        ? `<${part.name}>`
+                        : getStateName(state)
+                    : "";
                 if (
                     !enterRulesAlternation(
                         state,
@@ -2791,6 +3027,16 @@ export function matchState(state: MatchState, request: string) {
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
+        }
+        if (trace !== undefined) {
+            trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "partMatched",
+                rule: state.name,
+                part: partIndex,
+                endPos: state.index,
+            });
         }
         state.partIndex++;
     }
@@ -2831,9 +3077,11 @@ function memoLookup(
         ),
     );
     if (cached === "failed") {
-        debugMatchRaw(
-            `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
-        );
+        if (state.debugEnabled) {
+            debugMatchRaw(
+                `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
+            );
+        }
         return "failed";
     }
     if (cached !== undefined && !repeat && !pendingWildcardActive) {
@@ -2858,21 +3106,16 @@ function memoLookup(
         // cursor).  One frame instead of N-1 saves ~80 bytes per
         // delta in the pathological case.
         if (cached.length > 1) {
-            state.backtracks = {
-                origin: "memoReplay",
-                snapshot: baseSnapshot,
-                deltas: cached,
-                cursor: 1,
-                failedSuffixKeys,
-                prev: state.backtracks,
-            };
+            pushMemoReplay(state, baseSnapshot, cached, failedSuffixKeys);
         }
         applyDelta(state, cached[0]);
         state.lastReplayBatch = failedSuffixKeys;
         state.lastReplaySuffixKey = suffixStateKey(cached[0]);
-        debugMatchRaw(
-            `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
-        );
+        if (state.debugEnabled) {
+            debugMatchRaw(
+                `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
+            );
+        }
         return "replayed";
     }
     // Push the memo marker BEFORE the alternation cursor so the
@@ -2885,25 +3128,15 @@ function memoLookup(
     // flipped its flag.
     const noSuccessCache =
         repeat || pendingWildcardActive || state.valueIds === null;
-    const marker: MemoMarkerBacktrack = {
-        origin: "memoMarker",
+    return pushMemoMarker(
+        state,
         rules,
-        index: state.index,
-        leading: childLeadingSpacingMode,
+        childLeadingSpacingMode,
         pendingWildcardActive,
-        anyMemberFinalized: false,
-        valuesAtEntry: state.values,
-        valueIdsAtEntry: state.valueIds,
-        nextValueIdAtEntry: state.nextValueId,
-        lastMatchedPartInfoAtEntry: state.lastMatchedPartInfo,
-        carrier: isCarrier,
+        isCarrier,
         requireValue,
         noSuccessCache,
-        successes: [],
-        prev: state.backtracks,
-    };
-    state.backtracks = marker;
-    return marker;
+    );
 }
 
 /**
@@ -2984,7 +3217,7 @@ function enterRulesAlternation(
     // Note: `requireValue` was computed above for the cache key.
 
     // Update the current state to consider the first nested rule.
-    state.name = `${namePrefix}[0]`;
+    state.name = state.debugEnabled ? `${namePrefix}[0]` : "";
     state.parts = rules[0].parts;
     state.value = rules[0].value;
     state.partIndex = 0;
@@ -3003,6 +3236,15 @@ function enterRulesAlternation(
     if (rules.length > 1) {
         const base = forkMatchState(state);
         pushAlternation(state, base, rules, namePrefix);
+    }
+    if (state.trace !== undefined) {
+        state.trace({
+            seq: state.traceSeq++,
+            inputPos: state.index,
+            kind: "ruleEntered",
+            rule: state.name,
+            depth: state.nestedLevel,
+        });
     }
     return true;
 }
@@ -3112,9 +3354,11 @@ function enterDispatchPart(
             debugMatch(state, `dispatch: pending-wildcard fallback empty`);
             return false;
         }
-        const namePrefix = part.name
-            ? `<${part.name}>`
-            : `${getStateName(state)}<dispatch>`;
+        const namePrefix = state.debugEnabled
+            ? part.name
+                ? `<${part.name}>`
+                : `${getStateName(state)}<dispatch>`
+            : "";
         if (part.tailCall) {
             enterTailAlternation(state, part, all, namePrefix);
             // Tail calls always succeed: they replace the current
@@ -3184,9 +3428,11 @@ function enterDispatchPart(
         );
     }
 
-    const namePrefix = part.name
-        ? `<${part.name}>`
-        : `${getStateName(state)}<dispatch>`;
+    const namePrefix = state.debugEnabled
+        ? part.name
+            ? `<${part.name}>`
+            : `${getStateName(state)}<dispatch>`
+        : "";
     if (part.tailCall) {
         enterTailAlternation(state, part, effective, namePrefix);
         // Tail calls always succeed: they replace the current
@@ -3217,11 +3463,9 @@ const topLevelDispatchCacheParts = new WeakMap<Grammar, RulesPart>();
 function getTopLevelDispatchCachePart(grammar: Grammar): RulesPart {
     let p = topLevelDispatchCacheParts.get(grammar);
     if (p === undefined) {
-        p = {
-            type: "rules",
-            alternatives: grammar.alternatives,
+        p = createRulesPart(grammar.alternatives, {
             dispatch: grammar.dispatch,
-        };
+        });
         topLevelDispatchCacheParts.set(grammar, p);
     }
     return p;
@@ -3232,6 +3476,9 @@ export function initialMatchState(
     request: string,
     options?: GrammarMatchOptions,
 ): MatchState | undefined {
+    // Read the debug flag once from the getter; stored on the state
+    // so every downstream function reads a plain boolean field.
+    const debugEnabled = debugMatchRaw.enabled;
     const wildcardPolicy = options?.wildcardPolicy ?? "exhaustive";
     const optionalPolicy = options?.optionalPolicy ?? "exhaustive";
     const repeatPolicy = options?.repeatPolicy ?? "exhaustive";
@@ -3299,7 +3546,7 @@ export function initialMatchState(
     }
 
     const state: MatchState = {
-        name: `<Start>[0]`,
+        name: debugEnabled ? `<Start>[0]` : "",
         parts: effective[0].parts,
         value: effective[0].value,
         partIndex: 0,
@@ -3314,15 +3561,21 @@ export function initialMatchState(
         index: 0,
         pendingWildcard: undefined,
         lastMatchedPartInfo: undefined,
+        backtracks: undefined,
         wildcardPolicy,
         optionalPolicy,
         repeatPolicy,
+        debugEnabled,
         memoization,
+        lastReplayBatch: undefined,
+        lastReplaySuffixKey: undefined,
         // Per-call memoization cache: empty at start, populated
         // as sub-rule entries complete (with intrinsic-failure or
         // success-delta records).  See `MemoCache` and the
         // memoMarker branch in `tryNextBacktrack`.
         memoCache: new Map(),
+        trace: options?.trace,
+        traceSeq: 0,
     };
     // Top-level alternation: push a single compressed cursor frame
     // covering effective[1..N-1].  The cursor advances forward
@@ -3332,12 +3585,18 @@ export function initialMatchState(
     // from `effective[i]` directly on restore, and the debug name is
     // built lazily as `<Start>[i]`.
     if (effective.length > 1) {
-        pushAlternation(state, forkMatchState(state), effective, "<Start>");
+        pushAlternation(
+            state,
+            forkMatchState(state),
+            effective,
+            debugEnabled ? "<Start>" : "",
+        );
     }
     return state;
 }
 
 function debugMatch(state: MatchState, msg: string) {
+    if (!state.debugEnabled) return;
     if (state.nestedLevel < 0) {
         throw new Error(
             `Internal error: nestedLevel went negative (${state.nestedLevel}) at "${msg}"`,
@@ -3364,6 +3623,16 @@ export function matchGrammar(
     const results: GrammarMatchResult[] = [];
     if (state === undefined) {
         return results;
+    }
+    const trace = state.trace;
+    if (trace !== undefined) {
+        trace({
+            seq: state.traceSeq++,
+            inputPos: 0,
+            kind: "ruleEntered",
+            rule: state.name,
+            depth: 0,
+        });
     }
     // Explicit-stack DFS over the parse forest: `matchState` walks
     // the live state's parts left-to-right; on success collect the
@@ -3394,6 +3663,15 @@ export function matchGrammar(
             matchState(state, request) &&
             finalizeMatch(state, request, results)
         ) {
+            if (trace !== undefined) {
+                trace({
+                    seq: state.traceSeq++,
+                    inputPos: state.index,
+                    kind: "ruleExited",
+                    rule: state.name,
+                    result: "matched",
+                });
+            }
             suppressBacktracksAfterSuccess(state);
         }
 

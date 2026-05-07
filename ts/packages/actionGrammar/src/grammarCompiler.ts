@@ -5,11 +5,14 @@ import {
     Grammar,
     GrammarPart,
     GrammarRule,
-    RulesPart,
-    StringPart,
     CompiledSpacingMode,
     CompiledValueNode,
     CompiledObjectElement,
+    createStringPart,
+    createWildcardPart,
+    createNumberPart,
+    createRulesPart,
+    createPhraseSetPart,
 } from "./grammarTypes.js";
 import {
     Rule,
@@ -1098,10 +1101,7 @@ function createGrammarRule(
     for (const expr of expressions) {
         switch (expr.type) {
             case "string": {
-                const part: StringPart = {
-                    type: "string",
-                    value: expr.value,
-                };
+                const part = createStringPart(expr.value);
                 // TODO: create regexp
                 parts.push(part);
                 // default value of the string
@@ -1132,13 +1132,13 @@ function createGrammarRule(
                         name,
                         currentEpr,
                     );
-                    parts.push({
-                        type: "rules",
-                        alternatives: record.grammarRules,
-                        variable: name,
-                        name: referencedName,
-                        optional: expr.optional,
-                    });
+                    parts.push(
+                        createRulesPart(record.grammarRules, {
+                            optional: expr.optional,
+                            variable: name,
+                            name: referencedName,
+                        }),
+                    );
                     if (!expr.optional) {
                         // === false: only clear when *definitely* non-nullable.
                         // undefined (back-ref still compiling) leaves epr intact
@@ -1151,11 +1151,7 @@ function createGrammarRule(
                             ruleNullable && (record.nullable ?? false);
                     }
                 } else if (referencedName === "number") {
-                    parts.push({
-                        type: "number",
-                        variable: name,
-                        optional: expr.optional,
-                    });
+                    parts.push(createNumberPart(name, expr.optional));
                     if (!expr.optional) consumedInput();
                 } else {
                     // Validate type name references
@@ -1186,12 +1182,9 @@ function createGrammarRule(
                         }
                     }
 
-                    parts.push({
-                        type: "wildcard",
-                        variable: name,
-                        optional: expr.optional,
-                        typeName: referencedName,
-                    });
+                    parts.push(
+                        createWildcardPart(name, referencedName, expr.optional),
+                    );
                     if (!expr.optional) consumedInput();
                 }
                 break;
@@ -1208,10 +1201,7 @@ function createGrammarRule(
                     !isLocallyDefined &&
                     globalPhraseSetRegistry.isPhraseSetName(expr.refName.name)
                 ) {
-                    parts.push({
-                        type: "phraseSet",
-                        matcherName: expr.refName.name,
-                    });
+                    parts.push(createPhraseSetPart(expr.refName.name));
                     // Phrase sets don't produce a captured value on their own.
                     // Use defaultValue=true so single-part rules using a phrase set
                     // don't trip the "Start rule does not produce a value" check.
@@ -1228,11 +1218,11 @@ function createGrammarRule(
                 );
                 // default value of the rule reference
                 defaultValue = record.hasValue;
-                parts.push({
-                    type: "rules",
-                    alternatives: record.grammarRules,
-                    name: expr.refName.name,
-                });
+                parts.push(
+                    createRulesPart(record.grammarRules, {
+                        name: expr.refName.name,
+                    }),
+                );
                 // RuleRefExpr has no optional modifier; it is always non-optional.
                 // === false: only clear when *definitely* non-nullable (same
                 // asymmetry as the variable ruleRef case above).
@@ -1252,13 +1242,12 @@ function createGrammarRule(
                     nullable: groupNullable,
                 } = createGrammarRules(context, rules, currentEpr, spacingMode);
                 defaultValue = groupHasValue;
-                const rulesPart: RulesPart = {
-                    type: "rules",
-                    alternatives: grammarRules,
-                    optional,
-                };
-                if (repeat) rulesPart.repeat = true;
-                parts.push(rulesPart);
+                parts.push(
+                    createRulesPart(grammarRules, {
+                        optional,
+                        repeat,
+                    }),
+                );
                 if (!optional && !groupNullable) consumedInput();
                 break;
             }

@@ -16,6 +16,7 @@ export type GithubCliActions =
     | GistListAction
     | IssueCreateAction
     | IssueCloseAction
+    | IssueDeleteAction
     | IssueReopenAction
     | IssueListAction
     | IssueViewAction
@@ -27,6 +28,7 @@ export type GithubCliActions =
     | PrListAction
     | PrViewAction
     | PrCheckoutAction
+    | PrChecksAction
     | ProjectCreateAction
     | ProjectDeleteAction
     | ProjectListAction
@@ -60,6 +62,8 @@ export type GithubCliActions =
     | SecretCreateAction
     | SshKeyAddAction
     | StatusPrintAction
+    | MyAssignedIssuesAction
+    | IssueAddLabelAction
     | VariableCreateAction
     | DependabotAlertsAction;
 
@@ -184,6 +188,15 @@ export type IssueCloseAction = {
     };
 };
 
+// Permanently delete a GitHub issue (uses `gh issue delete --yes`).
+export type IssueDeleteAction = {
+    actionName: "issueDelete";
+    parameters: {
+        number: number;
+        repo?: string;
+    };
+};
+
 export type IssueReopenAction = {
     actionName: "issueReopen";
     parameters: {
@@ -206,11 +219,24 @@ export type IssueListAction = {
     };
 };
 
+// View / open a specific GitHub issue by number.
+//
+// Example:
+// User: show issue 2222
+// Agent: { actionName: "issueView", parameters: { number: 2222 } }
+//
+// Example:
+// User: view issue #42 in microsoft/TypeAgent
+// Agent: { actionName: "issueView", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
 export type IssueViewAction = {
     actionName: "issueView";
     parameters: {
+        // The issue number. Omit when the user references an issue via entity
+        // resolution ("that issue", "the issue we just opened") — the dispatcher
+        // will substitute it.
         number?: number;
 
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit unless the user names the repo.
         repo?: string;
     };
 };
@@ -273,11 +299,24 @@ export type PrListAction = {
     };
 };
 
+// View / open a specific GitHub pull request by number.
+//
+// Example:
+// User: show PR 2196
+// Agent: { actionName: "prView", parameters: { number: 2196 } }
+//
+// Example:
+// User: view pull request #42 in microsoft/TypeAgent
+// Agent: { actionName: "prView", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
 export type PrViewAction = {
     actionName: "prView";
     parameters: {
+        // The pull request number. Omit when the user references a PR via entity
+        // resolution ("that PR", "the PR we just opened") — the dispatcher will
+        // substitute it.
         number?: number;
 
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit unless the user names the repo.
         repo?: string;
     };
 };
@@ -288,6 +327,14 @@ export type PrCheckoutAction = {
         number?: number;
 
         branch?: string;
+    };
+};
+
+export type PrChecksAction = {
+    actionName: "prChecks";
+    parameters: {
+        number: number;
+        repo?: string;
     };
 };
 
@@ -474,6 +521,17 @@ export type LabelCreateAction = {
     };
 };
 
+export type IssueAddLabelAction = {
+    actionName: "issueAddLabel";
+    parameters: {
+        number: number;
+
+        label: string;
+
+        repo?: string;
+    };
+};
+
 export type LicensesViewAction = {
     actionName: "licensesView";
     parameters: {};
@@ -546,6 +604,16 @@ export type SshKeyAddAction = {
 export type StatusPrintAction = {
     actionName: "statusPrint";
     parameters: {};
+};
+
+// List issues assigned to the current authenticated user across all
+// repositories. Maps to `gh search issues --assignee @me --state open`.
+export type MyAssignedIssuesAction = {
+    actionName: "myAssignedIssues";
+    parameters: {
+        // Maximum number of issues to return (default 20)
+        limit?: number;
+    };
 };
 
 export type VariableCreateAction = {

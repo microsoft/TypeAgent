@@ -177,8 +177,7 @@ export type StringPartRegExpEntry = {
 
 export type StringPart = {
     type: "string";
-    value: string[];
-    optional?: undefined; // TODO: support optional string parts
+    optional: undefined; // TODO: support optional string parts
     /**
      * Optional capture variable.  When set, the matcher writes the
      * joined matched tokens (`value.join(" ")`) into the slot/value
@@ -189,7 +188,8 @@ export type StringPart = {
      * Currently introduced only by the optimizer's inliner pass; not
      * exposed in `.agr` source syntax.
      */
-    variable?: string | undefined;
+    variable: string | undefined;
+    value: string[];
 
     /**
      * Cache of compiled RegExp objects.  There are exactly 4
@@ -202,21 +202,28 @@ export type StringPart = {
      * allocation that the previous string-keyed Map incurred on
      * every match attempt.
      */
-    regexpCache?: Array<StringPartRegExpEntry | undefined>;
+    regexpCache?: Array<StringPartRegExpEntry | undefined> | undefined;
+
+    /**
+     * Cached result of `value.join(" ")`.  Populated lazily by
+     * `getJoinedValue` in the matcher to avoid repeated
+     * `Array.prototype.join` calls on every successful match.
+     */
+    joinedCache?: string | undefined;
 };
 
 export type VarStringPart = {
     type: "wildcard";
+    optional: boolean | undefined;
     variable: string;
-    optional?: boolean | undefined;
 
     typeName: string; // Not needed at runtime?
 };
 
 export type VarNumberPart = {
     type: "number";
+    optional: boolean | undefined;
     variable: string;
-    optional?: boolean | undefined;
 };
 
 /**
@@ -248,6 +255,8 @@ export type DispatchModeBucket = {
  */
 export type RulesPart = {
     type: "rules";
+    optional: boolean | undefined;
+    variable: string | undefined;
 
     alternatives: GrammarRule[];
     /**
@@ -309,8 +318,6 @@ export type RulesPart = {
     dispatch?: DispatchModeBucket[] | undefined;
     name?: string | undefined; // For debugging
 
-    variable?: string | undefined;
-    optional?: boolean | undefined;
     repeat?: boolean | undefined; // Kleene star: zero or more occurrences
 
     /**
@@ -350,8 +357,7 @@ export type RulesPart = {
 
 export type PhraseSetPart = {
     type: "phraseSet";
-    /** Name of the phrase-set matcher (e.g. "Polite", "Greeting") */
-    matcherName: string;
+    optional: undefined;
     /**
      * Optional capture variable.  When set, the matcher writes the
      * actual matched phrase (its tokens joined with a single space)
@@ -360,8 +366,9 @@ export type PhraseSetPart = {
      * Currently introduced only by the optimizer's inliner pass; not
      * exposed in `.agr` source syntax.
      */
-    variable?: string | undefined;
-    optional?: undefined;
+    variable: string | undefined;
+    /** Name of the phrase-set matcher (e.g. "Polite", "Greeting") */
+    matcherName: string;
 };
 
 export type GrammarPart =
@@ -411,6 +418,86 @@ export function isCaptureBearingPart(
 export function getCapturedVariableName(part: GrammarPart): string | undefined {
     return isCaptureBearingPart(part) ? part.variable : undefined;
 }
+
+// ── GrammarPart factory functions ────────────────────────────────────────
+//
+// Single creation point for each GrammarPart kind.  Guarantees V8 sees
+// a single hidden class per kind (identical field order, all fields
+// always present).  Optional fields default to `undefined`.
+
+export function createStringPart(
+    value: string[],
+    variable?: string,
+): StringPart {
+    return {
+        type: "string",
+        optional: undefined,
+        variable,
+        value,
+        regexpCache: undefined,
+        joinedCache: undefined,
+    };
+}
+
+export function createWildcardPart(
+    variable: string,
+    typeName: string,
+    optional?: boolean,
+): VarStringPart {
+    return {
+        type: "wildcard",
+        optional: optional,
+        variable,
+        typeName,
+    };
+}
+
+export function createNumberPart(
+    variable: string,
+    optional?: boolean,
+): VarNumberPart {
+    return {
+        type: "number",
+        optional: optional,
+        variable,
+    };
+}
+
+export function createRulesPart(
+    alternatives: GrammarRule[],
+    options?: {
+        optional?: boolean | undefined;
+        variable?: string | undefined;
+        dispatch?: DispatchModeBucket[] | undefined;
+        name?: string | undefined;
+        repeat?: boolean | undefined;
+        tailCall?: boolean | undefined;
+    },
+): RulesPart {
+    return {
+        type: "rules",
+        optional: options?.optional,
+        variable: options?.variable,
+        alternatives,
+        dispatch: options?.dispatch,
+        name: options?.name,
+        repeat: options?.repeat,
+        tailCall: options?.tailCall,
+    };
+}
+
+export function createPhraseSetPart(
+    matcherName: string,
+    variable?: string,
+): PhraseSetPart {
+    return {
+        type: "phraseSet",
+        optional: undefined,
+        variable,
+        matcherName,
+    };
+}
+
 export type GrammarRule = {
     parts: GrammarPart[];
     value?: CompiledValueNode | undefined;

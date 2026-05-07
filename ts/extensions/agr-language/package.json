@@ -16,6 +16,12 @@
   "license": "MIT",
   "author": "Microsoft",
   "publisher": "typeagent",
+  "type": "module",
+  "main": "./dist/client.js",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist"
+  },
   "contributes": {
     "grammars": [
       {
@@ -37,6 +43,20 @@
         "configuration": "./language-configuration.json"
       }
     ]
+  },
+  "activationEvents": [
+    "onLanguage:agr"
+  ],
+  "dependencies": {
+    "grammar-tools-core": "workspace:*",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.4.5"
   },
   "engines": {
     "vscode": "^1.90.0"

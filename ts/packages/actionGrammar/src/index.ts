@@ -30,7 +30,22 @@ export { matchGrammar, needsSeparatorInAutoMode } from "./grammarMatcher.js";
 export type {
     GrammarMatchResult,
     GrammarMatchOptions,
+    SeparatorMode,
 } from "./grammarMatcher.js";
+
+// Trace hook (opt-in instrumentation for the rule-level matcher)
+export type {
+    TraceEvent,
+    TraceCallback,
+    RuleId,
+    PartId,
+    RuleEnteredEvent,
+    RuleExitedEvent,
+    PartAttemptedEvent,
+    PartMatchedEvent,
+    PartFailedEvent,
+    BacktrackEvent,
+} from "./traceEvents.js";
 
 export {
     matchGrammarCompletion,

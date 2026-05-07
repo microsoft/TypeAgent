@@ -116,6 +116,8 @@ export interface Client {
     conversationChanged?(conversationId: string, name: string): void;
     markHistoryEntries?(): void;
     demoStateChanged?(state: DemoUIState): void;
+    /** Show/clear the reconnect banner. Pass undefined to clear. */
+    reconnectStatusChanged?(message: string | undefined): void;
 }
 
 export interface ElectronWindowFields {

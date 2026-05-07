@@ -88,24 +88,57 @@ export async function createConversationManager(
     idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
-    await fs.promises.mkdir(conversationsDir, { recursive: true });
 
-    // Migrate old on-disk layout: "server-sessions/" → "conversations/"
+    // TODO: deprecate and remove this on-disk migration once enough time has
+    // passed that no production install still has a "server-sessions/"
+    // directory hanging around.
+    // Migrate old on-disk layout: "server-sessions/" → "conversations/".
+    // IMPORTANT: do this BEFORE creating the destination — otherwise
+    // `fs.rename` fails with EPERM/EEXIST on Windows when the target
+    // already exists, silently stranding all historical conversations
+    // in the old directory.
     const oldConversationsDir = path.join(baseDir, "server-sessions");
-    try {
-        await fs.promises.rename(oldConversationsDir, conversationsDir);
-        debugConversation(
-            `Migrated on-disk directory "server-sessions" → "conversations"`,
-        );
-    } catch (e: any) {
-        if (
-            e?.code !== "ENOENT" &&
-            e?.code !== "EEXIST" &&
-            e?.code !== "EPERM"
-        ) {
+    if (
+        !fs.existsSync(conversationsDir) &&
+        fs.existsSync(oldConversationsDir)
+    ) {
+        try {
+            await fs.promises.rename(oldConversationsDir, conversationsDir);
+            debugConversation(
+                `Migrated on-disk directory "server-sessions" → "conversations"`,
+            );
+        } catch (e: any) {
             debugConversationErr("Failed to migrate server-sessions dir:", e);
         }
+    } else if (fs.existsSync(oldConversationsDir)) {
+        // Both directories exist — earlier builds raced and pre-created
+        // the destination. Move stragglers across so users don't lose history.
+        try {
+            for (const entry of await fs.promises.readdir(oldConversationsDir, {
+                withFileTypes: true,
+            })) {
+                const src = path.join(oldConversationsDir, entry.name);
+                const dst = path.join(conversationsDir, entry.name);
+                if (fs.existsSync(dst)) continue;
+                try {
+                    await fs.promises.rename(src, dst);
+                } catch (e: any) {
+                    debugConversationErr(`Failed to migrate ${entry.name}:`, e);
+                }
+            }
+            // Best-effort cleanup; will fail silently if non-empty.
+            await fs.promises.rmdir(oldConversationsDir).catch(() => undefined);
+            debugConversation(
+                `Merged stragglers from "server-sessions" → "conversations"`,
+            );
+        } catch (e: any) {
+            debugConversationErr(
+                "Failed to merge server-sessions stragglers:",
+                e,
+            );
+        }
     }
+    await fs.promises.mkdir(conversationsDir, { recursive: true });
     // Migrate old metadata filename: "sessions.json" → "conversations.json"
     const oldMetadataPath = path.join(conversationsDir, "sessions.json");
     const newMetadataPath = path.join(conversationsDir, METADATA_FILE);
@@ -126,6 +159,11 @@ export async function createConversationManager(
     const unlockInstanceDir = await lockInstanceDir(baseDir);
 
     const conversations = new Map<string, ConversationRecord>();
+
+    // Single-flight lock for "auto-create the default conversation". Two
+    // concurrent first-connects could both observe "no conversations exist"
+    // and race; this serializes them so only one create happens.
+    let defaultCreateP: Promise<string> | undefined;
 
     // Load persisted metadata
     await loadMetadata();
@@ -315,6 +353,23 @@ export async function createConversationManager(
         }
     }
 
+    /**
+     * Throw if `name` collides (case-insensitive) with another existing
+     * conversation. `selfId` is excluded from the check so renaming a
+     * conversation to its current name is a no-op rather than an error.
+     */
+    function ensureNameAvailable(name: string, selfId?: string): void {
+        const norm = name.trim().toLowerCase();
+        for (const [id, record] of conversations) {
+            if (id === selfId) continue;
+            if (record.name.trim().toLowerCase() === norm) {
+                throw new Error(
+                    `A conversation named "${record.name}" already exists. Pick a different name.`,
+                );
+            }
+        }
+    }
+
     // Sweep orphaned ephemeral conversations left behind by unclean CLI exits
     {
         const toSweep: string[] = [];
@@ -350,6 +405,7 @@ export async function createConversationManager(
     const manager: ConversationManager = {
         async createConversation(name: string): Promise<ConversationInfo> {
             validateConversationName(name);
+            ensureNameAvailable(name);
             const conversationId = randomUUID();
             const createdAt = new Date().toISOString();
             const record: ConversationRecord = {
@@ -391,9 +447,23 @@ export async function createConversationManager(
             if (resolved !== undefined) {
                 return resolved;
             }
-            // No conversations exist — auto-create a default
-            const info = await manager.createConversation("default");
-            return info.conversationId;
+            // No conversations exist — auto-create a default. Serialize so two
+            // concurrent first-connects don't both try to create "default" and
+            // race the duplicate-name check.
+            if (defaultCreateP === undefined) {
+                defaultCreateP = (async () => {
+                    // Re-check inside the critical section in case another caller
+                    // raced us between the early check above and acquiring the lock.
+                    const existing =
+                        getDefaultConversationId() ?? getAnyConversationId();
+                    if (existing !== undefined) return existing;
+                    const info = await manager.createConversation("default");
+                    return info.conversationId;
+                })().finally(() => {
+                    defaultCreateP = undefined;
+                });
+            }
+            return defaultCreateP;
         },
 
         async prewarmMostRecentConversation(): Promise<void> {
@@ -440,7 +510,7 @@ export async function createConversationManager(
             // Notify existing clients that a new client has joined
             if (sharedDispatcher.clientCount > 1 && dispatcher.connectionId) {
                 sharedDispatcher.broadcastSystemMessage(
-                    `[A new client has joined this conversation. You are connected to '${record.name}'.]`,
+                    `[A new client has joined this conversation.]`,
                     dispatcher.connectionId,
                 );
             }
@@ -474,7 +544,7 @@ export async function createConversationManager(
             // Notify remaining clients before this client leaves
             if (record.sharedDispatcher.clientCount > 1) {
                 record.sharedDispatcher.broadcastSystemMessage(
-                    `[A client has left this conversation. You remain connected to '${record.name}'.]`,
+                    `[A client has left this conversation.]`,
                     connectionId,
                 );
             }
@@ -518,6 +588,7 @@ export async function createConversationManager(
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
+            ensureNameAvailable(newName, conversationId);
             record.name = newName;
             await saveMetadata();
             debugConversation(

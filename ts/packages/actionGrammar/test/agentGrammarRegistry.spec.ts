@@ -6,7 +6,11 @@ import {
     AgentGrammar,
 } from "../src/agentGrammarRegistry.js";
 import { registerBuiltInEntities } from "../src/builtInEntities.js";
-import { Grammar } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createStringPart,
+    createWildcardPart,
+} from "../src/grammarTypes.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 
 describe("Agent Grammar Registry", () => {
@@ -20,12 +24,8 @@ describe("Agent Grammar Registry", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -53,7 +53,7 @@ describe("Agent Grammar Registry", () => {
             const baseGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
@@ -87,7 +87,7 @@ describe("Agent Grammar Registry", () => {
             const baseGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["test"] }],
+                        parts: [createStringPart(["test"])],
                     },
                 ],
             };
@@ -116,7 +116,7 @@ describe("Agent Grammar Registry", () => {
             const baseGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["test"] }],
+                        parts: [createStringPart(["test"])],
                     },
                 ],
                 entities: ["Ordinal"],
@@ -149,7 +149,7 @@ describe("Agent Grammar Registry", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["test"] }],
+                        parts: [createStringPart(["test"])],
                     },
                 ],
             };
@@ -167,7 +167,7 @@ describe("Agent Grammar Registry", () => {
             const baseGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
@@ -257,7 +257,7 @@ describe("Agent Grammar Registry", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["play"] }],
+                        parts: [createStringPart(["play"])],
                     },
                 ],
             };
@@ -296,7 +296,7 @@ describe("Agent Grammar Registry", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["test"] }],
+                        parts: [createStringPart(["test"])],
                     },
                 ],
             };
@@ -313,7 +313,7 @@ describe("Agent Grammar Registry", () => {
             const baseGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
@@ -350,12 +350,8 @@ describe("Agent Grammar Registry", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -377,12 +373,8 @@ describe("Agent Grammar Registry", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["schedule"] },
-                            {
-                                type: "wildcard",
-                                variable: "event",
-                                typeName: "string",
-                            },
+                            createStringPart(["schedule"]),
+                            createWildcardPart("event", "string"),
                         ],
                         value: {
                             type: "object",
@@ -423,14 +415,14 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("player", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["play"] }],
+                        parts: [createStringPart(["play"])],
                     },
                 ],
             });
             registry.registerAgent("calendar", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["schedule"] }],
+                        parts: [createStringPart(["schedule"])],
                     },
                 ],
             });
@@ -449,7 +441,7 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("player", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["play"] }],
+                        parts: [createStringPart(["play"])],
                     },
                 ],
             });
@@ -464,14 +456,14 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("player", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["play"] }],
+                        parts: [createStringPart(["play"])],
                     },
                 ],
             });
             registry.registerAgent("calendar", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["schedule"] }],
+                        parts: [createStringPart(["schedule"])],
                     },
                 ],
             });
@@ -486,14 +478,14 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("agent1", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["test1"] }],
+                        parts: [createStringPart(["test1"])],
                     },
                 ],
             });
             registry.registerAgent("agent2", {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["test2"] }],
+                        parts: [createStringPart(["test2"])],
                     },
                 ],
             });

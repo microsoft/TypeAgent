@@ -1,0 +1,69 @@
+# =============================================
+# VS Code Shell Extension Demo — PART 1 of 2
+# Run this in the regular Electron shell.
+# Companion file: vscode_shell_extension_part2.txt
+# =============================================
+
+# ---------------------------------------------
+# PRESENTER NOTES — environment
+# ---------------------------------------------
+# Before starting:
+#   • Agent server is running (pnpm --filter agent-server start).
+#   • vscode-shell extension installed (pnpm run deploy:local
+#     from ts/packages/vscode-shell). VS Code is open with the
+#     TypeAgent activity bar visible — but DO NOT click it yet.
+#   • Logged into gh:  gh auth status
+# ---------------------------------------------
+
+# ====== Init =======
+@clear
+@pauseForInput
+
+# -------------------------------------
+# 1. GitHub temperature check from the shell
+# -------------------------------------
+
+# What's on my plate today?
+show my assigned issues on github
+
+# Anything new on the team's project?
+list open PRs in microsoft/TypeAgent
+
+# Drill in
+show PR 2196 in microsoft/TypeAgent
+
+# PRESENTER PAUSE: optionally tab over to the browser and show
+# the same PR on github.com to anchor what the agent just told
+# us in something familiar.
+@pauseForInput
+
+# -------------------------------------
+# 2. Hand off to the editor
+# -------------------------------------
+
+# Bring the IDE to the foreground (use the exact Start Menu name
+# so the desktop agent's fuzzy matcher doesn't pick a different app).
+launch Code
+
+# PRESENTER: the IDE comes to the foreground. Continue with
+# vscode_shell_extension_part2.txt inside the extension's
+# sidebar chat. The current conversation will be there waiting.
+@pauseForInput
+
+# -------------------------------------
+# 3. Welcome back to the shell (after Part 2)
+# -------------------------------------
+
+# PRESENTER: switch focus back to the Electron shell. The
+# entire conversation — including everything typed in VS Code —
+# is right here. Sessions are shared across surfaces.
+
+# Prove it: ask about something we did over in the extension.
+what file did we just create?
+
+# Star the repo as a thank-you to the maintainers
+star microsoft/TypeAgent
+
+# =============================================
+# End of Part 1
+# =============================================

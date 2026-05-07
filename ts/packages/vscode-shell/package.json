@@ -1,0 +1,200 @@
+{
+  "name": "vscode-shell",
+  "displayName": "TypeAgent VS Code Shell",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Embeds the TypeAgent shell chat into VS Code",
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/vscode-shell"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "clean": "rimraf --glob dist dist-pub *.vsix",
+    "compile": "node esbuild.mjs",
+    "deploy:local": "npm run package && code --install-extension dist-pub/vscode-shell.vsix --force",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-shell.vsix",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-shell.openChat",
+        "title": "Open Chat in Editor",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.newChatPanel",
+        "title": "New Chat in Editor",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.focusChat",
+        "title": "Focus Chat",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.switchSession",
+        "title": "Switch Conversation",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.newSession",
+        "title": "New Conversation",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.renameSession",
+        "title": "Rename Conversation",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.deleteSession",
+        "title": "Delete Conversation",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.clearChat",
+        "title": "Clear Chat View",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.runDemo",
+        "title": "Run Demo Script…",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.demoContinue",
+        "title": "Demo: Continue",
+        "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.demoCancel",
+        "title": "Demo: Cancel",
+        "category": "TypeAgent"
+      }
+    ],
+    "configuration": {
+      "title": "TypeAgent VS Code Shell",
+      "properties": {
+        "typeagent.serverUrl": {
+          "type": "string",
+          "default": "ws://localhost:8999",
+          "description": "WebSocket URL of the TypeAgent agent server"
+        },
+        "typeagent.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start the agent server if not running"
+        },
+        "typeagent.serverPort": {
+          "type": "number",
+          "default": 8999,
+          "description": "Port for the agent server when auto-starting"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "vscode-shell.newChatPanel",
+        "key": "ctrl+k ctrl+t",
+        "mac": "cmd+k cmd+t"
+      },
+      {
+        "command": "vscode-shell.newSession",
+        "key": "ctrl+k ctrl+n",
+        "mac": "cmd+k cmd+n",
+        "when": "vscode-shell.chatFocused"
+      },
+      {
+        "command": "vscode-shell.switchSession",
+        "key": "ctrl+k ctrl+s",
+        "mac": "cmd+k cmd+s",
+        "when": "vscode-shell.chatFocused"
+      },
+      {
+        "command": "vscode-shell.renameSession",
+        "key": "ctrl+k ctrl+r",
+        "mac": "cmd+k cmd+r",
+        "when": "vscode-shell.chatFocused"
+      },
+      {
+        "command": "vscode-shell.clearChat",
+        "key": "ctrl+k ctrl+l",
+        "mac": "cmd+k cmd+l",
+        "when": "vscode-shell.chatFocused"
+      },
+      {
+        "command": "vscode-shell.demoContinue",
+        "key": "alt+right",
+        "when": "vscode-shell.demoPaused"
+      },
+      {
+        "command": "vscode-shell.demoCancel",
+        "key": "escape",
+        "when": "vscode-shell.demoPaused"
+      }
+    ],
+    "views": {
+      "vscode-shell": [
+        {
+          "type": "webview",
+          "id": "vscode-shell.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vscode-shell",
+          "title": "TypeAgent",
+          "icon": "media/icons/typeagent.svg"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onWebviewPanel:vscode-shell.chatPanel"
+  ],
+  "dependencies": {
+    "@typeagent/agent-rpc": "file:../agentRpc",
+    "@typeagent/agent-sdk": "file:../agentSdk",
+    "@typeagent/agent-server-client": "file:../agentServer/client",
+    "@typeagent/agent-server-protocol": "file:../agentServer/protocol",
+    "@typeagent/completion-ui": "file:../completionUI",
+    "@typeagent/dispatcher-rpc": "file:../dispatcher/rpc",
+    "@typeagent/dispatcher-types": "file:../dispatcher/types",
+    "agent-dispatcher": "file:../dispatcher/dispatcher",
+    "ansi_up": "^6.0.6",
+    "chat-ui": "workspace:*",
+    "debug": "^4.4.0",
+    "dompurify": "^3.4.1",
+    "isomorphic-ws": "^5.0.0",
+    "markdown-it": "^14.1.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "mkdirp": "^3.0.1",
+    "rimraf": "^6.0.1"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "icon": "media/icons/icon-80.png"
+}
