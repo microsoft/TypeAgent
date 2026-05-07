@@ -19,7 +19,9 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { GrammarRule, RulesPart,
+    createStringPart,
+} from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import {
@@ -947,7 +949,9 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
     function buildRule(token: string, value: string): GrammarRule {
         return {
-            parts: [{ type: "string", value: [token] }],
+            parts: [
+                createStringPart([token]),
+            ],
             value: { type: "literal", value },
         };
     }
@@ -959,6 +963,8 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         const ruleB = buildRule("beta", "b");
         const dispatch: RulesPart = {
             type: "rules",
+            optional: undefined,
+            variable: undefined,
             dispatch: [],
             alternatives: [ruleA, ruleB],
         };
@@ -981,11 +987,15 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         // peek hit yields the bucket, miss yields no alternatives.
         const ruleA = buildRule("alpha", "a1");
         const ruleA2: GrammarRule = {
-            parts: [{ type: "string", value: ["alpha", "two"] }],
+            parts: [
+                createStringPart(["alpha", "two"]),
+            ],
             value: { type: "literal", value: "a2" },
         };
         const dispatch: RulesPart = {
             type: "rules",
+            optional: undefined,
+            variable: undefined,
             alternatives: [],
             dispatch: [
                 {
@@ -1015,6 +1025,8 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         // nothing.
         const dispatch: RulesPart = {
             type: "rules",
+            optional: undefined,
+            variable: undefined,
             alternatives: [],
             dispatch: [],
         };
@@ -1033,6 +1045,8 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         const ruleA = buildRule("alpha", "a");
         const dispatch: RulesPart = {
             type: "rules",
+            optional: undefined,
+            variable: undefined,
             alternatives: [],
             dispatch: [
                 {

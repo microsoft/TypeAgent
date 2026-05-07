@@ -152,8 +152,8 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 // both an `[]` pool slot and a per-site `index`
                 // field for that case.
                 const part: RulePartJson = {
-                    name: p.name,
                     type: "rules",
+                    name: p.name,
                     variable: p.variable,
                     optional: p.optional,
                 };

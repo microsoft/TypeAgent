@@ -1,3 +1,4 @@
+import { createStringPart, createWildcardPart } from "../src/grammarTypes.js";
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -22,13 +23,9 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -56,13 +53,9 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -90,13 +83,9 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -130,13 +119,9 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -171,12 +156,8 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
                     ],
                     value: {
                         type: "object",
@@ -214,18 +195,10 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -265,18 +238,10 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -318,18 +283,10 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -371,24 +328,12 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["move"] },
-                        {
-                            type: "wildcard",
-                            variable: "item",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["from"] },
-                        {
-                            type: "wildcard",
-                            variable: "source",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["to"] },
-                        {
-                            type: "wildcard",
-                            variable: "dest",
-                            typeName: "string",
-                        },
+                        createStringPart(["move"]),
+                        createWildcardPart("item", "string"),
+                        createStringPart(["from"]),
+                        createWildcardPart("source", "string"),
+                        createStringPart(["to"]),
+                        createWildcardPart("dest", "string"),
                     ],
                     value: {
                         type: "object",
@@ -439,12 +384,8 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather", "forecast"] },
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather", "forecast"]),
                     ],
                     value: {
                         type: "object",
@@ -478,12 +419,8 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        {
-                            type: "wildcard",
-                            variable: "item",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["is", "ready"] },
+                        createWildcardPart("item", "string"),
+                        createStringPart(["is", "ready"]),
                     ],
                     value: {
                         type: "object",
@@ -520,12 +457,8 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["search", "for"] },
-                        {
-                            type: "wildcard",
-                            variable: "query",
-                            typeName: "string",
-                        },
+                        createStringPart(["search", "for"]),
+                        createWildcardPart("query", "string"),
                     ],
                     value: {
                         type: "object",
@@ -566,30 +499,14 @@ describe("Wildcard Length Variations - NFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["copy"] },
-                        {
-                            type: "wildcard",
-                            variable: "file",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["from"] },
-                        {
-                            type: "wildcard",
-                            variable: "source",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["to"] },
-                        {
-                            type: "wildcard",
-                            variable: "dest",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["using"] },
-                        {
-                            type: "wildcard",
-                            variable: "method",
-                            typeName: "string",
-                        },
+                        createStringPart(["copy"]),
+                        createWildcardPart("file", "string"),
+                        createStringPart(["from"]),
+                        createWildcardPart("source", "string"),
+                        createStringPart(["to"]),
+                        createWildcardPart("dest", "string"),
+                        createStringPart(["using"]),
+                        createWildcardPart("method", "string"),
                     ],
                     value: {
                         type: "object",
@@ -651,13 +568,9 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -686,13 +599,9 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -721,13 +630,9 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -762,12 +667,8 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
                     ],
                     value: {
                         type: "object",
@@ -806,18 +707,10 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -860,24 +753,12 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["move"] },
-                        {
-                            type: "wildcard",
-                            variable: "item",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["from"] },
-                        {
-                            type: "wildcard",
-                            variable: "source",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["to"] },
-                        {
-                            type: "wildcard",
-                            variable: "dest",
-                            typeName: "string",
-                        },
+                        createStringPart(["move"]),
+                        createWildcardPart("item", "string"),
+                        createStringPart(["from"]),
+                        createWildcardPart("source", "string"),
+                        createStringPart(["to"]),
+                        createWildcardPart("dest", "string"),
                     ],
                     value: {
                         type: "object",
@@ -929,12 +810,8 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["search", "for"] },
-                        {
-                            type: "wildcard",
-                            variable: "query",
-                            typeName: "string",
-                        },
+                        createStringPart(["search", "for"]),
+                        createWildcardPart("query", "string"),
                     ],
                     value: {
                         type: "object",
@@ -976,30 +853,14 @@ describe("Wildcard Length Variations - DFA", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["copy"] },
-                        {
-                            type: "wildcard",
-                            variable: "file",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["from"] },
-                        {
-                            type: "wildcard",
-                            variable: "source",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["to"] },
-                        {
-                            type: "wildcard",
-                            variable: "dest",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["using"] },
-                        {
-                            type: "wildcard",
-                            variable: "method",
-                            typeName: "string",
-                        },
+                        createStringPart(["copy"]),
+                        createWildcardPart("file", "string"),
+                        createStringPart(["from"]),
+                        createWildcardPart("source", "string"),
+                        createStringPart(["to"]),
+                        createWildcardPart("dest", "string"),
+                        createStringPart(["using"]),
+                        createWildcardPart("method", "string"),
                     ],
                     value: {
                         type: "object",

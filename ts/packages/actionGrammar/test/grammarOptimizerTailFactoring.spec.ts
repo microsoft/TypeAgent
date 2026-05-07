@@ -6,7 +6,9 @@ import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { Grammar, GrammarRule, RulesPart,
+    createStringPart,
+} from "../src/grammarTypes.js";
 import { findAllRulesParts } from "./testUtils.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
@@ -288,7 +290,7 @@ describe("validateTailRulesParts", () => {
         const bad = buildBadGrammar((rule, _tail) => {
             // Append a sentinel string part so the tail is no longer
             // last.
-            rule.parts.push({ type: "string", value: ["xyz"] });
+            rule.parts.push(createStringPart(["xyz"]));
         });
         expect(() => validateTailRulesParts(bad.alternatives)).toThrow(
             /must be the last part/,
@@ -536,9 +538,9 @@ describe("leadingSpacingMode propagation through tail-call entries", () => {
                 // 0: Start
                 {
                     parts: [
-                        { type: "string", value: ["do"] },
+                        createStringPart(["do"]),
                         { type: "rules", index: 1, variable: "x" },
-                        { type: "string", value: ["end"] },
+                        createStringPart(["end"]),
                     ],
                     value: { type: "variable", name: "x" },
                     spacingMode: "required",
@@ -550,13 +552,13 @@ describe("leadingSpacingMode propagation through tail-call entries", () => {
                 },
                 // 2: Tail member "bar"
                 {
-                    parts: [{ type: "string", value: ["bar"] }],
+                    parts: [createStringPart(["bar"])],
                     value: { type: "literal", value: "b" },
                     spacingMode: "none",
                 },
                 // 3: Tail member "baz"
                 {
-                    parts: [{ type: "string", value: ["baz"] }],
+                    parts: [createStringPart(["baz"])],
                     value: { type: "literal", value: "z" },
                     spacingMode: "none",
                 },

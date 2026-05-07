@@ -24,7 +24,9 @@ import { grammarFromJson } from "../src/grammarDeserializer.js";
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { Grammar, GrammarRule, RulesPart,
+    createStringPart,
+} from "../src/grammarTypes.js";
 import { getDispatchEffectiveMembers } from "../src/dispatchHelpers.js";
 import {
     DispatchedRulesPart,
@@ -160,15 +162,17 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         function buildBaseline(): Grammar {
             const memberA: GrammarRule = {
-                parts: [{ type: "string", value: ["alpha"] }],
+                parts: [createStringPart(["alpha"])],
                 value: { type: "literal", value: "a" },
             };
             const memberB: GrammarRule = {
-                parts: [{ type: "string", value: ["beta"] }],
+                parts: [createStringPart(["beta"])],
                 value: { type: "literal", value: "b" },
             };
             const dispatch: RulesPart = {
                 type: "rules",
+                optional: undefined,
+                variable: undefined,
                 alternatives: [],
                 dispatch: [
                     {
@@ -193,10 +197,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         it("rejects when not the last part of the parent rule", () => {
             const g = buildBaseline();
-            g.alternatives[0].parts.push({
-                type: "string",
-                value: ["trailer"],
-            });
+            g.alternatives[0].parts.push(createStringPart(["trailer"]));
             expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /must be the last part/,
             );

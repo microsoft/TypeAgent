@@ -1,3 +1,4 @@
+import { createStringPart, createWildcardPart } from "../src/grammarTypes.js";
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -27,8 +28,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -58,8 +59,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -91,13 +92,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -115,8 +111,8 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -148,20 +144,20 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: { type: "literal", value: "play-music" },
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["song"] },
+                        createStringPart(["play"]),
+                        createStringPart(["song"]),
                     ],
                     value: { type: "literal", value: "play-song" },
                 },
                 {
-                    parts: [{ type: "string", value: ["pause"] }],
+                    parts: [createStringPart(["pause"])],
                     value: { type: "literal", value: "pause" },
                 },
             ],
@@ -189,13 +185,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -226,13 +217,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -247,13 +233,8 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "n",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("n", "number"),
                     ],
                     value: {
                         type: "object",
@@ -285,8 +266,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: { type: "literal", value: "play-music" },
                 },
@@ -313,13 +294,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -339,13 +315,8 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "id",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("id", "number"),
                     ],
                     value: {
                         type: "object",
@@ -385,20 +356,10 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -447,13 +408,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -468,13 +424,8 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "id",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("id", "number"),
                     ],
                     value: {
                         type: "object",
@@ -489,8 +440,8 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: { type: "literal", value: "play-music" },
                 },
@@ -524,19 +475,9 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "x",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        {
-                            type: "wildcard",
-                            variable: "y",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("x", "string"),
+                        createWildcardPart("y", "string"),
                     ],
                     value: {
                         type: "object",
@@ -564,14 +505,9 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["track"] },
-                        {
-                            type: "wildcard",
-                            variable: "name",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createStringPart(["track"]),
+                        createWildcardPart("name", "string"),
                     ],
                     value: {
                         type: "object",
@@ -618,13 +554,8 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track", // SAME NAME
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"), // SAME NAME
                     ],
                     value: {
                         type: "object",
@@ -644,13 +575,8 @@ describe("DFA Compilation", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track", // SAME NAME
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "number"), // SAME NAME
                     ],
                     value: {
                         type: "object",
@@ -695,8 +621,8 @@ describe("DFA Compilation", () => {
                 {
                     // Rule 0
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -711,7 +637,7 @@ describe("DFA Compilation", () => {
                 },
                 {
                     // Rule 1
-                    parts: [{ type: "string", value: ["pause"] }],
+                    parts: [createStringPart(["pause"])],
                     value: {
                         type: "object",
                         value: [
@@ -726,13 +652,8 @@ describe("DFA Compilation", () => {
                 {
                     // Rule 2
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -773,8 +694,8 @@ describe("DFA Compilation", () => {
                 {
                     // Rule 0
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -790,8 +711,8 @@ describe("DFA Compilation", () => {
                 {
                     // Rule 1
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["song"] },
+                        createStringPart(["play"]),
+                        createStringPart(["song"]),
                     ],
                     value: {
                         type: "object",
@@ -828,13 +749,8 @@ describe("DFA Compilation", () => {
                 {
                     // Rule 0 - lower priority (wildcard)
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -853,8 +769,8 @@ describe("DFA Compilation", () => {
                 {
                     // Rule 1 - higher priority (more fixed strings)
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -889,10 +805,10 @@ describe("DFA Compilation", () => {
                 {
                     // play the first track
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["the"] },
-                        { type: "string", value: ["first"] },
-                        { type: "string", value: ["track"] },
+                        createStringPart(["play"]),
+                        createStringPart(["the"]),
+                        createStringPart(["first"]),
+                        createStringPart(["track"]),
                     ],
                     value: {
                         type: "object",
@@ -911,14 +827,9 @@ describe("DFA Compilation", () => {
                 {
                     // play track #5
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["track"] },
-                        {
-                            type: "wildcard",
-                            variable: "n",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createStringPart(["track"]),
+                        createWildcardPart("n", "number"),
                     ],
                     value: {
                         type: "object",
@@ -937,20 +848,10 @@ describe("DFA Compilation", () => {
                 {
                     // play <trackName> by <artist>
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "trackName",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("trackName", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -988,20 +889,10 @@ describe("DFA Compilation", () => {
                 {
                     // play <trackName> by <artist>
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "trackName",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("trackName", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -1017,21 +908,11 @@ describe("DFA Compilation", () => {
                 {
                     // play <trackName> from album <album>
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "trackName",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["from"] },
-                        { type: "string", value: ["album"] },
-                        {
-                            type: "wildcard",
-                            variable: "albumName",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("trackName", "string"),
+                        createStringPart(["from"]),
+                        createStringPart(["album"]),
+                        createWildcardPart("albumName", "string"),
                     ],
                     value: {
                         type: "object",
@@ -1071,20 +952,10 @@ describe("DFA Compilation", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "trackName",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "ArtistName",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("trackName", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "ArtistName"),
                     ],
                     value: {
                         type: "object",
@@ -1150,13 +1021,8 @@ describe("DFA Compilation", () => {
                 {
                     // play <artist>
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "ArtistName",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("artist", "ArtistName"),
                     ],
                     value: {
                         type: "object",
@@ -1172,13 +1038,8 @@ describe("DFA Compilation", () => {
                 {
                     // play <track>
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "TrackName",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "TrackName"),
                     ],
                     value: {
                         type: "object",
@@ -1194,13 +1055,8 @@ describe("DFA Compilation", () => {
                 {
                     // play <album>
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "album",
-                            typeName: "AlbumName",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("album", "AlbumName"),
                     ],
                     value: {
                         type: "object",

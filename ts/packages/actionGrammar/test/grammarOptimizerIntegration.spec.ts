@@ -21,7 +21,9 @@ import {
 } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { optimizeGrammar } from "../src/grammarOptimizer.js";
-import { Grammar, GrammarPart, GrammarRule } from "../src/grammarTypes.js";
+import { Grammar, GrammarPart, GrammarRule,
+    createStringPart,
+} from "../src/grammarTypes.js";
 
 function countRulesParts(rules: GrammarRule[]): number {
     let n = 0;
@@ -43,7 +45,7 @@ function countRulesParts(rules: GrammarRule[]): number {
 describe("Grammar Optimizer - Public API entry points", () => {
     it("optimizeGrammar returns the input grammar unchanged when options is undefined", () => {
         const grammar: Grammar = {
-            alternatives: [{ parts: [{ type: "string", value: ["hello"] }] }],
+            alternatives: [{ parts: [createStringPart(["hello"])] }],
         };
         const result = optimizeGrammar(grammar, undefined);
         // Same object identity — early return, no copy.
@@ -52,7 +54,7 @@ describe("Grammar Optimizer - Public API entry points", () => {
 
     it("optimizeGrammar returns the input grammar unchanged when no flags are set", () => {
         const grammar: Grammar = {
-            alternatives: [{ parts: [{ type: "string", value: ["hello"] }] }],
+            alternatives: [{ parts: [createStringPart(["hello"])] }],
         };
         // Both flags off → both passes skipped → returns same identity.
         const result = optimizeGrammar(grammar, {});

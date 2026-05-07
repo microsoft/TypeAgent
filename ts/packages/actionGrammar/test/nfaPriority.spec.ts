@@ -13,6 +13,8 @@
  */
 
 import { compileGrammarToNFA, matchNFA, Grammar } from "../src/index.js";
+import { createStringPart ,
+    createWildcardPart} from "../src/grammarTypes.js";
 
 describe("NFA Priority System", () => {
     test("Rule 1: No unchecked wildcards beats rules with unchecked wildcards", () => {
@@ -22,13 +24,8 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -46,8 +43,8 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -79,13 +76,8 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -100,14 +92,9 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["track"] },
-                        {
-                            type: "wildcard",
-                            variable: "name",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createStringPart(["track"]),
+                        createWildcardPart("name", "string"),
                     ],
                     value: {
                         type: "object",
@@ -138,13 +125,8 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "number"),
                     ],
                     value: {
                         type: "object",
@@ -159,20 +141,10 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "number",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "number"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "number"),
                     ],
                     value: {
                         type: "object",
@@ -204,20 +176,10 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -232,13 +194,8 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -270,25 +227,10 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "x",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        {
-                            type: "wildcard",
-                            variable: "y",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        {
-                            type: "wildcard",
-                            variable: "z",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("x", "string"),
+                        createWildcardPart("y", "string"),
+                        createWildcardPart("z", "string"),
                     ],
                     value: {
                         type: "object",
@@ -306,9 +248,9 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
-                        { type: "string", value: ["now"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
+                        createStringPart(["now"]),
                     ],
                     value: {
                         type: "object",
@@ -340,13 +282,8 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "song",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("song", "string"),
                     ],
                     value: {
                         type: "object",
@@ -361,13 +298,8 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -400,13 +332,8 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -421,13 +348,8 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "n",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("n", "number"),
                     ],
                     value: {
                         type: "object",
@@ -459,19 +381,9 @@ describe("NFA Priority System", () => {
                 // Lowest priority: 1 fixed + 2 unchecked wildcards
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "a",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        {
-                            type: "wildcard",
-                            variable: "b",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("a", "string"),
+                        createWildcardPart("b", "string"),
                     ],
                     value: {
                         type: "object",
@@ -487,13 +399,8 @@ describe("NFA Priority System", () => {
                 // Mid priority: 1 fixed + 1 unchecked wildcard
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -509,13 +416,8 @@ describe("NFA Priority System", () => {
                 // High priority: 1 fixed + 1 checked wildcard
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "n",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("n", "number"),
                     ],
                     value: {
                         type: "object",
@@ -531,8 +433,8 @@ describe("NFA Priority System", () => {
                 // Highest priority: 2 fixed strings
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -564,13 +466,8 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
                     ],
                     value: {
                         type: "object",
@@ -585,13 +482,8 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "song",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("song", "string"),
                     ],
                     value: {
                         type: "object",
@@ -624,19 +516,20 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
+                        createStringPart(["play"]),
                         {
                             type: "rules",
                             optional: true,
+                            variable: undefined,
                             alternatives: [
                                 {
                                     parts: [
-                                        { type: "string", value: ["please"] },
+                                        createStringPart(["please"]),
                                     ],
                                 },
                             ],
                         },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -651,8 +544,8 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["play"]),
+                        createStringPart(["music"]),
                     ],
                     value: {
                         type: "object",
@@ -688,20 +581,10 @@ describe("NFA Priority System", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "a",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "b",
-                            typeName: "string",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("a", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("b", "string"),
                     ],
                     value: {
                         type: "object",
@@ -719,20 +602,10 @@ describe("NFA Priority System", () => {
                 },
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                            optional: false,
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "number",
-                            optional: false,
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "number"),
                     ],
                     value: {
                         type: "object",
