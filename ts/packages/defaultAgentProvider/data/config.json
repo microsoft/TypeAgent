@@ -70,8 +70,7 @@
       "execMode": "separate"
     },
     "workflow": {
-      "name": "workflow-agent",
-      "execMode": "dispatcher"
+      "name": "workflow-agent"
     },
     "utility": {
       "name": "utility-typeagent"
