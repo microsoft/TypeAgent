@@ -576,14 +576,44 @@ async function getLatestVersion(pkg) {
 }
 
 /**
- * Extract unique sorted versions from pnpm-why data.
+ * Extract unique sorted resolved versions of a specific package from
+ * `pnpm why <pkg> -r --json` output.
+ *
+ * The output is an array of workspace-project entries, each with its own
+ * `name`/`version` (the workspace's version, NOT the queried package's
+ * version) and a nested `dependencies`/`devDependencies`/`optionalDependencies`
+ * tree. Each node in those trees keyed by a package name carries the
+ * `version` we actually want.
+ *
+ * Earlier this function read `e.version` off the top-level entries, which
+ * always returned the workspace project's own version (e.g. `1.0.0`) and
+ * caused `verifyAllVersionsFixed` to incorrectly conclude that updates had
+ * left vulnerable versions in place.
  */
-function getResolvedVersions(whyData) {
-    return [
-        ...new Set(
-            whyData.map((e) => e.version).filter((v) => v && semver.valid(v)),
-        ),
-    ].sort(semver.compare);
+function getResolvedVersions(whyData, pkg) {
+    const versions = new Set();
+    const depKeys = ["dependencies", "devDependencies", "optionalDependencies"];
+
+    function walk(node) {
+        if (!node || typeof node !== "object") return;
+        for (const key of depKeys) {
+            const deps = node[key];
+            if (!deps || typeof deps !== "object") continue;
+            for (const [depName, depNode] of Object.entries(deps)) {
+                if (!depNode || typeof depNode !== "object") continue;
+                if (depName === pkg && typeof depNode.version === "string") {
+                    versions.add(depNode.version);
+                }
+                walk(depNode);
+            }
+        }
+    }
+
+    for (const entry of whyData) walk(entry);
+
+    return [...versions]
+        .filter((v) => semver.valid(v))
+        .sort(semver.compare);
 }
 
 /**
@@ -605,7 +635,7 @@ async function verifyAllVersionsFixed(pkg, requiredVersion) {
     }
     getPnpmWhy.cache.delete(pkg);
     getPnpmWhy.inflight.delete(pkg);
-    const versions = getResolvedVersions(await getPnpmWhy(pkg));
+    const versions = getResolvedVersions(await getPnpmWhy(pkg), pkg);
     const unfixed = versions.filter((v) => semver.lt(v, requiredVersion));
     return { ok: unfixed.length === 0, versions, unfixed };
 }
@@ -1952,7 +1982,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 
     // ── Line 1: Identity ─────────────────────────────────────────────────
     if (!patched) {
-        const noPatchVersions = getResolvedVersions(whyData);
+        const noPatchVersions = getResolvedVersions(whyData, pkg);
         const installedStr =
             noPatchVersions.length > 0
                 ? noPatchVersions.map((v) => clr.versionBad(v)).join(", ")
@@ -1971,7 +2001,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     }
 
     // For strategies that need action: show version gap
-    const uniqueVersions = getResolvedVersions(whyData);
+    const uniqueVersions = getResolvedVersions(whyData, pkg);
     const vulnVersions = uniqueVersions.filter((v) => semver.lt(v, patched));
     const versionGap = vulnVersions
         .map((v) => clr.versionBad(`\u2717 ${v}`))
@@ -2277,13 +2307,13 @@ async function analyzeVulnerabilities(byPackage) {
                     }
 
                     if (!patched) {
-                        const noPatchVersions = getResolvedVersions(whyData);
+                        const noPatchVersions = getResolvedVersions(whyData, pkg);
                         e.currentVersion =
                             noPatchVersions.length > 0
                                 ? noPatchVersions[0]
                                 : null;
                     } else {
-                        const uniqueVersions = getResolvedVersions(whyData);
+                        const uniqueVersions = getResolvedVersions(whyData, pkg);
                         const vulnVersions = uniqueVersions.filter((v) =>
                             semver.lt(v, patched),
                         );
