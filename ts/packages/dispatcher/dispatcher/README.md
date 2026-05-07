@@ -316,7 +316,17 @@ Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `s
 
 ### Usage example
 
-For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships actions and grammar rules engineered to collide with player, list, and calendar. A typical Phase 1 observability experiment looks like:
+For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships rules engineered to collide with the **list** agent on these inputs:
+
+| Test phrase                          | Collides on                       |
+| ------------------------------------ | --------------------------------- |
+| `add eggs to my grocery list`        | `list.addItems` vs `vampire.addItems` |
+| `remove eggs from my grocery list`   | `list.removeItems` vs `vampire.removeItems` |
+| `what is on my grocery list`         | `list.getList` vs `vampire.getList` |
+
+(The `<Play>` rule in `vampireSchema.agr` claims it collides with `player.play` but the current player grammar requires `play <track> by <artist>`, so a bare `play X` only matches vampire today — kept for reference but not a working collision target until player grows back a bare `play <song>` rule.)
+
+A typical Phase 1 observability experiment looks like:
 
 ```
 @config agent vampire                              # enable the test agent
@@ -324,7 +334,7 @@ For deliberate, repeatable collisions during evaluation, enable the [vampire tes
 @config collision telemetry emit on                # capture events
 @config collision telemetry experimentId E1.2-2026-05-12
 @config collision grammarMatch detect on           # opt in to detection
-                                                   # ...drive the system normally...
+add eggs to my grocery list                        # known colliding phrase
 @collision events -k grammarMatch -n 25            # inspect what fired
 @config collision grammarMatch detect off          # rollback (one step)
 ```
