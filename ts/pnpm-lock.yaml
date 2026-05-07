@@ -3854,6 +3854,9 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.25
       rimraf:
         specifier: ^5.0.5
         version: 5.0.10

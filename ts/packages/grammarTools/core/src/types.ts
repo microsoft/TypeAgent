@@ -181,14 +181,12 @@ export interface PartMatchedEvent extends TraceEventBase {
     readonly rule: RuleId;
     readonly part: PartId;
     readonly endPos: number;
-    readonly slots?: Readonly<Record<string, string>>;
 }
 
 export interface PartFailedEvent extends TraceEventBase {
     readonly kind: "partFailed";
     readonly rule: RuleId;
     readonly part: PartId;
-    readonly reason?: string;
 }
 
 export interface BacktrackEvent extends TraceEventBase {

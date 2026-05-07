@@ -106,8 +106,7 @@ function formatEvent(
             return `${seq}${indent}  \u2502 matched[${event.part}] @${lastAttemptPos}..${event.endPos}${spanStr}`;
         }
         case "partFailed": {
-            const reason = event.reason ? ` (${event.reason})` : "";
-            return `${seq}${indent}  \u2502 failed[${event.part}]${pos}${reason}`;
+            return `${seq}${indent}  \u2502 failed[${event.part}]${pos}`;
         }
         case "backtrack":
             return `${seq}${indent}\u21b6 backtrack (${event.origin})${pos}`;

@@ -18,8 +18,8 @@ import type {
  * Load a grammar from a file path on disk.
  */
 export async function loadGrammarFromFile(path: string): Promise<LoadResult> {
-    const fs = await import("fs");
-    const text = fs.readFileSync(path, "utf-8");
+    const { readFile } = await import("fs/promises");
+    const text = await readFile(path, "utf-8");
     return loadFromText(text, { kind: "file", path });
 }
 
@@ -125,6 +125,7 @@ function buildIdentifierIndex(grammar: Grammar): GrammarIdentifierIndex {
     const ruleIds: string[] = [];
     const partIds: number[] = [];
     const ruleIndex = new Map<string, number>();
+    let nextPartId = 0;
 
     for (let i = 0; i < grammar.alternatives.length; i++) {
         const rule = grammar.alternatives[i];
@@ -135,7 +136,7 @@ function buildIdentifierIndex(grammar: Grammar): GrammarIdentifierIndex {
         ruleIndex.set(id, i);
 
         for (let p = 0; p < rule.parts.length; p++) {
-            partIds.push(i * 1000 + p); // placeholder PartId scheme
+            partIds.push(nextPartId++);
         }
     }
 

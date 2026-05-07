@@ -43,13 +43,39 @@ async function main(): Promise<void> {
             const result = await loadGrammarFromFile(path.resolve(file));
             if (result.ok) {
                 const g = result.grammar;
-                console.log(
-                    "Loaded: " + g.identifiers.ruleIds.length + " rules",
-                );
+                if (jsonFlag) {
+                    console.log(
+                        JSON.stringify(
+                            {
+                                ok: true,
+                                rules: g.identifiers.ruleIds.length,
+                            },
+                            null,
+                            2,
+                        ),
+                    );
+                } else {
+                    console.log(
+                        "Loaded: " + g.identifiers.ruleIds.length + " rules",
+                    );
+                }
             } else {
-                console.error("Failed to load grammar:");
-                for (const d of result.diagnostics) {
-                    console.error("  " + d.severity + ": " + d.message);
+                if (jsonFlag) {
+                    console.log(
+                        JSON.stringify(
+                            {
+                                ok: false,
+                                diagnostics: result.diagnostics,
+                            },
+                            null,
+                            2,
+                        ),
+                    );
+                } else {
+                    console.error("Failed to load grammar:");
+                    for (const d of result.diagnostics) {
+                        console.error("  " + d.severity + ": " + d.message);
+                    }
                 }
                 process.exit(1);
             }
@@ -57,8 +83,8 @@ async function main(): Promise<void> {
         }
         case "complete": {
             const file = positionals[1];
-            const input = positionals[2];
-            if (!file || input === undefined) {
+            const input = positionals.slice(2).join(" ");
+            if (!file || !input) {
                 console.error("Error: file and input required");
                 process.exit(1);
             }
@@ -68,7 +94,19 @@ async function main(): Promise<void> {
                 process.exit(1);
             }
             const preview = previewCompletion(result.grammar, input);
-            console.log(JSON.stringify(preview, null, 2));
+            if (jsonFlag) {
+                console.log(JSON.stringify(preview, null, 2));
+            } else {
+                // Human-friendly: show each group's completions
+                for (const group of preview.groups) {
+                    for (const c of group.completions) {
+                        console.log(`  ${c}`);
+                    }
+                }
+                if (preview.groups.length === 0) {
+                    console.log("(no completions)");
+                }
+            }
             break;
         }
         case "format": {
@@ -79,7 +117,11 @@ async function main(): Promise<void> {
             }
             const source = fs.readFileSync(path.resolve(file), "utf-8");
             const formatted = format(source);
-            process.stdout.write(formatted);
+            if (jsonFlag) {
+                console.log(JSON.stringify({ formatted }, null, 2));
+            } else {
+                process.stdout.write(formatted);
+            }
             break;
         }
         case "trace": {
