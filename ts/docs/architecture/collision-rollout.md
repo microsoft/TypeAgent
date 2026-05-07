@@ -275,37 +275,40 @@ milestone above; until S1 lands, fuzzy detection is inert.
 
 Sequential — each milestone uses the artifacts of the previous one.
 
-- [ ] **S1. `@action similar` — multi-vector pairwise similarity.** For
-      every loaded action across every agent, embed several signal
-      sources independently (not concatenated — concatenating
-      `${schemaName}.${actionName}: ${description}` lets the agent name
-      and camelCase tokens dominate cosine similarity and crowds out the
-      semantic content we actually want).  Initial vectors:
-      - **`desc`** — action description (JSDoc).  Captures intent.
-      - **`params`** — parameter property names + descriptions.
-        Single-string-input vs structured shape.
-      - **`combined`** — description + parameter doc as one prose blob.
-        Catches cases where description and params reinforce each other.
-      For each cross-schema pair, compute cosine on each vector and
-      surface pairs where the aggregate score (max + 0.3·min, or a
-      tunable formula) exceeds threshold.  Render an HTML cluster view
-      (similar pairs grouped transitively) and ship a `--json <path>`
-      flag mirroring `@grammar collisions --json`.  Reuses the embedding
-      model already loaded by `semanticSearchActionSchema`.
-      _Touches:_ new `actionSimilarity.ts` engine in
-      [`packages/dispatcher/dispatcher/src/translation/`](ts/packages/dispatcher/dispatcher/src/translation/),
-      new `@action` command tree in
-      [`packages/dispatcher/dispatcher/src/context/system/handlers/`](ts/packages/dispatcher/dispatcher/src/context/system/handlers/).
+- [x] **S1. `@collision similar` — multi-vector cross-schema similarity (semantic neighborhoods).** _Demoted from "find dispatch collisions" — see findings below._  Embeds each loaded action under multiple independent vectors (desc / params / nameShape / agentContext / agentAndAction), runs pairwise scoring across cross-schema pairs under one of six named strategies, and clusters via complete-linkage agglomeration.  HTML cluster view, `--json` export, score-distribution histogram.
+      _Status:_ shipped (S1 → S1.2 → `@collision probe`).
+      _What it answers:_ "Which actions are the same kind of operation, regardless of agent?" — a **semantic-neighborhoods** scanner.
+      _What it does NOT answer:_ "Which actions actually compete at the dispatcher's routing path?"  Validated empirically against the toggle clusters: 12 hand-crafted probes ran through `@collision probe`; 11 of 12 routed to the expected target as top-1 — the cross-agent embedding cluster was a semantic neighborhood, not a dispatch collision.  The competitors that matter are within-agent siblings, which `@collision similar` skips by design (cross-schema-only).
+      _Useful for:_ surfacing naming inconsistencies, finding duplicate-purpose actions across the agent set, action-tuning candidates.  Keep as is, but stop framing it as the rollout's primary collision tool.
 
-- [ ] **S2. LLM-synthesized phrase corpus per action.** For each action,
-      ask the configured LLM to generate K (5–10) plausible user
-      utterances that should trigger this action exactly.  Cache the
-      corpus keyed by action-shape hash so we only regenerate when an
-      action's description / params actually change.  Persist under the
-      agent cache directory.  This builds the missing corpus that
-      `probe` needs to find runtime-realistic collisions.
-      _Touches:_ new corpus generator (one-shot CLI + cached JSON), uses
-      existing model client.
+- [ ] **S1b. Within-schema sibling analysis.** Add `--within-schema`
+      mode to `@collision similar` that runs the same multi-vector
+      analysis on action pairs *within* each agent.  Per the today's-
+      findings, runtime ambiguity comes from sibling pairs like
+      (`ConnectWifi`, `EnableWifi`, `DisconnectWifi`) or
+      (`EnableFilterKeys`, `EnableStickyKeys`).  Same engine, different
+      filter; small change.
+
+- [ ] **S2. LLM-synthesized phrase corpus per action — multi-model.**
+      For each loaded action, prompt **every available chat model** (via
+      `aiclient.getChatModelNames()`) to generate **3 phrases each**
+      using a **diversity prompt** ("one short imperative, one
+      conversational/polite, one casual/abbreviated").  Multiple models
+      add phrasing variance — different LLMs converge on different
+      defaults; merging across models broadens the surface.  Output:
+      one corpus JSON with per-phrase source attribution
+      (`{schemaName, actionName, phrases: [{text, model}]}`), deduped
+      by lowercased text.
+      Cache key: `(modelName, actionShapeHash)` — only regenerate when
+      either the model list or the action's shape changes.  Cache lives
+      under the dispatcher's instance dir alongside other agent caches.
+      Implementation: a `corpus-runner.mjs` script (sibling to
+      `probe-runner.mjs`) that spins up a read-only dispatcher and
+      drives the model calls with concurrency 8 — at ~1000 actions × 4
+      models × 3 phrases, full run is ~40 min wall-clock.
+      Sample first (one or two agents end-to-end), then scale.
+      _Touches:_ new `packages/cli/scripts/corpus-runner.mjs`, uses
+      existing model client + cache directory.
 
 - [ ] **S3. `@action probe-corpus` — replay the corpus through the
       semantic ranker.** For each utterance in the S2 corpus, run
