@@ -12,6 +12,7 @@ import {
     PhraseSetPart,
     CompiledSpacingMode,
     getCapturedVariableName,
+    createRulesPart,
 } from "./grammarTypes.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
@@ -340,16 +341,13 @@ function stripDispatch(part: RulesPart): RulesPart {
         }
     }
     for (const r of part.alternatives) expanded.push(r);
-    const rulesPart: RulesPart = {
-        type: "rules",
-        alternatives: expanded,
-        name: part.name,
+    return createRulesPart(expanded, {
+        optional: part.optional,
         variable: part.variable,
-    };
-    if (part.optional) rulesPart.optional = true;
-    if (part.repeat) rulesPart.repeat = true;
-    if (part.tailCall) rulesPart.tailCall = true;
-    return rulesPart;
+        name: part.name,
+        repeat: part.repeat,
+        tailCall: part.tailCall,
+    });
 }
 
 /**
