@@ -35,17 +35,53 @@ import { getAppAgentName } from "agent-dispatcher/internal";
 
 // --- Config ------------------------------------------------------------------
 
-/** Models to query.  Phase 1 = OpenAI-family only.  Phase 2 will add
- * non-OpenAI deployments once those exist. */
-const MODELS = ["GPT_4_O", "GPT_4_O_MINI", "GPT_4_1", "GPT_5", "GPT_5_NANO"];
-
-/** Schemas to scope the sample to.  Both small + documented => fast +
- * easy to eyeball. */
-const SAMPLE_SCHEMAS = ["player", "list"];
+/** Default models — only the OpenAI-family endpoints currently working
+ * in this checkout (GPT_4_O has a stale API version pin, GPT_4_O_MINI
+ * has a permission issue; both can be re-added once those are fixed). */
+const DEFAULT_MODELS = ["GPT_4_1", "GPT_5", "GPT_5_NANO"];
 
 const PHRASES_PER_CALL = 3; // imperative / conversational / casual
-const CONCURRENCY = 8;
-const OUTPUT_PATH = path.resolve("f:/tmp/corpus-sample.json");
+const DEFAULT_CONCURRENCY = 8;
+
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const opts = {
+        // Empty schemas array = scan all loaded schemas.
+        schemas: [],
+        models: DEFAULT_MODELS,
+        out: "f:/tmp/corpus-full.json",
+        concurrency: DEFAULT_CONCURRENCY,
+    };
+    for (let i = 0; i < args.length; i++) {
+        switch (args[i]) {
+            case "--schemas":
+                // Comma-separated.  Empty / unset = all.
+                opts.schemas = (args[++i] ?? "")
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                break;
+            case "--models":
+                opts.models = (args[++i] ?? "")
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                break;
+            case "--out":
+                opts.out = args[++i];
+                break;
+            case "--concurrency":
+                opts.concurrency = Math.max(1, Number(args[++i]));
+                break;
+            default:
+                throw new Error(`Unknown argument: ${args[i]}`);
+        }
+    }
+    return opts;
+}
+const OPTS = parseArgs();
+const MODELS = OPTS.models;
+const OUTPUT_PATH = path.resolve(OPTS.out);
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -199,13 +235,14 @@ async function main() {
     );
     const allConfigs = provider.getActionConfigs();
 
-    // Filter to sample.
-    const sampled = allConfigs.filter((cfg) =>
-        SAMPLE_SCHEMAS.includes(cfg.schemaName),
-    );
+    // Filter to specified schemas — empty list means "all schemas".
+    const sampled =
+        OPTS.schemas.length === 0
+            ? allConfigs
+            : allConfigs.filter((cfg) => OPTS.schemas.includes(cfg.schemaName));
     if (sampled.length === 0) {
         process.stderr.write(
-            `No matching schemas found for sample: ${SAMPLE_SCHEMAS.join(", ")}.\n`,
+            `No matching schemas found for: ${OPTS.schemas.join(", ")}.\n`,
         );
         process.stderr.write(
             `Available schemas: ${allConfigs.map((c) => c.schemaName).join(", ")}\n`,
@@ -265,11 +302,11 @@ async function main() {
     }
 
     process.stderr.write(
-        `Running ${tasks.length} (action × model) generation(s) at concurrency ${CONCURRENCY}…\n`,
+        `Running ${tasks.length} (action × model) generation(s) at concurrency ${OPTS.concurrency}…\n`,
     );
     const t0 = Date.now();
-    const results = await pmap(tasks, CONCURRENCY, (done, total) => {
-        if (done % 10 === 0 || done === total) {
+    const results = await pmap(tasks, OPTS.concurrency, (done, total) => {
+        if (done % 25 === 0 || done === total) {
             process.stderr.write(`  [${done}/${total}]\n`);
         }
     });
@@ -321,7 +358,7 @@ async function main() {
     const corpus = {
         scannedAt: new Date().toISOString(),
         models: MODELS,
-        sampledSchemas: SAMPLE_SCHEMAS,
+        sampledSchemas: OPTS.schemas,
         actionCount: byAction.size,
         actions: Array.from(byAction.values()).sort((a, b) =>
             `${a.schemaName}.${a.actionName}`.localeCompare(
