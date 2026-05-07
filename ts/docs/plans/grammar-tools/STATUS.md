@@ -90,6 +90,16 @@ Promote into "Queued actions" when scheduling.
   extension to produce a single-file bundle for faster activation and
   smaller install size. Not blocking for dev, but desirable before
   publishing.
+- **Cross-file symbol resolution.** Handle imports and multi-file
+  grammars in the symbol index (go-to-def across files, find-refs
+  spanning imported grammars). Requires the loader to resolve import
+  paths and build a multi-file LoadedGrammar.
+- **NFA/DFA trace instrumentation.** The current trace hook covers only
+  the `grammarMatcher` (rule-level backtracking matcher). Adding trace
+  support to `nfaMatcher` and `dfaMatcher` would allow debugging and
+  coverage analysis for the NFA/DFA compile paths as well. Lower
+  priority since the rule-level matcher is the primary matching backend
+  for authoring/debugging; NFA/DFA are production-optimized paths.
 
 ## Out of scope for this pass
 

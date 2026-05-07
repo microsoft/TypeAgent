@@ -1,6 +1,6 @@
 # 02 - actionGrammar instrumentation
 
-Status: **Stub** - design pending.
+Status: **Partial** - grammarMatcher trace hook landed; PartId assignment pending.
 Owner: TBD.
 Depends on: ADR [0002 - trace hook strategy](./decisions/0002-trace-hook.md).
 Blocks: 01 (A.2 diagnostics, A.5 debug-info emission, B.2 trace, B.3

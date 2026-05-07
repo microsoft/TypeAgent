@@ -188,12 +188,18 @@ export interface PartFailedEvent extends TraceEventBase {
     readonly kind: "partFailed";
     readonly rule: RuleId;
     readonly part: PartId;
-    readonly reason: string;
+    readonly reason?: string;
 }
 
 export interface BacktrackEvent extends TraceEventBase {
     readonly kind: "backtrack";
-    readonly origin: "wildcard" | "optional" | "alternation" | "repeat";
+    readonly origin:
+        | "wildcard"
+        | "optional"
+        | "alternation"
+        | "repeat"
+        | "memoMarker"
+        | "memoReplay";
 }
 
 export type TraceEvent =

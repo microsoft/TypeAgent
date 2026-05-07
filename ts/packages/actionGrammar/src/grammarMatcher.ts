@@ -24,6 +24,7 @@ import {
     getDispatchMergedSingle,
     getDispatchMergedMulti,
 } from "./dispatchHelpers.js";
+import type { TraceCallback } from "./traceEvents.js";
 
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
@@ -294,6 +295,13 @@ export type GrammarMatchOptions = {
      * behavior to the pre-memoization matcher.
      */
     memoization?: boolean;
+
+    /**
+     * Opt-in trace callback. When provided, the matcher emits
+     * {@link TraceEvent}s as it progresses through the grammar.
+     * Zero overhead when absent (single `if` guard on the hot path).
+     */
+    trace?: TraceCallback;
 };
 
 // Origin tag carried on each Backtrack frame.  Used by
@@ -1077,6 +1085,12 @@ export type MatchState = PendingMatchState & {
     // policy fields - not snapshotted, persists across
     // `tryNextBacktrack` restores.  See `MemoCache`.
     memoCache: MemoCache;
+
+    // Opt-in trace hook.  Set once at `initialMatchState` time.
+    // Zero cost when undefined (single `if` guard).  Not in
+    // PendingMatchState/SnapshotState - persists across backtracks.
+    trace?: TraceCallback | undefined;
+    traceSeq: number;
 };
 
 // Explicit per-field copy of `state`.  Single source of truth
@@ -1321,6 +1335,14 @@ export function tryNextBacktrack(state: MatchState): boolean {
         if (frame === undefined) {
             return false;
         }
+        if (state.trace !== undefined) {
+            state.trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "backtrack",
+                origin: frame.origin,
+            });
+        }
         if (frame.origin === "alternation") {
             // Cursor frame: restore the shared base, then overlay the
             // next per-rule fields read directly from `rules[cursor]`.
@@ -1346,6 +1368,15 @@ export function tryNextBacktrack(state: MatchState): boolean {
                 state.backtracks = frame.prev;
             }
             debugMatch(state, `Restoring local backtrack (alternation)`);
+            if (state.trace !== undefined) {
+                state.trace({
+                    seq: state.traceSeq++,
+                    inputPos: state.index,
+                    kind: "ruleEntered",
+                    rule: state.name,
+                    depth: state.nestedLevel,
+                });
+            }
             return true;
         }
         if (frame.origin === "memoMarker") {
@@ -2175,6 +2206,15 @@ export function finalizeNestedRule(
     const parent = state.parent;
     if (parent !== undefined) {
         debugMatch(state, `finished nested`);
+        if (state.trace !== undefined) {
+            state.trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "ruleExited",
+                rule: state.name,
+                result: "matched",
+            });
+        }
 
         // Reuse state
         const { valueIds, value: value } = state;
@@ -2787,6 +2827,7 @@ function enterTailAlternation(
 }
 
 export function matchState(state: MatchState, request: string) {
+    const trace = state.trace;
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
@@ -2884,27 +2925,74 @@ export function matchState(state: MatchState, request: string) {
             pushBacktrack(state, skipState, "optional");
         }
 
+        if (trace !== undefined) {
+            trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "partAttempted",
+                rule: state.name,
+                part: partIndex,
+                partKind: part.type,
+            });
+        }
+
         switch (part.type) {
             case "string":
                 if (!matchStringPart(request, state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
 
             case "number":
                 if (!matchVarNumberPart(request, state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
             case "wildcard":
                 // string variable, wildcard
                 if (!matchVarStringPart(state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
             case "rules": {
                 if (part.dispatch !== undefined) {
                     if (!enterDispatchPart(state, part, request)) {
+                        if (trace !== undefined) {
+                            trace({
+                                seq: state.traceSeq++,
+                                inputPos: state.index,
+                                kind: "partFailed",
+                                rule: state.name,
+                                part: partIndex,
+                            });
+                        }
                         return false;
                     }
                     // continue the loop (without incrementing partIndex)
@@ -2939,6 +3027,16 @@ export function matchState(state: MatchState, request: string) {
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
+        }
+        if (trace !== undefined) {
+            trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "partMatched",
+                rule: state.name,
+                part: partIndex,
+                endPos: state.index,
+            });
         }
         state.partIndex++;
     }
@@ -3138,6 +3236,15 @@ function enterRulesAlternation(
     if (rules.length > 1) {
         const base = forkMatchState(state);
         pushAlternation(state, base, rules, namePrefix);
+    }
+    if (state.trace !== undefined) {
+        state.trace({
+            seq: state.traceSeq++,
+            inputPos: state.index,
+            kind: "ruleEntered",
+            rule: state.name,
+            depth: state.nestedLevel,
+        });
     }
     return true;
 }
@@ -3467,6 +3574,8 @@ export function initialMatchState(
         // success-delta records).  See `MemoCache` and the
         // memoMarker branch in `tryNextBacktrack`.
         memoCache: new Map(),
+        trace: options?.trace,
+        traceSeq: 0,
     };
     // Top-level alternation: push a single compressed cursor frame
     // covering effective[1..N-1].  The cursor advances forward
@@ -3515,6 +3624,16 @@ export function matchGrammar(
     if (state === undefined) {
         return results;
     }
+    const trace = state.trace;
+    if (trace !== undefined) {
+        trace({
+            seq: state.traceSeq++,
+            inputPos: 0,
+            kind: "ruleEntered",
+            rule: state.name,
+            depth: 0,
+        });
+    }
     // Explicit-stack DFS over the parse forest: `matchState` walks
     // the live state's parts left-to-right; on success collect the
     // result and prune any per-policy first-success frames; then
@@ -3544,6 +3663,15 @@ export function matchGrammar(
             matchState(state, request) &&
             finalizeMatch(state, request, results)
         ) {
+            if (trace !== undefined) {
+                trace({
+                    seq: state.traceSeq++,
+                    inputPos: state.index,
+                    kind: "ruleExited",
+                    rule: state.name,
+                    result: "matched",
+                });
+            }
             suppressBacktracksAfterSuccess(state);
         }
 
