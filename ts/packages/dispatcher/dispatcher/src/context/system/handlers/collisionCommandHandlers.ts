@@ -378,10 +378,10 @@ class CollisionSimilarCommandHandler implements CommandHandler {
         flags: {
             threshold: {
                 description:
-                    "Per-strategy score threshold (default 0.75)",
+                    "Per-strategy score threshold (default 0.85; raw cosine scale)",
                 char: "t",
                 type: "number",
-                default: 0.75,
+                default: 0.85,
             },
             strategy: {
                 description:
@@ -499,7 +499,7 @@ class CollisionSimilarCommandHandler implements CommandHandler {
             },
         });
 
-        const threshold = Math.max(0, params.flags.threshold ?? 0.75);
+        const threshold = Math.max(0, params.flags.threshold ?? 0.85);
         const top = Math.max(1, params.flags.top ?? 50);
 
         // Apply one or more strategies to the scan.
@@ -706,12 +706,64 @@ function renderSingleStrategyHTML(
     const strategyHeader = `<div style="font-size:12px;color:${C_SIM_MUTED};margin-bottom:6px;"><b>${escapeHtml(applied.strategy.name)}</b> — ${escapeHtml(applied.strategy.description)}</div>`;
 
     const summary = renderScanSummary(scan, [applied], skipped);
+    const histogram = renderScoreHistogramHTML(scan, applied);
 
     const view = showPairs
         ? renderPairsView(applied, top)
         : renderClustersView(applied, top);
 
-    return wrap + header + strategyHeader + summary + view + `</div>`;
+    return wrap + header + strategyHeader + summary + histogram + view + `</div>`;
+}
+
+/**
+ * Render a one-line histogram of score buckets across the current
+ * strategy.  Helps testers pick a threshold based on the distribution
+ * shape instead of guessing — if the bucket at 0.85+ is huge and the
+ * 0.95+ is tiny, that's a sign the threshold is in the noise floor.
+ */
+function renderScoreHistogramHTML(
+    scan: ActionSimilarityScanResult,
+    applied: AppliedStrategy,
+): string {
+    const buckets: { label: string; min: number; count: number; color: string }[] =
+        [
+            { label: "0.55+", min: 0.55, count: 0, color: "#888" },
+            { label: "0.65+", min: 0.65, count: 0, color: "#888" },
+            { label: "0.75+", min: 0.75, count: 0, color: "#36c" },
+            { label: "0.85+", min: 0.85, count: 0, color: "#080" },
+            { label: "0.95+", min: 0.95, count: 0, color: "#c44" },
+        ];
+    let scored = 0;
+    for (const pair of scan.pairs) {
+        const score = applied.strategy.score(pair.scores);
+        if (score === undefined) continue;
+        scored++;
+        for (const b of buckets) {
+            if (score >= b.min) b.count++;
+        }
+    }
+    if (scored === 0) return "";
+    const max = Math.max(...buckets.map((b) => b.count), 1);
+    const bars = buckets
+        .map((b) => {
+            const w = Math.max(2, Math.round((b.count / max) * 280));
+            return (
+                `<tr>` +
+                `<td style="font-family:monospace;color:${b.color};padding:2px 8px 2px 0;font-size:11px;text-align:right;">${b.label}</td>` +
+                `<td style="padding:2px 0;"><span style="display:inline-block;height:10px;width:${w}px;background:${b.color};vertical-align:middle;border-radius:2px;"></span></td>` +
+                `<td style="font-family:monospace;color:${C_SIM_MUTED};padding:2px 8px;font-size:11px;">${b.count}</td>` +
+                `</tr>`
+            );
+        })
+        .join("");
+    const note = `<div style="color:${C_SIM_MUTED};font-size:11px;margin-top:2px;">${scored} scored pair(s) under <code>${escapeHtml(applied.strategy.name)}</code>; threshold currently <code>${applied.threshold.toFixed(2)}</code>.</div>`;
+    return (
+        `<details style="margin-bottom:10px;">` +
+        `<summary style="cursor:pointer;font-size:12px;color:${C_SIM_MUTED};">Score distribution (cumulative — pairs ≥ threshold)</summary>` +
+        `<table style="border-collapse:collapse;margin-top:4px;">${bars}</table>` +
+        note +
+        `</details>`
+    );
 }
 
 function renderClustersView(applied: AppliedStrategy, top: number): string {

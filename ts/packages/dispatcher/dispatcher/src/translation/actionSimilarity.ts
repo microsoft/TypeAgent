@@ -126,15 +126,14 @@ const STRATEGIES: Record<string, Strategy> = {
     balanced: {
         name: "balanced",
         description:
-            "Aggregates desc / params / agentContext when present.  Score = max(scores) + 0.3·min(scores) over the vectors that are populated; rewards agreement on at least one strong signal with a small bonus when others reinforce.",
+            "max(desc, params, agentContext) over the vectors that are populated.  Score lives on the same 0–1 scale as raw cosines — threshold 0.85 means 'at least one of these signals reaches 0.85 cosine on both sides.'",
         score: (s) => {
             const present: number[] = [];
             if (s.desc !== undefined) present.push(s.desc);
             if (s.params !== undefined) present.push(s.params);
             if (s.agentContext !== undefined) present.push(s.agentContext);
             if (present.length === 0) return undefined;
-            if (present.length === 1) return present[0];
-            return Math.max(...present) + 0.3 * Math.min(...present);
+            return Math.max(...present);
         },
     },
 };
@@ -278,73 +277,129 @@ function canonicalKey(p: { keyA: any; keyB: any }): string {
 }
 
 /**
- * Connected components of the action graph where edges are pairs above
- * threshold.  Singletons (entries with no surviving edges) are dropped —
- * the caller's interest is "what cluster is X in," and an isolated X is
- * by definition not in a cluster of >1.
+ * Complete-linkage agglomerative clustering: a cluster of N requires
+ * *all* C(N,2) pairs within it to exceed threshold.  Avoids the
+ * single-linkage transitive-chain problem (where A↔B and B↔C alone
+ * would put A in the same cluster as C even with no direct A↔C edge),
+ * which collapses the entire action set into one giant component
+ * whenever pairs are dense.
+ *
+ * Algorithm: start with each entry in its own cluster.  Repeatedly find
+ * the cluster pair with the largest *minimum* cross-cluster pair score;
+ * if that minimum meets threshold, merge.  Stop when no merge qualifies.
+ *
+ * O(n² log n) for typical inputs; for the dispatcher's ~500 actions
+ * with ~125K pairs, completes in well under a second.
+ *
+ * Singletons (clusters of size 1) are dropped — caller cares about
+ * groups, not isolated points.
  */
 function buildClusters(
     entries: ActionSimilarityEntry[],
     pairs: StrategyPair[],
 ): ActionCluster[] {
-    if (pairs.length === 0) return [];
+    if (pairs.length === 0 || entries.length < 2) return [];
 
+    const n = entries.length;
     const idOf = new Map<string, number>();
     entries.forEach((e, i) => idOf.set(`${e.schemaName}.${e.actionName}`, i));
 
-    const parent = entries.map((_, i) => i);
-    const find = (x: number): number => {
-        while (parent[x] !== x) {
-            parent[x] = parent[parent[x]];
-            x = parent[x];
-        }
-        return x;
-    };
-    const union = (a: number, b: number) => {
-        const ra = find(a);
-        const rb = find(b);
-        if (ra !== rb) parent[ra] = rb;
-    };
-
+    // Sparse upper-triangular score matrix for the surviving pairs.
+    // We need to know if (a, b) is an edge; if it isn't, that pair fails
+    // complete-linkage automatically (it's below threshold).
+    const edgeKey = (a: number, b: number) =>
+        a < b ? `${a}-${b}` : `${b}-${a}`;
+    const scoreOf = new Map<string, StrategyPair>();
     for (const pair of pairs) {
         const a = idOf.get(`${pair.keyA.schemaName}.${pair.keyA.actionName}`);
         const b = idOf.get(`${pair.keyB.schemaName}.${pair.keyB.actionName}`);
-        if (a !== undefined && b !== undefined) union(a, b);
+        if (a === undefined || b === undefined || a === b) continue;
+        scoreOf.set(edgeKey(a, b), pair);
     }
 
-    const groups = new Map<number, number[]>();
-    for (let i = 0; i < entries.length; i++) {
-        const root = find(i);
-        const list = groups.get(root) ?? [];
-        list.push(i);
-        groups.set(root, list);
+    // Each cluster is represented by its set of member indices.  Map
+    // from canonical "owner" (smallest index) → member set.  When we
+    // merge two clusters their owners merge; updates touch O(n) maps.
+    const cluster = new Map<number, Set<number>>();
+    for (let i = 0; i < n; i++) cluster.set(i, new Set([i]));
+
+    // Build the initial candidate edges sorted by aggregate score desc.
+    // Only edges connecting distinct singletons at start are candidates;
+    // as we merge, candidates get re-evaluated against the new cluster.
+    const candidates = pairs.slice().sort((a, b) => b.aggregateScore - a.aggregateScore);
+
+    // Track which cluster each entry is in.
+    const ownerOf = new Map<number, number>();
+    for (let i = 0; i < n; i++) ownerOf.set(i, i);
+
+    /** Min cross-cluster score; undefined if any pair across c1×c2 is absent. */
+    const minCrossScore = (
+        c1: Set<number>,
+        c2: Set<number>,
+    ): number | undefined => {
+        let min = Infinity;
+        for (const a of c1) {
+            for (const b of c2) {
+                const p = scoreOf.get(edgeKey(a, b));
+                if (!p) return undefined; // missing edge → fails complete-linkage
+                if (p.aggregateScore < min) min = p.aggregateScore;
+            }
+        }
+        return min === Infinity ? undefined : min;
+    };
+
+    // Merge greedily by candidate edge order.  Every pair in
+    // `candidates` is already ≥ the user's threshold (applyStrategy
+    // filters upstream), so any defined `minCrossScore` is also ≥
+    // threshold.  Merge when defined; skip when any cross-pair is
+    // missing (below threshold).
+    for (const pair of candidates) {
+        const aIdx = idOf.get(
+            `${pair.keyA.schemaName}.${pair.keyA.actionName}`,
+        )!;
+        const bIdx = idOf.get(
+            `${pair.keyB.schemaName}.${pair.keyB.actionName}`,
+        )!;
+        const ownerA = ownerOf.get(aIdx)!;
+        const ownerB = ownerOf.get(bIdx)!;
+        if (ownerA === ownerB) continue; // already in the same cluster
+
+        const c1 = cluster.get(ownerA)!;
+        const c2 = cluster.get(ownerB)!;
+        const cross = minCrossScore(c1, c2);
+        if (cross === undefined) continue; // some cross-pair below threshold
+
+        const mergedSet = new Set([...c1, ...c2]);
+        const newOwner = Math.min(ownerA, ownerB);
+        cluster.delete(ownerA);
+        cluster.delete(ownerB);
+        cluster.set(newOwner, mergedSet);
+        for (const idx of mergedSet) ownerOf.set(idx, newOwner);
     }
 
-    const pairsByCluster = new Map<number, StrategyPair[]>();
-    for (const pair of pairs) {
-        const a = idOf.get(`${pair.keyA.schemaName}.${pair.keyA.actionName}`);
-        if (a === undefined) continue;
-        const root = find(a);
-        const list = pairsByCluster.get(root) ?? [];
-        list.push(pair);
-        pairsByCluster.set(root, list);
-    }
-
+    // Build cluster output.
     const clusters: ActionCluster[] = [];
-    for (const [root, indices] of groups) {
-        if (indices.length < 2) continue; // singleton
-        const clusterPairs = pairsByCluster.get(root) ?? [];
+    for (const [, members] of cluster) {
+        if (members.size < 2) continue;
+        const memberArr = [...members];
+        const clusterPairs: StrategyPair[] = [];
+        for (let i = 0; i < memberArr.length; i++) {
+            for (let j = i + 1; j < memberArr.length; j++) {
+                const p = scoreOf.get(edgeKey(memberArr[i], memberArr[j]));
+                if (p) clusterPairs.push(p);
+            }
+        }
         if (clusterPairs.length === 0) continue;
-        const members = indices.map((i) => ({
-            schemaName: entries[i].schemaName,
-            actionName: entries[i].actionName,
-            description: entries[i].description,
-            agentDescription: entries[i].agentDescription,
-        }));
+        clusterPairs.sort((a, b) => b.aggregateScore - a.aggregateScore);
         clusters.push({
-            members,
+            members: memberArr.map((i) => ({
+                schemaName: entries[i].schemaName,
+                actionName: entries[i].actionName,
+                description: entries[i].description,
+                agentDescription: entries[i].agentDescription,
+            })),
             pairs: clusterPairs,
-            topPair: clusterPairs[0], // pairs are pre-sorted aggregate desc
+            topPair: clusterPairs[0],
         });
     }
     clusters.sort((a, b) => {
