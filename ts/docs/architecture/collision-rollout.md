@@ -227,10 +227,11 @@ collision repeats within 3 round-trips), tester drops out citing friction.
 
 Sequential; code lands before experiments run.
 
-- [ ] **F1.** Real `ActionEmbeddingScorer` — reuse the embedding model
-      already loaded by `semanticSearchActionSchema` instead of computing
-      fresh embeddings. Replaces `PlaceholderScorer` as the default when
-      `scorer: "actionEmbedding"` is set.
+- [ ] **F1.** Real `ActionEmbeddingScorer` — wraps the multi-vector
+      similarity engine built in **Phase 5 / S1** (see below) so the
+      fuzzy detection point can call into it directly.  Replaces
+      `PlaceholderScorer` as the default when `scorer: "actionEmbedding"`
+      is set.  Blocked on S1.
       _Touches:_ [`fuzzyCollision.ts`](ts/packages/dispatcher/dispatcher/src/translation/fuzzyCollision.ts).
 - [ ] **F2.** Wire runtime fuzzy hook — `isFuzzyCollisionForMatch()` exists
       but has zero call sites. Add the post-resolver call site in
@@ -263,6 +264,74 @@ scanner.
       reduction.
 - [ ] **T4.** CI gate: run `analyze-grammar-collisions` and `jq`-check that
       Tier 1 collision count doesn't regress past `collisions-baseline.json`.
+
+## Phase 5 — Semantic action collision discovery (parallel track)
+
+Surfaces collisions that the grammar / NFA path can't see — actions that
+are semantically the same kind of operation (`browser.openWebPage` ⟷
+`desktop.openFile` ⟷ `archives.expand`) even when their `.agr` patterns
+don't overlap.  Output of this phase becomes the engine for the F1
+milestone above; until S1 lands, fuzzy detection is inert.
+
+Sequential — each milestone uses the artifacts of the previous one.
+
+- [ ] **S1. `@action similar` — multi-vector pairwise similarity.** For
+      every loaded action across every agent, embed several signal
+      sources independently (not concatenated — concatenating
+      `${schemaName}.${actionName}: ${description}` lets the agent name
+      and camelCase tokens dominate cosine similarity and crowds out the
+      semantic content we actually want).  Initial vectors:
+      - **`desc`** — action description (JSDoc).  Captures intent.
+      - **`params`** — parameter property names + descriptions.
+        Single-string-input vs structured shape.
+      - **`combined`** — description + parameter doc as one prose blob.
+        Catches cases where description and params reinforce each other.
+      For each cross-schema pair, compute cosine on each vector and
+      surface pairs where the aggregate score (max + 0.3·min, or a
+      tunable formula) exceeds threshold.  Render an HTML cluster view
+      (similar pairs grouped transitively) and ship a `--json <path>`
+      flag mirroring `@grammar collisions --json`.  Reuses the embedding
+      model already loaded by `semanticSearchActionSchema`.
+      _Touches:_ new `actionSimilarity.ts` engine in
+      [`packages/dispatcher/dispatcher/src/translation/`](ts/packages/dispatcher/dispatcher/src/translation/),
+      new `@action` command tree in
+      [`packages/dispatcher/dispatcher/src/context/system/handlers/`](ts/packages/dispatcher/dispatcher/src/context/system/handlers/).
+
+- [ ] **S2. LLM-synthesized phrase corpus per action.** For each action,
+      ask the configured LLM to generate K (5–10) plausible user
+      utterances that should trigger this action exactly.  Cache the
+      corpus keyed by action-shape hash so we only regenerate when an
+      action's description / params actually change.  Persist under the
+      agent cache directory.  This builds the missing corpus that
+      `probe` needs to find runtime-realistic collisions.
+      _Touches:_ new corpus generator (one-shot CLI + cached JSON), uses
+      existing model client.
+
+- [ ] **S3. `@action probe-corpus` — replay the corpus through the
+      semantic ranker.** For each utterance in the S2 corpus, run
+      `semanticSearchActionSchema.query` and capture the top-N candidate
+      ranking.  Surface utterances where:
+      - The "right" agent (the one the corpus generated the utterance
+        for) is NOT the top embedding match — the dispatch path is
+        already misrouting.
+      - The top two candidates are within `scoreDeltaThreshold` — a
+        runtime ambiguity that today's `llmSelect` would treat as a
+        collision.
+      Both cases ship to the JSONL / Cosmos pipeline tagged with
+      `kind: "fuzzy"` so they show up in `@collision events` and the
+      Cosmos queries from Phase 1.
+
+- [ ] **S4. Cross-pollinate with real-world telemetry.** The collision
+      events JSONL accumulating from Phase 1 has actual user requests in
+      its `request` field.  Feed those through the same probe path as
+      S3 to extend the synthetic corpus with real phrasing.  The
+      synthetic-vs-real divergence is itself a calibration signal.
+
+- [ ] **S5. Wire S1 as the `actionEmbedding` scorer (= F1).** Once S1's
+      similarity scores are stable, replace `PlaceholderScorer` in
+      [`fuzzyCollision.ts`](ts/packages/dispatcher/dispatcher/src/translation/fuzzyCollision.ts)
+      with a thin adapter calling into the S1 engine.  This unblocks
+      Phase 1 / E1.4 and Phase 3 / F2-F4.
 
 ## Cross-cutting items (track but don't block phases)
 
