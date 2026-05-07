@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Grammar } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createStringPart,
+    createWildcardPart,
+} from "../src/grammarTypes.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
 import {
@@ -165,7 +169,7 @@ describe("Dynamic Grammar Loader", () => {
             const existingGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
@@ -204,12 +208,8 @@ describe("Dynamic Grammar Loader", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -259,7 +259,7 @@ describe("Dynamic Grammar Loader", () => {
             const initialGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
@@ -299,7 +299,7 @@ describe("Dynamic Grammar Loader", () => {
             const initialGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
@@ -355,7 +355,7 @@ describe("Dynamic Grammar Loader", () => {
             const initialGrammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                     },
                 ],
             };
