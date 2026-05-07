@@ -85,6 +85,27 @@ function validateScope(
                 });
             }
         } else if (node.kind === "branch") {
+            // Validate selectorSchema type: String() coercion at runtime
+            // only produces useful results for string, number, and boolean.
+            const selectorType = node.selectorSchema?.type;
+            if (selectorType) {
+                const allowed = ["string", "number", "integer", "boolean"];
+                const types = Array.isArray(selectorType)
+                    ? selectorType
+                    : [selectorType];
+                const invalid = types.filter(
+                    (t: string) => !allowed.includes(t),
+                );
+                if (invalid.length > 0) {
+                    errors.push({
+                        path: `${path}.selectorSchema`,
+                        message:
+                            `Selector type must be string, number, or boolean ` +
+                            `(got ${JSON.stringify(selectorType)}). ` +
+                            `Objects and arrays cannot be meaningfully coerced to case labels.`,
+                    });
+                }
+            }
             for (const [label, target] of Object.entries(node.cases)) {
                 if (target === "@iterate" || target === "@exit") {
                     if (!insideLoop) {

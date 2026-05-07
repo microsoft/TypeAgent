@@ -594,4 +594,115 @@ describe("validateWorkflowIR", () => {
         const result = validateWorkflowIR(ir, taskMap("noop"));
         expect(result.valid).toBe(true);
     });
+
+    it("rejects branch selectorSchema with object type", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: { $from: "input", name: "x" },
+                    selectorSchema: { type: "object" },
+                    cases: { a: "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) =>
+                e.message.includes("cannot be meaningfully coerced"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects branch selectorSchema with array type", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: { $from: "input", name: "x" },
+                    selectorSchema: { type: "array" },
+                    cases: { a: "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) =>
+                e.message.includes("cannot be meaningfully coerced"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects branch selectorSchema with null type", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: null,
+                    selectorSchema: { type: "null" },
+                    cases: { null: "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+    });
+
+    it("allows branch selectorSchema with boolean type", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: true,
+                    selectorSchema: { type: "boolean" },
+                    cases: { true: "start", false: "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(true);
+    });
+
+    it("allows branch selectorSchema with integer type", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: 1,
+                    selectorSchema: { type: "integer" },
+                    cases: { "1": "start", "2": "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects union selectorSchema containing object", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: { $from: "input", name: "x" },
+                    selectorSchema: { type: ["string", "object"] },
+                    cases: { a: "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) =>
+                e.message.includes("cannot be meaningfully coerced"),
+            ),
+        ).toBe(true);
+    });
 });
