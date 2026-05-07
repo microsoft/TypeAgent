@@ -6,7 +6,8 @@ import {
     AgentGrammar,
 } from "../src/agentGrammarRegistry.js";
 import { registerBuiltInEntities } from "../src/builtInEntities.js";
-import { Grammar,
+import {
+    Grammar,
     createStringPart,
     createWildcardPart,
 } from "../src/grammarTypes.js";

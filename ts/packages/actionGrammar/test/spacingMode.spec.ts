@@ -18,7 +18,8 @@
  *                      no over-splitting of contractions in required rules.
  */
 
-import { Grammar,
+import {
+    Grammar,
     createStringPart,
     createWildcardPart,
 } from "../src/grammarTypes.js";
@@ -41,10 +42,7 @@ describe("flex-space — two-segment compound (hip hop)", () => {
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    createStringPart(["hip"]),
-                    createStringPart(["hop"]),
-                ],
+                parts: [createStringPart(["hip"]), createStringPart(["hop"])],
                 value: { type: "literal", value: "hiphop" },
             },
         ],
@@ -89,10 +87,7 @@ describe("flex-space — case-insensitive normalisation", () => {
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    createStringPart(["Hip"]),
-                    createStringPart(["Hop"]),
-                ],
+                parts: [createStringPart(["Hip"]), createStringPart(["Hop"])],
                 value: { type: "literal", value: "matched" },
             },
         ],
@@ -199,9 +194,7 @@ describe("two-pass matching — literal contraction wins over wildcard + suffix"
         alternatives: [
             // Literal rule — expects "don't" as one token
             {
-                parts: [
-                    createStringPart(["don't"]),
-                ],
+                parts: [createStringPart(["don't"])],
                 value: { type: "literal", value: "matched-literal" },
             },
             // Wildcard + suffix rule — "'t" registered as split candidate
@@ -251,23 +244,17 @@ describe("spacing=auto (undefined) — CJK token pre-splitting", () => {
 
     // The <color> alternatives as inline rules
     const yellowRule = {
-        parts: [
-            createStringPart(["黃色"]),
-        ],
+        parts: [createStringPart(["黃色"])],
         value: { type: "literal" as const, value: "yellow" },
         spacingMode: undefined as undefined, // auto
     };
     const blueRule = {
-        parts: [
-            createStringPart(["藍色"]),
-        ],
+        parts: [createStringPart(["藍色"])],
         value: { type: "literal" as const, value: "blue" },
         spacingMode: undefined as undefined,
     };
     const greenRule = {
-        parts: [
-            createStringPart(["綠色"]),
-        ],
+        parts: [createStringPart(["綠色"])],
         value: { type: "literal" as const, value: "green" },
         spacingMode: undefined as undefined,
     };
@@ -337,10 +324,7 @@ describe("spacing=auto — Latin token NOT registered as split candidate", () =>
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    createStringPart(["play"]),
-                    createStringPart(["'s"]),
-                ],
+                parts: [createStringPart(["play"]), createStringPart(["'s"])],
                 spacingMode: undefined, // auto
                 value: { type: "literal", value: "matched" },
             },
@@ -402,10 +386,7 @@ describe("flex-space — German two-morpheme compound (Fahrrad = bicycle)", () =
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    createStringPart(["Fahr"]),
-                    createStringPart(["rad"]),
-                ],
+                parts: [createStringPart(["Fahr"]), createStringPart(["rad"])],
                 value: { type: "literal", value: "bicycle" },
             },
         ],
@@ -546,17 +527,11 @@ describe("flex-space — Swahili noun-class prefix (kitabu / vitabu = book / boo
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    createStringPart(["ki"]),
-                    createStringPart(["tabu"]),
-                ],
+                parts: [createStringPart(["ki"]), createStringPart(["tabu"])],
                 value: { type: "literal", value: "book" },
             },
             {
-                parts: [
-                    createStringPart(["vi"]),
-                    createStringPart(["tabu"]),
-                ],
+                parts: [createStringPart(["vi"]), createStringPart(["tabu"])],
                 value: { type: "literal", value: "books" },
             },
         ],
@@ -628,19 +603,13 @@ describe("flex-space — Swahili <Tense> rule reference: fused and spaced forms 
                         name: "Tense",
                         alternatives: [
                             {
-                                parts: [
-                                    createStringPart(["li"]),
-                                ],
+                                parts: [createStringPart(["li"])],
                             },
                             {
-                                parts: [
-                                    createStringPart(["na"]),
-                                ],
+                                parts: [createStringPart(["na"])],
                             },
                             {
-                                parts: [
-                                    createStringPart(["ta"]),
-                                ],
+                                parts: [createStringPart(["ta"])],
                             },
                         ],
                     },

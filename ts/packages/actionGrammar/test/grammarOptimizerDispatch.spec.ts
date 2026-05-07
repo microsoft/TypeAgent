@@ -19,7 +19,9 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { GrammarRule, RulesPart,
+import {
+    GrammarRule,
+    RulesPart,
     createStringPart,
 } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
@@ -949,9 +951,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
     function buildRule(token: string, value: string): GrammarRule {
         return {
-            parts: [
-                createStringPart([token]),
-            ],
+            parts: [createStringPart([token])],
             value: { type: "literal", value },
         };
     }
@@ -987,9 +987,7 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         // peek hit yields the bucket, miss yields no alternatives.
         const ruleA = buildRule("alpha", "a1");
         const ruleA2: GrammarRule = {
-            parts: [
-                createStringPart(["alpha", "two"]),
-            ],
+            parts: [createStringPart(["alpha", "two"])],
             value: { type: "literal", value: "a2" },
         };
         const dispatch: RulesPart = {

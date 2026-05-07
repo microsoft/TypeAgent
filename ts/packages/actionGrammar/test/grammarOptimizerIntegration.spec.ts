@@ -21,7 +21,10 @@ import {
 } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { optimizeGrammar } from "../src/grammarOptimizer.js";
-import { Grammar, GrammarPart, GrammarRule,
+import {
+    Grammar,
+    GrammarPart,
+    GrammarRule,
     createStringPart,
 } from "../src/grammarTypes.js";
 

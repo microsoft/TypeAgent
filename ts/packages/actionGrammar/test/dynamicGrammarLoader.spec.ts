@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Grammar,
+import {
+    Grammar,
     createStringPart,
     createWildcardPart,
 } from "../src/grammarTypes.js";

@@ -6,7 +6,10 @@ import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import { Grammar, GrammarRule, RulesPart,
+import {
+    Grammar,
+    GrammarRule,
+    RulesPart,
     createStringPart,
 } from "../src/grammarTypes.js";
 import { findAllRulesParts } from "./testUtils.js";

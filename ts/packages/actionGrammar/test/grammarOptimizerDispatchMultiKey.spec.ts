@@ -29,7 +29,10 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { optimizeGrammar } from "../src/grammarOptimizer.js";
-import { Grammar, GrammarRule, RulesPart,
+import {
+    Grammar,
+    GrammarRule,
+    RulesPart,
     createStringPart,
 } from "../src/grammarTypes.js";
 import {

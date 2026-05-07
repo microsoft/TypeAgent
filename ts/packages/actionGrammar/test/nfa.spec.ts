@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Grammar,
+import {
+    Grammar,
     createNumberPart,
     createStringPart,
     createWildcardPart,
@@ -60,9 +61,7 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            createStringPart(["hello"]),
-                        ],
+                        parts: [createStringPart(["hello"])],
                     },
                 ],
             };
@@ -78,14 +77,10 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            createStringPart(["hello"]),
-                        ],
+                        parts: [createStringPart(["hello"])],
                     },
                     {
-                        parts: [
-                            createStringPart(["hi"]),
-                        ],
+                        parts: [createStringPart(["hi"])],
                     },
                 ],
             };
@@ -199,14 +194,10 @@ describe("NFA Infrastructure", () => {
                                 variable: undefined,
                                 alternatives: [
                                     {
-                                        parts: [
-                                            createStringPart(["um"]),
-                                        ],
+                                        parts: [createStringPart(["um"])],
                                     },
                                     {
-                                        parts: [
-                                            createStringPart(["uh"]),
-                                        ],
+                                        parts: [createStringPart(["uh"])],
                                     },
                                 ],
                                 repeat: true,
@@ -240,9 +231,7 @@ describe("NFA Infrastructure", () => {
                                 variable: undefined,
                                 alternatives: [
                                     {
-                                        parts: [
-                                            createStringPart(["word"]),
-                                        ],
+                                        parts: [createStringPart(["word"])],
                                     },
                                 ],
                                 repeat: true,
@@ -331,9 +320,7 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            createNumberPart("count"),
-                        ],
+                        parts: [createNumberPart("count")],
                         value: {
                             type: "object",
                             value: [
@@ -405,9 +392,7 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            createStringPart(["hello"]),
-                        ],
+                        parts: [createStringPart(["hello"])],
                     },
                 ],
             };

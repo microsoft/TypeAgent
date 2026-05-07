@@ -24,7 +24,10 @@ import { grammarFromJson } from "../src/grammarDeserializer.js";
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import { Grammar, GrammarRule, RulesPart,
+import {
+    Grammar,
+    GrammarRule,
+    RulesPart,
     createStringPart,
 } from "../src/grammarTypes.js";
 import { getDispatchEffectiveMembers } from "../src/dispatchHelpers.js";

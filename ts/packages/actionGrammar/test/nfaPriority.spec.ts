@@ -13,8 +13,7 @@
  */
 
 import { compileGrammarToNFA, matchNFA, Grammar } from "../src/index.js";
-import { createStringPart ,
-    createWildcardPart} from "../src/grammarTypes.js";
+import { createStringPart, createWildcardPart } from "../src/grammarTypes.js";
 
 describe("NFA Priority System", () => {
     test("Rule 1: No unchecked wildcards beats rules with unchecked wildcards", () => {
@@ -523,9 +522,7 @@ describe("NFA Priority System", () => {
                             variable: undefined,
                             alternatives: [
                                 {
-                                    parts: [
-                                        createStringPart(["please"]),
-                                    ],
+                                    parts: [createStringPart(["please"])],
                                 },
                             ],
                         },

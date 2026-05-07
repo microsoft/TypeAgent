@@ -3,7 +3,8 @@
 
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
-import { Grammar,
+import {
+    Grammar,
     createStringPart,
     createWildcardPart,
 } from "../src/grammarTypes.js";
