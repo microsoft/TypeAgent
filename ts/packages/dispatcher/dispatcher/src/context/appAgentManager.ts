@@ -10,6 +10,7 @@ import {
     AppAgentInitSettings,
     ReadinessReport,
 } from "@typeagent/agent-sdk";
+import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     convertToActionConfig,
@@ -135,6 +136,21 @@ export class AppAgentManager implements ActionConfigProvider {
     // {state: "ready"} for them. Cleared on agent disable; re-populated by
     // setup() and explicit refresh().
     private readonly readiness = new Map<string, ReadinessReport>();
+    // Re-entrancy guards. With multiple clients (CLI, shell, web) hitting
+    // the same agent server, two callers can race into runSetup or
+    // refreshReadiness for the same agent. We collapse concurrent setups
+    // (the second caller gets a friendly "in progress" result — the
+    // first one's yes/no card stays bound to its originating client) and
+    // dedupe concurrent refreshes (one probe, all callers share the
+    // result).
+    private readonly setupInFlight = new Map<
+        string,
+        Promise<ActionResult | undefined>
+    >();
+    private readonly refreshInFlight = new Map<
+        string,
+        Promise<ReadinessReport>
+    >();
     public constructor(
         cacheDir: string | undefined,
         private readonly allowSharedLocalView?: string[],
@@ -195,7 +211,22 @@ export class AppAgentManager implements ActionConfigProvider {
     // Re-runs the agent's checkReadiness and updates the cache. Returns the
     // fresh report. No-op (returns {state: "ready"}) for agents that don't
     // implement checkReadiness or whose session context isn't initialized.
-    public async refreshReadiness(
+    // Concurrent callers for the same agent share the in-flight probe.
+    public refreshReadiness(
+        appAgentName: string,
+    ): Promise<ReadinessReport> {
+        const existing = this.refreshInFlight.get(appAgentName);
+        if (existing !== undefined) {
+            return existing;
+        }
+        const p = this.refreshReadinessImpl(appAgentName).finally(() => {
+            this.refreshInFlight.delete(appAgentName);
+        });
+        this.refreshInFlight.set(appAgentName, p);
+        return p;
+    }
+
+    private async refreshReadinessImpl(
         appAgentName: string,
     ): Promise<ReadinessReport> {
         const record = this.agents.get(appAgentName);
@@ -235,6 +266,16 @@ export class AppAgentManager implements ActionConfigProvider {
     //     surface the agent's readiness message instead).
     //   - The agent's ActionResult otherwise — the dispatcher's command
     //     pipeline runs the standard post-execution processing on it.
+    //
+    // Concurrency note — the in-flight guard below covers the synchronous
+    // window of `agent.setup(...)`: if two clients call runSetup at the
+    // same instant, the second gets a friendly "in progress" result and
+    // does NOT re-trigger setup work. The guard does NOT cover the
+    // common pattern where setup returns immediately with a pendingChoice
+    // card and the heavy work runs later via handleChoice — at that point
+    // the dispatcher has no signal that work is still pending. Agents
+    // whose setup defers work to a choice callback are responsible for
+    // making that work itself idempotent / mutex-protected.
     public async runSetup(
         appAgentName: string,
         actionContext: ActionContext<unknown>,
@@ -243,15 +284,35 @@ export class AppAgentManager implements ActionConfigProvider {
         if (record?.appAgent?.setup === undefined) {
             return undefined;
         }
+
+        // Re-entrancy guard — only one setup runs at a time per agent.
+        // The second concurrent caller does NOT replay the first setup's
+        // ActionResult; that result (which may include a yes/no choice
+        // card with a choiceId already routed to the originating client)
+        // belongs to whoever started it. The runner-up gets a distinct
+        // "in progress" message and is expected to re-run their original
+        // request once setup completes.
+        if (this.setupInFlight.has(appAgentName)) {
+            return createActionResultFromError(
+                `Setup for '${appAgentName}' is already in progress on another client. Wait for it to finish, then re-run your request.`,
+            );
+        }
+        const p = (async () => {
+            try {
+                return await record.appAgent!.setup!(actionContext);
+            } finally {
+                // Always re-check readiness after setup, success or
+                // failure — setup may have made partial progress (e.g.
+                // cert installed but package register failed) and the
+                // cache should reflect the current truth.
+                await this.refreshReadiness(appAgentName);
+            }
+        })();
+        this.setupInFlight.set(appAgentName, p);
         try {
-            const result = await record.appAgent.setup(actionContext);
-            return result;
+            return await p;
         } finally {
-            // Always re-check readiness after setup, success or failure —
-            // setup may have made partial progress (e.g. cert installed but
-            // package register failed) and the cache should reflect the
-            // current truth.
-            await this.refreshReadiness(appAgentName);
+            this.setupInFlight.delete(appAgentName);
         }
     }
 
