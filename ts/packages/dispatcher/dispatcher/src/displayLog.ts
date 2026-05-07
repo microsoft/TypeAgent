@@ -8,6 +8,7 @@ import type {
     SetDisplayInfoEntry,
     IAgentMessage,
     RequestId,
+    RequestMetrics,
     PendingInteractionRequest,
 } from "@typeagent/dispatcher-types";
 
@@ -263,6 +264,35 @@ export class DisplayLog {
             timestamp: Date.now(),
             interactionId,
         });
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
+     * Append a command-result entry. Carries the per-request metrics so
+     * consumers can re-render timing info during history replay.
+     * @returns the assigned sequence number
+     */
+    logCommandResult(
+        requestId: RequestId,
+        metrics?: RequestMetrics,
+        tokenUsage?: import("@typeagent/dispatcher-types").CompletionUsageStats,
+    ): number {
+        const seq = this.nextSeq++;
+        const entry: import("@typeagent/dispatcher-types").CommandResultEntry =
+            {
+                type: "command-result",
+                seq,
+                timestamp: Date.now(),
+                requestId,
+            };
+        if (metrics !== undefined) {
+            entry.metrics = metrics;
+        }
+        if (tokenUsage !== undefined) {
+            entry.tokenUsage = { ...tokenUsage };
+        }
+        this.entries.push(entry);
         this.dirty = true;
         return seq;
     }

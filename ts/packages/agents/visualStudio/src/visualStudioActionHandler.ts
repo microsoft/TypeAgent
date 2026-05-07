@@ -101,6 +101,15 @@ class VisualStudioBridge {
 
 type Context = { bridge: VisualStudioBridge };
 
+// Shared, process-singleton bridge: the VS extension only ever opens one
+// WebSocket connection on port 5680, so per-session bridges would collide on
+// `new WebSocketServer({ port: 5680 })` (EADDRINUSE) the moment a second
+// session/conversation initializes the visualStudio agent. Created on first
+// initialize, closed when the last session disables. Mirrors the pattern used
+// by the code agent's CodeAgentWebSocketServer.
+let sharedBridge: VisualStudioBridge | undefined;
+let sharedBridgeRefCount = 0;
+
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext,
@@ -111,9 +120,12 @@ export function instantiate(): AppAgent {
 }
 
 async function initializeAgentContext(): Promise<Context> {
-    const bridge = new VisualStudioBridge();
-    bridge.start();
-    return { bridge };
+    if (sharedBridge === undefined) {
+        sharedBridge = new VisualStudioBridge();
+        sharedBridge.start();
+    }
+    sharedBridgeRefCount++;
+    return { bridge: sharedBridge };
 }
 
 async function updateAgentContext(
@@ -123,9 +135,17 @@ async function updateAgentContext(
 ): Promise<void> {}
 
 async function closeAgentContext(
-    context: SessionContext<Context>,
+    _context: SessionContext<Context>,
 ): Promise<void> {
-    await context.agentContext.bridge.stop();
+    if (sharedBridgeRefCount === 0) {
+        return;
+    }
+    sharedBridgeRefCount--;
+    if (sharedBridgeRefCount === 0 && sharedBridge !== undefined) {
+        const toStop = sharedBridge;
+        sharedBridge = undefined;
+        await toStop.stop();
+    }
 }
 
 async function executeAction(

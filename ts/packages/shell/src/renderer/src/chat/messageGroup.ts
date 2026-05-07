@@ -117,13 +117,21 @@ export class MessageGroup {
                     false,
                 );
             }
-        } else if (this.statusMessage === undefined) {
+        } else if (
+            this.statusMessage === undefined &&
+            this.agentMessages.length === 0
+        ) {
             this.addStatusMessage(
                 { message: "Command completed", source: "shell" },
                 false,
             );
         } else {
-            this.statusMessage.complete();
+            // statusMessage may be undefined when the dispatcher rendered
+            // straight into agent bubbles (the consolidated path) — only
+            // call complete() if it exists. Always scroll: updateMetrics
+            // ran above and may have grown the last bubble's height by
+            // inserting the metrics row, which can land below the viewport.
+            this.statusMessage?.complete();
             this.chatView.updateScroll();
         }
         this.chatView.onRequestComplete?.();

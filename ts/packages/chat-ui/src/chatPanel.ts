@@ -9,13 +9,73 @@
  * recognition dependencies.
  */
 
+import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { setContent } from "./setContent.js";
+
+// Restrictive sanitize config used at .innerHTML sinks below. The HTML
+// passed in is built from values that, while in practice come from
+// trusted dispatcher metadata (timing labels, JSON action data,
+// per-color SVG fills), is treated by CodeQL as "library input". Running
+// the final string through DOMPurify gives us defence-in-depth and
+// satisfies js/xss / js/html-constructed-from-input.
+const SANITIZE_CONFIG = {
+    ALLOWED_TAGS: ["div", "span", "b", "i", "br", "pre", "svg", "path"],
+    ALLOWED_ATTR: ["class", "xmlns", "width", "height", "viewBox", "fill", "d"],
+};
+function sanitize(html: string): string {
+    return DOMPurify.sanitize(html, SANITIZE_CONFIG) as string;
+}
 import {
     PlatformAdapter,
     ChatSettingsView,
     defaultChatSettings,
 } from "./platformAdapter.js";
+import {
+    PartialCompletion,
+    type PcCompletionState,
+    type PcPost,
+} from "./partialCompletion.js";
+
+/**
+ * Default per-agent emoji map used when a host calls add/replaceAgentMessage
+ * without an explicit `sourceIcon`. Sourced from the manifest emojiChar values
+ * in ts/packages/agents/* /src/*Manifest.json. Hosts can extend or override
+ * via `ChatPanel.setAvatarMap`.
+ */
+export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
+    androidmobile: "📱",
+    browser: "🌐",
+    calendar: "📅",
+    chat: "💬",
+    code: "⚛️",
+    desktop: "🪟",
+    dispatcher: "🤖",
+    email: "📩",
+    "github-cli": "🐙",
+    greeting: "🖐️",
+    image: "🖼️",
+    list: "📝",
+    localplayer: "🎵",
+    markdown: "🗎",
+    montage: "🎞",
+    music: "🎵",
+    onboarding: "🛠️",
+    photo: "📷",
+    player: "🎧",
+    scriptflow: "🔁",
+    settings: "⚙️",
+    shell: "🐚",
+    spelunker: "⛏",
+    system: "⚙",
+    taskflow: "📜",
+    test: "➕",
+    turtle: "🐢",
+    utility: "🔧",
+    video: "📹",
+    weather: "⛅",
+    word: "📄",
+};
 
 export interface CompletionResult {
     completions: string[];
@@ -32,6 +92,7 @@ export interface DynamicDisplayResult {
 // pulling the full dispatcher-types dependency into chat-ui.
 export interface PhaseTiming {
     duration?: number;
+    marks?: Record<string, { duration: number; count: number }>;
 }
 
 // Local mirror of dispatcher-types CompletionUsageStats.
@@ -50,6 +111,49 @@ export interface NotifyExplainedData {
     time: string;
 }
 
+/**
+ * One entry in a session history transcript replayed via
+ * `ChatPanel.replayHistory`. Discriminated by `kind`. Hosts construct
+ * these from whatever persisted format they use (file, IndexedDB,
+ * VS Code globalState, etc.) and hand them to the panel.
+ */
+export type HistoryEntry =
+    | { kind: "user"; text: string; requestId?: string; timestamp?: string }
+    | {
+          kind: "agent-replace";
+          content: DisplayContent;
+          source?: string;
+          sourceIcon?: string;
+          requestId?: string;
+          timestamp?: string;
+      }
+    | {
+          kind: "agent-append";
+          content: DisplayContent;
+          source?: string;
+          sourceIcon?: string;
+          mode?: DisplayAppendMode;
+          requestId?: string;
+          timestamp?: string;
+      }
+    | {
+          kind: "display-info";
+          source: string;
+          sourceIcon?: string;
+          action?: unknown;
+          requestId?: string;
+      }
+    | {
+          kind: "command-result";
+          requestId?: string;
+          actionPhase?: PhaseTiming;
+          totalDuration?: number;
+          tokenUsage?: CompletionUsageStats;
+          parsePhase?: PhaseTiming;
+          firstMessageMs?: number;
+      }
+    | { kind: "system"; text: string };
+
 function formatDuration(ms: number): string {
     if (ms < 1) return `${ms.toFixed(2)}ms`;
     if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
@@ -57,7 +161,7 @@ function formatDuration(ms: number): string {
 }
 
 function metricsLine(label: string, duration: number): string {
-    return `${label}: <b>${formatDuration(duration)}</b>`;
+    return `${escapeHtml(label)}: <b>${formatDuration(duration)}</b>`;
 }
 
 function escapeHtml(s: string): string {
@@ -67,6 +171,91 @@ function escapeHtml(s: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+}
+
+// Lightweight JSON syntax highlighter — returns HTML with span wrappers
+// around tokens. Implemented as a hand-rolled scanner rather than a
+// single tokenizing regex so we have no chance of polynomial backtracking
+// on adversarial input (the JSON comes from action data which can carry
+// arbitrary user content). Also escapes <, >, & in any character that
+// passes through.
+// Avoids pulling in highlight.js / Prism just to colorize the action
+// JSON popup.
+function highlightJson(json: string): string {
+    const escapeChar = (c: string): string =>
+        c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;
+    const wrap = (cls: string, text: string): string =>
+        `<span class="${cls}">${text}</span>`;
+
+    let out = "";
+    let i = 0;
+    const n = json.length;
+    while (i < n) {
+        const ch = json[i];
+        if (ch === '"') {
+            // Linear scan to the matching closing quote, honoring `\\`
+            // and `\"` escapes. Each character is consumed at most once,
+            // so this is O(n) worst case.
+            let j = i + 1;
+            let raw = '"';
+            while (j < n) {
+                const cj = json[j];
+                if (cj === "\\" && j + 1 < n) {
+                    raw += "\\" + escapeChar(json[j + 1]);
+                    j += 2;
+                    continue;
+                }
+                raw += escapeChar(cj);
+                j++;
+                if (cj === '"') break;
+            }
+            i = j;
+            // If a colon follows (optionally with whitespace), this is a
+            // JSON object key; otherwise a string value.
+            let k = i;
+            while (k < n && (json[k] === " " || json[k] === "\t")) k++;
+            if (json[k] === ":") {
+                out += wrap("json-key", raw + json.slice(i, k + 1));
+                i = k + 1;
+            } else {
+                out += wrap("json-string", raw);
+            }
+        } else if (
+            (ch >= "0" && ch <= "9") ||
+            (ch === "-" &&
+                i + 1 < n &&
+                json[i + 1] >= "0" &&
+                json[i + 1] <= "9")
+        ) {
+            let j = i + 1;
+            while (
+                j < n &&
+                ((json[j] >= "0" && json[j] <= "9") ||
+                    json[j] === "." ||
+                    json[j] === "e" ||
+                    json[j] === "E" ||
+                    json[j] === "+" ||
+                    json[j] === "-")
+            ) {
+                j++;
+            }
+            out += wrap("json-number", json.slice(i, j));
+            i = j;
+        } else if (json.startsWith("true", i)) {
+            out += wrap("json-bool", "true");
+            i += 4;
+        } else if (json.startsWith("false", i)) {
+            out += wrap("json-bool", "false");
+            i += 5;
+        } else if (json.startsWith("null", i)) {
+            out += wrap("json-null", "null");
+            i += 4;
+        } else {
+            out += escapeChar(ch);
+            i++;
+        }
+    }
+    return out;
 }
 
 // Generates a UUID for tagging user-message bubbles. Falls back to a
@@ -86,6 +275,84 @@ function generateRequestId(): string {
     );
 }
 
+/**
+ * Wire the hover-push behavior onto a chat bubble's body element.
+ *
+ * When the user hovers a bubble that has populated metrics (signaled by
+ * the `chat-message-has-metrics` class on `containerDiv`), the metrics
+ * tooltip overlay reveals via CSS — but it would otherwise cover the
+ * next bubble. To make room, we translate every DOM-earlier sibling
+ * (= visually-lower bubble in the column-reverse `.chat` layout) DOWN
+ * by the actual measured overlay height.
+ *
+ * We use the individual `translate` CSS property (not `transform`) so
+ * the translation isn't clobbered by the container's appearance
+ * `animation: message ... forwards` which locks `transform: scale(1)`.
+ * Per CSS Transforms Level 2, `translate` composes independently.
+ */
+function attachHoverPush(
+    bodyDiv: HTMLElement,
+    containerDiv: HTMLElement,
+    metricsDiv: HTMLElement,
+) {
+    bodyDiv.addEventListener("mouseenter", () => {
+        if (!containerDiv.classList.contains("chat-message-has-metrics")) {
+            return;
+        }
+        // Measure on demand — wrap heights vary per bubble.
+        metricsDiv.style.visibility = "hidden";
+        metricsDiv.style.display = "block";
+        const overlayH = metricsDiv.offsetHeight;
+        metricsDiv.style.display = "";
+        metricsDiv.style.visibility = "";
+        const offset = `${overlayH + 4}px`;
+        const hasEarlier = containerDiv.previousElementSibling !== null;
+        if (hasEarlier) {
+            // Normal case: hovered bubble is NOT the bottommost. Push
+            // visually-lower (DOM-earlier) bubbles DOWN to make room
+            // for the overlay rendered below this bubble.
+            let sibling: Element | null = containerDiv.previousElementSibling;
+            while (sibling) {
+                (sibling as HTMLElement).style.translate = `0 ${offset}`;
+                (sibling as HTMLElement).style.transition =
+                    "translate 0.15s ease-out";
+                sibling = sibling.previousElementSibling;
+            }
+        } else {
+            // Bottommost bubble: there's nothing visually below it to
+            // push down, AND the overlay would be clipped by the input
+            // area. Slide the bubble itself (plus all visually-higher
+            // = DOM-later siblings) UP by the overlay height so the
+            // overlay renders above the input. We translate all of
+            // them together so the chat's vertical stacking stays
+            // intact.
+            (containerDiv as HTMLElement).style.translate = `0 -${offset}`;
+            (containerDiv as HTMLElement).style.transition =
+                "translate 0.15s ease-out";
+            let sibling: Element | null = containerDiv.nextElementSibling;
+            while (sibling) {
+                (sibling as HTMLElement).style.translate = `0 -${offset}`;
+                (sibling as HTMLElement).style.transition =
+                    "translate 0.15s ease-out";
+                sibling = sibling.nextElementSibling;
+            }
+        }
+    });
+    bodyDiv.addEventListener("mouseleave", () => {
+        (containerDiv as HTMLElement).style.translate = "";
+        let sibling: Element | null = containerDiv.previousElementSibling;
+        while (sibling) {
+            (sibling as HTMLElement).style.translate = "";
+            sibling = sibling.previousElementSibling;
+        }
+        sibling = containerDiv.nextElementSibling;
+        while (sibling) {
+            (sibling as HTMLElement).style.translate = "";
+            sibling = sibling.nextElementSibling;
+        }
+    });
+}
+
 // Inline SVG roadrunner icon used by `notifyExplained` / `updateGrammarResult`
 // to mark a user bubble as "translated by ...". Color is supplied per call:
 // green for cached/grammar paths, gold for model translations, blue for
@@ -97,7 +364,19 @@ const ROADRUNNER_SVG_PATH =
 function iconRoadrunner(fill: string): HTMLElement {
     const wrapper = document.createElement("i");
     wrapper.className = "chat-message-explained-icon";
-    wrapper.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 567.896 567.896"><path fill="${fill}" d="${ROADRUNNER_SVG_PATH}"/></svg>`;
+    // Build the SVG via DOM nodes instead of innerHTML so the per-call
+    // `fill` color cannot be construed as an XSS sink.
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("xmlns", SVG_NS);
+    svg.setAttribute("width", "20");
+    svg.setAttribute("height", "20");
+    svg.setAttribute("viewBox", "0 0 567.896 567.896");
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("fill", fill);
+    path.setAttribute("d", ROADRUNNER_SVG_PATH);
+    svg.appendChild(path);
+    wrapper.appendChild(svg);
     return wrapper;
 }
 
@@ -106,10 +385,11 @@ export interface ChatPanelOptions {
     settingsView?: ChatSettingsView;
     /**
      * Callback when user sends a message. The `requestId` is a UUID
-     * generated by the panel for this submission — pass it through to the
-     * dispatcher (e.g. as `processCommand`'s `clientRequestId`) so that
-     * subsequent `notifyExplained` / `updateGrammarResult` calls can
-     * address the same user-message bubble.
+     * generated by the panel (or supplied by the host via
+     * `typeAndSend(text, requestId)`) — pass it through to the dispatcher
+     * (e.g. as `processCommand`'s `clientRequestId`) so subsequent calls
+     * (`notifyExplained` / `updateGrammarResult` / metrics) can target
+     * the same user-message bubble.
      */
     onSend?: (
         text: string,
@@ -142,15 +422,50 @@ export class ChatPanel {
 
     private readonly stopButton: HTMLButtonElement;
     private readonly ghostSpan: HTMLSpanElement;
+    private reconnectBanner: HTMLDivElement | undefined;
     private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
     private historyAgentContainer: AgentMessageContainer | undefined;
+    /**
+     * Per-requestId agent bubble lookup. Populated when add/replaceAgentMessage
+     * is called with a requestId. Allows out-of-order or concurrent flows to
+     * route follow-up content to the correct bubble (instead of always
+     * appending to the most recent one).
+     */
+    private agentContainersByRequestId = new Map<
+        string,
+        AgentMessageContainer
+    >();
     private pendingDisplayInfo:
         | { source: string; sourceIcon?: string; action?: unknown }
         | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
+    /** Local user's display name + initial used in user-bubble headers. */
+    private userName = "You";
+    private userInitial = "U";
+    /**
+     * Optional host-driven command-completion controller. Mounted by
+     * attachCompletion(); pcState messages are forwarded via applyPcState().
+     */
+    private partialCompletion: PartialCompletion | undefined;
     private activeRequestId?: string;
+    private isSwitching = false;
+    private isHistoryLoading = false;
+    private isDemoPaused = false;
+    private isDemoRunning = false;
+    // Flipped by `cancelTypingAnimation()` (called from the host when the
+    // user cancels the demo). `typeAndSend` checks this on every iteration
+    // of its character loop so a cancel mid-typing actually halts the
+    // current line instead of typing it out before we honor the cancel.
+    private demoTypingCancelled = false;
+    private inputHint?: string;
+    // Tracks the hint string most recently rendered into the ghost span
+    // so setInputHint(undefined) (or a hint change) can identify and
+    // clear the prior ghost without disturbing a completion preview.
+    private lastAppliedInputHint?: string;
+    private demoKeyHandler?: (e: KeyboardEvent) => void;
+    private avatarMap: Record<string, string> = { ...DEFAULT_AVATAR_MAP };
 
     // Completion state
     private completions: string[] = [];
@@ -177,12 +492,31 @@ export class ChatPanel {
     // dispatcher reports back. Cleared by clear().
     private userMessageById = new Map<string, HTMLElement>();
 
+    // Timestamp (ms since epoch) when the user sent each requestId. Used
+    // to compute the "First Message" elapsed time when the agent's first
+    // bubble for that request is created. Cleared on completeRequest().
+    private requestStartByRequestId = new Map<string, number>();
+    // Elapsed ms from request send to first agent message for each
+    // requestId (populated when the first agent bubble appears).
+    private firstMessageMsByRequestId = new Map<string, number>();
+    // Disables the requestStart/firstMessage timestamp capture during
+    // history replay (those timestamps would reflect replay speed, not
+    // the original interaction).
+    private suppressFirstMessageTracking = false;
+
     public onSend?: (
         text: string,
         attachments: string[] | undefined,
         requestId: string,
     ) => void;
     public onCancel?: (requestId: string) => void;
+    /**
+     * Fired when the user presses Ctrl/Meta+→ ("continue") or Esc
+     * ("cancel") while a demo script is paused. Hosts wire this to
+     * their own demo-runner to advance or abort the script. The panel
+     * owns the keystroke capture so the input field doesn't swallow it.
+     */
+    public onDemoAction?: (action: "continue" | "cancel") => void;
     public getCompletions?: (input: string) => Promise<CompletionResult | null>;
     public getDynamicDisplay?: (
         source: string,
@@ -203,6 +537,13 @@ export class ChatPanel {
         // Build DOM structure
         const wrapper = document.createElement("div");
         wrapper.className = "chat-panel-wrapper";
+
+        // Reconnect banner — hidden by default. Hosts call setReconnectStatus()
+        // to show retry/connecting state to the user instead of a silent UI.
+        this.reconnectBanner = document.createElement("div");
+        this.reconnectBanner.className = "chat-reconnect-banner";
+        this.reconnectBanner.style.display = "none";
+        wrapper.appendChild(this.reconnectBanner);
 
         // Scrollable message area
         this.messageDiv = document.createElement("div");
@@ -251,6 +592,25 @@ export class ChatPanel {
         textWrapper.className = "chat-input-text-wrapper";
         textWrapper.appendChild(this.textInput);
         textWrapper.appendChild(this.ghostSpan);
+        // The contentEditable .user-textarea has display:inline and
+        // min-width:1px, so when empty its native click target is a
+        // 1px stripe at the top-left of the wrapper. Clicking
+        // elsewhere in the wrapper would land on the flex container
+        // and never focus the input — leaving no caret. Forward those
+        // clicks to focus the input and place the caret at the end.
+        textWrapper.addEventListener("mousedown", (event) => {
+            const target = event.target as Node | null;
+            if (target === this.textInput) return;
+            if (target && this.textInput.contains(target)) return;
+            event.preventDefault();
+            this.textInput.focus();
+            const range = document.createRange();
+            range.selectNodeContents(this.textInput);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        });
 
         this.inputArea.appendChild(textWrapper);
         this.inputArea.appendChild(this.sendButton);
@@ -264,6 +624,12 @@ export class ChatPanel {
 
     private setupInputHandlers() {
         this.textInput.addEventListener("keydown", (e) => {
+            // Give the partial-completion (host-driven) controller first
+            // crack at the keystroke so its Tab/Enter/Esc/Arrow handling
+            // wins over chat-ui's local completions and history nav.
+            if (this.partialCompletion?.handleKeyDownPreSend(e)) {
+                return;
+            }
             if (e.key === "Tab" && this.completions.length > 0) {
                 e.preventDefault();
                 this.acceptCompletion();
@@ -306,6 +672,7 @@ export class ChatPanel {
         this.textInput.addEventListener("input", () => {
             this.sendButton.disabled = !this.textInput.textContent?.trim();
             this.scheduleCompletionFetch();
+            this.applyInputHint();
         });
 
         this.sendButton.addEventListener("click", () => this.send());
@@ -478,7 +845,7 @@ export class ChatPanel {
         this.sendButton.disabled = !this.textInput.textContent?.trim();
     }
 
-    private send() {
+    private send(requestId?: string) {
         const text = this.textInput.textContent?.trim();
         if (!text) return;
 
@@ -486,6 +853,9 @@ export class ChatPanel {
         this.historyIndex = -1;
         this.textInput.textContent = "";
         this.sendButton.disabled = true;
+        // Tell the host-driven completion controller that the input has
+        // been consumed so the next typed char registers as forward.
+        this.partialCompletion?.reset();
 
         const attachments =
             this.pendingAttachments.length > 0
@@ -494,9 +864,144 @@ export class ChatPanel {
         this.pendingAttachments = [];
         this.clearAttachmentPreview();
 
-        const requestId = generateRequestId();
-        this.addUserMessage(text, requestId);
-        this.onSend?.(text, attachments, requestId);
+        const id = requestId ?? generateRequestId();
+        this.addUserMessage(text, id);
+        // Toggle input controls into "processing" state — swaps the
+        // send button for the stop button so the user can cancel an
+        // in-flight command. setIdle() is invoked by the host on
+        // commandComplete.
+        this.setProcessing(id);
+        this.onSend?.(text, attachments, id);
+    }
+
+    /**
+     * Programmatically type `text` into the input character-by-character
+     * (25-40ms per char, matching the Electron shell's expandableTextArea)
+     * and submit it via the same path as a manual Enter press, using the
+     * supplied `requestId` so the user bubble and the host's command share
+     * the same id.
+     *
+     * Used by demo replay drivers to produce a natural typing animation
+     * instead of an instant paste-and-send.
+     *
+     * Resolves once the message has been submitted (after onSend fires).
+     * Returns `true` if submitted, `false` if cancellation was requested
+     * mid-animation (in which case `send()` is NOT invoked and the host
+     * must release any waiters of its own).
+     */
+    public async typeAndSend(
+        text: string,
+        requestId: string,
+    ): Promise<boolean> {
+        // Each new typeAndSend starts fresh — a stale cancel from a prior
+        // line shouldn't suppress this one.
+        this.demoTypingCancelled = false;
+        // Wait for any in-flight disable (e.g., session loading) to clear.
+        for (
+            let i = 0;
+            this.textInput.contentEditable !== "true" && i < 50;
+            i++
+        ) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        this.textInput.focus();
+        this.textInput.textContent = "";
+        // Block manual input while we animate so a keystroke (e.g. Esc to
+        // cancel a demo) doesn't clobber the in-flight typed text. The
+        // demo orchestrator owns the input during this window.
+        const wasEditable = this.textInput.contentEditable;
+        this.textInput.contentEditable = "false";
+        try {
+            for (let i = 0; i < text.length; i++) {
+                if (this.demoTypingCancelled) {
+                    // Wipe whatever we typed so the input doesn't keep a
+                    // partial command for the user to inadvertently send,
+                    // then bail without firing send().
+                    this.textInput.textContent = "";
+                    return false;
+                }
+                this.textInput.textContent =
+                    (this.textInput.textContent ?? "") + text[i];
+                // 25-40ms per char (random within range), matches Electron shell.
+                const delay = 25 + Math.floor(Math.random() * 15);
+                await new Promise((r) => setTimeout(r, delay));
+            }
+        } finally {
+            this.textInput.contentEditable = wasEditable;
+        }
+        if (this.demoTypingCancelled) {
+            this.textInput.textContent = "";
+            return false;
+        }
+        // Defer to send() so all bookkeeping (command history, attachments,
+        // user-bubble creation, sendButton/ghost reset) stays in one place.
+        this.send(requestId);
+        return true;
+    }
+
+    /**
+     * Signal `typeAndSend()` to stop typing the current line. Safe to call
+     * when no animation is in flight — the flag is reset at the start of
+     * each `typeAndSend()`. Use this from the host on demo cancel so the
+     * remainder of the current line isn't typed out before the cancel
+     * takes effect.
+     */
+    public cancelTypingAnimation(): void {
+        this.demoTypingCancelled = true;
+    }
+
+    /**
+     * Toggle "demo running" mode. While running, the input ghost-hint
+     * shown via `setInputHint` is preserved across input events so the
+     * Alt+→/Esc reminder stays visible at the pause point.
+     */
+    public setDemoRunning(running: boolean): void {
+        this.isDemoRunning = running;
+        this.refreshDemoKeyHandler();
+        if (!running) {
+            this.setInputHint(undefined);
+        }
+    }
+
+    /**
+     * Show a host-supplied hint string in the input box's ghost span
+     * when the textbox is empty. Used to display "Alt+→ continue ·
+     * Esc cancel" while the demo is paused. Pass `undefined` to clear.
+     */
+    public setInputHint(hint: string | undefined): void {
+        this.inputHint = hint;
+        this.applyInputHint();
+    }
+
+    private applyInputHint(): void {
+        // The hint shares the ghost span with completion previews. Show
+        // it only when the input is empty AND no completion suggestion
+        // is currently rendered (completion text takes precedence).
+        const hasText = (this.textInput.textContent ?? "").length > 0;
+        const hasCompletionGhost =
+            this.completions.length > 0 ||
+            (this.partialCompletion !== undefined &&
+                this.ghostSpan.textContent !== this.lastAppliedInputHint &&
+                this.ghostSpan.textContent !== this.inputHint &&
+                (this.ghostSpan.textContent ?? "").length > 0);
+        if (this.inputHint && !hasText && !hasCompletionGhost) {
+            this.ghostSpan.textContent = this.inputHint;
+            this.lastAppliedInputHint = this.inputHint;
+        } else if (
+            this.lastAppliedInputHint !== undefined &&
+            this.ghostSpan.textContent === this.lastAppliedInputHint
+        ) {
+            // Clear the previously-rendered hint when it should no longer
+            // be shown (hint cleared, hint changed to a value that doesn't
+            // currently apply, or the input is no longer empty). Comparing
+            // against `lastAppliedInputHint` (not the current `inputHint`)
+            // is essential — by the time we get here the caller may have
+            // already set `inputHint = undefined`, so a comparison against
+            // `inputHint` would never match and the stale text would
+            // linger in the ghost span.
+            this.ghostSpan.textContent = "";
+            this.lastAppliedInputHint = undefined;
+        }
     }
 
     /** Set the active request ID and show the stop button. */
@@ -516,22 +1021,28 @@ export class ChatPanel {
     /**
      * Display a user message bubble.
      *
-     * If `requestId` is provided, the container is indexed so that later
-     * `notifyExplained` / `updateGrammarResult` calls keyed by the same
-     * id can attach decorations to this bubble. `send()` always supplies
-     * one; external callers can omit it for fire-and-forget messages.
+     * `requestId` is stamped on the container as `data-request-id` so later
+     * targeting (metrics, explained overlays, peer updates) can find it.
+     * The container is also indexed in `userMessageById` so subsequent
+     * `notifyExplained` / `updateGrammarResult` calls keyed by the same id
+     * can attach decorations to this bubble. `send()` always supplies one;
+     * external callers can omit it for fire-and-forget messages.
      */
     public addUserMessage(text: string, requestId?: string) {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
+        container.dataset.requestId = requestId ?? generateRequestId();
+        // A new user request invalidates the previous "current" agent bubble so
+        // a follow-up addAgentMessage with no requestId starts a fresh one.
+        this.currentAgentContainer = undefined;
 
-        const timestamp = this.createTimestamp("user", "You");
+        const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
 
         const iconDiv = document.createElement("div");
         iconDiv.className = "user-icon";
-        iconDiv.textContent = "U";
+        iconDiv.textContent = this.userInitial;
         container.appendChild(iconDiv);
 
         const bodyDiv = document.createElement("div");
@@ -546,96 +1057,386 @@ export class ChatPanel {
         messageDiv.appendChild(span);
 
         bodyDiv.appendChild(messageDiv);
+
+        // Empty user-side metrics strip — populated later by
+        // applyUserMetrics() when the dispatcher reports `metrics.parse`.
+        const userMetricsDiv = document.createElement("div");
+        userMetricsDiv.className =
+            "chat-message-metrics chat-message-metrics-user";
+        bodyDiv.appendChild(userMetricsDiv);
+
         container.appendChild(bodyDiv);
+
+        attachHoverPush(bodyDiv, container, userMetricsDiv);
 
         sentinel.before(container);
         this.scrollToBottom();
 
-        if (requestId !== undefined) {
-            container.dataset.requestId = requestId;
-            this.userMessageById.set(requestId, container);
+        const id = container.dataset.requestId!;
+        this.userMessageById.set(id, container);
+        if (!this.suppressFirstMessageTracking) {
+            this.requestStartByRequestId.set(id, Date.now());
         }
+    }
 
-        // Reset current agent container for the new request
-        this.currentAgentContainer = undefined;
+    /**
+     * Stamp a metrics tooltip (hover-revealed) onto the user bubble.
+     * Used to display the dispatcher's `metrics.parse` (Translation) timing
+     * on the user side of the conversation.
+     */
+    public applyUserMetrics(
+        requestId: string,
+        label: string,
+        phase?: PhaseTiming,
+        totalDuration?: number,
+    ) {
+        const container = this.userMessageById.get(requestId);
+        // Note: do NOT bail when phase has no duration — chat-only requests
+        // sometimes return a parse PhaseTiming with marks but no duration,
+        // and we still want to render those marks. We bail only if there
+        // is genuinely nothing to show.
+        const hasContent =
+            (phase?.duration !== undefined && phase.duration !== null) ||
+            (phase?.marks && Object.keys(phase.marks).length > 0) ||
+            totalDuration !== undefined;
+        if (!container || !hasContent) return;
+        const metricsDiv = container.querySelector(
+            ".chat-message-metrics-user",
+        ) as HTMLElement | null;
+        if (!metricsDiv) return;
+        const mainLines: string[] = [];
+        if (phase?.duration !== undefined) {
+            mainLines.push(metricsLine(`${label} Elapsed`, phase.duration));
+        }
+        if (totalDuration !== undefined) {
+            mainLines.push(metricsLine("Total Elapsed", totalDuration));
+        }
+        const markLines: string[] = [];
+        if (phase?.marks) {
+            for (const [key, value] of Object.entries(phase.marks)) {
+                const avg = value.duration / Math.max(value.count, 1);
+                const suffix =
+                    value.count !== 1 ? `(out of ${value.count})` : "";
+                markLines.push(
+                    `${escapeHtml(key)}: <b>${formatDuration(avg)}${suffix}</b>`,
+                );
+            }
+        }
+        metricsDiv.innerHTML = sanitize(
+            `<div class="metrics-details">` +
+                `<div>${markLines.join("<br>")}</div>` +
+                `<div></div>` +
+                `<div>${mainLines.join("<br>")}</div>` +
+                `</div>`,
+        );
+        // Mark the container as having metrics so the hover-push handler
+        // (attached in addUserMessage) actually fires for user bubbles.
+        container.classList.add("chat-message-has-metrics");
     }
 
     /**
      * Replace the current agent message content (reuses existing container).
      * If no container exists, creates one.
+     * If `requestId` is supplied, the per-request bubble is targeted; otherwise
+     * the most recently created agent bubble is used.
      */
     public replaceAgentMessage(
         content: DisplayContent,
         source?: string,
         sourceIcon?: string,
+        requestId?: string,
     ) {
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
 
-        if (!this.currentAgentContainer) {
-            this.currentAgentContainer = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
-        }
-        this.currentAgentContainer.setMessage(content, source, undefined);
+        const container = this.getOrCreateAgentContainer(
+            source,
+            sourceIcon,
+            requestId,
+        );
+        container.setMessage(content, source, undefined);
         this.scrollToBottom();
     }
 
     /**
      * Display or append an agent message.
      * Call with appendMode to add to the current agent message.
+     * If `requestId` is supplied, the per-request bubble is targeted; otherwise
+     * the most recently created agent bubble is used.
      */
     public addAgentMessage(
         content: DisplayContent,
         source?: string,
         sourceIcon?: string,
         appendMode?: DisplayAppendMode,
+        requestId?: string,
     ) {
         // "temporary" mode = transient status (e.g. dispatcher's
-        // "Executing action X" indicator). Route to a dedicated status
-        // container so it doesn't stamp the main agent bubble with the
-        // status emitter's source and doesn't linger after the real
-        // response arrives.
-        if (appendMode === "temporary") {
-            if (this.statusContainer) {
-                this.statusContainer.remove();
-            }
-            this.statusContainer = this.createAgentContainer(
-                source ?? "",
-                sourceIcon ?? "",
+        // "Executing action X" indicator, reasoning's streaming "Thinking…"
+        // chunks). Route into the per-request bubble itself: the bubble
+        // starts as a status indicator and "upgrades" in place when the
+        // real reply arrives. AgentMessageContainer.setMessage already
+        // handles this — temporary content is appended as a last-child
+        // div tagged via lastAppendMode and flushed before the next
+        // non-temporary append. This avoids a separate status bubble
+        // appearing alongside the real reply (which looked like a duplicate).
+        //
+        // The free-standing `statusContainer` is kept only as a fallback
+        // for host-driven `showStatus()` calls that have no request context.
+        if (
+            appendMode === "temporary" &&
+            (requestId || this.currentAgentContainer)
+        ) {
+            const tempContainer = this.getOrCreateAgentContainer(
+                source,
+                sourceIcon,
+                requestId,
             );
-            this.statusContainer.setMessage(content, source, undefined);
+            tempContainer.setMessage(content, source, "temporary");
             this.scrollToBottom();
             return;
         }
 
-        // Remove lingering status message when a real response arrives
+        if (appendMode === "temporary") {
+            // No request context — fall back to a floating, visually-
+            // distinct status bubble (e.g. used by host-driven showStatus).
+            if (!this.statusContainer) {
+                this.statusContainer = this.createAgentContainer("", "");
+                this.statusContainer.markAsStatusBubble();
+            }
+            this.statusContainer.setMessage(content, undefined, undefined);
+            this.scrollToBottom();
+            return;
+        }
+
+        // Remove any lingering free-standing status bubble when a real
+        // response arrives.
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
 
-        if (!this.currentAgentContainer || !appendMode) {
-            this.currentAgentContainer = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
-            // Apply any action metadata that arrived via setDisplayInfo
-            // before the first render — the dispatcher fires it before
-            // the agent's first setDisplay/appendDisplay.
-            if (this.pendingDisplayInfo?.action !== undefined) {
-                this.currentAgentContainer.setActionData(
-                    this.pendingDisplayInfo.action,
-                );
+        const container = this.getOrCreateAgentContainer(
+            source,
+            sourceIcon,
+            requestId,
+        );
+
+        container.setMessage(content, source, appendMode);
+
+        this.scrollToBottom();
+    }
+
+    /**
+     * Drop the bubble association for a completed request id. Future
+     * add/replaceAgentMessage calls with this id will create a fresh bubble.
+     * Called by hosts when a request completes; safe to call for unknown ids.
+     */
+    public clearRequest(requestId: string): void {
+        this.agentContainersByRequestId.delete(requestId);
+    }
+
+    private getOrCreateAgentContainer(
+        source: string | undefined,
+        sourceIcon: string | undefined,
+        requestId: string | undefined,
+    ): AgentMessageContainer {
+        if (requestId && this.agentContainersByRequestId.has(requestId)) {
+            return this.agentContainersByRequestId.get(requestId)!;
+        }
+        if (!requestId && this.currentAgentContainer) {
+            return this.currentAgentContainer;
+        }
+        // If the dispatcher already announced this action's source/icon
+        // via setDisplayInfo, use those when creating the bubble — even
+        // if the first message routed into it is the dispatcher's own
+        // transient "[X] Executing action ..." status (source="dispatcher",
+        // no icon). Without this, the bubble would be created with the
+        // dispatcher robot avatar and stay that way (subsequent setMessage
+        // calls only update the name label, not the icon).
+        const effectiveSource = this.pendingDisplayInfo?.source ?? source;
+        const effectiveIcon =
+            this.pendingDisplayInfo?.sourceIcon ??
+            sourceIcon ??
+            this.iconForSource(effectiveSource);
+        const container = this.createAgentContainer(
+            effectiveSource ?? "assistant",
+            effectiveIcon,
+        );
+        this.currentAgentContainer = container;
+        if (requestId) {
+            this.agentContainersByRequestId.set(requestId, container);
+            // Capture the elapsed time from request send to first agent
+            // bubble for this request — drives the "First Message"
+            // metric line on the agent metrics tooltip.
+            if (!this.firstMessageMsByRequestId.has(requestId)) {
+                const start = this.requestStartByRequestId.get(requestId);
+                if (start !== undefined) {
+                    this.firstMessageMsByRequestId.set(
+                        requestId,
+                        Date.now() - start,
+                    );
+                }
             }
-            this.pendingDisplayInfo = undefined;
+        }
+        // Apply any action metadata that arrived via setDisplayInfo
+        // before the first render — the dispatcher fires it before
+        // the agent's first setDisplay/appendDisplay (including the
+        // "Executing action ..." temporary status emitted via displayStatus).
+        if (this.pendingDisplayInfo?.action !== undefined) {
+            container.setActionData(this.pendingDisplayInfo.action);
+        }
+        this.pendingDisplayInfo = undefined;
+        return container;
+    }
+
+    /**
+     * Look up the avatar emoji/icon for a given agent source name. Falls back
+     * to "🤖" if the source is unknown. Source names are matched
+     * case-insensitively against the first dot-separated segment, so
+     * "code.code-editor" looks up "code".
+     */
+    public iconForSource(source?: string): string {
+        if (!source) return "🤖";
+        const root = source.split(".")[0].toLowerCase();
+        return this.avatarMap[root] ?? "🤖";
+    }
+
+    /**
+     * Override or extend the per-source avatar map. Passed entries are merged
+     * over DEFAULT_AVATAR_MAP. Pass an entry with value "" to suppress a
+     * default mapping.
+     */
+    public setAvatarMap(map: Record<string, string>): void {
+        this.avatarMap = { ...DEFAULT_AVATAR_MAP, ...map };
+    }
+
+    /**
+     * Add a non-conversational system message styled distinctly from agent
+     * messages (no avatar, no source label, no timestamp). Use for `@`-config
+     * confirmations, session lifecycle events, and similar host notices.
+     */
+    public addSystemMessage(text: string): void {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const el = document.createElement("div");
+        el.className = "chat-message-system";
+        el.textContent = text;
+        sentinel.before(el);
+        this.scrollToBottom();
+    }
+
+    /**
+     * Atomically replay a list of past entries from a session history.
+     * Each replayed DOM element is marked with the `.history` class so
+     * hosts can style replayed turns differently (e.g. dimmed).
+     *
+     * Recognized entry kinds:
+     * - `{ kind: "user", text, requestId?, timestamp? }`
+     * - `{ kind: "agent-replace", content, source?, sourceIcon?, requestId?, timestamp? }`
+     * - `{ kind: "agent-append", content, source?, sourceIcon?, mode?, requestId?, timestamp? }`
+     * - `{ kind: "system", text }`
+     *
+     * Temporary append entries (`mode === "temporary"`) are skipped — they're
+     * ephemeral status text from the original interaction and would otherwise
+     * appear as orphan status lines in the replayed transcript.
+     *
+     * After replay, the per-request bubble map is cleared so future live
+     * messages don't accidentally route into history bubbles.
+     */
+    public replayHistory(entries: HistoryEntry[]): void {
+        if (!entries || entries.length === 0) return;
+
+        const firstHistoryIdx = this.messageDiv.children.length;
+
+        // Reset live state so replay starts fresh.
+        this.currentAgentContainer = undefined;
+
+        // Suppress first-message timing tracking during replay — those
+        // timestamps would reflect the speed of replay, not the original
+        // request-to-first-response time.
+        this.suppressFirstMessageTracking = true;
+        try {
+            for (const entry of entries) {
+                switch (entry.kind) {
+                    case "user":
+                        this.addUserMessage(entry.text, entry.requestId);
+                        break;
+                    case "agent-replace":
+                        this.replaceAgentMessage(
+                            entry.content,
+                            entry.source,
+                            entry.sourceIcon,
+                            entry.requestId,
+                        );
+                        break;
+                    case "agent-append":
+                        if (entry.mode === "temporary") break;
+                        this.addAgentMessage(
+                            entry.content,
+                            entry.source,
+                            entry.sourceIcon,
+                            entry.mode,
+                            entry.requestId,
+                        );
+                        break;
+                    case "system":
+                        this.addSystemMessage(entry.text);
+                        break;
+                    case "display-info":
+                        this.setDisplayInfo(
+                            entry.source,
+                            entry.sourceIcon,
+                            entry.action,
+                            entry.requestId,
+                        );
+                        break;
+                    case "command-result":
+                        if (entry.requestId) {
+                            // Pre-seed the per-request firstMessageMs so the
+                            // metrics tooltip can show "First Message" on
+                            // history-replayed bubbles (live tracking is
+                            // suppressed during replay).
+                            if (entry.firstMessageMs !== undefined) {
+                                this.firstMessageMsByRequestId.set(
+                                    entry.requestId,
+                                    entry.firstMessageMs,
+                                );
+                            }
+                            this.completeRequest(entry.requestId, {
+                                actionPhase: entry.actionPhase,
+                                totalDuration: entry.totalDuration,
+                                tokenUsage: entry.tokenUsage,
+                                parsePhase: entry.parsePhase,
+                            });
+                        }
+                        break;
+                }
+            }
+        } finally {
+            this.suppressFirstMessageTracking = false;
         }
 
-        this.currentAgentContainer.setMessage(content, source, appendMode);
+        // Mark everything just appended as history. Iteration is over the
+        // live NodeList so `children.length` reflects current count.
+        for (
+            let i = firstHistoryIdx;
+            i < this.messageDiv.children.length;
+            i++
+        ) {
+            this.messageDiv.children[i].classList.add("history");
+        }
 
+        // Reset state so the next live message starts a fresh bubble and
+        // doesn't reuse a history bubble via the requestId map.
+        // Also clear userMessageById: clientRequestIds from prior sessions
+        // (e.g. the shell's cmd-N counter resets each launch) can collide
+        // with new live requests, causing hasUserMessage() to return a
+        // false positive and silently drop the live user-message bubble.
+        this.currentAgentContainer = undefined;
+        this.agentContainersByRequestId.clear();
+        this.userMessageById.clear();
         this.scrollToBottom();
     }
 
@@ -644,11 +1445,15 @@ export class ChatPanel {
         source: string,
         sourceIcon?: string,
         action?: unknown,
+        requestId?: string,
     ) {
-        if (this.currentAgentContainer) {
-            this.currentAgentContainer.updateSource(source, sourceIcon);
+        const target =
+            (requestId && this.agentContainersByRequestId.get(requestId)) ||
+            this.currentAgentContainer;
+        if (target) {
+            target.updateSource(source, sourceIcon);
             if (action !== undefined) {
-                this.currentAgentContainer.setActionData(action);
+                target.setActionData(action);
             }
             return;
         }
@@ -658,13 +1463,36 @@ export class ChatPanel {
         this.pendingDisplayInfo = { source, sourceIcon, action };
     }
 
+    /** Returns true if a user-message bubble for `requestId` already exists. */
+    public hasUserMessage(requestId: string): boolean {
+        return this.userMessageById.has(requestId);
+    }
+
     /** Clear all messages. */
     public clear() {
-        while (this.messageDiv.children.length > 1) {
-            this.messageDiv.removeChild(this.messageDiv.lastChild!);
+        // Wipe everything then re-create the sticky scroll-anchor
+        // sentinel that the constructor installs as messageDiv's first
+        // child. addUserMessage / replaceAgentMessage / showSeparator /
+        // historyReplay all depend on `messageDiv.firstElementChild`
+        // being that sentinel and call `sentinel.before(...)`; without
+        // it they throw and the next command surfaces as a dispatcher
+        // error in the UI.
+        while (this.messageDiv.firstChild) {
+            this.messageDiv.removeChild(this.messageDiv.firstChild);
         }
+        const sentinel = document.createElement("div");
+        sentinel.className = "chat-sentinel";
+        this.messageDiv.appendChild(sentinel);
         this.currentAgentContainer = undefined;
+        this.agentContainersByRequestId.clear();
         this.userMessageById.clear();
+        this.requestStartByRequestId.clear();
+        this.firstMessageMsByRequestId.clear();
+        this.pendingDisplayInfo = undefined;
+        if (this.statusContainer) {
+            this.statusContainer.remove();
+            this.statusContainer = undefined;
+        }
     }
 
     /**
@@ -730,29 +1558,83 @@ export class ChatPanel {
      * Signal that the current request has finished. Mirrors the shell's
      * `statusMessage.complete()` hook — clears any lingering status /
      * dispatcher-temporary bubble regardless of the arrival order of the
-     * agent's real response. If `result` is provided, finalize the
-     * current agent bubble's hover-reveal metrics with overall duration
-     * and token usage. Also resets the current agent container so the
-     * next request starts a fresh bubble.
+     * agent's real response. If `result` is provided, finalize the target
+     * agent bubble's hover-reveal metrics with overall duration and token
+     * usage. If `requestId` is supplied, that bubble is finalized;
+     * otherwise the most recently created bubble is used. Also resets the
+     * current agent container so the next request starts a fresh bubble.
      */
-    public completeRequest(result?: {
-        actionPhase?: PhaseTiming;
-        totalDuration?: number;
-        tokenUsage?: CompletionUsageStats;
-    }) {
+    public completeRequest(
+        requestId?: string,
+        result?: {
+            actionPhase?: PhaseTiming;
+            totalDuration?: number;
+            tokenUsage?: CompletionUsageStats;
+            parsePhase?: PhaseTiming;
+            cancelled?: boolean;
+        },
+    ) {
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
-        if (result && this.currentAgentContainer) {
-            this.currentAgentContainer.updateMetrics(
+        const target =
+            (requestId && this.agentContainersByRequestId.get(requestId)) ||
+            this.currentAgentContainer;
+        const firstMessageMs =
+            requestId !== undefined
+                ? this.firstMessageMsByRequestId.get(requestId)
+                : undefined;
+        if (result?.cancelled) {
+            // Mirror the Electron shell's "⚠ Cancelled" status line so the
+            // user has visible confirmation that Stop / Esc cancelled the
+            // in-flight command. If no agent bubble was created yet (cancel
+            // landed before any agent output), spin up a minimal one so
+            // the status is still visible.
+            const cancelTarget =
+                target ??
+                this.createAgentContainer("shell", this.iconForSource("shell"));
+            cancelTarget.setMessage(
+                {
+                    type: "text",
+                    content: "⚠ Cancelled",
+                    kind: "status",
+                },
+                "shell",
+                "block",
+            );
+        }
+        if (result && target) {
+            target.updateMetrics(
                 "Action",
                 result.actionPhase,
                 result.totalDuration,
                 result.tokenUsage,
+                firstMessageMs,
             );
         }
-        this.currentAgentContainer = undefined;
+        if (result && requestId) {
+            // Always attempt to populate user-side metrics. Even when the
+            // request had no parse phase (e.g. cached translations or
+            // chat-only paths), we still show the total elapsed so the
+            // user bubble gets a metrics tooltip just like the agent's.
+            this.applyUserMetrics(
+                requestId,
+                "Translation",
+                result.parsePhase,
+                result.totalDuration,
+            );
+        }
+        if (requestId) {
+            this.agentContainersByRequestId.delete(requestId);
+            this.requestStartByRequestId.delete(requestId);
+            this.firstMessageMsByRequestId.delete(requestId);
+        }
+        // If we just finalized the active bubble, reset it so the next
+        // request starts fresh.
+        if (!requestId || target === this.currentAgentContainer) {
+            this.currentAgentContainer = undefined;
+        }
     }
 
     /** Show a status message (temporary, removed when the next real message arrives). */
@@ -971,13 +1853,18 @@ export class ChatPanel {
 
     /** Programmatically inject and send a command.
      *  @param displayText Optional friendly text shown in the user bubble instead of the raw command.
+     *  @param requestId Optional request id; one is generated if not supplied.
      */
-    public injectCommand(command: string, displayText?: string) {
+    public injectCommand(
+        command: string,
+        displayText?: string,
+        requestId?: string,
+    ) {
         this.commandHistory.unshift(command);
         this.historyIndex = -1;
-        const requestId = generateRequestId();
-        this.addUserMessage(displayText ?? command, requestId);
-        this.onSend?.(command, undefined, requestId);
+        const id = requestId ?? generateRequestId();
+        this.addUserMessage(displayText ?? command, id);
+        this.onSend?.(command, undefined, id);
     }
 
     /** Add a separator for previous session history. */
@@ -1037,8 +1924,239 @@ export class ChatPanel {
         this.historyAgentContainer = undefined;
     }
 
+    /**
+     * Set the local user's display name (and optional initial). Used in the
+     * user-bubble timestamp label and the round avatar to the right of the
+     * bubble. Affects bubbles created AFTER this call; existing bubbles are
+     * not retroactively updated. The initial defaults to the first
+     * non-whitespace character of `name` (uppercased).
+     */
+    public setUserInfo(name: string, initial?: string) {
+        const trimmed = (name ?? "").trim();
+        if (trimmed.length > 0) {
+            this.userName = trimmed;
+        }
+        if (initial !== undefined) {
+            const trimmedInitial = initial.trim();
+            if (trimmedInitial.length > 0) {
+                this.userInitial = trimmedInitial.charAt(0).toUpperCase();
+            }
+        } else if (trimmed.length > 0) {
+            this.userInitial = trimmed.charAt(0).toUpperCase();
+        }
+    }
+
+    /**
+     * Mount inline + dropdown command-completion driven by the host. The
+     * `post` callback receives messages (`pcUpdate` / `pcAccept` /
+     * `pcDismiss` / `pcHide` / `pcDispose`) which the host should forward
+     * to its CompletionController. The host pushes state updates back via
+     * `applyPcState(state)`.
+     *
+     * Returns the underlying PartialCompletion instance for callers that
+     * need direct access (e.g. to call `reset()` on session change).
+     * Re-attaching disposes the previous instance.
+     */
+    /**
+     * Tear down the panel's lifetime-bound listeners. Call this when the
+     * host (e.g. a VS Code webview) is being disposed so the window-level
+     * demo key handler doesn't survive the panel and fire stale callbacks
+     * (or leak memory across panel reincarnations).
+     *
+     * Idempotent. Safe to call even if attachCompletion / setDemoPaused
+     * were never invoked.
+     */
+    public dispose(): void {
+        if (this.demoKeyHandler) {
+            window.removeEventListener("keydown", this.demoKeyHandler, true);
+            this.demoKeyHandler = undefined;
+        }
+        this.isDemoPaused = false;
+        this.isDemoRunning = false;
+        this.partialCompletion?.dispose();
+        this.partialCompletion = undefined;
+    }
+
+    public attachCompletion(
+        post: PcPost,
+        opts?: { inline?: boolean },
+    ): PartialCompletion {
+        this.partialCompletion?.dispose();
+        // The textInput is wrapped in `chat-input-text-wrapper`; mount the
+        // toggle button on the wrapper so it sits flush with the input.
+        const wrapper =
+            (this.textInput.parentElement as HTMLElement | null) ??
+            this.inputArea;
+        this.partialCompletion = new PartialCompletion(
+            wrapper,
+            this.textInput,
+            this.ghostSpan,
+            post,
+            opts,
+        );
+        return this.partialCompletion;
+    }
+
+    /** Forward a host-pushed completion state update to the controller. */
+    public applyPcState(state: PcCompletionState | undefined) {
+        this.partialCompletion?.applyState(state);
+    }
+
     /** Enable or disable the input. */
     public setEnabled(enabled: boolean) {
+        // setSwitching/setHistoryLoading take precedence: if either is active,
+        // the host should not be able to re-enable the input until they clear.
+        if (enabled && (this.isSwitching || this.isHistoryLoading)) {
+            return;
+        }
+        this.textInput.contentEditable = enabled ? "true" : "false";
+        this.sendButton.disabled = !enabled;
+        if (enabled) {
+            this.inputArea.classList.remove("chat-input-disabled");
+        } else {
+            this.inputArea.classList.add("chat-input-disabled");
+            // No commands can be in flight when input is disabled (typically
+            // because the dispatcher disconnected). Hide the stop button so
+            // users can't try to cancel into a dead RPC channel.
+            if (this.activeRequestId !== undefined) {
+                this.setIdle();
+            }
+        }
+    }
+
+    /**
+     * Show or hide the reconnect banner above the chat. Pass `undefined` to
+     * hide. The banner is plain text only — hosts format the message
+     * (countdown, attempt number, etc.) before passing it in.
+     */
+    public setReconnectStatus(message: string | undefined): void {
+        if (this.reconnectBanner === undefined) return;
+        if (message === undefined) {
+            this.reconnectBanner.style.display = "none";
+            this.reconnectBanner.textContent = "";
+        } else {
+            this.reconnectBanner.textContent = message;
+            this.reconnectBanner.style.display = "";
+        }
+    }
+
+    /**
+     * Disable input and show a placeholder while a conversation switch is in
+     * progress. Re-enables input on `setSwitching(false)` (unless history is
+     * still loading).
+     */
+    public setSwitching(switching: boolean, targetName?: string) {
+        this.isSwitching = switching;
+        if (switching) {
+            this.setEnabledInternal(false);
+            const label = targetName
+                ? `Switching to conversation "${targetName}"…`
+                : "Switching conversation…";
+            this.textInput.setAttribute("data-placeholder", label);
+            this.inputArea.classList.add("chat-input-switching");
+        } else {
+            this.inputArea.classList.remove("chat-input-switching");
+            if (!this.isHistoryLoading) {
+                this.setEnabledInternal(true);
+                this.textInput.setAttribute(
+                    "data-placeholder",
+                    "Type a message...",
+                );
+            }
+        }
+    }
+
+    /**
+     * Disable input and show a "Loading history…" placeholder until the host
+     * finishes replaying past messages on (re)connect or session restore.
+     * Re-enables input on `setHistoryLoading(false)` (unless a switch is
+     * still in progress).
+     */
+    public setHistoryLoading(loading: boolean) {
+        this.isHistoryLoading = loading;
+        if (loading) {
+            this.setEnabledInternal(false);
+            this.textInput.setAttribute("data-placeholder", "Loading history…");
+            this.inputArea.classList.add("chat-input-history-loading");
+        } else {
+            this.inputArea.classList.remove("chat-input-history-loading");
+            if (!this.isSwitching) {
+                this.setEnabledInternal(true);
+                this.textInput.setAttribute(
+                    "data-placeholder",
+                    "Type a message...",
+                );
+            }
+        }
+    }
+
+    /**
+     * Toggle "demo paused" mode. While paused, the panel installs a
+     * window-level capture-phase keydown listener that swallows
+     * Ctrl/Meta+→ (continue) and Esc (cancel) before the focused input
+     * field sees them, and forwards the action via `onDemoAction`.
+     *
+     * The host is responsible for any user-facing "Demo paused" indicator
+     * (e.g., status ribbon suffix) — chat-ui no longer renders its own
+     * banner so the host can integrate the state into its existing UI
+     * without an extra component getting in the way.
+     */
+    public setDemoPaused(paused: boolean, _message?: string): void {
+        this.isDemoPaused = paused;
+        this.refreshDemoKeyHandler();
+        // When pausing, ensure the chat input has focus so the
+        // window-level demoKeyHandler reliably receives Ctrl+Right /
+        // Esc. VS Code's `vscode-shell.chatView.focus` reveals the
+        // webview view but doesn't always land focus inside the
+        // contenteditable, so without this nudge the key events can
+        // be swallowed by the surrounding VS Code UI before the
+        // capture-phase handler runs.
+        if (paused) {
+            try {
+                this.textInput.focus();
+            } catch {
+                // best-effort
+            }
+        }
+    }
+
+    private refreshDemoKeyHandler(): void {
+        const wantHandler = this.isDemoPaused || this.isDemoRunning;
+        if (wantHandler && !this.demoKeyHandler) {
+            this.demoKeyHandler = (e: KeyboardEvent) => {
+                if (!this.isDemoPaused && !this.isDemoRunning) return;
+                if (
+                    e.key === "ArrowRight" &&
+                    (e.altKey || e.ctrlKey || e.metaKey) &&
+                    this.isDemoPaused
+                ) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.onDemoAction?.("continue");
+                } else if (e.key === "Escape") {
+                    // Esc cancels the demo whether it's currently
+                    // paused at @pauseForInput or actively running a
+                    // line. The host's requestDemoCancel() sets a
+                    // sticky flag so the loop sees it on the next
+                    // iteration even mid-line.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.onDemoAction?.("cancel");
+                }
+            };
+            window.addEventListener("keydown", this.demoKeyHandler, true);
+        } else if (!wantHandler && this.demoKeyHandler) {
+            window.removeEventListener("keydown", this.demoKeyHandler, true);
+            this.demoKeyHandler = undefined;
+        }
+    }
+
+    /**
+     * Internal enable/disable that bypasses the isSwitching/isHistoryLoading
+     * guard in setEnabled. Used by setSwitching and setHistoryLoading
+     * themselves to actually toggle input state.
+     */
+    private setEnabledInternal(enabled: boolean) {
         this.textInput.contentEditable = enabled ? "true" : "false";
         this.sendButton.disabled = !enabled;
         if (enabled) {
@@ -1132,6 +2250,12 @@ class AgentMessageContainer {
     // rendered response and a <pre> of the action JSON.
     private actionDataHtml?: string;
     private savedMessageHtml?: string;
+    // When setActionData receives an action with schemaName/actionName,
+    // we display "schema.action" as the bubble title instead of the raw
+    // source agent name. setMessage's source-driven label-update is then
+    // suppressed so the action label doesn't get clobbered by later
+    // setDisplay calls.
+    private actionDerivedName?: string;
 
     constructor(
         beforeElement: Element,
@@ -1201,6 +2325,8 @@ class AgentMessageContainer {
 
         this.div.appendChild(bodyDiv);
 
+        attachHoverPush(bodyDiv, this.div, this.metricsDiv);
+
         // Insert into DOM (column-reverse order)
         beforeElement.before(this.div);
     }
@@ -1210,22 +2336,62 @@ class AgentMessageContainer {
         phase?: PhaseTiming,
         totalDuration?: number,
         tokenUsage?: CompletionUsageStats,
+        firstMessageMs?: number,
     ) {
-        const lines: string[] = [];
+        // Layout: .metrics-details flex row with three columns
+        //   left   — "First Message" + phase.marks (one line each)
+        //   middle — (reserved; tts metrics in the future)
+        //   right  — main metrics (Action Elapsed / Total Elapsed / Tokens)
+        // This mirrors the Electron shell's MessageContainer layout so the
+        // tooltip reads as "marks on the left, totals on the right".
+        const mainLines: string[] = [];
         if (phase?.duration !== undefined) {
-            lines.push(metricsLine(`${actionLabel} Elapsed`, phase.duration));
-        }
-        if (totalDuration !== undefined) {
-            lines.push(metricsLine("Total Elapsed", totalDuration));
-        }
-        if (tokenUsage) {
-            lines.push(
-                `Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(prompt ${tokenUsage.prompt_tokens}, ` +
-                    `completion ${tokenUsage.completion_tokens})`,
+            mainLines.push(
+                metricsLine(`${actionLabel} Elapsed`, phase.duration),
             );
         }
-        this.metricsDiv.innerHTML = lines.join("<br>");
+        if (totalDuration !== undefined) {
+            mainLines.push(metricsLine("Total Elapsed", totalDuration));
+        }
+        if (tokenUsage) {
+            // Compact form: "Tokens: 14356 (14257+99)" — the long
+            // "(prompt N, completion M)" form overflowed the metrics
+            // tooltip in narrow webview sidebars.
+            mainLines.push(
+                `Tokens: <b>${tokenUsage.total_tokens}</b> ` +
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+            );
+        }
+        const leftLines: string[] = [];
+        if (firstMessageMs !== undefined) {
+            leftLines.push(metricsLine("First Message", firstMessageMs));
+        }
+        if (phase?.marks) {
+            for (const [key, value] of Object.entries(phase.marks)) {
+                const avg = value.duration / Math.max(value.count, 1);
+                const suffix =
+                    value.count !== 1 ? `(out of ${value.count})` : "";
+                leftLines.push(
+                    `${escapeHtml(key)}: <b>${formatDuration(avg)}${suffix}</b>`,
+                );
+            }
+        }
+        this.metricsDiv.innerHTML = sanitize(
+            `<div class="metrics-details">` +
+                `<div>${leftLines.join("<br>")}</div>` +
+                `<div></div>` +
+                `<div>${mainLines.join("<br>")}</div>` +
+                `</div>`,
+        );
+        // Flag the container so the chat-level selector that pushes
+        // visually-below bubbles down on hover can target it without
+        // relying on a nested `:has()` chain (which proved unreliable in
+        // some webview versions).
+        if (leftLines.length > 0 || mainLines.length > 0) {
+            this.div.classList.add("chat-message-has-metrics");
+        } else {
+            this.div.classList.remove("chat-message-has-metrics");
+        }
     }
 
     /**
@@ -1236,31 +2402,79 @@ class AgentMessageContainer {
     public setActionData(action: unknown) {
         if (action === undefined || action === null) return;
         let html: string;
+        let label: string | undefined;
         if (Array.isArray(action)) {
-            html = `<pre>${escapeHtml(action.join(" "))}</pre>`;
-        } else if (typeof action === "object") {
-            html = `<pre>${escapeHtml(
+            // Skip arrays-of-primitives (e.g. dispatcher's ['request']
+            // housekeeping events) and empty arrays — making the agent
+            // name clickable here would produce a no-op popup.
+            const objectEntries = action.filter(
+                (v) => typeof v === "object" && v !== null,
+            );
+            if (objectEntries.length === 0) return;
+            // Skip arrays whose objects are all empty `{}` — same
+            // rationale (some agents emit `[{}]` placeholder events).
+            if (
+                objectEntries.every(
+                    (v) => Object.keys(v as object).length === 0,
+                )
+            ) {
+                return;
+            }
+            // Derive a label from the first object that carries a
+            // schema/action name (matches Electron shell behavior).
+            for (const entry of objectEntries) {
+                const o = entry as {
+                    schemaName?: unknown;
+                    actionName?: unknown;
+                };
+                if (
+                    typeof o.schemaName === "string" &&
+                    typeof o.actionName === "string"
+                ) {
+                    label = `${o.schemaName}.${o.actionName}`;
+                    break;
+                }
+            }
+            html = `<pre class="chat-json">${highlightJson(
                 JSON.stringify(action, undefined, 2),
             )}</pre>`;
+        } else if (typeof action === "object") {
+            // Skip empty objects — the popup would show only `{}` which
+            // is misleading (looks broken to the user).
+            if (Object.keys(action as object).length === 0) return;
+            const obj = action as {
+                schemaName?: unknown;
+                actionName?: unknown;
+            };
+            if (
+                typeof obj.schemaName === "string" &&
+                typeof obj.actionName === "string"
+            ) {
+                label = `${obj.schemaName}.${obj.actionName}`;
+            }
+            const json = JSON.stringify(action, undefined, 2);
+            html = `<pre class="chat-json">${highlightJson(json)}</pre>`;
         } else {
-            html = `<pre>${escapeHtml(String(action))}</pre>`;
+            // Primitives (string/number/bool) aren't useful as a JSON
+            // popup. Don't make the bubble clickable for them.
+            return;
         }
+        // Render the JSON below the message in the collapsible details
+        // area, instead of swapping out the message body. The agent name
+        // becomes a click affordance to toggle the details panel.
+        this.detailsDiv.innerHTML = sanitize(html);
         this.actionDataHtml = html;
+        if (label) {
+            this.nameSpan.textContent = label;
+            this.actionDerivedName = label;
+        }
         this.nameSpan.classList.add("clickable");
-        this.nameSpan.title = "Click to show action JSON";
+        this.nameSpan.title = "Click to show / hide action JSON";
     }
 
     private toggleActionData() {
         if (this.actionDataHtml === undefined) return;
-        if (this.savedMessageHtml === undefined) {
-            this.savedMessageHtml = this.messageDiv.innerHTML;
-            this.messageDiv.innerHTML = this.actionDataHtml;
-            this.messageDiv.classList.add("chat-message-action-data");
-        } else {
-            this.messageDiv.innerHTML = this.savedMessageHtml;
-            this.savedMessageHtml = undefined;
-            this.messageDiv.classList.remove("chat-message-action-data");
-        }
+        this.detailsDiv.classList.toggle("chat-details-visible");
     }
 
     public setMessage(
@@ -1268,7 +2482,7 @@ class AgentMessageContainer {
         source?: string,
         appendMode?: DisplayAppendMode,
     ) {
-        if (source) {
+        if (source && !this.actionDerivedName) {
             this.nameSpan.textContent = source;
         }
 
@@ -1320,10 +2534,23 @@ class AgentMessageContainer {
     }
 
     public updateSource(source: string, icon?: string) {
-        this.nameSpan.textContent = source;
+        if (!this.actionDerivedName) {
+            this.nameSpan.textContent = source;
+        }
         if (icon) {
             this.iconDiv.textContent = icon;
         }
+    }
+
+    /**
+     * Mark this container as a transient status indicator (used for
+     * "Executing action ...", reasoning's streaming "Thinking…" chunks,
+     * etc.). Adds a CSS class that styles the bubble as a small italicized
+     * indicator with no agent label/avatar/border — so the user can't
+     * mistake it for a duplicate of the real reply bubble.
+     */
+    public markAsStatusBubble() {
+        this.div.classList.add("chat-message-status-bubble");
     }
 
     /** Mark this container as a dimmed history message. */

@@ -56,6 +56,9 @@ function registerClient(client: Client) {
     ipcRenderer.on("demo-state", (_, state) => {
         client.demoStateChanged?.(state);
     });
+    ipcRenderer.on("reconnect-status", (_, message: string | undefined) => {
+        client.reconnectStatusChanged?.(message);
+    });
     ipcRenderer.on("show-dialog", (_, key) => {
         client.showDialog(key);
     });

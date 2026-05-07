@@ -13,7 +13,7 @@ export type EditorCodeActions =
     | EditorActionSaveCurrentFile
     | EditorActionSaveAllFiles;
 
-// Action to create a new file in the editor
+// @deprecated Use `NewCodeFileAction`, `NewMarkdownFileAction`, or `NewTextFileAction` instead.
 export type EditorActionCreateFile = {
     actionName: "createFile";
     parameters: {

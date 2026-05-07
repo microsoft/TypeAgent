@@ -62,7 +62,21 @@ export function createRpc<
             if (f === undefined) {
                 debugError("No call handler", message);
             } else {
-                f(...message.args);
+                // Call handlers are fire-and-forget (no callId), so any
+                // synchronous throw cannot be reported back to the caller.
+                // Swallow it here to keep the RPC bus alive — otherwise a
+                // single bad notify (e.g. cancelCommand after the remote
+                // dispatcher channel disconnected) would surface as an
+                // uncaught exception in the host process.
+                try {
+                    f(...message.args);
+                } catch (e: any) {
+                    debugError(
+                        "Call handler threw",
+                        message.name,
+                        e?.message ?? e,
+                    );
+                }
             }
             return;
         }

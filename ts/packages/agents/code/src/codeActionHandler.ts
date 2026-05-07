@@ -16,9 +16,34 @@ import { fileURLToPath } from "url";
 import os from "os";
 import registerDebug from "debug";
 import chalk from "chalk";
-import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
 
 const debug = registerDebug("typeagent:code");
+
+// Shared WebSocket server that bridges this code agent to the Coda VS Code
+// extension (ts/packages/coda) on port 8082. Created on first enable, closed
+// when the last session disables the code agent. Storing it per-session caused
+// "No websocket connection" errors when an action ran on a session different
+// from the one that originally created the server (e.g. after schema enable on
+// a different conversation), and also masked EADDRINUSE failures from a second
+// bind attempt on port 8082.
+let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
+let sharedWebSocketRefCount = 0;
+const sharedPendingCalls: Map<
+    number,
+    {
+        resolve: (value?: undefined) => void;
+        context?: ActionContext<CodeActionContext> | undefined;
+    }
+> = new Map();
+// Global call-id counter. The pending-calls map is module-scoped (one
+// websocket server is shared across all sessions), so the id space must
+// also be global — per-session counters would collide on 0,1,2,... and
+// route a response to the wrong session's pending call.
+let nextSharedCallId = 0;
 
 export function instantiate(): AppAgent {
     return {
@@ -31,12 +56,11 @@ export function instantiate(): AppAgent {
 type CodeActionContext = {
     enabled: Set<string>;
     webSocketServer?: CodeAgentWebSocketServer | undefined;
-    nextCallId: number;
     pendingCall: Map<
         number,
         {
             resolve: (value?: undefined) => void;
-            context: ActionContext<CodeActionContext>;
+            context?: ActionContext<CodeActionContext> | undefined;
         }
     >;
 };
@@ -45,7 +69,6 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
         enabled: new Set(),
         webSocketServer: undefined,
-        nextCallId: 0,
         pendingCall: new Map(),
     };
 }
@@ -57,28 +80,32 @@ async function updateCodeContext(
 ): Promise<void> {
     const agentContext = context.agentContext;
     if (enable) {
-        agentContext.enabled.add(schemaName);
-        if (agentContext.webSocketServer?.isConnected()) {
+        if (agentContext.enabled.has(schemaName)) {
             return;
         }
+        if (agentContext.enabled.size === 0) {
+            sharedWebSocketRefCount++;
+        }
+        agentContext.enabled.add(schemaName);
 
-        if (!context.agentContext.webSocketServer) {
+        if (!sharedWebSocketServer) {
+            // TODO: stop hardcoding the port. The dispatcher should hand each
+            // agent a free port at initialize time so multiple TypeAgent
+            // installs / sessions on one host can't collide on 8082.
             const port = parseInt(process.env["CODE_WEBSOCKET_PORT"] || "8082");
-            const webSocketServer = new CodeAgentWebSocketServer(port);
-            agentContext.webSocketServer = webSocketServer;
-            agentContext.pendingCall = new Map();
+            sharedWebSocketServer = new CodeAgentWebSocketServer(port);
 
-            webSocketServer.onMessage = (message: string) => {
+            sharedWebSocketServer.onMessage = (message: string) => {
                 try {
                     const data = JSON.parse(message) as WebSocketMessageV2;
 
                     if (data.id !== undefined && data.result !== undefined) {
-                        const pendingCall = agentContext.pendingCall.get(
+                        const pendingCall = sharedPendingCalls.get(
                             Number(data.id),
                         );
 
                         if (pendingCall) {
-                            agentContext.pendingCall.delete(Number(data.id));
+                            sharedPendingCalls.delete(Number(data.id));
                             const { resolve, context } = pendingCall;
                             if (context?.actionIO) {
                                 context.actionIO.setDisplay(data.result);
@@ -90,15 +117,21 @@ async function updateCodeContext(
                     debug("Error parsing WebSocket message:", error);
                 }
             };
-        } else {
-            agentContext.enabled.delete(schemaName);
-            if (agentContext.enabled.size === 0) {
-                const webSocketServer = context.agentContext.webSocketServer;
-                if (webSocketServer) {
-                    webSocketServer.close();
-                }
-
-                delete context.agentContext.webSocketServer;
+        }
+        agentContext.webSocketServer = sharedWebSocketServer;
+        agentContext.pendingCall = sharedPendingCalls;
+    } else {
+        if (!agentContext.enabled.has(schemaName)) {
+            return;
+        }
+        agentContext.enabled.delete(schemaName);
+        if (agentContext.enabled.size === 0) {
+            agentContext.webSocketServer = undefined;
+            sharedWebSocketRefCount = Math.max(0, sharedWebSocketRefCount - 1);
+            if (sharedWebSocketRefCount === 0 && sharedWebSocketServer) {
+                sharedWebSocketServer.close();
+                sharedWebSocketServer = undefined;
+                sharedPendingCalls.clear();
             }
         }
     }
@@ -182,7 +215,7 @@ async function sendPingToCodaExtension(
     const server = agentContext.webSocketServer;
     if (!server || !server.isConnected()) return false;
 
-    const callId = agentContext.nextCallId++;
+    const callId = nextSharedCallId++;
     return new Promise((resolve) => {
         const timeout = setTimeout(() => {
             agentContext.pendingCall.delete(callId);
@@ -224,7 +257,7 @@ export async function getActiveFileFromVSCode(
         return undefined;
     }
 
-    const callId = agentContext.nextCallId++;
+    const callId = nextSharedCallId++;
 
     return new Promise<ActiveFile | undefined>((resolve) => {
         // Hard timeout so we never hang
@@ -258,6 +291,42 @@ export async function getActiveFileFromVSCode(
     });
 }
 
+import { VSCodeConversationActions } from "./vscode/vscodeConversationActionsSchema.js";
+
+async function executeConversationAction(
+    action: VSCodeConversationActions,
+    context: ActionContext<CodeActionContext>,
+) {
+    context.actionIO.takeAction("vscode-shell-action" as any, {
+        actionName: action.actionName,
+        parameters: action.parameters,
+    });
+    switch (action.actionName) {
+        case "newConversation":
+            return createActionResult(
+                action.parameters.name
+                    ? `Created new conversation "${action.parameters.name}".`
+                    : "Creating a new conversation.",
+            );
+        case "renameConversation":
+            return createActionResult(
+                `Renamed current conversation to "${action.parameters.newName}".`,
+            );
+        case "switchConversation":
+            return createActionResult(
+                action.parameters.name
+                    ? `Switched to conversation "${action.parameters.name}".`
+                    : "Switching conversation.",
+            );
+        default: {
+            const _exhaustive: never = action;
+            throw new Error(
+                `Unhandled conversation action: ${(_exhaustive as VSCodeConversationActions).actionName}`,
+            );
+        }
+    }
+}
+
 async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,
@@ -265,6 +334,17 @@ async function executeCodeAction(
     if (action.actionName === "launchVSCode") {
         await ensureVSCodeProcess();
         return undefined;
+    }
+
+    // Conversation-management actions (code-vscode-shell sub-schema) are
+    // handled locally and routed back to the originating extension webview
+    // via takeAction. All other code sub-schemas are forwarded to the Coda
+    // VS Code extension over the WebSocket bridge below.
+    if (action.schemaName === "code-vscode-shell") {
+        return executeConversationAction(
+            action as VSCodeConversationActions,
+            context,
+        );
     }
 
     const agentContext = context.sessionContext.agentContext;
@@ -280,10 +360,25 @@ async function executeCodeAction(
                 );
             }
 
-            const callId = agentContext.nextCallId++;
+            const callId = nextSharedCallId++;
             return new Promise<undefined>((resolve) => {
+                const timeoutMs = 5000;
+                const timeoutHandle = setTimeout(() => {
+                    if (agentContext.pendingCall.has(callId)) {
+                        agentContext.pendingCall.delete(callId);
+                        if (context.actionIO) {
+                            context.actionIO.setDisplay(
+                                `No connected coda extension handled action "${action.actionName}". If multiple VS Code windows are open, reload the others (Ctrl+Shift+P → Developer: Reload Window) so they pick up the latest coda bundle.`,
+                            );
+                        }
+                        resolve(undefined);
+                    }
+                }, timeoutMs);
                 agentContext.pendingCall.set(callId, {
-                    resolve,
+                    resolve: (value?: undefined) => {
+                        clearTimeout(timeoutHandle);
+                        resolve(value);
+                    },
                     context,
                 });
                 webSocketServer.broadcast(

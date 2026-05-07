@@ -137,6 +137,11 @@ function buildArgs(
             if (p.repo) args.push("--repo", String(p.repo));
             return args;
         }
+        case "issueDelete": {
+            const args = ["issue", "delete", String(p.number), "--yes"];
+            if (p.repo) args.push("--repo", String(p.repo));
+            return args;
+        }
         case "issueReopen": {
             const args = ["issue", "reopen"];
             if (p.number) args.push(String(p.number));
@@ -221,6 +226,11 @@ function buildArgs(
             const args = ["pr", "checkout"];
             if (p.number) args.push(String(p.number));
             if (p.branch) args.push("--branch", String(p.branch));
+            return args;
+        }
+        case "prChecks": {
+            const args = ["pr", "checks", String(p.number)];
+            if (p.repo) args.push("--repo", String(p.repo));
             return args;
         }
 
@@ -399,6 +409,12 @@ function buildArgs(
             if (p.color) args.push("--color", String(p.color));
             return args;
         }
+        case "issueAddLabel": {
+            const args = ["issue", "edit", String(p.number)];
+            if (p.label) args.push("--add-label", String(p.label));
+            if (p.repo) args.push("--repo", String(p.repo));
+            return args;
+        }
         case "licensesView":
             return ["repo", "license", "view"];
         case "previewExecute": {
@@ -433,6 +449,22 @@ function buildArgs(
         }
         case "statusPrint":
             return ["status"];
+        case "myAssignedIssues": {
+            const limit = p.limit ?? 20;
+            // gh search issues --assignee @me --state open --json …
+            return [
+                "search",
+                "issues",
+                "--assignee",
+                "@me",
+                "--state",
+                "open",
+                "--limit",
+                String(limit),
+                "--json",
+                "number,title,url,repository,state,updatedAt,labels",
+            ];
+        }
         case "variableCreate": {
             const args = ["variable", "set"];
             if (p.name) args.push(String(p.name));
@@ -681,6 +713,30 @@ function formatListResults(
             .join("\n");
     }
 
+    // Issues assigned to the current user (gh search issues --assignee @me)
+    if (actionName === "myAssignedIssues" && "number" in items[0]) {
+        return items
+            .map((it) => {
+                const repo = it.repository as
+                    | Record<string, unknown>
+                    | undefined;
+                const repoFull =
+                    (repo?.nameWithOwner as string | undefined) ??
+                    (repo?.name as string | undefined) ??
+                    "";
+                const labels = Array.isArray(it.labels)
+                    ? (it.labels as Record<string, unknown>[])
+                          .map((l) => l.name)
+                          .filter(Boolean)
+                          .join(", ")
+                    : "";
+                const labelStr = labels ? ` _[${labels}]_` : "";
+                const repoPrefix = repoFull ? `${repoFull} ` : "";
+                return `- ${repoPrefix}[#${it.number} ${it.title}](${it.url})${labelStr}`;
+            })
+            .join("\n");
+    }
+
     // Search repos
     if (actionName === "searchRepos" && "fullName" in items[0]) {
         return items
@@ -714,6 +770,10 @@ function getMutationSuccessMessage(
             return `✅ Checked out PR **#${p.number}** locally.`;
         case "issueClose":
             return `✅ Closed issue **#${p.number}**.`;
+        case "issueDelete":
+            return `🗑️ Deleted issue **#${p.number}**.`;
+        case "issueAddLabel":
+            return `🏷️ Added label **${p.label}** to issue **#${p.number}**.`;
         case "issueReopen":
             return `✅ Reopened issue **#${p.number}**.`;
         case "prClose":
@@ -740,6 +800,48 @@ async function executeAction(
 
     try {
         const output = await runGh(args);
+
+        // Mutations that print a URL like https://github.com/owner/repo/issues/123
+        // — emit an entity so follow-ups ("that issue", "delete it") can resolve.
+        if (
+            output &&
+            (action.actionName === "issueCreate" ||
+                action.actionName === "prCreate")
+        ) {
+            const m = output.match(
+                /https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/(?:issues|pull)\/(\d+)/,
+            );
+            if (m) {
+                const repo = m[1];
+                const number = parseInt(m[2], 10);
+                const url = m[0];
+                const isIssue = action.actionName === "issueCreate";
+                const title = String(p.title ?? "");
+                const kindLabel = isIssue ? "issue" : "PR";
+                const entity = {
+                    name: `#${number}`,
+                    type: [isIssue ? "issue" : "pullRequest", "github"],
+                    uniqueId: url,
+                    facets: [
+                        { name: "number", value: number },
+                        { name: "repo", value: repo },
+                        { name: "url", value: url },
+                        ...(title ? [{ name: "title", value: title }] : []),
+                    ],
+                };
+                const md =
+                    `✅ Created ${kindLabel} **#${number}** in **${repo}**` +
+                    (title ? `: ${title}` : "") +
+                    `\n\n${url}`;
+                return createActionResultFromMarkdownDisplay(
+                    md,
+                    undefined,
+                    [entity],
+                    entity,
+                );
+            }
+        }
+
         if (!output) {
             // Friendly success messages for write/mutation actions
             const msg = getMutationSuccessMessage(action);

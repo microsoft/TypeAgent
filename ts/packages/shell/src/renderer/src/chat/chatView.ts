@@ -69,6 +69,7 @@ export class ChatView {
     private isScrolling = false;
 
     private _voiceBanner: HTMLElement;
+    private _reconnectBanner!: HTMLElement;
 
     public userGivenName: string = "";
     public chatInput: ChatInput | undefined;
@@ -109,6 +110,14 @@ export class ChatView {
         this._voiceBanner.className = "voice-mode-banner";
         this._voiceBanner.textContent = "Voice Mode";
         this.topDiv.appendChild(this._voiceBanner);
+
+        // Reconnect banner — hidden by default; shown by setReconnectStatus()
+        // when the WebSocket to the agent server drops and the host is
+        // attempting to reconnect.
+        this._reconnectBanner = document.createElement("div");
+        this._reconnectBanner.className = "chat-reconnect-banner";
+        this._reconnectBanner.style.display = "none";
+        this.topDiv.insertBefore(this._reconnectBanner, this.messageDiv);
 
         // wire up messages from iframes so we can resize them
         window.onmessage = (e) => {
@@ -197,9 +206,28 @@ export class ChatView {
         this.showStopButton(true);
     }
 
+    // Returns true if a command with this requestId was originated by this
+    // shell instance (still tracked under pendingLocalGroups by
+    // clientRequestId, awaiting lazy promotion on first display message).
+    // Used to suppress UI affordances (stop button) for commands mirrored
+    // from a peer client like the vscode extension.
+    public isLocalRequest(requestId: RequestId): boolean {
+        const localId = requestId.clientRequestId as string | undefined;
+        return !!localId && this.pendingLocalGroups.has(localId);
+    }
+
     private cancelCommand() {
         if (this.activeRequestId && this._dispatcher) {
-            this._dispatcher.cancelCommand(this.activeRequestId);
+            // Defensive try/catch — if the underlying dispatcher channel
+            // dropped (server killed) the call can throw synchronously.
+            // We hide the stop button regardless so the UI stays consistent.
+            try {
+                this._dispatcher.cancelCommand(this.activeRequestId);
+            } catch {
+                // Channel gone; nothing to cancel.
+            }
+            this.activeRequestId = undefined;
+            this.showStopButton(false);
         }
     }
 
@@ -694,6 +722,35 @@ export class ChatView {
         const notification = options?.notification ?? false;
         const content: DisplayContent = msg.message;
 
+        // Consolidate the dispatcher's transient "[X] Executing action ..."
+        // status (sent with source="dispatcher", actionIndex=undefined,
+        // appendMode="temporary") into the most recently created agent
+        // bubble for this request, instead of letting it create a separate
+        // dispatcher-sourced status bubble that visually duplicates the
+        // upcoming agent reply. Mirrors chat-ui's behavior in chatPanel.ts.
+        if (
+            options?.appendMode === "temporary" &&
+            msg.actionIndex === undefined &&
+            msg.source === "dispatcher" &&
+            !notification
+        ) {
+            const mg = this.getMessageGroup(msg.requestId);
+            const last = mg?.getLastAgentMessage();
+            if (last) {
+                last.setMessage(
+                    content,
+                    msg.source,
+                    "temporary",
+                    msg.sourceIcon,
+                );
+                if (!scrollToMessage) {
+                    this.updateScroll();
+                    this.chatInputFocus();
+                }
+                return;
+            }
+        }
+
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;
@@ -1015,6 +1072,28 @@ export class ChatView {
     public setClaudeFocus(active: boolean): void {
         this._voiceBanner.classList.toggle("claude-focus", active);
         this._voiceBanner.textContent = active ? "Claude Focus" : "Voice Mode";
+    }
+
+    /**
+     * Show or hide the reconnect banner above the chat. Pass `undefined` to
+     * hide. While disconnected, also hides the in-progress stop button so the
+     * user can't fire RPCs into a dead channel.
+     */
+    public setReconnectStatus(message: string | undefined): void {
+        if (message === undefined) {
+            this._reconnectBanner.style.display = "none";
+            this._reconnectBanner.textContent = "";
+        } else {
+            this._reconnectBanner.textContent = message;
+            this._reconnectBanner.style.display = "";
+            // Any in-flight requestId is now orphaned — the server we were
+            // talking to is gone. Reset so the stop button doesn't sit
+            // dangling in the input bar pointing at nothing.
+            if (this.activeRequestId) {
+                this.activeRequestId = undefined;
+                this.showStopButton(false);
+            }
+        }
     }
 
     public setDemoState(state: DemoUIState): void {

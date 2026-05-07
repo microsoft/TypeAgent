@@ -306,8 +306,18 @@ export function setContent(
 
         contentElm.appendChild(iframe);
     } else {
-        // vanilla, sanitized HTML only
-        contentElm.innerHTML += contentHtml;
+        // vanilla, sanitized HTML only — re-run DOMPurify at the sink so
+        // CodeQL js/xss can recognize sanitization (the upstream
+        // `processContent` already sanitizes html/markdown, but the data
+        // flow through messageContentToHTML breaks the static analysis
+        // chain).
+        contentElm.innerHTML += DOMPurify.sanitize(contentHtml, {
+            ADD_ATTR: ["target", "onclick", "onerror", "href"],
+            ADD_DATA_URI_TAGS: ["img"],
+            ADD_URI_SAFE_ATTR: ["src", "href", "style"],
+            ALLOWED_URI_REGEXP:
+                /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+        });
 
         // Add click handlers for all links — delegated to platform adapter
         const allLinks = contentElm.querySelectorAll("a[href]");
@@ -348,8 +358,14 @@ export function setContent(
         return contentElm.innerText;
     }
 
-    const parser = new DOMParser();
-    return parser.parseFromString(contentHtml, "text/html").body.innerText;
+    // Strip all HTML to plain text for TTS. Using DOMPurify with no
+    // allowed tags is both safe and recognized by CodeQL as a sanitizer
+    // (DOMParser-based extraction trips js/xss even though .body.innerText
+    // never executes scripts).
+    return DOMPurify.sanitize(contentHtml, {
+        ALLOWED_TAGS: [],
+        ALLOWED_ATTR: [],
+    }) as string;
 }
 
 /**

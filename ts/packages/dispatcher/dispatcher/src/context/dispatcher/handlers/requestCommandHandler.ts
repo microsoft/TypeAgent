@@ -44,7 +44,45 @@ import {
     DispatcherName,
     isUnknownAction,
 } from "../dispatcherUtils.js";
-import { executeReasoning } from "../../../reasoning/claude.js";
+import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
+import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
+
+type ReasoningFallbackContext = {
+    failedSchema: string;
+    failedAction: string;
+    error: string;
+};
+
+async function runConfiguredReasoning(
+    request: string,
+    context: ActionContext<CommandHandlerContext>,
+    options?: { fallbackContext?: ReasoningFallbackContext },
+): Promise<void> {
+    const engine =
+        context.sessionContext.agentContext.session.getConfig().execution
+            .reasoning;
+    switch (engine) {
+        case "copilot":
+            await executeCopilotReasoning(request, context, {
+                engine: "copilot",
+            });
+            return;
+        case "claude":
+            await executeClaudeReasoning(request, context, {
+                engine: "claude",
+                ...(options?.fallbackContext
+                    ? { fallbackContext: options.fallbackContext }
+                    : {}),
+            });
+            return;
+        case "none":
+            throw new Error(
+                "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
+            );
+        default:
+            throw new Error(`Unknown reasoning engine: ${engine}`);
+    }
+}
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
 import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
@@ -394,7 +432,7 @@ export class RequestCommandHandler implements CommandHandler {
                 (forceReasoningEnv ||
                     REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p)))
             ) {
-                await executeReasoning(request, context, { engine: "claude" });
+                await runConfiguredReasoning(request, context);
                 return;
             }
 
@@ -453,9 +491,7 @@ export class RequestCommandHandler implements CommandHandler {
             let reasoningHandled = false;
             if (needsReasoning && !systemContext.noReasoning) {
                 try {
-                    await executeReasoning(request, context, {
-                        engine: "claude",
-                    });
+                    await runConfiguredReasoning(request, context);
                     reasoningHandled = true;
                 } catch (e: any) {
                     debugRequest(
@@ -504,16 +540,19 @@ export class RequestCommandHandler implements CommandHandler {
                                 "Action failed — retrying with reasoning...",
                                 context,
                             );
-                            await executeReasoning(augmentedRequest, context, {
-                                engine: "claude",
-                                fallbackContext: {
-                                    failedSchema:
-                                        failedAction.action.schemaName,
-                                    failedAction:
-                                        failedAction.action.actionName,
-                                    error,
+                            await runConfiguredReasoning(
+                                augmentedRequest,
+                                context,
+                                {
+                                    fallbackContext: {
+                                        failedSchema:
+                                            failedAction.action.schemaName,
+                                        failedAction:
+                                            failedAction.action.actionName,
+                                        error,
+                                    },
                                 },
-                            });
+                            );
                         } catch (e: any) {
                             debugRequest(
                                 `Error-triggered reasoning failed, keeping original error: ${e.message}`,
