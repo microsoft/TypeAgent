@@ -2,18 +2,26 @@
 // Licensed under the MIT License.
 
 /**
- * Tests for the github-cli agent's readiness wiring.
+ * Tests for the github-cli agent's readiness + setup wiring.
  *
- * `evaluateGhReadiness` is a pure decision function split out from the
- * agent's `checkReadiness` hook so it can be tested without spawning the
- * `gh` subprocess. Mirrors the player/screencapture pattern.
+ * `evaluateGhReadiness` (decision) and `planGhSetupCommand` (install
+ * planning) are pure functions exercised without spawning subprocesses.
+ * `runInstall` is exercised through the mutex early-return path —
+ * verifying the heavy install pipeline itself would require a real
+ * winget/apt subprocess.
  *
- * No `setup` hook to test — `gh auth login` is interactive and must be run
- * by the user in a terminal, so github-cli takes the manual-config shape
- * (same as player's Spotify env-var setup).
+ * The setup hook handles the not-installed case (winget / apt). The
+ * not-auth case still has no automation — `gh auth login` is an
+ * interactive browser flow we can't drive from chat.
  */
 
-import { evaluateGhReadiness } from "../src/github-cliActionHandler.js";
+import {
+    evaluateGhReadiness,
+    runInstall,
+} from "../src/github-cliActionHandler.js";
+import { isProgressNoise, planGhSetupCommand } from "../src/setup.js";
+import type { ActionContext } from "@typeagent/agent-sdk";
+import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 
 describe("evaluateGhReadiness", () => {
     test("ready when probe succeeds (gh installed AND authenticated)", () => {
@@ -22,17 +30,17 @@ describe("evaluateGhReadiness", () => {
         });
     });
 
-    test("setup-required when gh is not on PATH — points at install docs", () => {
+    test("setup-required when gh is not on PATH — points at @config agent setup", () => {
         const r = evaluateGhReadiness({ kind: "not-installed" });
         expect(r.state).toBe("setup-required");
         expect(r.message).toMatch(/not found on PATH/);
-        // Details should include the canonical install URL plus per-platform
-        // hints so the user can pick whichever fits.
+        // The not-installed branch now has an automated setup path
+        // (winget / apt) — the message should direct the user there
+        // first, with the canonical URL as fallback for unsupported
+        // OSes (macOS).
+        expect(r.details).toMatch(/@config agent setup github-cli/);
         expect(r.details).toMatch(/cli\.github\.com/);
-        expect(r.details).toMatch(/winget install GitHub\.cli/);
         expect(r.details).toMatch(/brew install gh/);
-        expect(r.details).toMatch(/apt install gh/);
-        expect(r.details).toMatch(/@config agent refresh github-cli/);
     });
 
     test("setup-required when gh runs but auth status fails — points at gh auth login", () => {
@@ -68,8 +76,169 @@ describe("evaluateGhReadiness", () => {
         expect(r.message).toMatch(/probe failed/);
         // Underlying error is preserved so the user has a thread to pull on.
         expect(r.message).toMatch(/spawn ETIMEDOUT/);
-        // Probe-failed details should explain that there's no auto-setup
-        // path (so the user doesn't wait for one).
-        expect(r.details).toMatch(/setup.*hook|interactive/i);
+        // Probe failures want the user to confirm `gh auth status` works
+        // in a terminal first — refreshing without fixing the underlying
+        // issue would just loop.
+        expect(r.details).toMatch(/gh auth status/);
+        expect(r.details).toMatch(/@config agent refresh github-cli/);
+    });
+});
+
+describe("planGhSetupCommand", () => {
+    describe("windows", () => {
+        test("error when winget is missing", () => {
+            const r = planGhSetupCommand("windows", { wingetPresent: false });
+            expect(r.kind).toBe("error");
+            if (r.kind === "error") {
+                expect(r.message).toMatch(/winget is not available/);
+                expect(r.message).toMatch(/cli\.github\.com/);
+            }
+        });
+
+        test("emits a winget command for GitHub.cli with user scope", () => {
+            const r = planGhSetupCommand("windows", { wingetPresent: true });
+            expect(r.kind).toBe("ok");
+            if (r.kind === "ok") {
+                expect(r.commands).toHaveLength(1);
+                expect(r.commands[0].argv).toEqual([
+                    "winget",
+                    "install",
+                    "--id",
+                    "GitHub.cli",
+                    "--silent",
+                    "--scope",
+                    "user",
+                    "--accept-package-agreements",
+                    "--accept-source-agreements",
+                ]);
+            }
+        });
+    });
+
+    describe("linux", () => {
+        test("error when apt-get is missing", () => {
+            const r = planGhSetupCommand("linux", {
+                linux: { aptPresent: false, sudoNoninteractiveOk: false },
+            });
+            expect(r.kind).toBe("error");
+            if (r.kind === "error") {
+                expect(r.message).toMatch(/apt-based distributions/);
+                expect(r.message).toMatch(/install_linux\.md/);
+            }
+        });
+
+        test("error when passwordless sudo is unavailable — surfaces manual command + repo-setup hint", () => {
+            const r = planGhSetupCommand("linux", {
+                linux: { aptPresent: true, sudoNoninteractiveOk: false },
+            });
+            expect(r.kind).toBe("error");
+            if (r.kind === "error") {
+                expect(r.message).toMatch(/passwordless sudo/);
+                expect(r.message).toMatch(/sudo apt-get install -y gh/);
+                expect(r.message).toMatch(/install_linux\.md/);
+            }
+        });
+
+        test("emits a single apt-get install when both apt + sudo are available", () => {
+            const r = planGhSetupCommand("linux", {
+                linux: { aptPresent: true, sudoNoninteractiveOk: true },
+            });
+            expect(r.kind).toBe("ok");
+            if (r.kind === "ok") {
+                expect(r.commands).toHaveLength(1);
+                expect(r.commands[0].argv).toEqual([
+                    "sudo",
+                    "-n",
+                    "apt-get",
+                    "install",
+                    "-y",
+                    "gh",
+                ]);
+            }
+        });
+    });
+});
+
+describe("isProgressNoise", () => {
+    test("filters empty / whitespace lines and single spinner glyphs", () => {
+        expect(isProgressNoise("")).toBe(true);
+        expect(isProgressNoise("   ")).toBe(true);
+        expect(isProgressNoise("-")).toBe(true);
+        expect(isProgressNoise("\\")).toBe(true);
+    });
+
+    test("filters bar/percent lines (winget download progress)", () => {
+        expect(isProgressNoise("  ██████████▒▒▒▒▒▒▒▒▒▒  1.2 MB / 5.4 MB")).toBe(
+            true,
+        );
+        expect(isProgressNoise("  ▒▒▒▒▒▒▒▒▒▒  17%")).toBe(true);
+    });
+
+    test("keeps informational lines (URLs, status, errors)", () => {
+        expect(isProgressNoise("Downloading https://example.com/x.zip")).toBe(
+            false,
+        );
+        expect(isProgressNoise("Successfully installed")).toBe(false);
+        expect(isProgressNoise("E: Unable to locate package gh")).toBe(false);
+    });
+});
+
+describe("runInstall — install mutex", () => {
+    function makeAgentContext(installInProgress: boolean) {
+        return {
+            choiceManager: new ChoiceManager(),
+            installInProgress,
+        };
+    }
+
+    function makeActionContext(agentCtx: ReturnType<typeof makeAgentContext>) {
+        const appended: any[] = [];
+        return {
+            sessionContext: {
+                agentContext: agentCtx,
+                notify: () => {},
+            } as any,
+            actionIO: {
+                appendDisplay: (content: any) => appended.push(content),
+                setDisplay: () => {},
+                takeAction: () => {},
+            } as any,
+            _appended: appended,
+        } as any as ActionContext<unknown>;
+    }
+
+    test("returns an in-progress error when installInProgress is already true", async () => {
+        const ctx = makeAgentContext(true);
+        const actionContext = makeActionContext(ctx);
+        const result = await runInstall(
+            { kind: "ok", commands: [] },
+            actionContext as any,
+        );
+        expect(result.error).toBeDefined();
+        expect(result.error).toMatch(/already in progress/i);
+        // Early-return must not append "Installing…" status.
+        expect((actionContext as any)._appended).toEqual([]);
+    });
+
+    test("does NOT clear installInProgress when an in-progress caller short-circuits", async () => {
+        // The early-return must NOT clear the flag — that would let the
+        // second concurrent caller release the lock the first caller is
+        // still holding.
+        const ctx = makeAgentContext(true);
+        await runInstall(
+            { kind: "ok", commands: [] },
+            makeActionContext(ctx) as any,
+        );
+        expect(ctx.installInProgress).toBe(true);
+    });
+
+    test("clears installInProgress in finally on the success path (empty plan)", async () => {
+        const ctx = makeAgentContext(false);
+        const result = await runInstall(
+            { kind: "ok", commands: [] },
+            makeActionContext(ctx) as any,
+        );
+        expect(result.error).toBeUndefined();
+        expect(ctx.installInProgress).toBe(false);
     });
 });

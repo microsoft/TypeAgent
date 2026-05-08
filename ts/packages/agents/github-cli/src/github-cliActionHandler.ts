@@ -6,28 +6,67 @@ import {
     AppAgent,
     TypeAgentAction,
     ActionResult,
+    ActionResultSuccess,
     ReadinessReport,
 } from "@typeagent/agent-sdk";
 import {
+    ChoiceManager,
+    createActionResultFromError,
     createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
+    createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { GithubCliActions } from "./github-cliSchema.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import {
+    SetupPlan,
+    planGhSetupCommand,
+    probeLinuxInstaller,
+    runSetupCommand,
+    whichExists,
+} from "./setup.js";
 
 const execFileAsync = promisify(execFile);
+
+// Internal context — no per-action state, but we keep a per-process
+// ChoiceManager for the setup yes/no card. Agents that don't use
+// choices skip this; we need it because setup defers the actual
+// install into a handleChoice callback.
+type GithubCliActionContext = {
+    choiceManager: ChoiceManager;
+    // Mutex protecting the install pipeline. The dispatcher's
+    // setup-window guard only covers the synchronous setup() call, not
+    // the deferred work behind the yes/no card. Two clients each
+    // confirming their own card before either install completes would
+    // otherwise run winget / apt-get install in parallel.
+    installInProgress: boolean;
+};
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext,
         executeAction,
         checkReadiness,
+        setup: async (actionContext) =>
+            offerInstall(
+                actionContext as ActionContext<GithubCliActionContext>,
+            ),
+        // Routes user yes/no responses (from createYesNoChoiceResult)
+        // back to the registered ChoiceManager callback.
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<GithubCliActionContext>)
+                .sessionContext.agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
     };
 }
 
-async function initializeAgentContext(): Promise<unknown> {
-    return {};
+async function initializeAgentContext(): Promise<GithubCliActionContext> {
+    return {
+        choiceManager: new ChoiceManager(),
+        installInProgress: false,
+    };
 }
 
 // Outcome of the `gh auth status` probe — split out from the report so the
@@ -48,9 +87,7 @@ export type GhProbeOutcome =
 
 // Pure decision function — translates a probe outcome to a ReadinessReport.
 // Mirrors the player/screencapture pattern. Exported for unit tests.
-export function evaluateGhReadiness(
-    outcome: GhProbeOutcome,
-): ReadinessReport {
+export function evaluateGhReadiness(outcome: GhProbeOutcome): ReadinessReport {
     switch (outcome.kind) {
         case "ready":
             return { state: "ready" };
@@ -59,13 +96,16 @@ export function evaluateGhReadiness(
                 state: "setup-required",
                 message: "GitHub CLI (`gh`) not found on PATH.",
                 details:
-                    "Install from https://cli.github.com/ (e.g. `winget install GitHub.cli` on Windows, `brew install gh` on macOS, `sudo apt install gh` on Debian/Ubuntu), then run `@config agent refresh github-cli`.",
+                    "Run `@config agent setup github-cli` to install via winget (Windows) / apt (Linux), or install manually from https://cli.github.com/ (e.g. `brew install gh` on macOS).",
             };
         case "not-auth":
             return {
                 state: "setup-required",
                 message: "GitHub CLI is installed but not authenticated.",
                 details:
+                    // No `setup` automation here — `gh auth login` is
+                    // interactive (browser flow + paste-back code) and
+                    // doesn't drive cleanly from chat.
                     "Run `gh auth login` in a terminal to authenticate, then `@config agent refresh github-cli`.",
             };
         case "probe-failed":
@@ -73,7 +113,7 @@ export function evaluateGhReadiness(
                 state: "setup-required",
                 message: `GitHub CLI readiness probe failed: ${outcome.message}`,
                 details:
-                    "Confirm `gh auth status` works in a terminal, then run `@config agent refresh github-cli`. No `setup` hook — `gh auth login` is interactive and must be run by the user.",
+                    "Confirm `gh auth status` works in a terminal, then run `@config agent refresh github-cli`.",
             };
     }
 }
@@ -111,6 +151,193 @@ async function checkReadiness(): Promise<ReadinessReport> {
             kind: "probe-failed",
             message: err?.message ?? String(err),
         });
+    }
+}
+
+// ============================================================================
+// Setup — best-effort installer for `gh` (winget on Windows, apt on
+// Linux). If the user is already authenticated this just confirms; if
+// they're installed-but-not-authenticated, we surface a clear error
+// pointing at `gh auth login` (we can't drive the browser flow from
+// chat). The mutex pattern, HH:MM timestamping, and progress-noise
+// filter mirror the screencapture agent.
+// ============================================================================
+
+// HH:MM timestamp prefix — same convention as screencapture / desktop
+// / calendar / code so progress reads consistently across agents.
+function ts(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// Re-probes the environment to decide whether we should install (gh
+// missing) or short-circuit (already installed → tell the user to
+// `gh auth login` themselves). Returns the SetupPlan plus the
+// already-handled state so the caller can surface the right message.
+async function planGhInstall(): Promise<{
+    plan: SetupPlan;
+    alreadyInstalled: boolean;
+}> {
+    const ghOnPath = await whichExists("gh");
+    if (ghOnPath) {
+        return {
+            alreadyInstalled: true,
+            plan: { kind: "ok", commands: [] },
+        };
+    }
+    if (process.platform !== "win32" && process.platform !== "linux") {
+        return {
+            alreadyInstalled: false,
+            plan: {
+                kind: "error",
+                message: `Automated install for GitHub CLI is only supported on Windows and Linux. On ${process.platform}, install manually (e.g. \`brew install gh\` on macOS), then run \`@config agent refresh github-cli\`.`,
+            },
+        };
+    }
+    if (process.platform === "win32") {
+        const wingetPresent = await whichExists("winget");
+        return {
+            alreadyInstalled: false,
+            plan: planGhSetupCommand("windows", { wingetPresent }),
+        };
+    }
+    const linux = await probeLinuxInstaller();
+    return {
+        alreadyInstalled: false,
+        plan: planGhSetupCommand("linux", { linux }),
+    };
+}
+
+// Builds the yes/no card that gates the install. Already-installed
+// case short-circuits with an auth hint (we can't drive `gh auth
+// login` from chat). Manual-install cases return a plain error so the
+// dispatcher surfaces the install-instructions hint.
+async function offerInstall(
+    actionContext: ActionContext<GithubCliActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const { plan, alreadyInstalled } = await planGhInstall();
+
+    if (alreadyInstalled) {
+        return createActionResultFromTextDisplay(
+            "GitHub CLI is already installed. If you're not authenticated, run `gh auth login` in a terminal, then `@config agent refresh github-cli`.",
+        );
+    }
+    if (plan.kind === "error") {
+        return createActionResultFromError(plan.message);
+    }
+    return offerYesNoCard(ctx, plan);
+}
+
+function offerYesNoCard(
+    ctx: GithubCliActionContext,
+    plan: SetupPlan & { kind: "ok" },
+): ActionResultSuccess {
+    const summary = plan.commands
+        .map((c) => `  - ${c.argv.join(" ")}`)
+        .join("\n");
+    const prompt = [
+        "Install GitHub CLI? The following will run:",
+        summary,
+        "",
+        "Downloads can take 30–60 seconds (or longer on slow networks). I'll stream progress here and post a final message when it completes — no need to wait actively.",
+        "",
+        "After install you'll still need to authenticate by running `gh auth login` in a terminal (it's an interactive browser flow we can't drive from chat).",
+    ].join("\n");
+    return createYesNoChoiceResult(
+        ctx.choiceManager,
+        prompt,
+        async (confirmed, liveActionContext) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Install skipped. Run the commands manually, then `@config agent refresh github-cli`.",
+                );
+            }
+            return runInstall(
+                plan,
+                liveActionContext as ActionContext<GithubCliActionContext>,
+            );
+        },
+    );
+}
+
+// Runs after the user confirms the setup card. Lives in the
+// handleChoice callback path — fresh ActionContext, displays go via
+// actionIO.appendDisplay. Exported for unit tests.
+export async function runInstall(
+    plan: SetupPlan & { kind: "ok" },
+    actionContext: ActionContext<GithubCliActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    if (ctx.installInProgress) {
+        return createActionResultFromError(
+            "Install is already in progress (another client is running it). Wait for it to finish, then re-run `@config agent setup github-cli` if needed.",
+        );
+    }
+    ctx.installInProgress = true;
+    const overallStartMs = Date.now();
+
+    try {
+        const stepCount = plan.commands.length;
+        if (stepCount > 0) {
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${ts()}] Starting install (${stepCount} step${stepCount === 1 ? "" : "s"}). I'll post here when it finishes — feel free to do other things in the meantime.`,
+                    kind: "status",
+                },
+                "block",
+            );
+        }
+        for (let i = 0; i < plan.commands.length; i++) {
+            const cmd = plan.commands[i];
+            const stepStartMs = Date.now();
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${ts()}] Step ${i + 1}/${stepCount}: ${cmd.description}…`,
+                    kind: "status",
+                },
+                "block",
+            );
+            const { code, tail } = await runSetupCommand(cmd, (line) =>
+                actionContext.actionIO.appendDisplay(
+                    {
+                        type: "text",
+                        content: `[${ts()}] ${line}`,
+                        kind: "status",
+                    },
+                    "inline",
+                ),
+            );
+            const stepElapsed = Math.round((Date.now() - stepStartMs) / 1000);
+            if (code !== 0) {
+                // Linux apt failure most commonly means "gh not in
+                // stock repos for this distro" — surface that hint
+                // alongside the raw tail.
+                const aptTail =
+                    process.platform === "linux"
+                        ? "\n\nIf the package wasn't found, your distro may not include `gh` in its default repos. See https://github.com/cli/cli/blob/trunk/docs/install_linux.md for instructions to add the GitHub apt repo, then re-run `@config agent setup github-cli`."
+                        : "";
+                return createActionResultFromError(
+                    `[${ts()}] Install failed after ${stepElapsed}s (\`${cmd.argv[0]}\` exited with code ${code}). Last output:\n${tail}${aptTail}`,
+                );
+            }
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${ts()}] ✓ Step ${i + 1}/${stepCount} complete (${stepElapsed}s).`,
+                    kind: "status",
+                },
+                "block",
+            );
+        }
+        const totalElapsed = Math.round((Date.now() - overallStartMs) / 1000);
+        return createActionResultFromTextDisplay(
+            `[${ts()}] Install complete in ${totalElapsed}s. Now authenticate by running \`gh auth login\` in a terminal — once that succeeds, the agent will pick up the auth state automatically on the next request (or run \`@config agent refresh github-cli\` to force a re-check).`,
+        );
+    } finally {
+        ctx.installInProgress = false;
     }
 }
 

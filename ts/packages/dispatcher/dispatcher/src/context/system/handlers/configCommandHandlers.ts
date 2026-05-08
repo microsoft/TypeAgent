@@ -651,7 +651,11 @@ class AgentSetupCommandHandler implements CommandHandler {
             getActionContext(name, systemContext, requestId);
         let result;
         try {
-            result = await agents.runSetup(name, agentActionContext);
+            result = await agents.runSetup(
+                name,
+                agentActionContext,
+                systemContext,
+            );
             if (result !== undefined) {
                 emitActionResult(
                     result,

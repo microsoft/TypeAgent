@@ -109,6 +109,7 @@ export async function checkAgentReady(
         const setupResult = await systemContext.agents.runSetup(
             appAgentName,
             actionContext,
+            systemContext,
         );
         if (setupResult !== undefined) {
             return setupResult;

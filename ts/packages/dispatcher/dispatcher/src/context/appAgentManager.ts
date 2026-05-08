@@ -303,6 +303,7 @@ export class AppAgentManager implements ActionConfigProvider {
     public async runSetup(
         appAgentName: string,
         actionContext: ActionContext<unknown>,
+        context?: CommandHandlerContext,
     ): Promise<ActionResult | undefined> {
         const record = this.agents.get(appAgentName);
         if (record?.appAgent?.setup === undefined) {
@@ -330,6 +331,22 @@ export class AppAgentManager implements ActionConfigProvider {
                 // cert installed but package register failed) and the
                 // cache should reflect the current truth.
                 await this.refreshReadiness(appAgentName);
+                // If the agent had a stale load failure (likely the
+                // very thing setup just resolved), clear it and retry
+                // the enables that were blocked by it. Without this,
+                // the user sees the load-error marker forever AND
+                // their actions stay disabled even though readiness
+                // now reports `ready` — they'd have to manually toggle
+                // off+on to recover. Skipped when no context was
+                // provided (older callers); they'll keep the legacy
+                // behavior. See recoverFromLoadFailure for details.
+                if (
+                    context !== undefined &&
+                    this.loadErrors.has(appAgentName) &&
+                    this.getReadiness(appAgentName).state === "ready"
+                ) {
+                    await this.recoverFromLoadFailure(appAgentName, context);
+                }
             }
         })();
         this.setupInFlight.set(appAgentName, p);
@@ -337,6 +354,46 @@ export class AppAgentManager implements ActionConfigProvider {
             return await p;
         } finally {
             this.setupInFlight.delete(appAgentName);
+        }
+    }
+
+    // Cleans up after a successful setup that came on the heels of a
+    // failed load:
+    //   1. Resets cached load state. initializeSessionContext caches its
+    //      promise on `record.sessionContextP`; if the original init
+    //      threw (binary missing, etc.), that's a rejected promise that
+    //      ensureSessionContext would happily return on the next call,
+    //      forever. Clear it so the next access reattempts.
+    //   2. Clears the loadErrors entry so the table marker disappears.
+    //   3. Re-applies current session settings via setState — retries
+    //      any enables that were blocked by the original failure.
+    //      setState only mutates agents whose desired state differs
+    //      from current, so other agents are unaffected.
+    //
+    // If the retry fails (still broken for some other reason), setState's
+    // own catch path will repopulate loadErrors with the new error, so
+    // we don't need a try/catch here for state correctness — but we
+    // swallow throw so the original setup result still surfaces to the
+    // user.
+    private async recoverFromLoadFailure(
+        appAgentName: string,
+        context: CommandHandlerContext,
+    ): Promise<void> {
+        const record = this.agents.get(appAgentName);
+        if (record === undefined) return;
+        debug(
+            `Recovering ${appAgentName} after successful setup (clearing stale load error + retrying enables)`,
+        );
+        record.sessionContextP = undefined;
+        record.sessionContext = undefined;
+        record.appAgent = undefined;
+        this.loadErrors.delete(appAgentName);
+        try {
+            await this.setState(context, context.session.getConfig());
+        } catch (e: any) {
+            debugError(
+                `Recovery setState for ${appAgentName} threw: ${e?.message ?? e}`,
+            );
         }
     }
 
