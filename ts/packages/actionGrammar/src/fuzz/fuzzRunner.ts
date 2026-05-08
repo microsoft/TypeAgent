@@ -39,6 +39,7 @@ import {
     validateOptimizerEquivalence,
     validateTextRoundTrip,
     validateJsonRoundTrip,
+    validateMemoParity,
     DEFAULT_OPTIMIZER_VARIANTS,
     type FuzzConfig,
     type FuzzResult,
@@ -449,6 +450,16 @@ function replayReproCases(dir: string): number {
                     validateJsonRoundTrip(meta.grammarIndex, grammarText, gen),
                 ];
                 break;
+            case "memo-parity": {
+                const inputs = meta.input !== undefined ? [meta.input] : [];
+                results = validateMemoParity(
+                    meta.grammarIndex,
+                    grammarText,
+                    inputs,
+                    gen,
+                );
+                break;
+            }
         }
 
         const passed = results.every((r) => r.passed);

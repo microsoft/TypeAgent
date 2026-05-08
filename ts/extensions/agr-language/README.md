@@ -7,14 +7,24 @@ Syntax highlighting for Action Grammar (.agr) files used in TypeAgent.
 
 ## Features
 
-- Syntax highlighting for AGR grammar rules
-- Comment support (`//`)
-- Rule definition highlighting (`<RuleName> = ...;`)
-- Rule reference highlighting (`<RuleName>`)
-- Capture syntax highlighting (`$(name:Type)` and `$(name)`)
-- Action object highlighting with embedded JavaScript syntax
-- Operator highlighting (`|`, `?`, `*`, `+`)
+### Syntax Highlighting
+
+- Rule definitions (`<RuleName> = ...;`) and rule references (`<RuleName>`)
+- Capture syntax (`$(name:Type)` and `$(name)`)
+- Action objects with embedded JavaScript syntax
+- Operators (`|`, `?`, `*`, `+`), comments (`//`)
 - Bracket matching and auto-closing pairs
+
+### Language Server (LSP)
+
+The extension includes an LSP server powered by `grammar-tools-core`:
+
+- **Diagnostics**: Parse errors and warnings reported inline as you type
+- **Go to Definition**: Jump from a `<RuleName>` reference to its definition
+- **Find References**: Find all usages of a rule across the file
+- **Hover**: See rule signatures and alternative counts on hover
+- **Document Formatting**: Format `.agr` files (parse-and-rewrite round-trip)
+- **Document Symbols**: Outline view showing all rule definitions
 
 ## Grammar Syntax Elements
 
@@ -89,13 +99,23 @@ Open any `.agr` file to see syntax highlighting in action. A sample file is incl
 
 ## Development
 
-This extension uses TextMate grammar for syntax highlighting. The grammar is defined in `syntaxes/agr.tmLanguage.json`.
+This extension uses TextMate grammar for syntax highlighting and an LSP server for language intelligence.
+
+- **Syntax highlighting**: Defined in `syntaxes/agr.tmLanguage.json`
+- **LSP server**: `src/server.ts` (diagnostics, definitions, references, hover, formatting, symbols)
+- **LSP client**: `src/client.ts` (launches the server)
 
 To modify the grammar:
 
 1. Edit `syntaxes/agr.tmLanguage.json`
 2. Reload VS Code to see changes
 3. Use the scope inspector to debug: `Developer: Inspect Editor Tokens and Scopes`
+
+To modify LSP features:
+
+1. Edit `src/server.ts`
+2. Run `pnpm run build` in this directory
+3. Reload VS Code to pick up changes
 
 ## License
 

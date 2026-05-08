@@ -173,6 +173,7 @@ export type AgentCallFunctions = {
             delta: string | undefined;
         },
     ) => void;
+    cancelAction: (param: { actionContextId: number }) => void;
 };
 
 export type AgentInvokeFunctions = {

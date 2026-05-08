@@ -4,6 +4,8 @@
 export type {
     GrammarJson,
     Grammar,
+    GrammarRule,
+    GrammarPart,
     CompiledSpacingMode,
 } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
@@ -12,7 +14,12 @@ export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 export type { LoadGrammarRulesOptions } from "./grammarLoader.js";
 export type { GrammarOptimizationOptions } from "./grammarOptimizer.js";
 export { recommendedOptimizations } from "./grammarOptimizer.js";
-export type { SchemaLoader } from "./grammarCompiler.js";
+export type {
+    SchemaLoader,
+    DebugInfoCollector,
+    FileLoader,
+} from "./grammarCompiler.js";
+export { defaultFileLoader } from "./defaultFileLoader.js";
 
 // Parser (for tooling — formatter, linters, etc.)
 export { parseGrammarRules } from "./grammarRuleParser.js";
@@ -30,7 +37,22 @@ export { matchGrammar, needsSeparatorInAutoMode } from "./grammarMatcher.js";
 export type {
     GrammarMatchResult,
     GrammarMatchOptions,
+    SeparatorMode,
 } from "./grammarMatcher.js";
+
+// Trace hook (opt-in instrumentation for the rule-level matcher)
+export type {
+    TraceEvent,
+    TraceCallback,
+    RuleId,
+    PartId,
+    RuleEnteredEvent,
+    RuleExitedEvent,
+    PartAttemptedEvent,
+    PartMatchedEvent,
+    PartFailedEvent,
+    BacktrackEvent,
+} from "./traceEvents.js";
 
 export {
     matchGrammarCompletion,

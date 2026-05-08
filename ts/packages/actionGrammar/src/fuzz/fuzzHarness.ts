@@ -34,7 +34,7 @@ import {
 } from "./grammarGenerator.js";
 import { loadGrammarRules } from "../grammarLoader.js";
 import type { LoadGrammarRulesOptions } from "../grammarLoader.js";
-import { matchGrammar } from "../grammarMatcher.js";
+import { matchGrammar, type GrammarMatchOptions } from "../grammarMatcher.js";
 import {
     recommendedOptimizations,
     type GrammarOptimizationOptions,
@@ -50,7 +50,8 @@ import type { Grammar } from "../grammarTypes.js";
 export type FuzzValidationKind =
     | "optimizer"
     | "roundtrip-text"
-    | "roundtrip-json";
+    | "roundtrip-json"
+    | "memo-parity";
 
 /**
  * Named optimizer-option preset used by the optimizer-equivalence
@@ -140,6 +141,13 @@ export type FuzzConfig = {
      * is performed.  Defaults to `undefined`.
      */
     slowGrammarThresholdMs?: number;
+    /**
+     * Policy overrides to cross with the `"memo-parity"` validation.
+     * Each entry is run with `memoization: true` and `memoization:
+     * false`; results are compared.  Defaults to `[{}]` (default
+     * policies only).
+     */
+    memoPolicySets?: readonly GrammarMatchOptions[];
 };
 
 export const DEFAULT_CONFIG: FuzzConfig = {
@@ -250,9 +258,10 @@ export type FuzzResult = {
 function matchKeys(
     grammar: Grammar,
     input: string,
+    options?: GrammarMatchOptions,
 ): string[] | { error: string } {
     try {
-        return matchGrammar(grammar, input)
+        return matchGrammar(grammar, input, options)
             .map((m) => JSON.stringify(m.match))
             .sort();
     } catch (e) {
@@ -514,6 +523,99 @@ export function validateJsonRoundTrip(
     }
 }
 
+/**
+ * Validate that `matchGrammar` produces identical results with
+ * memoization enabled (default) and disabled.  Optionally crosses
+ * with a set of `GrammarMatchOptions` policy overrides so policy +
+ * memo interactions are also tested.
+ */
+export function validateMemoParity(
+    grammarIndex: number,
+    grammarText: string,
+    inputs: string[],
+    gen: GeneratedGrammar,
+    policySets?: readonly GrammarMatchOptions[],
+): FuzzResult[] {
+    const results: FuzzResult[] = [];
+    const loadOpts: LoadGrammarRulesOptions = {
+        startValueRequired: gen.startValueRequired,
+        enableValueExpressions: gen.usesValueExpressions,
+    };
+
+    let grammar: Grammar;
+    try {
+        grammar = loadGrammarRules("fuzz.grammar", grammarText, loadOpts);
+    } catch (e) {
+        results.push({
+            grammarIndex,
+            grammarText,
+            validation: "memo-parity",
+            passed: false,
+            error: `Compile error: ${(e as Error).message}`,
+        });
+        return results;
+    }
+
+    const policies: readonly GrammarMatchOptions[] = policySets ?? [{}];
+
+    for (const policy of policies) {
+        const policyTag =
+            Object.keys(policy).length === 0
+                ? ""
+                : " [" +
+                  Object.entries(policy)
+                      .map(([k, v]) => `${k}:${v}`)
+                      .join("+") +
+                  "]";
+
+        for (const input of inputs) {
+            const memoOn = matchKeys(grammar, input, {
+                ...policy,
+                memoization: true,
+            });
+            const memoOff = matchKeys(grammar, input, {
+                ...policy,
+                memoization: false,
+            });
+
+            let passed: boolean;
+            let error: string | undefined;
+
+            if (isErrorResult(memoOn)) {
+                passed = isErrorResult(memoOff);
+                if (!passed) {
+                    error = `Memo ON threw but OFF did not${policyTag}: ${memoOn.error}`;
+                }
+            } else if (isErrorResult(memoOff)) {
+                passed = false;
+                error = `Memo OFF threw but ON did not${policyTag}: ${memoOff.error}`;
+            } else {
+                const eq =
+                    memoOn.length === memoOff.length &&
+                    memoOn.every((v, i) => v === memoOff[i]);
+                passed = eq;
+                if (!passed) {
+                    error =
+                        `Memo parity mismatch${policyTag}:\n` +
+                        `  memo ON:  ${JSON.stringify(memoOn)}\n` +
+                        `  memo OFF: ${JSON.stringify(memoOff)}`;
+                }
+            }
+
+            results.push({
+                grammarIndex,
+                grammarText,
+                validation: "memo-parity",
+                input,
+                passed,
+                error,
+            });
+        }
+    }
+
+    return results;
+}
+
 // ── Orchestrator ──────────────────────────────────────────────────────────────
 
 /**
@@ -568,6 +670,15 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
                     break;
                 case "roundtrip-json":
                     results = [validateJsonRoundTrip(g, gen.text, gen)];
+                    break;
+                case "memo-parity":
+                    results = validateMemoParity(
+                        g,
+                        gen.text,
+                        inputs,
+                        gen,
+                        config.memoPolicySets,
+                    );
                     break;
             }
 

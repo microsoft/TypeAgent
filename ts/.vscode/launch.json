@@ -441,6 +441,18 @@
       "program": "./dist/server.js",
       "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
-    },          
+    },
+    {
+      "name": "AGR Language Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/extensions/agr-language"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/extensions/agr-language/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm run build"
+    }
   ]
 }

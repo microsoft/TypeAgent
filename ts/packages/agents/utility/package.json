@@ -21,9 +21,12 @@
     "asc": "asc -i ./src/utilitySchema.mts -o ./dist/utilitySchema.pas.json -t UtilityAction",
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "tsc": "tsc -b"
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b src test"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
@@ -36,9 +39,12 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/jest": "^29.5.7",
     "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

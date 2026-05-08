@@ -130,33 +130,58 @@ export type AssistantSelection = {
 type TranslatorPartition = {
     names: string[];
     translator: {
-        translate: (request: string) => Promise<Result<AssistantSelection>>;
+        translate: (
+            request: string,
+            signal?: AbortSignal,
+        ) => Promise<Result<AssistantSelection>>;
     };
 };
 
 /**
  * Run all translator partitions in parallel and return the first non-"unknown"
  * result in partition order, or "unknown" if all partitions return "unknown".
+ *
+ * The provided signal is forwarded to each partition's translator so that an
+ * abort tears down the in-flight LLM HTTP requests, rather than just stopping
+ * the loop from awaiting them.
  */
 export async function selectFromPartitions(
     partitions: TranslatorPartition[],
     request: string,
+    signal?: AbortSignal,
 ): Promise<Result<AssistantSelection>> {
     partitions.forEach(({ names }) =>
         debugSwitchSearch(`Switch: searching ${names.join(", ")}`),
     );
     // Start all translations in parallel.
     const promises = partitions.map(({ translator }) =>
-        translator.translate(request).catch(
-            (err): Result<AssistantSelection> => ({
-                success: false,
-                message: err instanceof Error ? err.message : String(err),
+        translator
+            .translate(request, signal)
+            .catch((err): Result<AssistantSelection> => {
+                // Let AbortError propagate so callers see cancellation rather
+                // than a generic failure result. Non-abort errors are converted
+                // to a failure result so a single bad partition doesn't block
+                // the others from being checked.
+                if (
+                    err instanceof Error &&
+                    (err.name === "AbortError" ||
+                        (err as DOMException).name === "AbortError")
+                ) {
+                    throw err;
+                }
+                return {
+                    success: false,
+                    message: err instanceof Error ? err.message : String(err),
+                };
             }),
-        ),
     );
     // Await results in partition order; return as soon as outcome is decided.
     for (const promise of promises) {
+        // Check for cancellation before and after awaiting each partition result
+        // so an abort that fires mid-await is caught promptly.
+        signal?.throwIfAborted();
         const result = await promise;
+        signal?.throwIfAborted();
         if (!result.success) {
             return result;
         }
@@ -199,10 +224,9 @@ export function loadAssistantSelectionJsonTranslator(
         current.push(entry);
         currentLength += schema.length;
     }
-    const translators = partitions.map((entries) => {
-        return {
-            names: entries.map((entry) => entry.name),
-            translator: createJsonTranslatorFromSchemaDef<AssistantSelection>(
+    const translators = partitions.map((entries): TranslatorPartition => {
+        const innerTranslator =
+            createJsonTranslatorFromSchemaDef<AssistantSelection>(
                 "AllAssistantSelection",
                 entries
                     .map((entry) => entry.schema)
@@ -217,12 +241,22 @@ export function loadAssistantSelectionJsonTranslator(
                     ],
                     promptLogger,
                 },
-            ),
+            );
+        return {
+            names: entries.map((entry) => entry.name),
+            // Adapt typechat's translate(request, promptPreamble?, signal?) to
+            // the (request, signal?) shape selectFromPartitions expects. The
+            // signal is smuggled through to model.complete via the prompt's
+            // ModelParamSection (see jsonTranslator.ts).
+            translator: {
+                translate: (request: string, signal?: AbortSignal) =>
+                    innerTranslator.translate(request, undefined, signal),
+            },
         };
     });
 
     return {
-        translate: (request: string) =>
-            selectFromPartitions(translators, request),
+        translate: (request: string, signal?: AbortSignal) =>
+            selectFromPartitions(translators, request, signal),
     };
 }

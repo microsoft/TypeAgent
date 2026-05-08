@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createStringPart, createWildcardPart } from "../src/grammarTypes.js";
+
 /**
  * Tests for AST-based DFA matching (matchDFAToAST + evaluateMatchAST)
  *
@@ -36,8 +38,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["play"]),
+                            createStringPart(["music"]),
                         ],
                         value: {
                             type: "object",
@@ -78,8 +80,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["play"]),
+                            createStringPart(["music"]),
                         ],
                         value: { type: "literal", value: "playMusic" },
                     },
@@ -97,8 +99,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["play"]),
+                            createStringPart(["music"]),
                         ],
                         value: { type: "literal", value: "playMusic" },
                     },
@@ -118,12 +120,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -161,12 +159,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -198,18 +192,10 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
-                            { type: "string", value: ["by"] },
-                            {
-                                type: "wildcard",
-                                variable: "artist",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
+                            createStringPart(["by"]),
+                            createWildcardPart("artist", "string"),
                         ],
                         value: {
                             type: "object",
@@ -264,18 +250,10 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
-                            { type: "string", value: ["by"] },
-                            {
-                                type: "wildcard",
-                                variable: "artist",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
+                            createStringPart(["by"]),
+                            createWildcardPart("artist", "string"),
                         ],
                         value: {
                             type: "object",
@@ -338,18 +316,10 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
-                            { type: "string", value: ["on"] },
-                            {
-                                type: "wildcard",
-                                variable: "device",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
+                            createStringPart(["on"]),
+                            createWildcardPart("device", "string"),
                         ],
                         value: {
                             type: "object",
@@ -393,12 +363,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -432,18 +398,10 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
-                            { type: "string", value: ["by"] },
-                            {
-                                type: "wildcard",
-                                variable: "artist",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
+                            createStringPart(["by"]),
+                            createWildcardPart("artist", "string"),
                         ],
                         value: {
                             type: "object",
@@ -483,18 +441,10 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
-                            { type: "string", value: ["by"] },
-                            {
-                                type: "wildcard",
-                                variable: "artist",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
+                            createStringPart(["by"]),
+                            createWildcardPart("artist", "string"),
                         ],
                         value: {
                             type: "object",
@@ -535,7 +485,7 @@ describe("DFA AST Matching", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["pause"] }],
+                        parts: [createStringPart(["pause"])],
                         value: {
                             type: "object",
                             value: [
@@ -566,8 +516,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["play"]),
+                            createStringPart(["music"]),
                         ],
                         value: {
                             type: "object",
@@ -585,8 +535,8 @@ describe("DFA AST Matching", () => {
                     },
                     {
                         parts: [
-                            { type: "string", value: ["stop"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["stop"]),
+                            createStringPart(["music"]),
                         ],
                         value: {
                             type: "object",
@@ -627,18 +577,10 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "artist",
-                                typeName: "string",
-                            },
-                            { type: "string", value: ["'s"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("artist", "string"),
+                            createStringPart(["'s"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -681,9 +623,9 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            { type: "string", value: ["the"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["play"]),
+                            createStringPart(["the"]),
+                            createStringPart(["music"]),
                         ],
                         value: { type: "literal", value: "playTheMusic" },
                     },
@@ -703,12 +645,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            {
-                                type: "wildcard",
-                                variable: "track",
-                                typeName: "string",
-                            },
+                            createStringPart(["play"]),
+                            createWildcardPart("track", "string"),
                         ],
                         value: {
                             type: "object",
@@ -735,8 +673,8 @@ describe("DFA AST Matching", () => {
                 alternatives: [
                     {
                         parts: [
-                            { type: "string", value: ["play"] },
-                            { type: "string", value: ["music"] },
+                            createStringPart(["play"]),
+                            createStringPart(["music"]),
                         ],
                         value: {
                             type: "literal",
@@ -758,7 +696,7 @@ describe("DFA AST Matching", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [{ type: "string", value: ["play"] }],
+                        parts: [createStringPart(["play"])],
                     },
                 ],
             };

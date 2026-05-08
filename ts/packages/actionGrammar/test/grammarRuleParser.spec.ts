@@ -1337,7 +1337,7 @@ describe("Grammar Rule Parser", () => {
                 invalid = world;
             `;
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
-                /test\.agr:\d+:\d+:/,
+                /test\.agr\(\d+,\d+\): error:/,
             );
         });
     });

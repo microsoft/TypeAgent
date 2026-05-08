@@ -257,11 +257,17 @@ export async function executeAction(
             }
         }
     } catch (e: any) {
-        if (e.name === "AbortError") {
-            throw e;
+        if (
+            e.name === "AbortError" ||
+            systemContext.currentAbortSignal?.aborted
+        ) {
+            throw new DOMException("The operation was aborted.", "AbortError");
         }
         result = createActionResultFromError(e.message);
     }
+    // If the agent ran to completion but a cancel arrived while it was executing,
+    // discard the result and treat this as a cancellation.
+    systemContext.currentAbortSignal?.throwIfAborted();
     actionContext.profiler?.stop();
     actionContext.profiler = undefined;
 
@@ -689,6 +695,10 @@ export function startStreamPartialAction(
     context.streamingActionContext = actionContextWithClose;
 
     return (name: string, value: any, delta?: string) => {
+        // Gap 2: Drop streaming chunks after cancellation to avoid
+        // dispatching to agents once the request has been aborted.
+        if (context.currentAbortSignal?.aborted) return;
+
         appAgent.streamPartialAction!(
             actionName,
             name,
@@ -778,8 +788,14 @@ export async function executeCommand(
             }
             return;
         } catch (e: any) {
-            if (e.name === "AbortError") {
-                throw e;
+            if (
+                e.name === "AbortError" ||
+                context.currentAbortSignal?.aborted
+            ) {
+                throw new DOMException(
+                    "The operation was aborted.",
+                    "AbortError",
+                );
             }
             displayError(`ERROR: ${e.message}`, actionContext);
             debugCommandExecError(e.stack);

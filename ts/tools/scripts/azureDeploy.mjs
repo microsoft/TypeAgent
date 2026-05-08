@@ -348,7 +348,7 @@ function getKeys(vaultName, commit) {
         "--vault",
         vaultName,
     ];
-    if (commit) args.push("--commit");
+    if (!commit) args.push("--dry-run");
     child_process.execFileSync(process.execPath, args);
     success(`Keys populated from ${nameColor(vaultName)}.`);
 }

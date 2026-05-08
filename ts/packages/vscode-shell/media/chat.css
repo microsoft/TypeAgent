@@ -1,0 +1,595 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+
+/* TypeAgent Shell Chat — VS Code Webview Styles
+   Uses VS Code CSS variables for theme integration. */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+    height: 100vh;
+    overflow: hidden;
+
+    /* Map shared chat-ui host-neutral tokens onto VS Code theme vars so
+       chat-ui CSS rules pick up the editor theme automatically. */
+    --chat-input-button-color: var(--vscode-foreground);
+}
+
+#chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ── Status bar ──────────────────────────────────────────────── */
+
+.status {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.status.connected {
+    background: var(--vscode-testing-iconPassed);
+    color: var(--vscode-editor-background);
+}
+
+.status.connecting {
+    background: var(--vscode-editorWarning-foreground);
+    color: var(--vscode-editor-background);
+}
+
+.status.disconnected {
+    background: var(--vscode-errorForeground);
+    color: var(--vscode-editor-background);
+}
+
+.status.switching {
+    background: var(--vscode-editorWarning-foreground);
+    color: var(--vscode-editor-background);
+    font-style: italic;
+}
+
+/* When this chat is not the active one, mute the status ribbon so it's
+   visually clear which chat the global commands / status bar refer to. */
+body.chat-inactive .status.connected,
+body.chat-inactive .status.connecting,
+body.chat-inactive .status.disconnected,
+body.chat-inactive .status.switching {
+    background: var(--vscode-disabledForeground, #888);
+    color: var(--vscode-editor-background);
+    opacity: 0.7;
+}
+
+/* ── Messages area ───────────────────────────────────────────── */
+
+#messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.message {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 100%;
+    line-height: 1.4;
+}
+
+.message.user {
+    flex-direction: row-reverse;
+}
+
+.message.agent {
+    flex-direction: row;
+}
+
+/* Hide agent bubble until it has real content (avoids flash of empty
+   bubble while status / setDisplayInfo events fire before content). */
+.message.agent.empty {
+    display: none;
+}
+
+.message-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: calc(100% - 36px);
+}
+
+.message.user .message-body {
+    align-items: flex-end;
+}
+
+.message.agent .message-body {
+    align-items: flex-start;
+}
+
+.message-header {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    font-size: 10.5px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 2px;
+    padding: 0 4px;
+    user-select: none;
+}
+
+.message.user .message-header {
+    flex-direction: row-reverse;
+}
+
+.source-label {
+    font-weight: 600;
+}
+
+.source-label.clickable {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+.source-label.clickable:hover {
+    color: var(--vscode-textLink-activeForeground);
+}
+
+.action-json {
+    margin: 4px 0 0 0;
+    padding: 8px 10px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15));
+    border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+    border-radius: 6px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--vscode-foreground);
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 320px;
+}
+
+/* JSON syntax highlighting (uses VS Code token colors with fallbacks). */
+.action-json .json-key {
+    color: var(--vscode-debugTokenExpression-name, #9cdcfe);
+}
+.action-json .json-string {
+    color: var(--vscode-debugTokenExpression-string, #ce9178);
+}
+.action-json .json-number {
+    color: var(--vscode-debugTokenExpression-number, #b5cea8);
+}
+.action-json .json-bool {
+    color: var(--vscode-debugTokenExpression-boolean, #569cd6);
+    font-weight: 600;
+}
+.action-json .json-null {
+    color: var(--vscode-debugTokenExpression-value, #569cd6);
+    font-style: italic;
+}
+.action-json .json-punct {
+    color: var(--vscode-foreground);
+    opacity: 0.7;
+}
+
+/* Inline metrics row — rendered inside the bubble at the bottom.
+   Hidden by default; revealed when the user hovers the bubble. */
+.bubble-metrics {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin: 8px -12px -8px -12px; /* extend to bubble edges (negate .bubble padding) */
+    padding: 6px 12px;
+    border-top: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+    background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition:
+        opacity 120ms ease-in,
+        max-height 120ms ease-in,
+        padding 120ms ease-in;
+    pointer-events: none;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-width: 0;
+}
+
+.message.agent:hover .bubble-metrics,
+.message.user:hover .bubble-metrics {
+    opacity: 1;
+    max-height: 80px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-top-width: 1px;
+    pointer-events: auto;
+}
+
+.bubble-metrics .metrics-left {
+    text-align: left;
+    flex: 0 0 auto;
+}
+
+.bubble-metrics .metrics-right {
+    text-align: right;
+    flex: 0 0 auto;
+}
+
+.bubble-metrics b {
+    font-weight: 600;
+    color: var(--vscode-foreground);
+}
+
+.message-timestamp {
+    opacity: 0.7;
+}
+
+.message.user .message-timestamp::before,
+.message.agent .message-timestamp::before {
+    content: "· ";
+    opacity: 0.5;
+}
+
+/* The actual chat bubble */
+.bubble {
+    position: relative;
+    padding: 8px 12px;
+    border-radius: 12px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    max-width: 100%;
+}
+
+.message.user .bubble {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-top-right-radius: 4px;
+    /* Reserve space in the top-right corner for the roadrunner icon */
+    padding-right: 24px;
+}
+
+.message.agent .bubble {
+    background: var(--vscode-input-background);
+    color: var(--vscode-foreground);
+    border: 1px solid var(--vscode-input-border, transparent);
+    border-top-left-radius: 4px;
+}
+
+/* Avatars */
+.avatar {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    user-select: none;
+    margin-top: 18px; /* aligns with bubble, accounting for header */
+}
+
+.avatar-user {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.avatar-agent {
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+}
+
+.message.agent.partial {
+    opacity: 0.8;
+}
+
+/* Replayed history messages — muted/grayscale */
+.message.history {
+    opacity: 0.55;
+    filter: grayscale(0.4);
+}
+
+.message-content {
+    display: block;
+}
+
+/* Status icon inside user bubble (roadrunner: translation/cache state).
+   Positioned in the top-right corner of the bubble like the Electron shell. */
+.status-icon {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    user-select: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: help;
+    line-height: 0;
+}
+.status-icon.hidden {
+    visibility: hidden;
+}
+.status-icon svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+}
+
+.message.system {
+    align-self: center;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+    background: none;
+    padding: 4px 8px;
+    display: block;
+}
+
+.message.error {
+    align-self: center;
+    font-size: 12px;
+    color: var(--vscode-errorForeground);
+    background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.1));
+    border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+    padding: 6px 10px;
+    display: block;
+}
+
+/* ── Input area ──────────────────────────────────────────────── */
+
+#input-area {
+    display: flex;
+    align-items: flex-end;
+    padding: 8px 12px;
+    gap: 8px;
+    border-top: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-sideBar-background);
+    flex-shrink: 0;
+}
+
+#chat-input {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--vscode-input-border);
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    line-height: 1.4;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+#chat-input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+#chat-input:disabled {
+    opacity: 0.5;
+}
+
+#chat-input::placeholder {
+    color: var(--vscode-input-placeholderForeground);
+}
+
+#send-btn {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+#send-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+#send-btn:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+
+#send-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* ── Scrollbar styling ───────────────────────────────────────── */
+
+#messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#messages::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-background);
+    border-radius: 3px;
+}
+
+#messages::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+/* ── ANSI color codes (from ansi_up with use_classes=true) ─────
+ * Tuned for contrast against the agent bubble background, using
+ * VS Code's body theme classes (vscode-light / vscode-dark /
+ * vscode-high-contrast) so colors stay readable in any theme.
+ */
+
+/* Dark themes (default) — saturated mid-tones */
+.message span.ansi-black-fg { color: #6c6c6c; }
+.message span.ansi-red-fg { color: #f48771; }
+.message span.ansi-green-fg { color: #89d185; }
+.message span.ansi-yellow-fg { color: #dcdcaa; }
+.message span.ansi-blue-fg { color: #6796e6; }
+.message span.ansi-magenta-fg { color: #d670d6; }
+.message span.ansi-cyan-fg { color: #4ec9b0; }
+.message span.ansi-white-fg,
+.message span.ansi-bright-white-fg { color: var(--vscode-foreground); }
+.message span.ansi-bright-black-fg,
+.message span.ansi-gray-fg { color: var(--vscode-descriptionForeground); }
+.message span.ansi-bright-red-fg { color: #ff8a76; }
+.message span.ansi-bright-green-fg { color: #b5cea8; }
+.message span.ansi-bright-yellow-fg { color: #ffd700; }
+.message span.ansi-bright-blue-fg { color: #569cd6; }
+.message span.ansi-bright-magenta-fg { color: #d670d6; }
+.message span.ansi-bright-cyan-fg { color: #4ec9b0; }
+
+/* Light theme — darker, more saturated */
+body.vscode-light .message span.ansi-red-fg,
+body.vscode-light .message span.ansi-bright-red-fg { color: #a31515; }
+body.vscode-light .message span.ansi-green-fg,
+body.vscode-light .message span.ansi-bright-green-fg { color: #098658; }
+body.vscode-light .message span.ansi-yellow-fg,
+body.vscode-light .message span.ansi-bright-yellow-fg { color: #795e26; }
+body.vscode-light .message span.ansi-blue-fg,
+body.vscode-light .message span.ansi-bright-blue-fg { color: #0451a5; }
+body.vscode-light .message span.ansi-magenta-fg,
+body.vscode-light .message span.ansi-bright-magenta-fg { color: #af00db; }
+body.vscode-light .message span.ansi-cyan-fg,
+body.vscode-light .message span.ansi-bright-cyan-fg { color: #267f99; }
+body.vscode-light .message span.ansi-black-fg,
+body.vscode-light .message span.ansi-white-fg,
+body.vscode-light .message span.ansi-bright-white-fg { color: var(--vscode-foreground); }
+body.vscode-light .message span.ansi-bright-black-fg,
+body.vscode-light .message span.ansi-gray-fg { color: var(--vscode-descriptionForeground); }
+
+.message span.ansi-bold { font-weight: bold; }
+.message span.ansi-italic { font-style: italic; }
+.message span.ansi-underline { text-decoration: underline; }
+
+/* ── Markdown content ────────────────────────────────────────── */
+
+.message p { margin: 0.25em 0; }
+.message h1, .message h2, .message h3, .message h4, .message h5, .message h6 {
+    margin: 0.6em 0 0.3em;
+    line-height: 1.25;
+    font-weight: 600;
+}
+.message h1 { font-size: 1.35em; }
+.message h2 { font-size: 1.2em; }
+.message h3 { font-size: 1.08em; }
+.message h4, .message h5, .message h6 { font-size: 1em; }
+.message strong { font-weight: 600; }
+.message em { font-style: italic; }
+.message a {
+    color: var(--vscode-textLink-foreground);
+    text-decoration: none;
+}
+.message a:hover {
+    color: var(--vscode-textLink-activeForeground);
+    text-decoration: underline;
+}
+.message blockquote {
+    margin: 0.4em 0;
+    padding: 0.2em 0.8em;
+    border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border));
+    background: var(--vscode-textBlockQuote-background, transparent);
+    color: var(--vscode-descriptionForeground);
+}
+.message hr {
+    border: 0;
+    border-top: 1px solid var(--vscode-panel-border);
+    margin: 0.6em 0;
+}
+.message pre {
+    background: var(--vscode-textCodeBlock-background);
+    padding: 6px 8px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9em;
+    margin: 0.4em 0;
+}
+.message code {
+    background: var(--vscode-textCodeBlock-background);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+.message pre code { background: transparent; padding: 0; }
+.message ul, .message ol { margin: 0.25em 0 0.25em 1.4em; padding: 0; }
+.message li { margin: 0.15em 0; }
+.message li > p { margin: 0.1em 0; }
+.message table {
+    border-collapse: collapse;
+    margin: 0.4em 0;
+}
+.message th, .message td {
+    border: 1px solid var(--vscode-panel-border);
+    padding: 3px 6px;
+    font-size: 0.9em;
+}
+
+/* ── Completion menu (theme-matched override of @typeagent/completion-ui) ── */
+.autocomplete-container {
+    background-color: var(--vscode-editorSuggestWidget-background, var(--vscode-editorWidget-background));
+    color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-editorWidget-foreground));
+    border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-editorWidget-border, var(--vscode-panel-border)));
+    border-radius: 4px;
+    backdrop-filter: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+}
+.autocomplete-container .completions li {
+    padding: 4px 10px;
+    color: var(--vscode-editorSuggestWidget-foreground);
+}
+.autocomplete-container .completions li:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+.autocomplete-container .completions li .search-prefix {
+    color: var(--vscode-editorSuggestWidget-highlightForeground, var(--vscode-list-highlightForeground));
+    font-weight: bold;
+}
+.autocomplete-container .completions .completion-selected,
+.autocomplete-container .completions .completion-selected:hover {
+    background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+    color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+}
+.autocomplete-container .completions .completion-selected .search-prefix {
+    color: var(--vscode-editorSuggestWidget-focusHighlightForeground, var(--vscode-list-focusHighlightForeground, inherit));
+}
+.autocomplete-scrollbar {
+    background-color: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.2));
+}
+.autocomplete-scrollbar-indicator {
+    background-color: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.4));
+}
+.completion-toggle {
+    color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}
+

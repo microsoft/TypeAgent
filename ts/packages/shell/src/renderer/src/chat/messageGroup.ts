@@ -107,17 +107,31 @@ export class MessageGroup {
     private requestCompleted(result: CommandResult | undefined) {
         this.updateMetrics(result?.metrics);
         if (result?.cancelled) {
-            this.addStatusMessage(
-                { message: "⚠ Cancelled", source: "shell" },
-                false,
-            );
-        } else if (this.statusMessage === undefined) {
+            const lastAgentMessage = this.getLastAgentMessage();
+            if (lastAgentMessage !== undefined) {
+                lastAgentMessage.setMessage("⚠  Cancelled", "shell", "block");
+                this.chatView.updateScroll();
+            } else {
+                this.addStatusMessage(
+                    { message: "⚠  Cancelled", source: "shell" },
+                    false,
+                );
+            }
+        } else if (
+            this.statusMessage === undefined &&
+            this.agentMessages.length === 0
+        ) {
             this.addStatusMessage(
                 { message: "Command completed", source: "shell" },
                 false,
             );
         } else {
-            this.statusMessage.complete();
+            // statusMessage may be undefined when the dispatcher rendered
+            // straight into agent bubbles (the consolidated path) — only
+            // call complete() if it exists. Always scroll: updateMetrics
+            // ran above and may have grown the last bubble's height by
+            // inserting the metrics row, which can land below the viewport.
+            this.statusMessage?.complete();
             this.chatView.updateScroll();
         }
         this.chatView.onRequestComplete?.();

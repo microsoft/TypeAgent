@@ -12,9 +12,12 @@ import {
     GrammarPart,
     GrammarRule,
     isCaptureBearingPart,
-    PhraseSetPart,
     RulesPart,
-    StringPart,
+    createStringPart,
+    createWildcardPart,
+    createNumberPart,
+    createRulesPart,
+    createPhraseSetPart,
 } from "./grammarTypes.js";
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
@@ -372,6 +375,20 @@ export function optimizeGrammar(
             topLevelDispatch = promotedDispatch;
         }
     }
+    // Final pass: mark RulesParts whose alternatives are all
+    // string-only (no wildcards, numbers, nested rules, or phrase
+    // sets) with `skipMemo`.  For these simple alternations the
+    // regex re-execution cost is lower than the memo cache
+    // bookkeeping overhead.
+    markSkipMemoRulesParts(rules);
+    if (topLevelDispatch !== undefined) {
+        for (const entry of topLevelDispatch) {
+            for (const bucket of entry.tokenMap.values()) {
+                markSkipMemoRulesParts(bucket);
+            }
+        }
+    }
+
     if (rules === grammar.alternatives && topLevelDispatch === undefined) {
         return grammar;
     }
@@ -1667,47 +1684,26 @@ function recordStepRemap(
 
 function edgeToPart(edge: TrieEdge): GrammarPart {
     switch (edge.kind) {
-        case "string": {
-            const out: StringPart = { type: "string", value: edge.tokens };
-            if (edge.canonical !== undefined) out.variable = edge.canonical;
-            return out;
-        }
-        case "wildcard": {
-            const out: GrammarPart = {
-                type: "wildcard",
-                typeName: edge.typeName,
+        case "string":
+            return createStringPart(edge.tokens, edge.canonical);
+        case "wildcard":
+            return createWildcardPart(
+                edge.canonical,
+                edge.typeName,
+                edge.optional,
+            );
+        case "number":
+            return createNumberPart(edge.canonical, edge.optional);
+        case "rules":
+            return createRulesPart(edge.rules, {
+                optional: edge.optional,
                 variable: edge.canonical,
-            };
-            if (edge.optional) out.optional = true;
-            return out;
-        }
-        case "number": {
-            const out: GrammarPart = {
-                type: "number",
-                variable: edge.canonical,
-            };
-            if (edge.optional) out.optional = true;
-            return out;
-        }
-        case "rules": {
-            const out: RulesPart = { type: "rules", alternatives: edge.rules };
-            if (edge.canonical !== undefined) {
-                out.variable = edge.canonical;
-            }
-            if (edge.optional) out.optional = true;
-            if (edge.repeat) out.repeat = true;
-            if (edge.name !== undefined) out.name = edge.name;
-            if (edge.tailCall) out.tailCall = true;
-            return out;
-        }
-        case "phraseSet": {
-            const out: PhraseSetPart = {
-                type: "phraseSet",
-                matcherName: edge.matcherName,
-            };
-            if (edge.canonical !== undefined) out.variable = edge.canonical;
-            return out;
-        }
+                repeat: edge.repeat,
+                name: edge.name,
+                tailCall: edge.tailCall,
+            });
+        case "phraseSet":
+            return createPhraseSetPart(edge.matcherName, edge.canonical);
     }
 }
 
@@ -1730,10 +1726,10 @@ function appendPartInPlace(prefix: GrammarPart[], part: GrammarPart): void {
         last.variable === undefined &&
         part.variable === undefined
     ) {
-        prefix[prefix.length - 1] = {
-            type: "string",
-            value: [...last.value, ...part.value],
-        };
+        prefix[prefix.length - 1] = createStringPart([
+            ...last.value,
+            ...part.value,
+        ]);
         return;
     }
     prefix.push(part);
@@ -1751,10 +1747,7 @@ function concatParts(a: GrammarPart[], b: GrammarPart[]): GrammarPart[] {
         last.variable === undefined &&
         first.variable === undefined
     ) {
-        const merged: GrammarPart = {
-            type: "string",
-            value: [...last.value, ...first.value],
-        };
+        const merged = createStringPart([...last.value, ...first.value]);
         return [...a.slice(0, a.length - 1), merged, ...b.slice(1)];
     }
     return [...a, ...b];
@@ -1982,11 +1975,9 @@ function buildTailWrapper(
     members: GrammarRule[],
     partitionSpacing: CompiledSpacingMode | undefined,
 ): GrammarRule {
-    const suffixRulesPart: RulesPart = {
-        type: "rules",
-        alternatives: members,
+    const suffixRulesPart = createRulesPart(members, {
         tailCall: true,
-    };
+    });
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
     };
@@ -2018,7 +2009,7 @@ function buildNonTailWrapper(
     buildState: BuildState,
     partitionSpacing: CompiledSpacingMode | undefined,
 ): GrammarRule {
-    const suffixRulesPart: RulesPart = { type: "rules", alternatives: members };
+    const suffixRulesPart = createRulesPart(members);
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
     };
@@ -2566,17 +2557,15 @@ function tryDispatchifyRulesPart(
     }
     if (payload === null) return undefined;
 
-    const out: RulesPart = {
-        type: "rules",
-        alternatives: payload.alternatives,
+    return createRulesPart(payload.alternatives, {
+        optional: part.optional,
+        variable: part.variable,
         dispatch: payload.dispatch,
-    };
-    if (part.name !== undefined) out.name = part.name;
-    if (part.variable !== undefined) out.variable = part.variable;
-    if (part.optional) out.optional = true;
-    if (part.repeat) out.repeat = true;
-    if (part.tailCall) out.tailCall = true;
-    return out;
+        name: part.name,
+        repeat: part.repeat,
+        tailCall: part.tailCall,
+        partId: part.partId,
+    });
 }
 
 /**
@@ -2807,10 +2796,7 @@ function dispatchifyAlternations(rules: GrammarRule[]): {
     };
     if (result.length >= 2) {
         const dispatched = tryDispatchifyRulesPart(
-            {
-                type: "rules",
-                alternatives: result,
-            },
+            createRulesPart(result),
             dispatchMemo,
         );
         if (dispatched?.dispatch !== undefined) {
@@ -3111,13 +3097,12 @@ function tryPromoteTrailing(
 
     // Build the rewritten last part: drop variable / repeat /
     // optional (already verified absent), set tailCall.
-    const newLast: RulesPart = {
-        type: "rules",
-        alternatives: newAlternatives,
+    const newLast = createRulesPart(newAlternatives, {
         tailCall: true,
-    };
-    if (last.name !== undefined) newLast.name = last.name;
-    if (newDispatch !== undefined) newLast.dispatch = newDispatch;
+        name: last.name,
+        dispatch: newDispatch,
+        partId: last.partId,
+    });
 
     const newParts = parts.slice();
     newParts[newParts.length - 1] = newLast;
@@ -3435,4 +3420,72 @@ function checkTailContract(
             );
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pass: markSkipMemoRulesParts
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true when every alternative in `rules` consists solely of
+ * `StringPart`s (no wildcards, numbers, nested rules, or phrase sets).
+ * These alternations are cheap to re-execute via regex, so the memo
+ * cache overhead exceeds the savings.
+ */
+function isStringOnlyAlternation(rules: ReadonlyArray<GrammarRule>): boolean {
+    for (const rule of rules) {
+        for (const part of rule.parts) {
+            if (part.type !== "string") {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ * Walk the grammar tree and set `skipMemo = true` on every `RulesPart`
+ * whose alternatives (including dispatch buckets) are all string-only.
+ * Recurses into nested `RulesPart`s so the flag propagates to inner
+ * alternations as well.
+ */
+function markSkipMemoRulesParts(rules: GrammarRule[]): void {
+    const visited = new Set<GrammarRule[]>();
+    function walk(alts: GrammarRule[]): void {
+        if (visited.has(alts)) return;
+        visited.add(alts);
+        for (const rule of alts) {
+            for (const part of rule.parts) {
+                if (part.type !== "rules") continue;
+                // Recurse into nested alternations first.
+                walk(part.alternatives);
+                if (part.dispatch !== undefined) {
+                    for (const entry of part.dispatch) {
+                        for (const bucket of entry.tokenMap.values()) {
+                            walk(bucket);
+                        }
+                    }
+                }
+                // Check eligibility: all effective members must be
+                // string-only.  For dispatched parts, check both
+                // the fallback (part.alternatives) and every bucket.
+                if (part.tailCall) continue; // tail calls skip memo already
+                let eligible = isStringOnlyAlternation(part.alternatives);
+                if (eligible && part.dispatch !== undefined) {
+                    outer: for (const entry of part.dispatch) {
+                        for (const bucket of entry.tokenMap.values()) {
+                            if (!isStringOnlyAlternation(bucket)) {
+                                eligible = false;
+                                break outer;
+                            }
+                        }
+                    }
+                }
+                if (eligible) {
+                    part.skipMemo = true;
+                }
+            }
+        }
+    }
+    walk(rules);
 }

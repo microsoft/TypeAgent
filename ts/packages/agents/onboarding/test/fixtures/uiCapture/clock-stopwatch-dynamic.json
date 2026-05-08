@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "integrationName": "windowsClock",
+  "calibration": {
+    "lastRun": "2026-05-04T05:34:32.554Z",
+    "durationMs": 6793,
+    "dumpsCompared": 3
+  },
+  "rules": [
+    {
+      "id": "cal-1",
+      "match": {
+        "kind": "automationId",
+        "value": "StopwatchTimerText"
+      },
+      "dynamicProperties": ["name"],
+      "semantic": "StopwatchTimerText",
+      "reason": "calibration-drift",
+      "confidence": 1,
+      "observations": 2,
+      "firstSeen": "2026-05-04T05:34:32.554Z",
+      "lastConfirmed": "2026-05-04T05:34:32.554Z"
+    }
+  ]
+}

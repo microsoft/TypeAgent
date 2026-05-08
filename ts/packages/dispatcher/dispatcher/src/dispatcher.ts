@@ -299,6 +299,13 @@ export function createDispatcherFromContext(
                 controller.abort();
             }
         },
+        cancelCommandByClientId(clientRequestId: unknown) {
+            const controller =
+                context.activeRequestsByClientId.get(clientRequestId);
+            if (controller) {
+                controller.abort();
+            }
+        },
         async respondToChoice(choiceId: string, response: boolean | number[]) {
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);

@@ -27,6 +27,7 @@
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
+import { parseArgs } from "util";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
 import { compileGrammarToNFA } from "../nfaCompiler.js";
 import { matchNFA } from "../nfaInterpreter.js";
@@ -45,12 +46,49 @@ import {
     type FirstTokenIndex,
 } from "../index.js";
 import { registerBuiltInEntities } from "../builtInEntities.js";
-import { colorSpeedup, printAligned } from "./benchUtil.js";
+import { colorCV, colorSpeedup, printAligned } from "./benchUtil.js";
+
+// ─── CLI flags ───────────────────────────────────────────────────────────────
+
+type MatcherMode = "ast" | "nfa" | "dfa" | "all";
+type ConfigMode = "default" | "all";
+
+const { values: cliFlags } = parseArgs({
+    options: {
+        matcher: { type: "string", default: "all" },
+        config: { type: "string", default: "default" },
+        help: { type: "boolean", default: false },
+    },
+    strict: false,
+});
+
+if (cliFlags.help) {
+    console.log(`Usage: node dfaBenchmark.js [options]
+
+Options:
+  --matcher=ast|nfa|dfa|all   Which matcher families to time (default: all)
+  --config=default|all        Optimization configs to compare (default: default)
+                              default = AST opt + NFA+idx + DFA AST
+                              all     = all variants (no-opt, opt, NFA raw, etc.)
+  --help                      Show this help
+`);
+    process.exit(0);
+}
+
+const MATCHER: MatcherMode = (cliFlags.matcher as MatcherMode) ?? "all";
+const CONFIG: ConfigMode = (cliFlags.config as ConfigMode) ?? "default";
+
+const RUN_AST = MATCHER === "all" || MATCHER === "ast";
+const RUN_NFA = MATCHER === "all" || MATCHER === "nfa";
+const RUN_DFA = MATCHER === "all" || MATCHER === "dfa";
+const RUN_ALL_CONFIGS = CONFIG === "all";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const ITERATIONS = 1000;
+const ITERATIONS = 2000;
+const ROUNDS = 5;
+const WARMUP_ROUNDS = 2;
 
 function fileExists(filePath: string): boolean {
     try {
@@ -71,6 +109,53 @@ function timeMsN(fn: () => void, n: number): number {
     const start = performance.now();
     for (let i = 0; i < n; i++) fn();
     return performance.now() - start;
+}
+
+/** Try to flush GC between rounds so it doesn't land mid-measurement. */
+function tryGC(): void {
+    if (typeof globalThis.gc === "function") {
+        globalThis.gc();
+    }
+}
+
+interface RoundResult {
+    medianMs: number;
+    cvPct: number;
+}
+
+/**
+ * Run `fn` for `n` iterations in each of `rounds` independent rounds,
+ * preceded by `WARMUP_ROUNDS` discarded warm-up rounds.
+ *
+ * Between rounds a GC is triggered (requires `--expose-gc`) to keep
+ * collection pauses out of the timed windows.
+ *
+ * Returns the **median** total-ms (robust to outlier rounds caused by
+ * OS scheduling or residual GC) and the CV% across the kept rounds.
+ */
+function runRounds(fn: () => void, n: number, rounds: number): RoundResult {
+    // Warm-up: let JIT settle before we start recording.
+    for (let w = 0; w < WARMUP_ROUNDS; w++) {
+        timeMsN(fn, n);
+    }
+    // Single GC after warm-up clears accumulated garbage so it won't
+    // trigger mid-measurement.  We do NOT GC between rounds because
+    // that thrashes the CPU cache and adds variance.
+    tryGC();
+    const times: number[] = [];
+    for (let r = 0; r < rounds; r++) {
+        times.push(timeMsN(fn, n));
+    }
+    const sorted = [...times].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    // Trimmed CV: drop the highest and lowest rounds before computing
+    // stddev so a single GC-affected outlier doesn't dominate.
+    const trimmed = sorted.slice(1, -1);
+    const mean = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+    const variance =
+        trimmed.reduce((s, t) => s + (t - mean) ** 2, 0) / trimmed.length;
+    const stddev = Math.sqrt(variance);
+    return { medianMs: median, cvPct: mean > 0 ? (stddev / mean) * 100 : 0 };
 }
 
 /**
@@ -139,6 +224,13 @@ interface TimingResult {
     dfaTraverseMsPerCall: number;
     dfaHybridMsPerCall: number;
     dfaASTMsPerCall: number;
+    matchNoOptCV: number;
+    matchOptCV: number;
+    nfaMatchCV: number;
+    nfaIndexCV: number;
+    dfaTraverseCV: number;
+    dfaHybridCV: number;
+    dfaASTCV: number;
     optSpeedup: number;
     indexSpeedup: number;
     hybridSpeedup: number;
@@ -205,13 +297,12 @@ function printCompileTable(rows: CompileResult[]): void {
 function printTimingTable(rows: TimingResult[]): void {
     if (!rows.length) return;
 
-    // Format "12.34 (1.5x)" with the speedup colored.  Padding is applied
-    // by the table's printAligned which strips ANSI when measuring width.
-    const fmt = (us: number, speedup: number): string =>
-        `${us.toFixed(2)} (${colorSpeedup(speedup)})`;
+    // Format "12.34 ±5% (1.5x)" with speedup colored and CV dimmed/colored.
+    const fmt = (us: number, cv: number, speedup: number): string =>
+        `${us.toFixed(2)} ${colorCV(cv)} (${colorSpeedup(speedup)})`;
 
     console.log(
-        `\n╔══ MATCH TIMING (${ITERATIONS} iterations) ═══════════════════╗`,
+        `\n╔══ ALL OPTIMIZATION VARIANTS (${ITERATIONS}×${ROUNDS} iters) ═════════╗`,
     );
     const header = [
         "Grammar",
@@ -229,13 +320,13 @@ function printTimingTable(rows: TimingResult[]): void {
         r.grammar,
         r.request.length > 30 ? r.request.slice(0, 27) + "..." : r.request,
         r.matched ? "✓" : "✗",
-        r.matchNoOptMsPerCall.toFixed(2),
-        fmt(r.matchOptMsPerCall, r.optSpeedup),
-        r.nfaMatchMsPerCall.toFixed(2),
-        fmt(r.nfaIndexMsPerCall, r.indexSpeedup),
-        r.dfaTraverseMsPerCall.toFixed(2),
-        fmt(r.dfaHybridMsPerCall, r.hybridSpeedup),
-        fmt(r.dfaASTMsPerCall, r.astSpeedup),
+        `${r.matchNoOptMsPerCall.toFixed(2)} ${colorCV(r.matchNoOptCV)}`,
+        fmt(r.matchOptMsPerCall, r.matchOptCV, r.optSpeedup),
+        `${r.nfaMatchMsPerCall.toFixed(2)} ${colorCV(r.nfaMatchCV)}`,
+        fmt(r.nfaIndexMsPerCall, r.nfaIndexCV, r.indexSpeedup),
+        `${r.dfaTraverseMsPerCall.toFixed(2)} ${colorCV(r.dfaTraverseCV)}`,
+        fmt(r.dfaHybridMsPerCall, r.dfaHybridCV, r.hybridSpeedup),
+        fmt(r.dfaASTMsPerCall, r.dfaASTCV, r.astSpeedup),
     ]);
     printAligned(header, data);
 
@@ -270,10 +361,26 @@ function printTimingTable(rows: TimingResult[]): void {
             `  Avg speedup (unmatched): opt=${fmtAvg(avgOpt)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
         );
     }
+
+    // Noise summary across all rows
+    const allCVs = rows.flatMap((r) => [
+        r.matchNoOptCV,
+        r.matchOptCV,
+        r.nfaMatchCV,
+        r.nfaIndexCV,
+        r.dfaTraverseCV,
+        r.dfaHybridCV,
+        r.dfaASTCV,
+    ]);
+    const avgCV = allCVs.reduce((a, b) => a + b, 0) / allCVs.length;
+    const maxCV = Math.max(...allCVs);
+    console.log(
+        `  Noise: avg CV=${colorCV(avgCV)}  max CV=${colorCV(maxCV)}  (${WARMUP_ROUNDS} warmup + ${ROUNDS} rounds of ${ITERATIONS} iters, median, --expose-gc)`,
+    );
 }
 
 /**
- * Compare the three "produces an AST / typed match value" variants:
+ * Compare the three matcher families head-to-head (best config of each):
  *   - AST opt  (matchGrammar with all recommended optimizations)
  *   - NFA+idx  (NFA threading with first-token index dispatch)
  *   - DFA AST  (DFA traversal + bottom-up value evaluation)
@@ -283,10 +390,10 @@ function printTimingTable(rows: TimingResult[]): void {
  * Speedups above the green threshold in `colorSpeedup` are colored green;
  * speedups below the red threshold are colored red.
  */
-function printASTComparisonTable(rows: TimingResult[]): void {
+function printMatcherComparisonTable(rows: TimingResult[]): void {
     if (!rows.length) return;
 
-    console.log(`\n╔══ AST-PRODUCING VARIANTS (median = 1.00x baseline) ════╗`);
+    console.log(`\n╔══ MATCHER COMPARISON (median = 1.00x baseline) ════════╗`);
     const header = [
         "Grammar",
         "Request",
@@ -296,10 +403,15 @@ function printASTComparisonTable(rows: TimingResult[]): void {
         "DFA AST μs/call",
     ];
 
-    const fmt = (us: number, speedup: number, isBase: boolean): string => {
+    const fmt = (
+        us: number,
+        cv: number,
+        speedup: number,
+        isBase: boolean,
+    ): string => {
         const usStr = us.toFixed(2);
-        if (isBase) return `${usStr} (1.00x)`;
-        return `${usStr} (${colorSpeedup(speedup)})`;
+        if (isBase) return `${usStr} ${colorCV(cv)} (1.00x)`;
+        return `${usStr} ${colorCV(cv)} (${colorSpeedup(speedup)})`;
     };
 
     const data = rows.map((r) => {
@@ -308,15 +420,16 @@ function printASTComparisonTable(rows: TimingResult[]): void {
             r.nfaIndexMsPerCall,
             r.dfaASTMsPerCall,
         ];
+        const cvs = [r.matchOptCV, r.nfaIndexCV, r.dfaASTCV];
         const sorted = [...values].sort((a, b) => a - b);
         const median = sorted[1];
         return [
             r.grammar,
             r.request.length > 30 ? r.request.slice(0, 27) + "..." : r.request,
             r.matched ? "✓" : "✗",
-            fmt(values[0], median / values[0], values[0] === median),
-            fmt(values[1], median / values[1], values[1] === median),
-            fmt(values[2], median / values[2], values[2] === median),
+            fmt(values[0], cvs[0], median / values[0], values[0] === median),
+            fmt(values[1], cvs[1], median / values[1], values[1] === median),
+            fmt(values[2], cvs[2], median / values[2], values[2] === median),
         ];
     });
     printAligned(header, data);
@@ -378,27 +491,38 @@ function runBenchmark(
     // Two extra grammar instances for the AST-walking matcher
     // (`matchGrammar`): no optimizations vs all recommended
     // optimizations (inline + factor + tailFactoring + dispatch).
-    const noOptErrors: string[] = [];
-    const grammarNoOpt = loadGrammarRulesNoThrow(
-        path.basename(grammarPath),
-        content,
-        noOptErrors,
-        undefined,
-        { optimizations: {} },
-    );
-    const optErrors: string[] = [];
-    const grammarOpt = loadGrammarRulesNoThrow(
-        path.basename(grammarPath),
-        content,
-        optErrors,
-        undefined,
-        { optimizations: recommendedOptimizations },
-    );
-    if (!grammarNoOpt || !grammarOpt) {
-        console.log(
-            `Skipping ${grammarName} AST variants: ` +
-                [...noOptErrors, ...optErrors].join(", "),
+    let grammarNoOpt: ReturnType<typeof loadGrammarRulesNoThrow> = undefined;
+    let grammarOpt: ReturnType<typeof loadGrammarRulesNoThrow> = undefined;
+
+    if (RUN_AST) {
+        if (RUN_ALL_CONFIGS) {
+            const noOptErrors: string[] = [];
+            grammarNoOpt = loadGrammarRulesNoThrow(
+                path.basename(grammarPath),
+                content,
+                noOptErrors,
+                undefined,
+                { optimizations: {} },
+            );
+            if (!grammarNoOpt) {
+                console.log(
+                    `Skipping ${grammarName} AST no-opt: ${noOptErrors.join(", ")}`,
+                );
+            }
+        }
+        const optErrors: string[] = [];
+        grammarOpt = loadGrammarRulesNoThrow(
+            path.basename(grammarPath),
+            content,
+            optErrors,
+            undefined,
+            { optimizations: recommendedOptimizations },
         );
+        if (!grammarOpt) {
+            console.log(
+                `Skipping ${grammarName} AST opt: ${optErrors.join(", ")}`,
+            );
+        }
     }
 
     // ── Compilation ───────────────────────────────────────────────────
@@ -448,50 +572,74 @@ function runBenchmark(
     for (const request of testRequests) {
         const tokens = tokenizeRequest(request);
 
-        // Warm up JIT
-        matchNFA(nfa!, tokens, false);
-        matchNFAWithIndex(nfa!, index!, tokens, false);
-        matchDFAWithSplitting(dfa!, tokens);
-        traverseDFAOnly(dfa!, tokens);
-        {
-            const r = matchDFAToASTWithSplitting(dfa!, tokens);
-            if (r.ast) evaluateMatchAST(r.ast, grammar);
-        }
-        if (grammarNoOpt) matchGrammar(grammarNoOpt, request);
-        if (grammarOpt) matchGrammar(grammarOpt, request);
+        const zero = { medianMs: 0, cvPct: 0 };
 
-        const matchNoOptMs = grammarNoOpt
-            ? timeMsN(() => matchGrammar(grammarNoOpt, request), ITERATIONS)
-            : 0;
+        const matchNoOpt =
+            RUN_AST && RUN_ALL_CONFIGS && grammarNoOpt
+                ? runRounds(
+                      () => matchGrammar(grammarNoOpt!, request),
+                      ITERATIONS,
+                      ROUNDS,
+                  )
+                : zero;
 
-        const matchOptMs = grammarOpt
-            ? timeMsN(() => matchGrammar(grammarOpt, request), ITERATIONS)
-            : 0;
+        const matchOpt =
+            RUN_AST && grammarOpt
+                ? runRounds(
+                      () => matchGrammar(grammarOpt!, request),
+                      ITERATIONS,
+                      ROUNDS,
+                  )
+                : zero;
 
-        const nfaMatchMs = timeMsN(
-            () => matchNFA(nfa!, tokens, false),
-            ITERATIONS,
-        );
+        const nfaMatch = RUN_NFA
+            ? RUN_ALL_CONFIGS
+                ? runRounds(
+                      () => matchNFA(nfa!, tokens, false),
+                      ITERATIONS,
+                      ROUNDS,
+                  )
+                : zero
+            : zero;
 
-        const nfaIndexMs = timeMsN(
-            () => matchNFAWithIndex(nfa!, index!, tokens, false),
-            ITERATIONS,
-        );
+        const nfaIndex = RUN_NFA
+            ? runRounds(
+                  () => matchNFAWithIndex(nfa!, index!, tokens, false),
+                  ITERATIONS,
+                  ROUNDS,
+              )
+            : zero;
 
-        const dfaTraverseMs = timeMsN(
-            () => traverseDFAOnly(dfa!, tokens),
-            ITERATIONS,
-        );
+        const dfaTraverse = RUN_DFA
+            ? RUN_ALL_CONFIGS
+                ? runRounds(
+                      () => traverseDFAOnly(dfa!, tokens),
+                      ITERATIONS,
+                      ROUNDS,
+                  )
+                : zero
+            : zero;
 
-        const dfaHybridMs = timeMsN(
-            () => matchDFAWithSplitting(dfa!, tokens),
-            ITERATIONS,
-        );
+        const dfaHybrid = RUN_DFA
+            ? RUN_ALL_CONFIGS
+                ? runRounds(
+                      () => matchDFAWithSplitting(dfa!, tokens),
+                      ITERATIONS,
+                      ROUNDS,
+                  )
+                : zero
+            : zero;
 
-        const dfaASTMs = timeMsN(() => {
-            const r = matchDFAToASTWithSplitting(dfa!, tokens);
-            if (r.ast) evaluateMatchAST(r.ast, grammar);
-        }, ITERATIONS);
+        const dfaAST = RUN_DFA
+            ? runRounds(
+                  () => {
+                      const r = matchDFAToASTWithSplitting(dfa!, tokens);
+                      if (r.ast) evaluateMatchAST(r.ast, grammar);
+                  },
+                  ITERATIONS,
+                  ROUNDS,
+              )
+            : zero;
 
         const matched = matchNFA(nfa!, tokens, false).matched;
 
@@ -499,24 +647,41 @@ function runBenchmark(
             grammar: grammarName,
             request,
             matched,
-            matchNoOptMs,
-            matchOptMs,
-            nfaMatchMs,
-            nfaIndexMs,
-            dfaTraverseMs,
-            dfaHybridMs,
-            dfaASTMs,
-            matchNoOptMsPerCall: (matchNoOptMs / ITERATIONS) * 1000,
-            matchOptMsPerCall: (matchOptMs / ITERATIONS) * 1000,
-            nfaMatchMsPerCall: (nfaMatchMs / ITERATIONS) * 1000,
-            nfaIndexMsPerCall: (nfaIndexMs / ITERATIONS) * 1000,
-            dfaTraverseMsPerCall: (dfaTraverseMs / ITERATIONS) * 1000,
-            dfaHybridMsPerCall: (dfaHybridMs / ITERATIONS) * 1000,
-            dfaASTMsPerCall: (dfaASTMs / ITERATIONS) * 1000,
-            optSpeedup: matchOptMs > 0 ? matchNoOptMs / matchOptMs : 0,
-            indexSpeedup: nfaIndexMs > 0 ? nfaMatchMs / nfaIndexMs : 0,
-            hybridSpeedup: dfaHybridMs > 0 ? nfaMatchMs / dfaHybridMs : 0,
-            astSpeedup: dfaASTMs > 0 ? nfaMatchMs / dfaASTMs : 0,
+            matchNoOptMs: matchNoOpt.medianMs,
+            matchOptMs: matchOpt.medianMs,
+            nfaMatchMs: nfaMatch.medianMs,
+            nfaIndexMs: nfaIndex.medianMs,
+            dfaTraverseMs: dfaTraverse.medianMs,
+            dfaHybridMs: dfaHybrid.medianMs,
+            dfaASTMs: dfaAST.medianMs,
+            matchNoOptMsPerCall: (matchNoOpt.medianMs / ITERATIONS) * 1000,
+            matchOptMsPerCall: (matchOpt.medianMs / ITERATIONS) * 1000,
+            nfaMatchMsPerCall: (nfaMatch.medianMs / ITERATIONS) * 1000,
+            nfaIndexMsPerCall: (nfaIndex.medianMs / ITERATIONS) * 1000,
+            dfaTraverseMsPerCall: (dfaTraverse.medianMs / ITERATIONS) * 1000,
+            dfaHybridMsPerCall: (dfaHybrid.medianMs / ITERATIONS) * 1000,
+            dfaASTMsPerCall: (dfaAST.medianMs / ITERATIONS) * 1000,
+            matchNoOptCV: matchNoOpt.cvPct,
+            matchOptCV: matchOpt.cvPct,
+            nfaMatchCV: nfaMatch.cvPct,
+            nfaIndexCV: nfaIndex.cvPct,
+            dfaTraverseCV: dfaTraverse.cvPct,
+            dfaHybridCV: dfaHybrid.cvPct,
+            dfaASTCV: dfaAST.cvPct,
+            optSpeedup:
+                matchOpt.medianMs > 0
+                    ? matchNoOpt.medianMs / matchOpt.medianMs
+                    : 0,
+            indexSpeedup:
+                nfaIndex.medianMs > 0
+                    ? nfaMatch.medianMs / nfaIndex.medianMs
+                    : 0,
+            hybridSpeedup:
+                dfaHybrid.medianMs > 0
+                    ? nfaMatch.medianMs / dfaHybrid.medianMs
+                    : 0,
+            astSpeedup:
+                dfaAST.medianMs > 0 ? nfaMatch.medianMs / dfaAST.medianMs : 0,
         });
     }
 }
@@ -651,8 +816,129 @@ const GRAMMARS: GrammarSpec[] = [
     },
 ];
 
+function printSummaryTable(rows: TimingResult[]): void {
+    if (!rows.length) return;
+
+    console.log(`\n╔══ PER-GRAMMAR SUMMARY (avg μs/call, median = 1.00x) ══╗`);
+
+    // Collect column specs based on active matchers/configs
+    type ColSpec = {
+        label: string;
+        getValue: (r: TimingResult) => number;
+        getCV: (r: TimingResult) => number;
+    };
+    const colSpecs: ColSpec[] = [];
+    if (RUN_AST && RUN_ALL_CONFIGS)
+        colSpecs.push({
+            label: "AST no-opt",
+            getValue: (r) => r.matchNoOptMsPerCall,
+            getCV: (r) => r.matchNoOptCV,
+        });
+    if (RUN_AST)
+        colSpecs.push({
+            label: "AST opt",
+            getValue: (r) => r.matchOptMsPerCall,
+            getCV: (r) => r.matchOptCV,
+        });
+    if (RUN_NFA && RUN_ALL_CONFIGS)
+        colSpecs.push({
+            label: "NFA",
+            getValue: (r) => r.nfaMatchMsPerCall,
+            getCV: (r) => r.nfaMatchCV,
+        });
+    if (RUN_NFA)
+        colSpecs.push({
+            label: "NFA+idx",
+            getValue: (r) => r.nfaIndexMsPerCall,
+            getCV: (r) => r.nfaIndexCV,
+        });
+    if (RUN_DFA && RUN_ALL_CONFIGS)
+        colSpecs.push({
+            label: "DFA trav",
+            getValue: (r) => r.dfaTraverseMsPerCall,
+            getCV: (r) => r.dfaTraverseCV,
+        });
+    if (RUN_DFA && RUN_ALL_CONFIGS)
+        colSpecs.push({
+            label: "DFA hybrid",
+            getValue: (r) => r.dfaHybridMsPerCall,
+            getCV: (r) => r.dfaHybridCV,
+        });
+    if (RUN_DFA)
+        colSpecs.push({
+            label: "DFA AST",
+            getValue: (r) => r.dfaASTMsPerCall,
+            getCV: (r) => r.dfaASTCV,
+        });
+
+    const header = ["Grammar", ...colSpecs.map((c) => c.label)];
+
+    // Format cell: median-based comparison (1.00x for the median value)
+    const fmtCell = (
+        avgUs: number,
+        avgCV: number,
+        medianUs: number,
+    ): string => {
+        const speedup = medianUs / avgUs;
+        const isBase = avgUs === medianUs;
+        if (isBase) return `${avgUs.toFixed(2)} ${colorCV(avgCV)} (1.00x)`;
+        return `${avgUs.toFixed(2)} ${colorCV(avgCV)} (${colorSpeedup(speedup)})`;
+    };
+
+    // Group by grammar
+    const grammars = [...new Set(rows.map((r) => r.grammar))];
+    const allAvgs: number[][] = []; // [grammarIdx][colIdx]
+
+    const data: string[][] = [];
+
+    for (const g of grammars) {
+        const gRows = rows.filter((r) => r.grammar === g);
+        const avg = (vals: number[]) =>
+            vals.reduce((a, b) => a + b, 0) / vals.length;
+
+        const avgs = colSpecs.map((c) => avg(gRows.map(c.getValue)));
+        const cvs = colSpecs.map((c) => avg(gRows.map(c.getCV)));
+        allAvgs.push(avgs);
+
+        const sorted = [...avgs].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+
+        const row = [g];
+        for (let i = 0; i < avgs.length; i++) {
+            row.push(fmtCell(avgs[i], cvs[i], median));
+        }
+        data.push(row);
+    }
+
+    // Compute overall averages
+    const overallAvgs = colSpecs.map(
+        (_, i) => allAvgs.reduce((s, row) => s + row[i], 0) / allAvgs.length,
+    );
+    const overallCVs = colSpecs.map((c) => {
+        const allVals = rows.map(c.getCV);
+        return allVals.reduce((a, b) => a + b, 0) / allVals.length;
+    });
+
+    const overallSorted = [...overallAvgs].sort((a, b) => a - b);
+    const overallMedian = overallSorted[Math.floor(overallSorted.length / 2)];
+
+    const overallRow = ["OVERALL"];
+    for (let i = 0; i < overallAvgs.length; i++) {
+        overallRow.push(fmtCell(overallAvgs[i], overallCVs[i], overallMedian));
+    }
+
+    // Use printAligned with a separator sentinel
+    const SEPARATOR = header.map(() => "---");
+    printAligned(header, [...data, SEPARATOR, overallRow]);
+}
+
 function main(): void {
     registerBuiltInEntities();
+
+    console.log(
+        `Config: matcher=${MATCHER}  config=${CONFIG}  ` +
+            `(${WARMUP_ROUNDS} warmup + ${ROUNDS} rounds of ${ITERATIONS} iters)`,
+    );
 
     for (const g of GRAMMARS) {
         runBenchmark(g.name, g.path, g.requests);
@@ -660,8 +946,20 @@ function main(): void {
 
     printSpaceTable(spaceResults);
     printCompileTable(compileResults);
-    printTimingTable(timingResults);
-    printASTComparisonTable(timingResults);
+
+    // "All optimizations" table: shown only when --config=all
+    // (compares no-opt vs opt, NFA vs NFA+idx, DFA variants)
+    if (RUN_ALL_CONFIGS) {
+        printTimingTable(timingResults);
+    }
+
+    // "Matcher comparison" table: shown only when --matcher=all
+    // (compares AST opt vs NFA+idx vs DFA AST head-to-head)
+    if (MATCHER === "all") {
+        printMatcherComparisonTable(timingResults);
+    }
+
+    printSummaryTable(timingResults);
     printCrossGrammarSummary(spaceResults);
 }
 

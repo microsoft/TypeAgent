@@ -1,0 +1,12 @@
+# C# build outputs
+csharp/bin/
+csharp/obj/
+csharp/*.user
+
+# WebView2 bundled content (generated from ../webview/dist)
+csharp/webview-content/*
+!csharp/webview-content/.gitkeep
+
+# WebView build outputs
+webview/dist/
+webview/node_modules/

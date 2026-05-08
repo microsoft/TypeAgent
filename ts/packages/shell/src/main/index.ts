@@ -432,6 +432,17 @@ async function initialize() {
 
 app.whenReady().then(initialize).catch(fatal);
 
+// Defense-in-depth: log unhandled promise rejections instead of crashing.
+// Common source: a fire-and-forget dispatcher RPC invoke whose channel
+// disconnects before the response arrives. We surface these in the debug log
+// but never let them tear down the main process.
+process.on("unhandledRejection", (reason: any) => {
+    debugShellError(
+        "[unhandledRejection]",
+        reason?.stack ?? reason?.message ?? reason,
+    );
+});
+
 let reloadingInstance = false;
 export async function reloadInstance() {
     reloadingInstance = true;

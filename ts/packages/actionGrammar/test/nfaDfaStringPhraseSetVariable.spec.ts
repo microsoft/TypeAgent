@@ -28,6 +28,11 @@ import { matchDFAWithSplitting } from "../src/dfaMatcher.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import type { Grammar } from "../src/grammarTypes.js";
+import {
+    createStringPart,
+    createWildcardPart,
+    createPhraseSetPart,
+} from "../src/grammarTypes.js";
 
 function bestNfaActionValue(grammar: Grammar, request: string): unknown {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
@@ -61,13 +66,7 @@ describe("StringPart variable capture", () => {
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    {
-                        type: "string",
-                        value: ["hello"],
-                        variable: "greeting",
-                    },
-                ],
+                parts: [createStringPart(["hello"], "greeting")],
                 value: { type: "variable", name: "greeting" },
             },
         ],
@@ -91,13 +90,7 @@ describe("StringPart variable capture", () => {
     const multiTokenGrammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    {
-                        type: "string",
-                        value: ["good", "morning"],
-                        variable: "greeting",
-                    },
-                ],
+                parts: [createStringPart(["good", "morning"], "greeting")],
                 value: { type: "variable", name: "greeting" },
             },
         ],
@@ -127,16 +120,8 @@ describe("StringPart variable capture", () => {
         alternatives: [
             {
                 parts: [
-                    {
-                        type: "string",
-                        value: ["greet"],
-                        variable: "verb",
-                    },
-                    {
-                        type: "wildcard",
-                        typeName: "string",
-                        variable: "name",
-                    },
+                    createStringPart(["greet"], "verb"),
+                    createWildcardPart("name", "string"),
                 ],
                 value: {
                     type: "object",
@@ -185,12 +170,8 @@ describe("PhraseSetPart variable capture", () => {
         alternatives: [
             {
                 parts: [
-                    {
-                        type: "phraseSet",
-                        matcherName: "Polite",
-                        variable: "opener",
-                    },
-                    { type: "string", value: ["go"] },
+                    createPhraseSetPart("Polite", "opener"),
+                    createStringPart(["go"]),
                 ],
                 value: {
                     type: "object",
@@ -231,13 +212,7 @@ describe("Serialization round-trip preserves variable", () => {
         const grammar: Grammar = {
             alternatives: [
                 {
-                    parts: [
-                        {
-                            type: "string",
-                            value: ["hi"],
-                            variable: "v",
-                        },
-                    ],
+                    parts: [createStringPart(["hi"], "v")],
                     value: { type: "variable", name: "v" },
                 },
             ],
@@ -254,12 +229,8 @@ describe("Serialization round-trip preserves variable", () => {
             alternatives: [
                 {
                     parts: [
-                        {
-                            type: "phraseSet",
-                            matcherName: "Polite",
-                            variable: "v",
-                        },
-                        { type: "string", value: ["go"] },
+                        createPhraseSetPart("Polite", "v"),
+                        createStringPart(["go"]),
                     ],
                     value: { type: "variable", name: "v" },
                 },

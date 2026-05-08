@@ -64,8 +64,8 @@ node tools/scripts/syncPoolSecrets.mjs --vault aisystems              # preview
 node tools/scripts/syncPoolSecrets.mjs --vault aisystems --commit     # apply
 
 # 5. Pull the new secrets into .env
-node tools/scripts/getKeys.mjs              # preview
-node tools/scripts/getKeys.mjs --commit     # apply
+node tools/scripts/getKeys.mjs              # apply (default)
+node tools/scripts/getKeys.mjs --dry-run    # preview
 
 # 6. Verify the pool is live
 DEBUG=typeagent:pool,typeagent:rest:retry pnpm --filter shell start
@@ -75,7 +75,7 @@ DEBUG=typeagent:pool,typeagent:rest:retry pnpm --filter shell start
 
 If you use key vault to store service settings and keys.
 
-- **[getKeys.mjs](./getKeys.mjs)** This script is responsible for connecting to a keyvault to download secret values for placement in the .env configuration file. This script is intended to be used in cases where there is frequent key rotation or in situations where you need to easily switch between various endpoints. This script also has the ability to elevate PIM roles for key vault access or use direct access for persistent RBAC configurations. **Dry-run by default** (both `pull` and `push`); pass `--commit` to actually write the .env (pull) or the vault (push).
+- **[getKeys.mjs](./getKeys.mjs)** This script is responsible for connecting to a keyvault to download secret values for placement in the .env configuration file. This script is intended to be used in cases where there is frequent key rotation or in situations where you need to easily switch between various endpoints. This script also has the ability to elevate PIM roles for key vault access or use direct access for persistent RBAC configurations. **Commits by default** (both `pull` and `push`); pass `--dry-run` to preview without writing the .env (pull) or the vault (push).
 
 - **[getKeys.config.json](./getKeys.config.json)** contains the names of the secret values to obtain from the named keyvault and to write to the .env configuration file. You can also specify secrets that are to be deprecated/removed from the .env configuration file. Regional pool secrets (`AZURE-OPENAI-*-<REGION>`, `AZURE-OPENAI-POOL-<MODEL>`) are admitted via the `sharedPatterns` regex list so new regions don't require editing this file. The `cert` section drives `getCert.mjs` (below).
 

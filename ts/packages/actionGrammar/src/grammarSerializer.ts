@@ -136,6 +136,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     value: p.value,
                 };
                 if (p.variable !== undefined) part.variable = p.variable;
+                if (p.partId !== undefined) part.partId = p.partId;
                 return part;
             }
             case "wildcard":
@@ -162,9 +163,11 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 }
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
+                if (p.skipMemo) part.skipMemo = true;
                 if (p.dispatch !== undefined) {
                     part.dispatch = dispatchIndexFor(p.dispatch);
                 }
+                if (p.partId !== undefined) part.partId = p.partId;
                 return part;
             }
             case "phraseSet": {
@@ -173,6 +176,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     matcherName: p.matcherName,
                 };
                 if (p.variable !== undefined) part.variable = p.variable;
+                if (p.partId !== undefined) part.partId = p.partId;
                 return part;
             }
         }

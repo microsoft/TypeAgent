@@ -83,7 +83,9 @@
     "typechat-utils": "workspace:*",
     "utility-typeagent": "workspace:*",
     "video-agent": "workspace:*",
+    "visualstudio-agent": "workspace:*",
     "weather-agent": "workspace:*",
+    "windowsclock-agent": "workspace:*",
     "ws": "^8.17.1",
     "zod": "^4.1.13"
   },
