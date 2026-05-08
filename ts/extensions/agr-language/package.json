@@ -42,6 +42,13 @@
         ],
         "configuration": "./language-configuration.json"
       }
+    ],
+    "commands": [
+      {
+        "command": "agr.traceMatch",
+        "title": "Trace Match",
+        "category": "Action Grammar"
+      }
     ]
   },
   "activationEvents": [

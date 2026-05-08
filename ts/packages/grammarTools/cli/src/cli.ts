@@ -179,7 +179,11 @@ async function main(): Promise<void> {
                     ),
                 );
             } else {
-                console.log(formatTrace(trace));
+                console.log(
+                    formatTrace(trace, {
+                        debugInfo: result.grammar.debugInfo,
+                    }),
+                );
             }
             break;
         }
