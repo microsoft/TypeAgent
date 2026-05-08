@@ -11,6 +11,11 @@
 
 import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
+import type {
+    PhaseTiming,
+    CompletionUsageStats,
+    NotifyExplainedData,
+} from "@typeagent/dispatcher-types";
 import { setContent } from "./setContent.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
@@ -88,28 +93,13 @@ export interface DynamicDisplayResult {
     nextRefreshMs: number;
 }
 
-// Local mirror of dispatcher-types PhaseTiming — kept here to avoid
-// pulling the full dispatcher-types dependency into chat-ui.
-export interface PhaseTiming {
-    duration?: number;
-    marks?: Record<string, { duration: number; count: number }>;
-}
-
-// Local mirror of dispatcher-types CompletionUsageStats.
-export interface CompletionUsageStats {
-    completion_tokens: number;
-    prompt_tokens: number;
-    total_tokens: number;
-}
-
-// Local mirror of dispatcher-types NotifyExplainedData — kept here to avoid
-// pulling the full dispatcher-types dependency into chat-ui.
-export interface NotifyExplainedData {
-    error?: string | undefined;
-    fromCache: "construction" | "grammar" | false;
-    fromUser: boolean;
-    time: string;
-}
+// Re-exported from @typeagent/dispatcher-types so consumers of chat-ui that
+// already have a dispatcher-types dependency get a single canonical type
+// (and so we don't drift). Previously these were locally mirrored to avoid
+// pulling dispatcher-types in; the rationale is stale now that
+// dispatcher-types is a small types package with minimal dependencies (just
+// @typeagent/agent-sdk, which chat-ui already depends on).
+export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData };
 
 /**
  * One entry in a session history transcript replayed via
@@ -1036,6 +1026,15 @@ export class ChatPanel {
         // A new user request invalidates the previous "current" agent bubble so
         // a follow-up addAgentMessage with no requestId starts a fresh one.
         this.currentAgentContainer = undefined;
+        // Reap stale per-request bubble lookups now that a new request is
+        // starting. completeRequest() intentionally leaves the entry in
+        // agentContainersByRequestId so out-of-band setDisplay updates from
+        // a host's takeAction handler can still target the existing bubble
+        // (see PR #2306). Once the user starts a new request, any pending
+        // late update from a prior request would be unsafe to apply, so we
+        // can safely free the references here. New requests' bubbles will
+        // re-populate the map via getOrCreateAgentContainer.
+        this.agentContainersByRequestId.clear();
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
@@ -1253,14 +1252,20 @@ export class ChatPanel {
         // via setDisplayInfo, use those when creating the bubble — even
         // if the first message routed into it is the dispatcher's own
         // transient "[X] Executing action ..." status (source="dispatcher",
-        // no icon). Without this, the bubble would be created with the
-        // dispatcher robot avatar and stay that way (subsequent setMessage
-        // calls only update the name label, not the icon).
+        // sourceIcon="🤖"). Without this, the bubble would be created with
+        // the dispatcher robot avatar and stay that way (subsequent
+        // setMessage calls only update the name label, not the icon).
+        //
+        // When pending source info is present we treat it as authoritative:
+        // even though setDisplayInfo doesn't carry sourceIcon, we resolve
+        // the icon from pending.source via iconForSource so the dispatcher's
+        // 🤖 from the "Executing action ..." caller doesn't win the fallback
+        // chain.
         const effectiveSource = this.pendingDisplayInfo?.source ?? source;
-        const effectiveIcon =
-            this.pendingDisplayInfo?.sourceIcon ??
-            sourceIcon ??
-            this.iconForSource(effectiveSource);
+        const effectiveIcon = this.pendingDisplayInfo
+            ? (this.pendingDisplayInfo.sourceIcon ??
+              this.iconForSource(effectiveSource))
+            : (sourceIcon ?? this.iconForSource(effectiveSource));
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
@@ -1451,7 +1456,19 @@ export class ChatPanel {
             (requestId && this.agentContainersByRequestId.get(requestId)) ||
             this.currentAgentContainer;
         if (target) {
-            target.updateSource(source, sourceIcon);
+            // Fall back to the avatar map when the host doesn't pass an
+            // icon — matches the create-path in getOrCreateAgentContainer
+            // (effectiveIcon ?? iconForSource(effectiveSource)). Without
+            // this, a bubble that was first created by the dispatcher's
+            // "Translating ..." / "Executing action ..." status (source
+            // "dispatcher", icon 🤖) and is later re-tagged via
+            // setDisplayInfo to the real agent source would keep the
+            // robot icon — updateSource is a no-op on icon when called
+            // with undefined.
+            target.updateSource(
+                source,
+                sourceIcon ?? this.iconForSource(source),
+            );
             if (action !== undefined) {
                 target.setActionData(action);
             }
@@ -1626,7 +1643,11 @@ export class ChatPanel {
             );
         }
         if (requestId) {
-            this.agentContainersByRequestId.delete(requestId);
+            // Keep the bubble's per-request lookup alive after completion so
+            // late setDisplay calls (e.g. validation results from a host's
+            // takeAction handler that runs out-of-band with the action's
+            // own ActionResult) can still target the existing bubble
+            // instead of creating a new empty one.
             this.requestStartByRequestId.delete(requestId);
             this.firstMessageMsByRequestId.delete(requestId);
         }
