@@ -2,11 +2,13 @@
 
 A single-pass walkthrough covering everything the automated smoke (`pnpm -F @typeagent/agent-server-client run smoke`) does not. Run before merging changes that touch `agentServer/`, `shell/src/main/instance.ts`, `vscode-shell/src/agentServerBridge.ts`, `cli/src/commands/`, `webSocketChannelServer`, or markdown/montage view-server code.
 
-Total run time: ~10 min. All commands assume `cwd = ts/` after `pnpm install && pnpm run build`.
+Total run time: ~10 min. Run from `cwd = ts/` after `pnpm install && pnpm run build`. **Commands assume PowerShell** (Windows). On macOS/Linux, translate the env-var and `Remove-Item` syntax accordingly.
 
 > Discovery file = `~/.typeagent/agent-server.json` (referred to below as `$file`).
 
 ---
+
+Pre-flight: define the `$file` shortcut used in later steps, and clear any AS / stale discovery file left over from earlier dev work so step 1 starts from a clean slate.
 
 ```pwsh
 $file = "$env:USERPROFILE\.typeagent\agent-server.json"
