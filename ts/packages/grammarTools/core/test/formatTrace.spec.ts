@@ -135,4 +135,49 @@ describe("formatTrace", () => {
         expect(output).not.toContain("input:");
         expect(output).toMatch(/\[\d+\]/);
     });
+
+    // ---------------------------------------------------------------
+    // Source location annotations
+    // ---------------------------------------------------------------
+
+    it("shows source locations when debugInfo is provided", () => {
+        const g = load();
+        const trace = traceMatch(g, "pause");
+        const output = formatTrace(trace, { debugInfo: g.debugInfo });
+        // Should contain file:line:col annotations
+        expect(output).toContain("(test.agr:");
+    });
+
+    it("omits source locations when debugInfo is absent", () => {
+        const trace = traceMatch(load(), "pause");
+        const output = formatTrace(trace);
+        // Should not contain file references
+        expect(output).not.toContain("(test.agr:");
+    });
+
+    it("respects showSourceLocations: false even with debugInfo", () => {
+        const g = load();
+        const trace = traceMatch(g, "pause");
+        const output = formatTrace(trace, {
+            debugInfo: g.debugInfo,
+            showSourceLocations: false,
+        });
+        expect(output).not.toContain("(test.agr:");
+    });
+
+    it("source locations have 1-based line numbers", () => {
+        const g = load();
+        const trace = traceMatch(g, "pause");
+        const output = formatTrace(trace, { debugInfo: g.debugInfo });
+        // Extract all (file:line:col) annotations
+        const locs = [...output.matchAll(/\(test\.agr:(\d+):(\d+)\)/g)];
+        expect(locs.length).toBeGreaterThan(0);
+        for (const m of locs) {
+            const line = parseInt(m[1], 10);
+            const col = parseInt(m[2], 10);
+            // 1-based, so both should be >= 1
+            expect(line).toBeGreaterThanOrEqual(1);
+            expect(col).toBeGreaterThanOrEqual(1);
+        }
+    });
 });
