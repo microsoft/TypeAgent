@@ -362,7 +362,7 @@ async function executeConversationAction(
         case "newConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Created new conversation "${action.parameters.name}".`
+                    ? `Creating conversation "${action.parameters.name}".`
                     : "Creating a new conversation.",
             );
         case "renameConversation":
@@ -372,8 +372,14 @@ async function executeConversationAction(
         case "switchConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Switched to conversation "${action.parameters.name}".`
+                    ? `Switching to conversation "${action.parameters.name}".`
                     : "Switching conversation.",
+            );
+        case "deleteConversation":
+            return createActionResult(
+                action.parameters.name
+                    ? `Deleting conversation "${action.parameters.name}".`
+                    : "Deleting conversation.",
             );
         default: {
             const _exhaustive: never = action;
@@ -397,7 +403,11 @@ async function executeCodeAction(
     // handled locally and routed back to the originating extension webview
     // via takeAction. All other code sub-schemas are forwarded to the Coda
     // VS Code extension over the WebSocket bridge below.
-    if (action.schemaName === "code-vscode-shell") {
+    //
+    // Note: sub-schema names are dot-prefixed with the parent agent name by
+    // the dispatcher (see actionConfig.collectActionConfigs), so the runtime
+    // schemaName here is "code.code-vscode-shell", not "code-vscode-shell".
+    if (action.schemaName === "code.code-vscode-shell") {
         return executeConversationAction(
             action as VSCodeConversationActions,
             context,
