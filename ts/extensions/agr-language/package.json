@@ -23,6 +23,13 @@
     "clean": "rimraf dist"
   },
   "contributes": {
+    "commands": [
+      {
+        "command": "agr.traceMatch",
+        "title": "Trace Match",
+        "category": "Action Grammar"
+      }
+    ],
     "grammars": [
       {
         "language": "agr",
@@ -41,13 +48,6 @@
           ".agr"
         ],
         "configuration": "./language-configuration.json"
-      }
-    ],
-    "commands": [
-      {
-        "command": "agr.traceMatch",
-        "title": "Trace Match",
-        "category": "Action Grammar"
       }
     ]
   },
