@@ -267,6 +267,7 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                     name: p.name,
                     repeat: p.repeat,
                     tailCall: p.tailCall,
+                    skipMemo: p.skipMemo,
                     dispatch,
                 });
             }

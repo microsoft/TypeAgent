@@ -375,6 +375,20 @@ export function optimizeGrammar(
             topLevelDispatch = promotedDispatch;
         }
     }
+    // Final pass: mark RulesParts whose alternatives are all
+    // string-only (no wildcards, numbers, nested rules, or phrase
+    // sets) with `skipMemo`.  For these simple alternations the
+    // regex re-execution cost is lower than the memo cache
+    // bookkeeping overhead.
+    markSkipMemoRulesParts(rules);
+    if (topLevelDispatch !== undefined) {
+        for (const entry of topLevelDispatch) {
+            for (const bucket of entry.tokenMap.values()) {
+                markSkipMemoRulesParts(bucket);
+            }
+        }
+    }
+
     if (rules === grammar.alternatives && topLevelDispatch === undefined) {
         return grammar;
     }
@@ -3404,4 +3418,72 @@ function checkTailContract(
             );
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pass: markSkipMemoRulesParts
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true when every alternative in `rules` consists solely of
+ * `StringPart`s (no wildcards, numbers, nested rules, or phrase sets).
+ * These alternations are cheap to re-execute via regex, so the memo
+ * cache overhead exceeds the savings.
+ */
+function isStringOnlyAlternation(rules: ReadonlyArray<GrammarRule>): boolean {
+    for (const rule of rules) {
+        for (const part of rule.parts) {
+            if (part.type !== "string") {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ * Walk the grammar tree and set `skipMemo = true` on every `RulesPart`
+ * whose alternatives (including dispatch buckets) are all string-only.
+ * Recurses into nested `RulesPart`s so the flag propagates to inner
+ * alternations as well.
+ */
+function markSkipMemoRulesParts(rules: GrammarRule[]): void {
+    const visited = new Set<GrammarRule[]>();
+    function walk(alts: GrammarRule[]): void {
+        if (visited.has(alts)) return;
+        visited.add(alts);
+        for (const rule of alts) {
+            for (const part of rule.parts) {
+                if (part.type !== "rules") continue;
+                // Recurse into nested alternations first.
+                walk(part.alternatives);
+                if (part.dispatch !== undefined) {
+                    for (const entry of part.dispatch) {
+                        for (const bucket of entry.tokenMap.values()) {
+                            walk(bucket);
+                        }
+                    }
+                }
+                // Check eligibility: all effective members must be
+                // string-only.  For dispatched parts, check both
+                // the fallback (part.alternatives) and every bucket.
+                if (part.tailCall) continue; // tail calls skip memo already
+                let eligible = isStringOnlyAlternation(part.alternatives);
+                if (eligible && part.dispatch !== undefined) {
+                    outer: for (const entry of part.dispatch) {
+                        for (const bucket of entry.tokenMap.values()) {
+                            if (!isStringOnlyAlternation(bucket)) {
+                                eligible = false;
+                                break outer;
+                            }
+                        }
+                    }
+                }
+                if (eligible) {
+                    part.skipMemo = true;
+                }
+            }
+        }
+    }
+    walk(rules);
 }

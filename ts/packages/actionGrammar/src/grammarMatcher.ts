@@ -3075,8 +3075,9 @@ function memoLookup(
     repeat: boolean,
     requireValue: boolean,
     isCarrier: boolean,
+    skipMemo: boolean,
 ): "failed" | "replayed" | MemoMarkerBacktrack | undefined {
-    if (!state.memoization) {
+    if (!state.memoization || skipMemo) {
         return undefined;
     }
     const innerCache = state.memoCache.get(rules);
@@ -3192,6 +3193,7 @@ function enterRulesAlternation(
         repeat,
         requireValue,
         isCarrier,
+        !!part.skipMemo,
     );
     if (memo === "failed") {
         return false;
