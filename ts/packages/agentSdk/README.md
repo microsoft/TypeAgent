@@ -59,10 +59,10 @@ Agents we plan to onboard, ordered by impact (silent-failure cases first). Mark 
 - [x] **desktop** — `autoShell.exe` (.NET, Windows-only). `"unsupported"` on macOS/Linux; `"setup-required"` when the binary hasn't been built; `setup` runs `dotnet build` on `dotnet/autoShell/autoShell.csproj`.
 - [x] **calendar** + **email** — Microsoft Graph or Google OAuth. Shared evaluator in `graph-utils/readiness.ts` (`evaluateGraphReadiness` + `probeGraphConfig`) reports `setup-required` for missing env vars (manual config) and unauthenticated providers (in-chat sign-in via yes/no card → `provider.login()` device-code flow).
 - [x] **code** — VS Code extension WebSocket. The agent IS the WebSocket server; "ready" means the Coda extension client has an open connection. `setup` spawns `code --new-window` and polls the server for client connection up to 30s (yes/no card → poll w/ progress).
+- [x] **browser** — TypeAgent browser extension WebSocket OR in-process `BrowserControl` (Electron-shell mode). Either path means ready. No `setup` hook (browser extensions can't be launched programmatically). The not-ready message branches on `browser-seen.json` in instanceStorage: **first-time user** (file absent) gets install-the-extension instructions; **returning user** (file present) gets a transient "open your browser" message — file gets stamped on every successful client connect via `onClientConnected`.
 - [ ] **playerLocal** — needs one of `afplay` / `mpv` / `ffplay` / VLC depending on platform. Falls back gracefully today; upfront guidance would help.
 - [ ] **markdown** / **montage** — local-view subprocess + port. Low priority; subprocess lifecycle makes this trickier.
 - [ ] **image** — relies on the dispatcher's OpenAI key. No agent-local readiness probe today.
-- [ ] **browser** — subprocess + WebSocket bridge. Low priority; subprocess failures are caught but errors are confusing.
 
 Cache extensions:
 

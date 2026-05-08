@@ -11,6 +11,7 @@ import {
     DisplayType,
     DynamicDisplay,
     ParsedCommandParams,
+    ReadinessReport,
     ResolveEntityResult,
     SessionContext,
     TypeAgentAction,
@@ -35,6 +36,12 @@ import {
     AgentWebSocketServer,
     BrowserClient,
 } from "./agentWebSocketServer.mjs";
+import {
+    evaluateBrowserReadiness,
+    hasClientForSession,
+    loadSeenRecord,
+    recordClientSeen,
+} from "./readiness.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
@@ -270,6 +277,12 @@ export function instantiate(): AppAgent {
         updateAgentContext: updateBrowserContext,
         closeAgentContext: closeBrowserContext,
         executeAction: executeBrowserAction,
+        checkReadiness: checkBrowserReadiness,
+        // No `setup` hook — browser extensions can't be installed/launched
+        // programmatically the way `code` can. Manual-config flow:
+        // setup-required surfaces the install-and-open instructions, and
+        // `@config agent refresh browser` re-checks once the user has
+        // opened a browser with the extension.
         resolveEntity,
         getDynamicDisplay: getDynamicDisplayImpl,
         async getDynamicGrammar(_context, schemaName) {
@@ -301,6 +314,34 @@ export function instantiate(): AppAgent {
         },
         ...getCommandInterface(handlers),
     };
+}
+
+// Cheap readiness probe — checks (1) whether the host injected an
+// in-process BrowserControl (Electron-shell mode), (2) whether any
+// WebSocket client (extension or electron) is connected for our session,
+// and (3) whether browser-seen.json exists in instanceStorage to
+// distinguish a first-time user from a returning one with a closed
+// browser. See readiness.mts for the decision logic.
+async function checkBrowserReadiness(
+    context: SessionContext<BrowserActionContext>,
+): Promise<ReadinessReport> {
+    const ctx = context.agentContext;
+    const hasConnectedClient = hasClientForSession(
+        ctx?.agentWebSocketServer,
+        ctx?.sessionId ?? "default",
+    );
+    // Skip the storage read on the happy path — it's only relevant when
+    // we're going to surface a setup-required state, and the dispatcher
+    // refreshes readiness often enough that the saving adds up.
+    const seenClientBefore =
+        ctx?.clientBrowserControl !== undefined || hasConnectedClient
+            ? true
+            : (await loadSeenRecord(context.instanceStorage)) !== undefined;
+    return evaluateBrowserReadiness({
+        hasInProcessControl: ctx?.clientBrowserControl !== undefined,
+        hasConnectedClient,
+        seenClientBefore,
+    });
 }
 
 export interface urlResolutionAction {
@@ -433,6 +474,13 @@ async function updateBrowserContext(
                             sessionId,
                         );
                 }
+                // Persist a "we've seen a client" stamp so the next
+                // readiness probe (after the browser closes again) can
+                // distinguish "first-time user" from "returning user
+                // with browser closed" and pick the right message. Best
+                // effort — see recordClientSeen for the swallow-on-fail
+                // contract.
+                void recordClientSeen(context.instanceStorage);
             },
             onClientDisconnected: (client: BrowserClient) => {
                 if (client.type === "extension") {
