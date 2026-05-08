@@ -14,6 +14,7 @@ import {
     createActionResultFromError,
     createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
+    createMultiChoiceResult,
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { GithubCliActions } from "./github-cliSchema.js";
@@ -1038,10 +1039,163 @@ function getMutationSuccessMessage(
     }
 }
 
+// ============================================================================
+// Repo argument validation + clarification
+//
+// `gh --repo` requires `[HOST/]OWNER/REPO`. The LLM sometimes produces a bare
+// name ("typeagent") because the user phrased the request that way. Rather
+// than letting `gh` reject with a format error the user has to translate,
+// we catch the malformed value here, search GitHub for likely matches, and
+// surface a multi-choice card so the user picks the actual repo. The choice
+// callback re-invokes executeAction with the corrected parameters.
+//
+// Sentinel string for the cancel option in the multi-choice card. Matched
+// by index against the candidates list (anything past the candidate range
+// is treated as cancel) — this string is only the user-facing label.
+const REPO_CHOICE_CANCEL = "(none of these — cancel)";
+
+type RepoValidationResult =
+    | { kind: "ok"; action: TypeAgentAction<GithubCliActions> }
+    | { kind: "clarify"; result: ActionResult };
+
+// Searches GitHub for repos matching a bare name. Returns up to 5 OWNER/REPO
+// strings. Best-effort: any failure (auth, rate limit, network) returns an
+// empty list and the caller surfaces a manual-format-the-repo error instead
+// of pretending the search worked.
+async function searchRepoCandidates(query: string): Promise<string[]> {
+    try {
+        // Using `name,owner` instead of `fullName` so the field schema is
+        // robust to gh CLI version drift (`fullName` is documented but the
+        // owner+name pair is rock-solid across all gh versions).
+        const stdout = await runGh([
+            "search",
+            "repos",
+            query,
+            "--limit",
+            "5",
+            "--json",
+            "name,owner",
+        ]);
+        const data = JSON.parse(stdout) as Array<{
+            name?: string;
+            owner?: { login?: string };
+        }>;
+        return data
+            .map((d) =>
+                d.owner?.login && d.name ? `${d.owner.login}/${d.name}` : null,
+            )
+            .filter((s): s is string => s !== null);
+    } catch {
+        return [];
+    }
+}
+
+// If the action has a `repo` parameter that's clearly malformed (a bare
+// name with no `/`), build a multi-choice card asking the user to pick the
+// real OWNER/REPO from search results. Otherwise return the action
+// unchanged. Exported for unit tests.
+export async function validateAndResolveRepo(
+    action: TypeAgentAction<GithubCliActions>,
+    context: ActionContext<GithubCliActionContext>,
+    searchImpl: (query: string) => Promise<string[]> = searchRepoCandidates,
+): Promise<RepoValidationResult> {
+    const p = action.parameters as Record<string, unknown>;
+    const repo = p.repo;
+    // Undefined / empty / non-string → gh will use the cwd's git remote
+    // (or fail later in a way the user can interpret) — not our problem.
+    if (typeof repo !== "string" || repo.length === 0) {
+        return { kind: "ok", action };
+    }
+    // OWNER/REPO, HOST/OWNER/REPO, full URL — all contain at least one `/`.
+    // GitHub usernames/repo names disallow `/`, so a bare word is always
+    // wrong. (`OWNER/REPO/ROUTE` would also pass this check and gh might
+    // still reject it, but that's a different — and rare — failure mode
+    // we leave to gh's own error.)
+    if (repo.includes("/")) {
+        return { kind: "ok", action };
+    }
+
+    const candidates = await searchImpl(repo);
+    if (candidates.length === 0) {
+        return {
+            kind: "clarify",
+            result: createActionResultFromError(
+                `"${repo}" isn't in OWNER/REPO format and \`gh search repos\` returned no matches. Re-run with the full owner/repo (e.g. "microsoft/${repo}").`,
+            ),
+        };
+    }
+
+    const ctx = context.sessionContext.agentContext;
+    const choices = [...candidates, REPO_CHOICE_CANCEL];
+    const message = `"${repo}" isn't in OWNER/REPO format. Pick the repo you meant:`;
+    return {
+        kind: "clarify",
+        result: createMultiChoiceResult(
+            ctx.choiceManager,
+            message,
+            choices,
+            async (selectedIndices, liveContext) => {
+                if (selectedIndices.length === 0) return undefined;
+                // Single-pick semantics on a multi-choice surface: take
+                // the first index. Indices past candidates.length-1 are
+                // the cancel sentinel.
+                const idx = selectedIndices[0];
+                if (idx >= candidates.length) {
+                    // Replace the bubble text — leaving the "isn't in
+                    // OWNER/REPO format. Pick the repo you meant:" prompt
+                    // above a "Cancelled" notice would read stale.
+                    liveContext.actionIO.setDisplay({
+                        type: "text",
+                        content: `Cancelled. Re-run the command with the full owner/repo (e.g. "microsoft/${repo}").`,
+                        kind: "error",
+                    });
+                    return undefined;
+                }
+                const picked = candidates[idx];
+                const correctedAction = {
+                    ...action,
+                    parameters: { ...action.parameters, repo: picked },
+                } as TypeAgentAction<GithubCliActions>;
+                const result = await executeAction(
+                    correctedAction,
+                    liveContext as ActionContext<GithubCliActionContext>,
+                );
+                // Replace the bubble content with the action's result.
+                // We bypass the dispatcher's default appendDisplay-after-
+                // handleChoice path by writing via setDisplay here and
+                // returning undefined — otherwise the choice card prompt
+                // ("isn't in OWNER/REPO format. Pick the repo you meant:")
+                // would still sit above the result.
+                if (result.error !== undefined) {
+                    liveContext.actionIO.setDisplay({
+                        type: "text",
+                        content: result.error,
+                        kind: "error",
+                    });
+                } else if (result.displayContent !== undefined) {
+                    liveContext.actionIO.setDisplay(result.displayContent);
+                }
+                return undefined;
+            },
+        ),
+    };
+}
+
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {
+    // Bare-name repo guard — see validateAndResolveRepo. Runs before
+    // buildArgs so we never hand `gh` a malformed --repo value.
+    const validated = await validateAndResolveRepo(
+        action,
+        context as ActionContext<GithubCliActionContext>,
+    );
+    if (validated.kind === "clarify") {
+        return validated.result;
+    }
+    action = validated.action;
+
     const args = buildArgs(action);
     if (!args) {
         return createActionResultFromTextDisplay(
