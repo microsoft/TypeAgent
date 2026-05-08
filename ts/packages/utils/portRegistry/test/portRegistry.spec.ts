@@ -31,7 +31,7 @@ describe("PortRegistry (single process, server mode)", () => {
         await withTestRegistry(async () => {
             const reg = new PortRegistry();
             try {
-                const result = await reg.allocate(Namespaces.Excel, {
+                const result = await reg.allocate("test-ns", {
                     count: 2,
                 });
                 expect(result.slotId).toMatch(/^[0-9a-f-]+$/);
@@ -47,11 +47,11 @@ describe("PortRegistry (single process, server mode)", () => {
             const reg = new PortRegistry();
             try {
                 const { slotId, ports } = await reg.allocate(
-                    Namespaces.Excel,
+                    "test-ns",
                     { count: 2 },
                 );
-                await reg.register(slotId, "Book1.xlsx");
-                const got = await reg.lookup(Namespaces.Excel, "Book1.xlsx");
+                await reg.register(slotId, "resA");
+                const got = await reg.lookup("test-ns", "resA");
                 expect(got.slotId).toBe(slotId);
                 expect(got.ports).toEqual(ports);
             } finally {
@@ -81,7 +81,7 @@ describe("PortRegistry (single process, server mode)", () => {
             const reg = new PortRegistry();
             try {
                 await reg.ensure();
-                const got = await reg.lookup(Namespaces.Excel, "nope.xlsx");
+                const got = await reg.lookup("test-ns", "missing");
                 expect(got.slotId).toBeNull();
                 expect(got.ports).toBeNull();
             } finally {
@@ -94,11 +94,11 @@ describe("PortRegistry (single process, server mode)", () => {
         await withTestRegistry(async () => {
             const reg = new PortRegistry();
             try {
-                const { slotId } = await reg.allocate(Namespaces.Excel, {
-                    key: "x.xlsx",
+                const { slotId } = await reg.allocate("test-ns", {
+                    key: "resX",
                 });
                 await reg.release(slotId);
-                const got = await reg.lookup(Namespaces.Excel, "x.xlsx");
+                const got = await reg.lookup("test-ns", "resX");
                 expect(got.slotId).toBeNull();
             } finally {
                 await reg.stop();
@@ -110,15 +110,15 @@ describe("PortRegistry (single process, server mode)", () => {
         await withTestRegistry(async () => {
             const reg = new PortRegistry();
             try {
-                const { slotId } = await reg.allocate(Namespaces.Excel, {
-                    key: "x.xlsx",
+                const { slotId } = await reg.allocate("test-ns", {
+                    key: "resX",
                 });
-                await reg.unregister(slotId, "x.xlsx");
-                const got = await reg.lookup(Namespaces.Excel, "x.xlsx");
+                await reg.unregister(slotId, "resX");
+                const got = await reg.lookup("test-ns", "resX");
                 expect(got.slotId).toBeNull();
                 // slot itself still alive — register a new resource on it
-                await reg.register(slotId, "y.xlsx");
-                const got2 = await reg.lookup(Namespaces.Excel, "y.xlsx");
+                await reg.register(slotId, "resY");
+                const got2 = await reg.lookup("test-ns", "resY");
                 expect(got2.slotId).toBe(slotId);
             } finally {
                 await reg.stop();
@@ -148,11 +148,11 @@ describe("PortRegistry (two processes — same-process simulation)", () => {
             try {
                 await a.ensure();
                 await b.ensure();
-                const { slotId, ports } = await a.allocate(Namespaces.Excel, {
+                const { slotId, ports } = await a.allocate("test-ns", {
                     count: 1,
-                    key: "shared.xlsx",
+                    key: "resShared",
                 });
-                const got = await b.lookup(Namespaces.Excel, "shared.xlsx");
+                const got = await b.lookup("test-ns", "resShared");
                 expect(got.slotId).toBe(slotId);
                 expect(got.ports).toEqual(ports);
             } finally {
@@ -169,13 +169,13 @@ describe("PortRegistry (two processes — same-process simulation)", () => {
             try {
                 await a.ensure();
                 await b.ensure();
-                const { slotId } = await b.allocate(Namespaces.Excel, {
+                const { slotId } = await b.allocate("test-ns", {
                     count: 1,
                 });
-                await b.register(slotId, "from-client.xlsx");
+                await b.register(slotId, "resClient");
                 const got = await a.lookup(
-                    Namespaces.Excel,
-                    "from-client.xlsx",
+                    "test-ns",
+                    "resClient",
                 );
                 expect(got.slotId).toBe(slotId);
             } finally {

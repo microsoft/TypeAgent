@@ -20,8 +20,6 @@ export const USE_REGISTRY_ENV = "TYPEAGENT_USE_PORT_REGISTRY";
 /** Standard namespace identifiers used across the codebase. */
 export const Namespaces = {
     AgentServer: "agentServer",
-    Excel: "excel",
-    VsBridge: "vsBridge",
 } as const;
 
 export type Namespace = string;
