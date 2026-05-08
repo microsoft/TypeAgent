@@ -11,7 +11,7 @@ possible.
 
 ## Progress by track
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-08_
 
 ### Track 0 - Critical path
 
@@ -56,14 +56,15 @@ _Last updated: 2026-05-07_
 
 ### Track D - Shared UI
 
-| Item | Description                          | Status      |
-| ---- | ------------------------------------ | ----------- |
-| D.0  | Scaffold `grammar-tools-ui` with Lit | not started |
-| D.1  | `<completion-preview>` component     | not started |
-| D.2  | `<rule-trace>` component             | not started |
-| D.3  | `<grammar-picker>` component         | not started |
-| D.4  | `<coverage-view>` component          | not started |
-| D.5  | `<diff-view>` component              | not started |
+| Item | Description                                 | Status |
+| ---- | ------------------------------------------- | ------ |
+| D.0  | Scaffold `grammar-tools-ui` with Lit        | done   |
+| D.1  | `<gt-completion-panel>` component           | done   |
+| D.2  | `<gt-trace-timeline>` component             | done   |
+| D.3  | `<gt-source-view>` (grammar picker)         | done   |
+| D.4  | `<gt-coverage-heatmap>` component           | done   |
+| D.5  | `<gt-diff-view>` component                  | done   |
+| D.6  | `<gt-debug-panel>` composite host component | done   |
 
 ### Track E - CLI
 
