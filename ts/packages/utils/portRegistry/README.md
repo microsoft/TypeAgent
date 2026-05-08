@@ -5,39 +5,47 @@ bind sockets — agent server, language-extension bridges, dev daemons.
 
 The package replaces hardcoded port constants (`8999`, `5680`,
 `5677`/`5678`/`5679`, …) with a single registry that allocates ephemeral
-ports on demand and lets other processes look them up by name. It also
-provides forward-compat hooks (`workspaceKey`, named resources) for
-multi-instance scenarios that today are single-instance because of other
-constraints.
+ports on demand and lets other processes look them up by name. The
+acute need is for **bridge processes** (Excel, Visual Studio, and
+soon Word) that are genuinely per-document or per-solution — running
+two of them today fails because of port contention. The agent server
+benefits secondarily, mostly through better discovery.
 
 ## The problem
 
-Every TypeAgent component that binds a socket today picks a port
-unilaterally:
+The acute pain is in **bridges** — Excel, Visual Studio, and (soon)
+Word — where the bridge process is genuinely per-document or
+per-solution and a second instance is a normal user action. Today every
+bridge picks a hardcoded port and the second one fails.
 
-| Component               | Port               | Failure mode when contended         |
-|-------------------------|--------------------|-------------------------------------|
-| `agentServer`           | `8999`             | Second VS Code window can't start   |
-| `visualStudio` agent    | `5680`             | Second VS instance: `EADDRINUSE`    |
-| Excel `BridgeRegistry`  | `5677`             | Second Excel add-in can't start     |
-| Excel bridge            | `5678` / `5679`    | Second workbook collides            |
-
-Clients that talk to those processes are equally hardcoded:
+The agent server itself is per-user, not per-workspace, and there's
+typically only one of those running. But its clients (CLI commands,
+shells, the VS Code extension) still hardcode `ws://localhost:8999`,
+which means they have no way to find the server if it's not on that
+port and no coordination story when several of them race to spawn one.
 
 ```ts
 const url = "ws://localhost:8999";          // CLI, vscode-shell, electron shell
 const port = parseInt(arg ?? "8999", 10);   // electron shell --connect
 ```
 
-There's no central authority that says "the agent server is on port X
-right now," so neither side can adapt to a port being unavailable, and
-nobody can run two of anything.
+So we want one mechanism that covers both shapes — **mandatory** for
+bridges, where multi-instance is the whole point, and **useful** for
+the agent server, where it replaces an ad-hoc spawn-lock file with
+proper discovery.
 
-The Excel agent already has the right shape for the solution — its
-`BridgeRegistry` runs as a per-machine HTTP service that hands out
-workbook-keyed slots to the bridge processes that the Office add-in then
-discovers via `/lookup`. This package generalizes that pattern so every
-TypeAgent component can use it.
+The Excel agent already has the right shape — its `BridgeRegistry`
+runs as a per-machine HTTP service that hands out workbook-keyed slots
+to bridge processes that the Office add-in then discovers via
+`/lookup`. This package generalizes that pattern so every TypeAgent
+component can use it.
+
+| Component               | Port               | Failure mode when contended         |
+|-------------------------|--------------------|-------------------------------------|
+| `agentServer`           | `8999`             | Spawn-lock file works most of the time, but clients still hardcode the URL |
+| `visualStudio` agent    | `5680`             | Second VS instance: `EADDRINUSE`    |
+| Excel `BridgeRegistry`  | `5677`             | Second Excel add-in can't start     |
+| Excel bridge            | `5678` / `5679`    | Second workbook collides            |
 
 ## Architecture overview
 
@@ -178,12 +186,21 @@ migrated and validated, and removed once stable.
 ## Forward compatibility: `workspaceKey`
 
 The agent-server-client API takes a `workspaceKey: string` parameter
-even though today only one agent server can run per machine (the
-`lockInstanceDir` constraint in the dispatcher gates that). Wiring the
-key through the API surface — and through the registry's slot key —
-means that when per-workspace `instanceDir` lands, the protocol doesn't
-change. Until then, every consumer passes `"default"` and the system
-behaves single-instance.
+even though only one agent server runs per user today. This is honest
+forward-compat hedging, not a planned multi-server rollout: if a
+future change ever needs to partition agent-server state by workspace
+(e.g. different model configs per project), the API surface and the
+registry's slot key already carry the dimension and won't have to
+break.
+
+That said, "I want different config per project" is more naturally
+solved as a **workspace-scoped session** inside a single dispatcher,
+not a second dispatcher process — the dispatcher already partitions
+conversations and could carry a workspace dimension on settings. So
+the realistic baseline remains one agent server per user.
+
+Until any of that lands, every consumer passes `"default"` and the
+system behaves single-instance.
 
 ## Allocation race
 
