@@ -289,7 +289,10 @@ Sequential — each milestone uses the artifacts of the previous one.
       (`EnableFilterKeys`, `EnableStickyKeys`).  Same engine, different
       filter; small change.
 
-- [ ] **S2. LLM-synthesized phrase corpus per action — multi-model.**
+- [x] **S2. LLM-synthesized phrase corpus per action — multi-model.**
+      _Done._  See findings below.
+
+      Original spec follows for reference:
       For each loaded action, prompt **every available chat model** (via
       `aiclient.getChatModelNames()`) to generate **3 phrases each**
       using a **diversity prompt** ("one short imperative, one
@@ -310,19 +313,144 @@ Sequential — each milestone uses the artifacts of the previous one.
       _Touches:_ new `packages/cli/scripts/corpus-runner.mjs`, uses
       existing model client + cache directory.
 
-- [ ] **S3. `@action probe-corpus` — replay the corpus through the
-      semantic ranker.** For each utterance in the S2 corpus, run
-      `semanticSearchActionSchema.query` and capture the top-N candidate
-      ranking.  Surface utterances where:
-      - The "right" agent (the one the corpus generated the utterance
-        for) is NOT the top embedding match — the dispatch path is
-        already misrouting.
-      - The top two candidates are within `scoreDeltaThreshold` — a
-        runtime ambiguity that today's `llmSelect` would treat as a
-        collision.
-      Both cases ship to the JSONL / Cosmos pipeline tagged with
-      `kind: "fuzzy"` so they show up in `@collision events` and the
-      Cosmos queries from Phase 1.
+- [x] **S3. Replay the corpus through the semantic ranker.**
+      _Done._  Implemented as
+      [`packages/cli/scripts/probe-corpus-runner.mjs`](ts/packages/cli/scripts/probe-corpus-runner.mjs)
+      (calls `agents.semanticSearchActionSchema` directly rather than going
+      through `@collision probe`'s HTML output).  Reanalyzed with a
+      prefix-aware matcher in
+      [`reanalyze-probe-results.mjs`](ts/packages/cli/scripts/reanalyze-probe-results.mjs)
+      to fold out type-name-vs-enum-name false misroutes.
+
+      **Future work:** ship a "feed events to the JSONL/Cosmos pipeline
+      with `kind: "fuzzy"`" mode so probe-corpus runs surface in
+      `@collision events` and the Phase 1 Cosmos queries.  Today the
+      script just writes a local JSON.
+
+## S2/S3 calibration findings (baseline before any corrective action)
+
+**Corpus** ([`corpus-runner.mjs`](ts/packages/cli/scripts/corpus-runner.mjs)
+output, run 2026-05-07): 489 actions across 65 schemas (1 schema —
+`mcpfilesystem` — failed to load and was skipped).  Three working
+OpenAI-family models (`GPT_4_1`, `GPT_5`, `GPT_5_NANO`).  Each (action,
+model) call asks for 3 phrases in distinct styles (imperative,
+conversational, casual).  **4392 raw model outputs → 4258 unique
+phrases (96.9% dedup keep-rate)** = high stylistic variance.  Run time
+~25 min at concurrency 8.
+
+`GPT_4_O` and `GPT_4_O_MINI` are broken in this checkout (stale API
+version pin / wrong API key) and would add more variance once fixed.
+
+**Probe replay** ([`probe-corpus-runner.mjs`](ts/packages/cli/scripts/probe-corpus-runner.mjs)
+on the corpus, delta=0.05, top=5):
+
+| Verdict   | Count | %      | Meaning                                                 |
+| --------- | ----- | ------ | ------------------------------------------------------- |
+| CLEAN     | 419   | 9.8%   | top-1 correct AND Δ to #2 ≥ 0.05                        |
+| TIGHT     | 1983  | 46.6%  | top-1 correct but Δ < 0.05 (`llmSelect` would flag)     |
+| MISROUTE  | 1856  | 43.6%  | top-1 wrong                                             |
+
+**Misroute split: 55% cross-agent, 45% within-agent.**  Both buckets
+are big enough to matter.
+
+**Per-style:** terse phrasing wrecks routing.
+
+| Style          | CLEAN | TIGHT | MISROUTE |
+| -------------- | ----- | ----- | -------- |
+| imperative     | 16.5% | 49.0% | 33.7%    |
+| conversational | 9.6%  | 53.7% | 36.6%    |
+| casual         | 5.5%  | 35.0% | 59.5%    |
+
+**Per-source-model:** GPT_5_NANO produces the most-routable phrasings.
+Probably because nano outputs are shorter and more imperative on
+average — closer to the action description voice — which the ranker
+can pin down.
+
+| Model        | CLEAN | TIGHT | MISROUTE |
+| ------------ | ----- | ----- | -------- |
+| GPT_5_NANO   | 13.5% | 49.0% | 38.0%    |
+| GPT_4_1      | 9.4%  | 45.6% | 45.5%    |
+| GPT_5        | 8.9%  | 46.3% | 45.6%    |
+
+### Five misroute patterns the data exposes
+
+The signal isn't uniform — it concentrates in five distinct categories,
+each calling for a different fix.
+
+- **A. Cross-agent semantic hubs.**  One generic action absorbs phrases
+  meant for siblings across multiple agents.  The exemplar:
+  `desktop.SetVolumeAction` is the universal sink for any volume-related
+  phrase generated for `player.setVolume`, `player.setMaxVolume`,
+  `player.changeVolume`, `localPlayer.setVolume`, `localPlayer.changeVolume`,
+  and even `desktop.AdjustVolume` (5 of the top-30 misroute edges).
+  This is the canonical "open bbc" case at scale.
+  _Fix candidate:_ tighten descriptions ("set system audio volume" not
+  just "set volume"), or add `priorityOrder` so music agents win when
+  both match.
+
+- **B. Within-agent disambiguation hubs.**  One action absorbs phrases
+  meant for siblings *inside the same agent*.  `player.PlayArtistAction`
+  steals from `playTrack` (9×), `playGenre` (8×), `addSongsToPlaylist`
+  (7×); `list.GetListAction` steals from `createList` (7×) and others.
+  These don't show up in `@collision similar`'s output at all because
+  it filters cross-schema-only — exactly the gap S1b was reframed for.
+  _Fix candidate:_ tighten the hub action's description to be more
+  specific; add example utterances to siblings' descriptions.
+
+- **C. Near-duplicate agents.**  `localPlayer` (local file player) and
+  `player` (Spotify) cover the same conceptual surface; phrases
+  generated for one routinely route to the other.  `localPlayer.shuffle
+  → player.ShuffleAction` (8×), `localPlayer.mute → desktop.MuteVolumeAction`
+  (9×), several volume edges.
+  _Fix candidate:_ document the agent boundary explicitly in agent
+  descriptions ("local file" vs "Spotify"); or accept the collision and
+  use `priorityOrder` to bias the more common case.
+
+- **D. Engineered collisions firing as designed.**  `vampire.createCalendarEvent
+  → calendar.ScheduleEventAction` (7×), `vampire.revive → player.PlayArtistAction`
+  (7×).  Vampire is doing what it was designed to do — these aren't
+  bugs, they're the test fixtures detecting collisions correctly.
+
+- **E. Naming-hygiene noise.**  TypeScript type names sometimes carry
+  prefixes the action description doesn't (`code.code-editor.saveAllFiles`
+  → `EditorActionSaveAllFiles` ×9; similar for other `EditorAction*`
+  types).  Routing is *correct* — the embedder just doesn't realize
+  it because the type-name and the description don't share vocabulary.
+  _Fix candidate:_ rename the types to drop the `EditorAction` prefix.
+  Pure refactor, doesn't change runtime behavior.
+
+### Cleanest actions (calibration anchors)
+
+These set the bar for what good disambiguation looks like.  Common
+pattern: distinctive vocabulary + no within-agent siblings competing.
+
+```
+desktop.Debug                                       9 CLEAN
+desktop.desktop-taskbar.DisplayTaskbarOnAllMonitors 8 CLEAN
+desktop.desktop-taskbar.ShowBadgesOnTaskbar         8 CLEAN
+code.code-display.showOutputPanel                   8 CLEAN
+desktop.desktop-personalization.ApplyColorToTitleBar 7 CLEAN
+desktop.desktop-taskbar.DisplaySecondsInSystrayClock 7 CLEAN
+onboarding.listIntegrations                         7 CLEAN
+desktop.ListThemes                                  7 CLEAN
+```
+
+### What this means for Phase 1 / Phase 2 baseline
+
+The 9.8% / 46.6% / 43.6% split is the **before-corrective-action
+baseline** for the rollout's empirical questions.  Expectations:
+
+- **Phase 1 / E1.3 (`llmSelect.detect=on`)**: with the current
+  scoreDeltaThreshold of 0.05, 56.4% of phrases would emit a collision
+  event (TIGHT + MISROUTE).  That's a high event rate; if the
+  experiment ratio holds for real traffic, the JSONL/Cosmos pipeline
+  will see ~1 collision per ~1.8 user requests.  Plan capacity
+  accordingly.
+- **Phase 2 / E2.x (strategy A/B)**: the divergence rate (chosen ≠
+  `firstMatchCandidate`) under non-`first-match` strategies will be at
+  least 56.4% — strategies have something to act on.  If Phase 2
+  measures divergence well below that, the strategies aren't
+  triggering.
 
 - [ ] **S4. Cross-pollinate with real-world telemetry.** The collision
       events JSONL accumulating from Phase 1 has actual user requests in
