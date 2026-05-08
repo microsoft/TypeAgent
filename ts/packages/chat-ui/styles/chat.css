@@ -628,18 +628,6 @@ table.table-message td {
   align-items: center;
   justify-content: center;
   line-height: 1;
-  /* Force an emoji-capable font so newer emoji (e.g. 🪟 from Emoji 13.0)
-   * render consistently on first paint. Without this, the icon inherits
-   * the chat's body font (e.g. "Segoe UI") which only ships glyphs for
-   * older emoji; newer codepoints get a fallback glyph that varies by
-   * timing / reflow state — visible as the icon "fixing itself" after
-   * switching conversations and back. */
-  font-family:
-    "Segoe UI Emoji",
-    "Apple Color Emoji",
-    "Noto Color Emoji",
-    "Segoe UI Symbol",
-    sans-serif;
 }
 
 .agent-name {
