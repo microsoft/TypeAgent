@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import * as os from "os";
 import {
     connectAgentServer,
-    lookupAgentServerForWorkspace,
+    lookupAgentServerViaRegistry,
 } from "@typeagent/agent-server-client";
 import { isRegistryEnabled } from "@typeagent/port-registry";
 import type {
@@ -446,7 +446,7 @@ export class AgentServerBridge {
         // the user-configured serverUrl (default ws://localhost:8999).
         let serverUrl: string;
         if (isRegistryEnabled()) {
-            const handle = await lookupAgentServerForWorkspace();
+            const handle = await lookupAgentServerViaRegistry();
             if (handle === undefined) {
                 throw new Error(
                     "TypeAgent agent server not found in port registry. Start one with 'agent-server' or via the shell.",

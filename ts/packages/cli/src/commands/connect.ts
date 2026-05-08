@@ -18,7 +18,7 @@ import {
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
-    ensureAgentServerForWorkspace,
+    ensureAgentServerViaRegistry,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
@@ -186,7 +186,7 @@ export default class Connect extends Command {
             // feature flag on, this is a registry lookup; otherwise it
             // falls back to ws://localhost:${flags.port}.
             const ensureServer = async () => {
-                const handle = await ensureAgentServerForWorkspace({
+                const handle = await ensureAgentServerViaRegistry({
                     legacyPort: flags.port,
                     hidden: flags.hidden,
                     idleTimeout: flags.idleTimeout,

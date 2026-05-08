@@ -42,7 +42,7 @@ import { isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
     ensureAgentServer,
-    ensureAgentServerForWorkspace,
+    ensureAgentServerViaRegistry,
     connectAgentServer,
     stopAgentServer,
 } from "@typeagent/agent-server-client";
@@ -79,7 +79,6 @@ async function initializeDispatcher(
     connect?: number,
     hidden?: boolean,
     idleTimeout?: number,
-    workspace?: string,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -204,8 +203,7 @@ async function initializeDispatcher(
             // the flag is off.
             let resolvedPort: number;
             if (isRegistryEnabled()) {
-                const handle = await ensureAgentServerForWorkspace({
-                    workspaceKey: workspace ?? "default",
+                const handle = await ensureAgentServerViaRegistry({
                     hidden: effectiveHidden,
                     idleTimeout: effectiveIdleTimeout,
                 });
@@ -651,7 +649,6 @@ export function initializeInstance(
     hidden?: boolean,
     idleTimeout?: number,
     _resume?: boolean, // reserved: shell conversation resume not yet implemented
-    workspace?: string,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -706,7 +703,6 @@ export function initializeInstance(
         connect,
         hidden,
         idleTimeout,
-        workspace,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

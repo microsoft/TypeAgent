@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import {
     connectAgentServer,
-    ensureAgentServerForWorkspace,
+    ensureAgentServerViaRegistry,
 } from "@typeagent/agent-server-client";
 import {
     ChatHistoryInput,
@@ -74,7 +74,7 @@ export default class ReplayCommand extends Command {
 
         const history = await readHistoryFile(args.history);
 
-        const handle = await ensureAgentServerForWorkspace({
+        const handle = await ensureAgentServerViaRegistry({
             legacyPort: flags.port,
             hidden: !flags.show,
             idleTimeout: 600,

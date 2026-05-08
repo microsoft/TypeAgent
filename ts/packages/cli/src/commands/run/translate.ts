@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import {
     connectAgentServer,
-    ensureAgentServerForWorkspace,
+    ensureAgentServerViaRegistry,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
@@ -47,7 +47,7 @@ export default class TranslateCommand extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
 
-        const handle = await ensureAgentServerForWorkspace({
+        const handle = await ensureAgentServerViaRegistry({
             legacyPort: flags.port,
             hidden: !flags.show,
             idleTimeout: 600,

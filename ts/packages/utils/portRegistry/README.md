@@ -146,7 +146,7 @@ spawn) a local agent server.** Concretely:
 The default is **client-only**. Server-eligibility is opt-in — either
 via `new PortRegistry({ serverEligible: true })` or by calling
 `globalRegistry.enableServerMode()` early in startup, before any
-registry call. The `ensureAgentServerForWorkspace` helper enables
+registry call. The `ensureAgentServerViaRegistry` helper enables
 server mode automatically for its callers because that call site can
 spawn.
 
@@ -214,24 +214,23 @@ The flag exists only to land the package and the per-consumer wiring
 incrementally. It will flip to default-on once every consumer has been
 migrated and validated, and removed once stable.
 
-## Forward compatibility: `workspaceKey`
+## Forward compatibility: keyed slots
 
-The agent-server-client API takes a `workspaceKey: string` parameter
-even though only one agent server runs per user today. This is honest
-forward-compat hedging, not a planned multi-server rollout: if a
-future change ever needs to partition agent-server state by workspace
-(e.g. different model configs per project), the API surface and the
-registry's slot key already carry the dimension and won't have to
-break.
+The registry's allocation API supports an optional `key: string`
+parameter (`(namespace, key) → slot`) even though no current consumer
+needs sub-keys. This is forward-compat hedging, not a planned
+partitioning rollout: if a future change ever needs to partition a
+namespace's slots (e.g. a per-workspace agent-server variant once
+`instanceDir` becomes per-workspace), the registry's slot table
+already carries the dimension and won't have to break.
 
 That said, "I want different config per project" is more naturally
 solved as a **workspace-scoped session** inside a single dispatcher,
 not a second dispatcher process — the dispatcher already partitions
 conversations and could carry a workspace dimension on settings. So
-the realistic baseline remains one agent server per user.
-
-Until any of that lands, every consumer passes `"default"` and the
-system behaves single-instance.
+the realistic baseline remains one agent server per user, and the
+agent-server-client API today exposes no key parameter; the slot is
+stored under a single fixed key internally.
 
 ## Allocation race
 

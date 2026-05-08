@@ -14,7 +14,6 @@ type ShellCommandLineArgs = {
     mockGreetings?: boolean;
     inputOnly?: boolean;
     connect?: number;
-    workspace?: string;
     hidden?: boolean;
     idleTimeout?: number;
     resume?: boolean;
@@ -140,19 +139,6 @@ export function parseShellCommandLine() {
 
             if (arg === "--no-resume") {
                 result.resume = false;
-                continue;
-            }
-
-            if (arg === "--workspace") {
-                i++;
-                if (
-                    i < process.argv.length &&
-                    !process.argv[i].startsWith("--")
-                ) {
-                    result.workspace = process.argv[i];
-                } else {
-                    debugShell("Missing value for --workspace argument");
-                }
                 continue;
             }
 

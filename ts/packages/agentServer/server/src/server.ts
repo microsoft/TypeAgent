@@ -198,12 +198,6 @@ async function main() {
               ? parseInt(process.env.AGENT_SERVER_PORT, 10)
               : 8999;
 
-    const workspaceIdx = process.argv.indexOf("--workspace");
-    const workspaceKey =
-        workspaceIdx !== -1 && workspaceIdx + 1 < process.argv.length
-            ? process.argv[workspaceIdx + 1]
-            : (process.env.TYPEAGENT_AGENT_SERVER_WORKSPACE ?? undefined);
-
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
         idleShutdownIdx !== -1
@@ -429,23 +423,20 @@ async function main() {
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);
 
-    // When the registry feature flag is on and we were spawned with a
-    // workspace key, surface that for diagnostics. The slot itself is
-    // owned by the client that spawned us (see workspaceClient.ts) — when
-    // all clients exit, the slot dies via PID liveness GC and any
+    // When the registry feature flag is on, the agent server is the
+    // canonical long-lived registry host. The slot itself is owned by
+    // the client that spawned us (see registryClient.ts) — when all
+    // clients exit, the slot dies via PID liveness GC and any
     // subsequent client will spawn a fresh server. The orphaned server
     // will exit on its idle timeout if one was set.
-    if (isRegistryEnabled() && workspaceKey !== undefined) {
-        debugStartup(
-            `registry-enabled spawn: workspace=${workspaceKey} port=${port}`,
-        );
-        // Agent server is the canonical long-lived registry host. Mark
-        // this process as server-eligible so that, on a future failed
-        // registry call, it can self-promote and take over from the
-        // (potentially short-lived) spawner that allocated our slot.
-        // ensure() races to bind the well-known registry port now; if
-        // another process already hosts it we stay in client mode and
-        // promote later if needed.
+    if (isRegistryEnabled()) {
+        debugStartup(`registry-enabled spawn: port=${port}`);
+        // Mark this process as server-eligible so that, on a future
+        // failed registry call, it can self-promote and take over from
+        // the (potentially short-lived) spawner that allocated our
+        // slot. ensure() races to bind the well-known registry port
+        // now; if another process already hosts it we stay in client
+        // mode and promote later if needed.
         globalRegistry.enableServerMode();
         await globalRegistry.ensure().catch((err) => {
             debugStartup(`globalRegistry.ensure() failed: ${err}`);
