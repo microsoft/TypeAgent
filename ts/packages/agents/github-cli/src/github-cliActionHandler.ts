@@ -6,6 +6,7 @@ import {
     AppAgent,
     TypeAgentAction,
     ActionResult,
+    ReadinessReport,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
@@ -21,11 +22,96 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext,
         executeAction,
+        checkReadiness,
     };
 }
 
 async function initializeAgentContext(): Promise<unknown> {
     return {};
+}
+
+// Outcome of the `gh auth status` probe — split out from the report so the
+// decision logic can be unit-tested without spawning a subprocess.
+//
+//   ready          — gh exited 0; installed AND authenticated
+//   not-installed  — execFile rejected with ENOENT; gh isn't on PATH
+//   not-auth       — gh exited non-zero; installed but `gh auth status` failed
+//                    (most commonly: not logged in)
+//   probe-failed   — anything we couldn't classify (timeout, permission
+//                    error, etc.) — surfaced as setup-required so the user
+//                    gets a chance to investigate
+export type GhProbeOutcome =
+    | { kind: "ready" }
+    | { kind: "not-installed" }
+    | { kind: "not-auth"; stderr?: string }
+    | { kind: "probe-failed"; message: string };
+
+// Pure decision function — translates a probe outcome to a ReadinessReport.
+// Mirrors the player/screencapture pattern. Exported for unit tests.
+export function evaluateGhReadiness(
+    outcome: GhProbeOutcome,
+): ReadinessReport {
+    switch (outcome.kind) {
+        case "ready":
+            return { state: "ready" };
+        case "not-installed":
+            return {
+                state: "setup-required",
+                message: "GitHub CLI (`gh`) not found on PATH.",
+                details:
+                    "Install from https://cli.github.com/ (e.g. `winget install GitHub.cli` on Windows, `brew install gh` on macOS, `sudo apt install gh` on Debian/Ubuntu), then run `@config agent refresh github-cli`.",
+            };
+        case "not-auth":
+            return {
+                state: "setup-required",
+                message: "GitHub CLI is installed but not authenticated.",
+                details:
+                    "Run `gh auth login` in a terminal to authenticate, then `@config agent refresh github-cli`.",
+            };
+        case "probe-failed":
+            return {
+                state: "setup-required",
+                message: `GitHub CLI readiness probe failed: ${outcome.message}`,
+                details:
+                    "Confirm `gh auth status` works in a terminal, then run `@config agent refresh github-cli`. No `setup` hook — `gh auth login` is interactive and must be run by the user.",
+            };
+    }
+}
+
+// Spawns `gh auth status` once and classifies the result for
+// evaluateGhReadiness. The dispatcher caches the report, so this runs at
+// most once per session (plus on `@config agent refresh github-cli`).
+//
+// `gh auth status` does hit the network to validate the stored token, so
+// this is on the heavy end of "cheap" per the AppAgent.checkReadiness
+// contract — but it catches expired tokens, which a local-only check (e.g.
+// `gh auth token`) would miss. The 10s timeout caps worst-case latency.
+async function checkReadiness(): Promise<ReadinessReport> {
+    try {
+        await execFileAsync("gh", ["auth", "status"], {
+            timeout: 10_000,
+            maxBuffer: 1024 * 1024,
+            windowsHide: true,
+        });
+        return evaluateGhReadiness({ kind: "ready" });
+    } catch (err: any) {
+        // execFile uses err.code for both spawn errors (string like "ENOENT")
+        // and non-zero exit (number). String → spawn failed; number → ran
+        // and exited non-zero, which for `auth status` means not logged in.
+        if (err?.code === "ENOENT") {
+            return evaluateGhReadiness({ kind: "not-installed" });
+        }
+        if (typeof err?.code === "number") {
+            return evaluateGhReadiness({
+                kind: "not-auth",
+                stderr: err?.stderr,
+            });
+        }
+        return evaluateGhReadiness({
+            kind: "probe-failed",
+            message: err?.message ?? String(err),
+        });
+    }
 }
 
 // Run a gh CLI command and return stdout. Throws on non-zero exit.
