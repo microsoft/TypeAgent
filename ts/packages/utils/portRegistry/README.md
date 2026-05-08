@@ -3,22 +3,24 @@
 Centralized port allocation and discovery for TypeAgent processes that
 bind sockets — agent server, language-extension bridges, dev daemons.
 
-The package replaces hardcoded port constants (`8999`, `5680`,
-`5677`/`5678`/`5679`, …) with a single registry that allocates ephemeral
-ports on demand and lets other processes look them up by name. The
-acute need is for **bridge processes** (Excel, Visual Studio, and
-soon Word) that are genuinely per-document or per-solution — running
-two of them today fails because of port contention. The agent server
+The package replaces hardcoded port constants with a single registry
+that allocates ephemeral ports on demand and lets other processes look
+them up by name. The acute need is for **extension bridges and other
+local servers** — the kind of process that an editor extension, a
+desktop application add-in, or an MCP-style helper spawns to talk to
+TypeAgent — where the natural lifetime is per-document or per-project
+and a second instance is a normal user action. The agent server
 benefits secondarily, mostly through better discovery.
 
 ## The problem
 
-The acute pain is in **bridges** — Excel, Visual Studio, and (soon)
-Word — where the bridge process is genuinely per-document or
-per-solution and a second instance is a normal user action. Today every
-bridge picks a hardcoded port and the second one fails.
+The acute pain is in **extension bridges** — local helper processes
+that an editor or desktop-application extension spawns to relay between
+its host and TypeAgent. These are naturally per-document or
+per-project: opening a second project is a normal user action, and a
+second bridge picking the same hardcoded port just fails.
 
-The agent server itself is per-user, not per-workspace, and there's
+The agent server itself is per-user, not per-project, and there's
 typically only one of those running. But its clients (CLI commands,
 shells, the VS Code extension) still hardcode `ws://localhost:8999`,
 which means they have no way to find the server if it's not on that
@@ -30,22 +32,18 @@ const port = parseInt(arg ?? "8999", 10);   // electron shell --connect
 ```
 
 So we want one mechanism that covers both shapes — **mandatory** for
-bridges, where multi-instance is the whole point, and **useful** for
-the agent server, where it replaces an ad-hoc spawn-lock file with
-proper discovery.
+extension bridges, where multi-instance is the whole point, and
+**useful** for the agent server, where it replaces an ad-hoc spawn-lock
+file with proper discovery. The same mechanism also gives us a clean
+home for any future MCP-style local servers that need a discoverable
+port.
 
-The Excel agent already has the right shape — its `BridgeRegistry`
-runs as a per-machine HTTP service that hands out workbook-keyed slots
-to bridge processes that the Office add-in then discovers via
-`/lookup`. This package generalizes that pattern so every TypeAgent
-component can use it.
-
-| Component               | Port               | Failure mode when contended         |
-|-------------------------|--------------------|-------------------------------------|
-| `agentServer`           | `8999`             | Spawn-lock file works most of the time, but clients still hardcode the URL |
-| `visualStudio` agent    | `5680`             | Second VS instance: `EADDRINUSE`    |
-| Excel `BridgeRegistry`  | `5677`             | Second Excel add-in can't start     |
-| Excel bridge            | `5678` / `5679`    | Second workbook collides            |
+The pattern is well-known: a small per-machine HTTP service that hands
+out keyed slots to the local processes that bind sockets, and that
+external clients (extension code running in a different runtime, a CLI
+command in another shell) then discover via a `lookup` call. This
+package generalizes that pattern so every TypeAgent component can use
+it.
 
 ## Architecture overview
 
@@ -91,13 +89,14 @@ discovery**, because they have different lifetimes:
 | Concern                | API                              | Lifetime                |
 |------------------------|----------------------------------|-------------------------|
 | Port allocation        | `allocate(ns, …)` / `release`    | the bridge process      |
-| Resource routing       | `register` / `unregister` / `lookup` | the resource (workbook, solution, …) |
+| Resource routing       | `register` / `unregister` / `lookup` | the resource (one per document, project, or whatever the host concept is) |
 
 A bridge process allocates a slot once at startup and releases it at
 shutdown. While alive, it can attach and detach **resources** to that
-slot — for Excel, each workbook the user opens; for Visual Studio, each
-loaded solution. External clients (the Office add-in JS, a CLI command)
-look up resources by name and get back the bridge's port.
+slot — typically one per host-side concept (a document, a project,
+whatever the extension's natural unit is). External clients (extension
+code in a different runtime, a CLI command) look up resources by name
+and get back the bridge's port.
 
 For consumers that only need "a unique port" with no resource layer
 (e.g. the agent server today), `allocate` alone is sufficient — pass a
@@ -136,9 +135,9 @@ This means:
   clean slate. That's correct because slots only describe currently
   running processes anyway.
 
-The pattern is lifted directly from the existing Excel `BridgeRegistry`,
-which has been running this way in production. This package generalizes
-it to N namespaces and packages it for reuse.
+The pattern is lifted directly from an existing per-machine bridge
+registry that has been running this way in production. This package
+generalizes it to N namespaces and packages it for reuse.
 
 ## Liveness
 
@@ -168,8 +167,8 @@ process alive.
 | `GET`    | `/status`     | —                                             | `{ entries: StatusEntry[] }`   |
 
 JSON over HTTP, CORS enabled. Designed to be consumable from any
-language — including the C# Visual Studio extension and the JS Office
-add-in, which can't reasonably depend on the Node-side client library.
+language — including extension code that runs in a non-Node host
+runtime and so can't pull in the client library directly.
 
 ## Feature flag
 
@@ -231,18 +230,18 @@ import { globalRegistry, Namespaces, isRegistryEnabled }
 if (isRegistryEnabled()) {
     // Bridge process: claim a slot at startup.
     const { slotId, ports } = await globalRegistry.allocate(
-        Namespaces.Excel,
-        { count: 2, key: "MyWorkbook.xlsx" },
+        Namespaces.AgentServer, // or any namespace identifier
+        { count: 2, key: "primary-resource-id" },
     );
     const [wsPort, evalPort] = ports;
 
-    // Attach more resources later (Excel: a second workbook).
-    await globalRegistry.register(slotId, "OtherWorkbook.xlsx");
+    // Attach more resources later if the host can hold several at once.
+    await globalRegistry.register(slotId, "secondary-resource-id");
 
     // Discover from another process (or via HTTP from a non-Node client).
     const { ports: lookedUp } = await globalRegistry.lookup(
-        Namespaces.Excel,
-        "MyWorkbook.xlsx",
+        Namespaces.AgentServer,
+        "primary-resource-id",
     );
 
     // Cleanup on shutdown.
