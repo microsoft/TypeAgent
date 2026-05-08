@@ -33,12 +33,12 @@ _Last updated: 2026-05-07_
 
 ### Track B - Core debug + quality services
 
-| Item | Description                               | Status      |
-| ---- | ----------------------------------------- | ----------- |
-| B.1  | Completion preview                        | done        |
-| B.2  | Rule-level trace                          | done        |
-| B.3  | Coverage (per-rule / per-part hit counts) | not started |
-| B.4  | Diff (structural rule-level diff)         | not started |
+| Item | Description                               | Status |
+| ---- | ----------------------------------------- | ------ |
+| B.1  | Completion preview                        | done   |
+| B.2  | Rule-level trace                          | done   |
+| B.3  | Coverage (per-rule / per-part hit counts) | done   |
+| B.4  | Diff (structural rule-level diff)         | done   |
 
 ### Track C - VS Code extension
 
@@ -67,14 +67,14 @@ _Last updated: 2026-05-07_
 
 ### Track E - CLI
 
-| Item | Description                  | Status      |
-| ---- | ---------------------------- | ----------- |
-| E.0  | Scaffold `grammar-tools-cli` | done        |
-| E.1  | `grammar load` command       | done        |
-| E.2  | `grammar complete` command   | done        |
-| E.3  | `grammar trace` command      | done        |
-| E.4  | `grammar coverage` command   | not started |
-| E.5  | `grammar diff` command       | not started |
+| Item | Description                  | Status |
+| ---- | ---------------------------- | ------ |
+| E.0  | Scaffold `grammar-tools-cli` | done   |
+| E.1  | `grammar load` command       | done   |
+| E.2  | `grammar complete` command   | done   |
+| E.3  | `grammar trace` command      | done   |
+| E.4  | `grammar coverage` command   | done   |
+| E.5  | `grammar diff` command       | done   |
 
 ### Track F - Dispatcher snapshot
 
@@ -177,11 +177,10 @@ Promote into "Queued actions" when scheduling.
   coverage analysis for the NFA/DFA compile paths as well. Lower
   priority since the rule-level matcher is the primary matching backend
   for authoring/debugging; NFA/DFA are production-optimized paths.
-- **B.3 coverage / B.4 diff implementation.** Stubs (`runCoverage`,
-  `diffGrammars`) removed during self-review (2026-05-07) to avoid
-  shipping dead code. Types (`CoverageReport`, `RuleCoverage`, etc.)
-  remain in `types.ts` as the agreed shape. Implement when Track A.5
-  (`GrammarDebugInfo` emission) lands.
+- **B.3 coverage / B.4 diff implementation.** ~~Stubs removed during
+  self-review (2026-05-07).~~ Implemented 2026-05-07: `computeCoverage`
+  in `coverage.ts`, `diffGrammars` in `diff.ts`. CLI commands E.4 and
+  E.5 (`grammar coverage`, `grammar diff`) also landed.
 
 ## Out of scope for this pass
 

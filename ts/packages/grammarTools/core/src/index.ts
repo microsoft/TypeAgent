@@ -46,6 +46,14 @@ export type {
     PartFailedEvent,
     BacktrackEvent,
     MatchTrace,
+    // Coverage
+    PartCoverage,
+    RuleCoverage,
+    CoverageReport,
+    // Diff
+    DiffChangeReason,
+    RuleChange,
+    GrammarDiff,
     // Snapshot
     GrammarSnapshot,
 } from "./types.js";
@@ -67,3 +75,5 @@ export { previewCompletion } from "./completion.js";
 export { traceMatch } from "./trace.js";
 export { formatTrace } from "./formatTrace.js";
 export type { FormatTraceOptions } from "./formatTrace.js";
+export { computeCoverage } from "./coverage.js";
+export { diffGrammars } from "./diff.js";
