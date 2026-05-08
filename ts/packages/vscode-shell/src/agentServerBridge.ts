@@ -74,6 +74,18 @@ export class AgentServerBridge {
     private joinInFlight: Promise<void> | undefined;
     private session: SessionDispatcher | undefined;
     private webviews: Set<vscode.Webview> = new Set();
+    /**
+     * Per-webview buffer for live broadcasts that arrive while the webview
+     * is being hydrated (history fetch in flight). Without this buffer,
+     * live setDisplay/appendDisplay events fired by the dispatcher during
+     * the `await getDisplayHistory()` window would be applied immediately
+     * by the webview, but the historyReplay message arrives later and is
+     * applied on top — yielding out-of-order or duplicated transcripts.
+     */
+    private hydratingWebviews = new Map<
+        vscode.Webview,
+        BridgeToWebviewMessage[]
+    >();
     private statusBarItem: vscode.StatusBarItem;
     private isConnected = false;
     private reconnectTimer: NodeJS.Timeout | undefined;
@@ -229,6 +241,7 @@ export class AgentServerBridge {
         return {
             dispose: () => {
                 this.webviews.delete(webview);
+                this.hydratingWebviews.delete(webview);
                 if (this.completionWebview === webview) {
                     this.disposeCompletionController();
                 }
@@ -860,9 +873,13 @@ export class AgentServerBridge {
         if (!session) return;
 
         // Fire-and-forget: fetch history and post to this webview only.
-        // We deliberately do NOT engage the replay buffer here — peers
-        // are mid-conversation and shouldn't have their live events
-        // paused for a single webview's reload hydration.
+        // We deliberately do NOT engage the global replay buffer here —
+        // peers are mid-conversation and shouldn't have their live events
+        // paused for a single webview's reload hydration. Instead we
+        // queue live broadcasts destined for THIS webview only via
+        // `hydratingWebviews`, draining the queue after historyReplay
+        // is posted so the transcript stays ordered.
+        this.hydratingWebviews.set(webview, []);
         void (async () => {
             this.postToWebview(webview, {
                 type: "historyLoading",
@@ -886,6 +903,13 @@ export class AgentServerBridge {
                     type: "historyLoading",
                     loading: false,
                 });
+                // Drain any live broadcasts that arrived during hydration
+                // and stop intercepting future broadcasts for this webview.
+                const queued = this.hydratingWebviews.get(webview) ?? [];
+                this.hydratingWebviews.delete(webview);
+                for (const m of queued) {
+                    this.postToWebview(webview, m);
+                }
             }
         })();
     }
@@ -1569,6 +1593,13 @@ export class AgentServerBridge {
             return;
         }
         for (const webview of this.webviews) {
+            // If this webview is mid-hydration, queue the live message
+            // until history replay has been delivered (see hydrateWebview).
+            const queue = this.hydratingWebviews.get(webview);
+            if (queue !== undefined) {
+                queue.push(msg);
+                continue;
+            }
             this.postToWebview(webview, msg);
         }
     }

@@ -1026,6 +1026,15 @@ export class ChatPanel {
         // A new user request invalidates the previous "current" agent bubble so
         // a follow-up addAgentMessage with no requestId starts a fresh one.
         this.currentAgentContainer = undefined;
+        // Reap stale per-request bubble lookups now that a new request is
+        // starting. completeRequest() intentionally leaves the entry in
+        // agentContainersByRequestId so out-of-band setDisplay updates from
+        // a host's takeAction handler can still target the existing bubble
+        // (see PR #2306). Once the user starts a new request, any pending
+        // late update from a prior request would be unsafe to apply, so we
+        // can safely free the references here. New requests' bubbles will
+        // re-populate the map via getOrCreateAgentContainer.
+        this.agentContainersByRequestId.clear();
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
