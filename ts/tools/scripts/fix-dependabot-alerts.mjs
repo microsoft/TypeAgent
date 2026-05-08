@@ -2379,6 +2379,111 @@ async function executeResolutions(analyses) {
     };
 
     /**
+     * Read the current `pnpm.overrides[pkg]` spec from the workspace root
+     * package.json, if any.
+     * @param {string} pkg
+     * @returns {string|undefined}
+     */
+    function readExistingOverride(pkg) {
+        try {
+            const pkgJson = JSON.parse(
+                readFileSync(resolve(ROOT, "package.json"), "utf-8"),
+            );
+            return pkgJson?.pnpm?.overrides?.[pkg];
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * True if `spec` is satisfied by some version below `patched` — i.e. the
+     * existing override is wide enough to keep the vulnerable version pinned.
+     */
+    function overrideAllowsVulnerable(spec, patched) {
+        if (!spec || typeof spec !== "string") return false;
+        try {
+            const min = semver.minVersion(spec);
+            return min ? semver.lt(min.version, patched) : false;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Build the raised pnpm.overrides spec.
+     *
+     * Naively returning `>=${patched}` discards any existing upper bound
+     * (e.g. `^12.2.0` becomes `>=12.5.0`), which can silently broaden the
+     * override into a major-version-spanning range and change resolution
+     * behaviour for unrelated dependencies.
+     *
+     * Instead, AND-combine the existing range with `>=${patched}` so the
+     * upper bound (if any) is preserved. If the combined range would be
+     * empty (existing range is capped below patched), fall back to
+     * `>=${patched}` and warn — there's no way to honour both.
+     */
+    function raiseOverrideSpec(existing, patched) {
+        const fallback = `>=${patched}`;
+        if (!existing || typeof existing !== "string") return fallback;
+        // Compound specs we already warn about elsewhere; keep simple here.
+        try {
+            // If patched is greater than every version satisfying existing,
+            // intersecting would yield an empty range. Drop the upper bound
+            // explicitly and warn.
+            if (semver.gtr(patched, existing)) {
+                warn(
+                    `Existing override "${existing}" caps below patched ${patched}; widening to "${fallback}" — review manually`,
+                );
+                return fallback;
+            }
+            const combined = `${existing} ${fallback}`;
+            if (!semver.validRange(combined)) {
+                return fallback;
+            }
+            return combined;
+        } catch {
+            return fallback;
+        }
+    }
+
+    /**
+     * Snapshot package.json (and pnpm-lock.yaml if present) so the
+     * override-raise path can roll back cleanly when the second verify
+     * still fails. Without this, a failed raise leaves the modified
+     * override + lockfile on disk, polluting subsequent package fixes
+     * in the same run and producing a dirty working tree for what we
+     * report as a "blocked" outcome.
+     */
+    function snapshotRoot() {
+        const pkgJsonPath = resolve(ROOT, "package.json");
+        const lockPath = resolve(ROOT, "pnpm-lock.yaml");
+        const snap = { pkgJson: readFileSync(pkgJsonPath, "utf-8") };
+        try {
+            snap.lock = readFileSync(lockPath, "utf-8");
+        } catch {
+            snap.lock = null;
+        }
+        return snap;
+    }
+
+    async function restoreRoot(snap) {
+        const pkgJsonPath = resolve(ROOT, "package.json");
+        const lockPath = resolve(ROOT, "pnpm-lock.yaml");
+        writeFileSync(pkgJsonPath, snap.pkgJson, "utf-8");
+        if (snap.lock !== null) writeFileSync(lockPath, snap.lock, "utf-8");
+        // Re-run install so the in-memory state of node_modules matches the
+        // restored lockfile before the next package's analysis kicks in.
+        try {
+            await runCmdAsync("pnpm", ["install"], {
+                timeout: 180000,
+                nothrow: true,
+            });
+        } catch {
+            /* best-effort */
+        }
+    }
+
+    /**
      * Run `pnpm update <pkg> -r` and verify all versions are fixed.
      * Returns "ok" | "blocked" | "failed".
      */
@@ -2387,13 +2492,52 @@ async function executeResolutions(analyses) {
             await runCmdAsync("pnpm", ["update", a.pkg, "-r"], {
                 timeout: 120000,
             });
-            const check = await verifyAllVersionsFixed(a.pkg, a.patched);
+            let check = await verifyAllVersionsFixed(a.pkg, a.patched);
             if (check.ok) {
                 ok(
                     `Updated ${a.pkg} — all versions fixed: ${check.versions.join(", ")}`,
                 );
                 return "ok";
             }
+
+            // pnpm update couldn't move past an existing pnpm.overrides[pkg]
+            // entry that's wider than `>=patched`. Raise the override and
+            // re-run install + verify. Without this, packages whose only
+            // remaining vulnerability gate is a stale override (e.g. an
+            // earlier security bump that has since been superseded by a new
+            // advisory) get classified as blocked.
+            const existing = readExistingOverride(a.pkg);
+            if (existing && overrideAllowsVulnerable(existing, a.patched)) {
+                const newSpec = raiseOverrideSpec(existing, a.patched);
+                verbose(
+                    `Stale override pnpm.overrides["${a.pkg}"] = "${existing}" allows ${check.unfixed.join(", ")} — raising to "${newSpec}"`,
+                );
+                // Snapshot before mutating so we can roll back cleanly if the
+                // raise doesn't actually fix the vulnerability.
+                const snap = snapshotRoot();
+                addOverrides(new Map([[a.pkg, newSpec]]));
+                try {
+                    await runCmdAsync("pnpm", ["install"], { timeout: 180000 });
+                    check = await verifyAllVersionsFixed(a.pkg, a.patched);
+                } catch (e) {
+                    await restoreRoot(snap);
+                    throw e;
+                }
+                if (check.ok) {
+                    ok(
+                        `Raised pnpm.overrides["${a.pkg}"] from "${existing}" to "${newSpec}" — all versions fixed: ${check.versions.join(", ")}`,
+                    );
+                    return "ok";
+                }
+                // Re-verify still failed — undo the override + lockfile
+                // changes so this package's blocked outcome doesn't leak
+                // into the next package's analysis.
+                warn(
+                    `Raised pnpm.overrides["${a.pkg}"] to "${newSpec}" but still unfixed: ${check.unfixed.join(", ")} — rolling back`,
+                );
+                await restoreRoot(snap);
+            }
+
             warn(
                 `pnpm update left unfixed versions of ${a.pkg}: ${check.unfixed.join(", ")} (need >=${a.patched})`,
             );
@@ -2413,7 +2557,20 @@ async function executeResolutions(analyses) {
 
         if (isSimpleUpdate(a)) {
             if (DRY_RUN) {
-                ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
+                const existing = readExistingOverride(a.pkg);
+                if (existing && overrideAllowsVulnerable(existing, a.patched)) {
+                    // The real path tries `pnpm update` first and only falls
+                    // back to raising the override when update alone leaves
+                    // unfixed versions. Mirror that sequence in the dry-run
+                    // message so reviewers don't think we're skipping the
+                    // cheap `update` attempt.
+                    const newSpec = raiseOverrideSpec(existing, a.patched);
+                    ok(
+                        `${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}; if still unfixed, raise pnpm.overrides["${a.pkg}"] from "${existing}" to "${newSpec}" + pnpm install`,
+                    );
+                } else {
+                    ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
+                }
             } else {
                 const outcome = await runUpdateAndVerify(a);
                 if (outcome === "blocked") {
