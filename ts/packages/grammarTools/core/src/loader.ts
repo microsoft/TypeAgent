@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRulesNoThrow } from "action-grammar";
-import type { Grammar, DebugInfoCollector } from "action-grammar";
+import type { Grammar, DebugInfoCollector, FileLoader } from "action-grammar";
 import type {
     GrammarIdentifierIndex,
     GrammarDebugInfo,
@@ -18,11 +18,38 @@ import type {
 
 /**
  * Load a grammar from a file path on disk.
+ * Supports .agr file imports (import ... from "./other.agr").
  */
-export async function loadGrammarFromFile(path: string): Promise<LoadResult> {
+export async function loadGrammarFromFile(
+    filePath: string,
+): Promise<LoadResult> {
+    const nodePath = await import("path");
+    const nodeFs = await import("fs");
     const { readFile } = await import("fs/promises");
-    const text = await readFile(path, "utf-8");
-    return loadFromText(text, { kind: "file", path });
+
+    const resolvedPath = nodePath.resolve(filePath);
+    const text = await readFile(resolvedPath, "utf-8");
+    const displayPath = nodePath.relative(process.cwd(), resolvedPath);
+
+    const fileLoader: FileLoader = {
+        resolvePath: (name: string, ref?: string) =>
+            ref
+                ? nodePath.resolve(nodePath.dirname(ref), name)
+                : nodePath.resolve(name),
+        readContent: (fullPath: string) => {
+            if (!nodeFs.existsSync(fullPath)) {
+                throw new Error(`File not found: ${fullPath}`);
+            }
+            return nodeFs.readFileSync(fullPath, "utf-8");
+        },
+        displayPath: (fullPath: string) =>
+            nodePath.relative(process.cwd(), fullPath),
+    };
+
+    return loadFromFileLoader(resolvedPath, text, displayPath, fileLoader, {
+        kind: "file",
+        path: filePath,
+    });
 }
 
 /**
@@ -77,6 +104,75 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
         const debugInfo = buildDebugInfo(collector, text, sourceId(source));
+        const loaded: LoadedGrammar = {
+            source,
+            grammar,
+            debugInfo,
+            files: [file],
+            identifiers,
+        };
+        const diagnostics: Diagnostic[] | undefined =
+            warnings.length > 0
+                ? warnings.map((message) => ({
+                      range: extractRange(message, text),
+                      severity: "warning" as const,
+                      message,
+                      source: "grammar-tools-core" as const,
+                  }))
+                : undefined;
+        if (diagnostics) {
+            return { ok: true, grammar: loaded, diagnostics };
+        }
+        return { ok: true, grammar: loaded };
+    }
+
+    const diagnostics: Diagnostic[] = [
+        ...errors.map((message) => ({
+            range: extractRange(message, text),
+            severity: "error" as const,
+            message,
+            source: "grammar-tools-core" as const,
+        })),
+        ...warnings.map((message) => ({
+            range: extractRange(message, text),
+            severity: "warning" as const,
+            message,
+            source: "grammar-tools-core" as const,
+        })),
+    ];
+    return { ok: false, diagnostics, files: [file] };
+}
+
+/**
+ * Load a grammar using a FileLoader so the compiler can resolve
+ * `import ... from "./other.agr"` statements.
+ */
+function loadFromFileLoader(
+    fullPath: string,
+    text: string,
+    displayPath: string,
+    fileLoader: FileLoader,
+    source: GrammarSource,
+): LoadResult {
+    const file: SourceFile = { id: sourceId(source), text };
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const collector: DebugInfoCollector = {
+        partPositions: new Map(),
+        rulePositions: new Map(),
+        fileId: displayPath,
+    };
+    const grammar = loadGrammarRulesNoThrow(
+        fullPath,
+        fileLoader,
+        errors,
+        warnings,
+        { debugCollector: collector },
+    );
+
+    if (grammar && errors.length === 0) {
+        const identifiers = buildIdentifierIndex(grammar);
+        const debugInfo = buildDebugInfo(collector, text, displayPath);
         const loaded: LoadedGrammar = {
             source,
             grammar,

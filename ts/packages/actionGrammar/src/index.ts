@@ -12,7 +12,12 @@ export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 export type { LoadGrammarRulesOptions } from "./grammarLoader.js";
 export type { GrammarOptimizationOptions } from "./grammarOptimizer.js";
 export { recommendedOptimizations } from "./grammarOptimizer.js";
-export type { SchemaLoader, DebugInfoCollector } from "./grammarCompiler.js";
+export type {
+    SchemaLoader,
+    DebugInfoCollector,
+    FileLoader,
+} from "./grammarCompiler.js";
+export { defaultFileLoader } from "./defaultFileLoader.js";
 
 // Parser (for tooling — formatter, linters, etc.)
 export { parseGrammarRules } from "./grammarRuleParser.js";
