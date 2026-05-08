@@ -13,10 +13,15 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js"
   },
   "types": "./dist/index.d.ts",
+  "bin": {
+    "typeagent-config": "./bin/typeagent-config.mjs"
+  },
   "files": [
+    "bin",
     "dist",
     "!dist/test"
   ],
