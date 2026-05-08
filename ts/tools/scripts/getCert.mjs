@@ -204,15 +204,11 @@ async function pull() {
     try {
         const passwordSecret = await secretClient.getSecret(passwordSecretName);
         password = passwordSecret.value;
-        console.log(
-            `Reusing existing PFX password secret ${chalk.cyanBright(passwordSecretName)}.`,
-        );
+        console.log("Reusing existing PFX password secret.");
     } catch (e) {
         if (e?.statusCode !== 404) throw e;
         password = generatePassword();
-        console.log(
-            `Creating new PFX password secret ${chalk.cyanBright(passwordSecretName)} in vault.`,
-        );
+        console.log("Creating new PFX password secret in vault.");
         await secretClient.setSecret(passwordSecretName, password);
     }
 
