@@ -75,6 +75,11 @@ export async function ensureAgentServerForWorkspace(
         };
     }
 
+    // This call site may spawn a local agent server, so it owns one
+    // (transitively) — opt this process into being a registry host.
+    // Idempotent; no-op once another registry call has already run.
+    globalRegistry.enableServerMode();
+
     // Registry-enabled path.
     const existing = await globalRegistry.lookup(
         Namespaces.AgentServer,

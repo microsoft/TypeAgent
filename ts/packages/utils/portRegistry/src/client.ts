@@ -41,19 +41,64 @@ interface ShadowEntry {
     resources: Set<string>;
 }
 
+export interface PortRegistryOptions {
+    /**
+     * Whether this process is allowed to host the registry server.
+     *
+     * Default `false` — the handle is **client-only**: it never binds
+     * the well-known port and never self-promotes. Operations that
+     * cannot reach an existing server fail.
+     *
+     * Set to `true` for processes that own (or are about to spawn) a
+     * local agent server: the agent server itself, the Electron shell
+     * main process when not in `--connect` mode, and CLI commands that
+     * may spawn an agent server. Pure remote clients (e.g. an extension
+     * host doing lookup-only against a server it does not spawn) should
+     * stay client-only.
+     */
+    serverEligible?: boolean;
+}
+
 /**
  * Process-wide PortRegistry handle.
  *
- * `ensure()` either binds the well-known port (server mode) or enters
- * client mode and forwards calls to the existing server. If the existing
- * server's process dies, this handle self-promotes by binding the port
- * itself and replaying its shadow map.
+ * Behavior depends on `serverEligible`:
+ * - **server-eligible**: `ensure()` races to bind the well-known port; if
+ *   it loses, it falls back to client mode but is allowed to self-promote
+ *   by binding the port itself and replaying its shadow map when the
+ *   current server's process dies.
+ * - **client-only** (default): `ensure()` never tries to bind, never
+ *   self-promotes; if the registry server is unreachable, calls fail.
  */
 export class PortRegistry {
     private state = new RegistryState();
     private serverClose: (() => Promise<void>) | undefined;
     private mode: "server" | "client" | "uninitialized" = "uninitialized";
     private port = getRegistryPort();
+    private serverEligible: boolean;
+
+    constructor(options: PortRegistryOptions = {}) {
+        this.serverEligible = options.serverEligible ?? false;
+    }
+
+    /**
+     * Mark this handle as server-eligible. Must be called before
+     * `ensure()` (or any operation that triggers it). Idempotent.
+     */
+    enableServerMode(): void {
+        if (this.mode !== "uninitialized") {
+            debug(
+                `enableServerMode called after ensure (mode=${this.mode}); ignored`,
+            );
+            return;
+        }
+        this.serverEligible = true;
+    }
+
+    /** True if this handle is allowed to host or self-promote to server. */
+    isServerEligible(): boolean {
+        return this.serverEligible;
+    }
 
     /** Shadow copy of slots this process owns (for replay on self-promotion). */
     private shadow = new Map<string, ShadowEntry>();
@@ -62,6 +107,11 @@ export class PortRegistry {
 
     async ensure(): Promise<void> {
         if (this.mode !== "uninitialized") return;
+        if (!this.serverEligible) {
+            this.mode = "client";
+            debug(`mode=client (client-only) port=${this.port}`);
+            return;
+        }
         const result = await startRegistryServer(this.state, this.port);
         if (result.kind === "started") {
             this.mode = "server";
@@ -188,8 +238,12 @@ export class PortRegistry {
             }
             return (await res.json()) as T;
         } catch (err) {
-            // Server may have died — try to self-promote and retry once.
-            if (this.mode === "client" && !this.promoting) {
+            // Server may have died — try to self-promote (only if eligible) and retry once.
+            if (
+                this.mode === "client" &&
+                !this.promoting &&
+                this.serverEligible
+            ) {
                 debug(`fetch failed (${err}); attempting self-promotion`);
                 await this.tryPromote();
                 if ((this.mode as "server" | "client") === "server") {
@@ -265,5 +319,11 @@ export class PortRegistry {
     }
 }
 
-/** Process-wide singleton. */
+/**
+ * Process-wide singleton. Defaults to **client-only**. Processes that
+ * may host the registry (agent server, shell main without `--connect`,
+ * CLI commands that may spawn an agent server) must call
+ * `globalRegistry.enableServerMode()` early in startup, before any
+ * registry call.
+ */
 export const globalRegistry = new PortRegistry();

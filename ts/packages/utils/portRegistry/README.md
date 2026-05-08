@@ -73,10 +73,11 @@ Three layers, each with a clear responsibility:
    small HTTP API on the well-known port. Knows nothing about who its
    clients are.
 3. **Client** (`client.ts`) — `PortRegistry` class that every consumer
-   talks to. Tries to start the server itself; if the well-known port is
-   already bound, it falls into client mode and forwards every call over
-   HTTP. Also keeps a local **shadow map** so it can replay its slots
-   after a self-promotion.
+   talks to. Server-eligible handles try to start the server themselves
+   and fall into client mode (with the right to self-promote later) if
+   the well-known port is already bound; client-only handles never bind
+   and never promote. Both keep a local **shadow map** so a server-
+   eligible client can replay its slots after self-promotion.
 
 The whole thing has zero dependencies beyond `node:net`, `node:http`,
 and `debug`. No daemon, no install step, no IPC framework.
@@ -106,34 +107,65 @@ allocation and lookup record.
 ## Multi-process election
 
 When `PortRegistry.ensure()` is called for the first time in any
-process, it tries to bind the well-known HTTP port (`5681` by default,
-overridable via `TYPEAGENT_PORT_REGISTRY_PORT`):
+process, behavior depends on whether the process is **server-eligible**
+(see [Who can host the registry?](#who-can-host-the-registry) below):
 
-- **First process wins.** It binds, becomes the server, and starts
-  serving HTTP. Its mode is `"server"` — it dispatches calls to its own
-  in-memory state directly without a network round-trip.
-- **Every later process loses.** It gets `EADDRINUSE`, transitions to
-  `"client"` mode, and forwards `allocate`/`register`/etc. as HTTP
-  requests to whoever bound the port.
+- **Server-eligible processes** try to bind the well-known HTTP port
+  (`5681` by default, overridable via `TYPEAGENT_PORT_REGISTRY_PORT`).
+  The first such process wins and becomes the registry server (mode
+  `"server"`). Every later server-eligible process gets `EADDRINUSE`,
+  transitions to `"client"` mode, but remains eligible to **self-promote**
+  if the current server dies.
+- **Client-only processes** never attempt to bind. They go straight to
+  `"client"` mode and route every call as an HTTP request to whoever is
+  hosting the registry. If the server dies, calls fail loudly — they do
+  not self-promote.
 
-Each client also keeps a **shadow map** of slots it owns. If the
-authoritative server dies, the next HTTP call from any client will fail.
-That client then re-attempts to bind the well-known port; whichever
-client wins the bind race becomes the new server, replays its own
-shadow into the new state, and continues. Other clients re-discover the
-new server on their next call (`ECONNREFUSED` → re-bind attempt → if
-already bound by a peer, fall back to client mode).
+Each server-eligible client also keeps a **shadow map** of slots it
+owns. If the authoritative server dies, the next HTTP call from any
+server-eligible client will fail. That client then re-attempts to bind
+the well-known port; whichever wins the bind race becomes the new
+server, replays its own shadow into the new state, and continues. Other
+server-eligible clients re-discover the new server on their next call
+(`ECONNREFUSED` → re-bind attempt → if already bound by a peer, fall
+back to client mode).
+
+### Who can host the registry?
+
+The rule is simple: **a process is server-eligible iff it owns (or may
+spawn) a local agent server.** Concretely:
+
+| Process                                       | Server-eligible? | Why                                                 |
+| --------------------------------------------- | ---------------- | --------------------------------------------------- |
+| Agent server                                  | yes              | It is the canonical long-lived registry host        |
+| Electron shell main (spawning a local server) | yes              | Owns the agent server it spawns                     |
+| CLI commands that may spawn (`translate`, …)  | yes              | May bring up a local agent server on demand         |
+| Extension hosts doing lookup-only             | no               | Pure consumer; never spawns                         |
+| Pure remote clients                           | no               | Already have an explicit URL; no local server       |
+
+The default is **client-only**. Server-eligibility is opt-in — either
+via `new PortRegistry({ serverEligible: true })` or by calling
+`globalRegistry.enableServerMode()` early in startup, before any
+registry call. The `ensureAgentServerForWorkspace` helper enables
+server mode automatically for its callers because that call site can
+spawn.
+
+This avoids the failure mode where a short-lived process (a CLI that
+exits in a few hundred milliseconds) becomes the registry host and
+then takes the registry down with it. Eligible processes are exactly
+the ones that have a reason to outlive a registry hand-off — or whose
+spawned agent server will.
 
 This means:
 
-- **No supervisor.** Every TypeAgent process can be started and stopped
-  independently. The registry survives any one of them dying.
-- **No startup ordering.** Whoever happens to come up first becomes the
-  server.
-- **No persistence.** State is in-memory; if every participating process
-  exits, the slot map vanishes, and the next process to start gets a
-  clean slate. That's correct because slots only describe currently
-  running processes anyway.
+- **No supervisor.** Every server-eligible process can be started and
+  stopped independently. The registry survives any one of them dying.
+- **No startup ordering.** Whichever eligible process happens to come
+  up first becomes the server.
+- **No persistence.** State is in-memory; if every participating
+  process exits, the slot map vanishes, and the next process to start
+  gets a clean slate. That's correct because slots only describe
+  currently running processes anyway.
 
 The pattern is lifted directly from an existing per-machine bridge
 registry that has been running this way in production. This package
@@ -219,7 +251,7 @@ fresh allocation rather than treat it as fatal.
 | `server.ts`    | `RegistryState` + `startRegistryServer` HTTP handler           |
 | `client.ts`    | `PortRegistry` with server/client mode + self-promotion        |
 | `index.ts`     | Barrel exports                                                 |
-| `test/`        | 13 unit tests: allocator, server lifecycle, slot CRUD, GC, self-promotion |
+| `test/`        | 16 unit tests: allocator, server lifecycle, slot CRUD, GC, self-promotion, client-only mode |
 
 ## Quick reference
 
@@ -228,6 +260,13 @@ import { globalRegistry, Namespaces, isRegistryEnabled }
     from "@typeagent/port-registry";
 
 if (isRegistryEnabled()) {
+    // Server-eligible processes opt in once at startup. The default is
+    // client-only, which never binds the well-known port. Skip this
+    // line in any process that should never host the registry (e.g.
+    // an extension host that only does lookup against an existing
+    // server).
+    globalRegistry.enableServerMode();
+
     // Bridge process: claim a slot at startup.
     const { slotId, ports } = await globalRegistry.allocate(
         Namespaces.AgentServer, // or any namespace identifier

@@ -34,7 +34,7 @@ import {
     writeServerPid,
     removeServerPid,
 } from "@typeagent/agent-server-client";
-import { isRegistryEnabled } from "@typeagent/port-registry";
+import { globalRegistry, isRegistryEnabled } from "@typeagent/port-registry";
 import registerDebug from "debug";
 import os from "node:os";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -439,6 +439,17 @@ async function main() {
         debugStartup(
             `registry-enabled spawn: workspace=${workspaceKey} port=${port}`,
         );
+        // Agent server is the canonical long-lived registry host. Mark
+        // this process as server-eligible so that, on a future failed
+        // registry call, it can self-promote and take over from the
+        // (potentially short-lived) spawner that allocated our slot.
+        // ensure() races to bind the well-known registry port now; if
+        // another process already hosts it we stay in client mode and
+        // promote later if needed.
+        globalRegistry.enableServerMode();
+        await globalRegistry.ensure().catch((err) => {
+            debugStartup(`globalRegistry.ensure() failed: ${err}`);
+        });
     }
 
     scheduleIdleShutdown();

@@ -29,7 +29,7 @@ async function withTestRegistry<T>(
 describe("PortRegistry (single process, server mode)", () => {
     it("allocate returns a slotId and the requested number of ports", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 const result = await reg.allocate("test-ns", {
                     count: 2,
@@ -44,7 +44,7 @@ describe("PortRegistry (single process, server mode)", () => {
 
     it("register + lookup round-trips", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 const { slotId, ports } = await reg.allocate(
                     "test-ns",
@@ -62,7 +62,7 @@ describe("PortRegistry (single process, server mode)", () => {
 
     it("allocate with key registers the resource atomically", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 const { slotId } = await reg.allocate(
                     Namespaces.AgentServer,
@@ -78,7 +78,7 @@ describe("PortRegistry (single process, server mode)", () => {
 
     it("lookup of unknown resource returns null", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 await reg.ensure();
                 const got = await reg.lookup("test-ns", "missing");
@@ -92,7 +92,7 @@ describe("PortRegistry (single process, server mode)", () => {
 
     it("release drops the slot and any registrations on it", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 const { slotId } = await reg.allocate("test-ns", {
                     key: "resX",
@@ -108,7 +108,7 @@ describe("PortRegistry (single process, server mode)", () => {
 
     it("unregister removes the resource but keeps the slot", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 const { slotId } = await reg.allocate("test-ns", {
                     key: "resX",
@@ -128,7 +128,7 @@ describe("PortRegistry (single process, server mode)", () => {
 
     it("singleton lookup (no key) returns the first slot in a namespace", async () => {
         await withTestRegistry(async () => {
-            const reg = new PortRegistry();
+            const reg = new PortRegistry({ serverEligible: true });
             try {
                 const { slotId } = await reg.allocate(Namespaces.AgentServer);
                 const got = await reg.lookup(Namespaces.AgentServer);
@@ -143,8 +143,8 @@ describe("PortRegistry (single process, server mode)", () => {
 describe("PortRegistry (two processes — same-process simulation)", () => {
     it("second instance enters client mode and shares state with server", async () => {
         await withTestRegistry(async () => {
-            const a = new PortRegistry();
-            const b = new PortRegistry();
+            const a = new PortRegistry({ serverEligible: true });
+            const b = new PortRegistry({ serverEligible: true });
             try {
                 await a.ensure();
                 await b.ensure();
@@ -164,8 +164,8 @@ describe("PortRegistry (two processes — same-process simulation)", () => {
 
     it("client can register and server sees it", async () => {
         await withTestRegistry(async () => {
-            const a = new PortRegistry();
-            const b = new PortRegistry();
+            const a = new PortRegistry({ serverEligible: true });
+            const b = new PortRegistry({ serverEligible: true });
             try {
                 await a.ensure();
                 await b.ensure();
@@ -181,6 +181,66 @@ describe("PortRegistry (two processes — same-process simulation)", () => {
             } finally {
                 await b.stop();
                 await a.stop();
+            }
+        });
+    });
+});
+
+describe("PortRegistry client-only mode", () => {
+    it("client-only handle never binds the registry port", async () => {
+        await withTestRegistry(async () => {
+            const c = new PortRegistry();
+            try {
+                await c.ensure();
+                expect(c.isServerEligible()).toBe(false);
+                // No server is up — allocate should fail (cannot bind, cannot reach).
+                await expect(
+                    c.allocate("test-ns", { count: 1 }),
+                ).rejects.toBeDefined();
+            } finally {
+                await c.stop();
+            }
+        });
+    });
+
+    it("client-only handle talks to an existing server but does not promote on failure", async () => {
+        await withTestRegistry(async () => {
+            const server = new PortRegistry({ serverEligible: true });
+            const client = new PortRegistry();
+            try {
+                await server.ensure();
+                await client.ensure();
+                expect(client.isServerEligible()).toBe(false);
+                const { slotId } = await client.allocate("test-ns", {
+                    count: 1,
+                });
+                expect(slotId).toBeDefined();
+                // Kill the server. A subsequent client call must NOT promote.
+                await server.stop();
+                await expect(
+                    client.lookup("test-ns", "missing"),
+                ).rejects.toBeDefined();
+            } finally {
+                await client.stop();
+                await server.stop().catch(() => {});
+            }
+        });
+    });
+
+    it("enableServerMode flips a fresh handle to server-eligible", async () => {
+        await withTestRegistry(async () => {
+            const reg = new PortRegistry();
+            expect(reg.isServerEligible()).toBe(false);
+            reg.enableServerMode();
+            expect(reg.isServerEligible()).toBe(true);
+            try {
+                await reg.ensure();
+                const { slotId } = await reg.allocate("test-ns", {
+                    count: 1,
+                });
+                expect(slotId).toBeDefined();
+            } finally {
+                await reg.stop();
             }
         });
     });

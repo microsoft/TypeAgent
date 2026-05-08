@@ -25,6 +25,7 @@ export {
     globalRegistry,
     isRegistryEnabled,
 } from "./client.js";
+export type { PortRegistryOptions } from "./client.js";
 
 export { RegistryState, startRegistryServer } from "./server.js";
 export type { StartResult } from "./server.js";
