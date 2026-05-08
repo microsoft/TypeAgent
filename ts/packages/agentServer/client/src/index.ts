@@ -14,6 +14,16 @@ export {
     writeServerPid,
     removeServerPid,
 } from "./agentServerClient.js";
+export {
+    DEFAULT_AGENT_SERVER_PORT,
+    DEFAULT_WORKSPACE_KEY,
+    ensureAgentServerForWorkspace,
+    lookupAgentServerForWorkspace,
+} from "./workspaceClient.js";
+export type {
+    AgentServerHandle,
+    EnsureAgentServerOptions,
+} from "./workspaceClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {
     ConversationInfo,

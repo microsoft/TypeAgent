@@ -150,7 +150,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1045,7 +1045,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1153,6 +1153,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/port-registry':
+        specifier: workspace:*
+        version: link:../../utils/portRegistry
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -1218,6 +1221,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      '@typeagent/port-registry':
+        specifier: workspace:*
+        version: link:../../utils/portRegistry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -4139,7 +4145,7 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@4.3.6)
+        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.8
@@ -4876,6 +4882,34 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/utils/portRegistry:
+    dependencies:
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.25
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -17321,7 +17355,7 @@ snapshots:
       async: 3.2.6
       cosmiconfig: 8.3.6(typescript@5.4.5)
       date-fns: 2.30.0
-      debug: 4.4.1
+      debug: 4.4.3(supports-color@8.1.1)
       detect-indent: 6.1.0
       find-up: 7.0.0
       fs-extra: 11.3.0
@@ -19873,7 +19907,7 @@ snapshots:
   '@types/fs-extra@11.0.4':
     dependencies:
       '@types/jsonfile': 6.1.4
-      '@types/node': 20.19.23
+      '@types/node': 20.19.25
 
   '@types/fs-extra@8.1.5':
     dependencies:
@@ -20124,11 +20158,11 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 20.19.23
+      '@types/node': 20.19.25
 
   '@types/xml2js@0.4.14':
     dependencies:
-      '@types/node': 20.19.23
+      '@types/node': 20.19.25
 
   '@types/yargs-parser@21.0.2': {}
 

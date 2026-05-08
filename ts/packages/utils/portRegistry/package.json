@@ -1,12 +1,13 @@
 {
-  "name": "@typeagent/agent-server-client",
+  "name": "@typeagent/port-registry",
   "version": "0.0.1",
-  "description": "Client for the Type Agent Server",
+  "private": true,
+  "description": "Centralized port allocation and resource discovery service for TypeAgent processes.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agentServer/client"
+    "directory": "ts/packages/utils/portRegistry"
   },
   "license": "MIT",
   "author": "Microsoft",
@@ -21,21 +22,21 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-rpc": "workspace:*",
-    "@typeagent/agent-server-protocol": "workspace:*",
-    "@typeagent/dispatcher-rpc": "workspace:*",
-    "@typeagent/port-registry": "workspace:*",
-    "debug": "^4.4.0",
-    "isomorphic-ws": "^5.0.0"
+    "debug": "^4.4.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
-    "@types/ws": "^8.5.10",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

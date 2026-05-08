@@ -34,6 +34,7 @@ import {
     writeServerPid,
     removeServerPid,
 } from "@typeagent/agent-server-client";
+import { isRegistryEnabled } from "@typeagent/port-registry";
 import registerDebug from "debug";
 import os from "node:os";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -196,6 +197,9 @@ async function main() {
             : process.env.AGENT_SERVER_PORT
               ? parseInt(process.env.AGENT_SERVER_PORT, 10)
               : 8999;
+
+    const workspaceKey =
+        process.env.TYPEAGENT_AGENT_SERVER_WORKSPACE ?? undefined;
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
@@ -421,6 +425,19 @@ async function main() {
 
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);
+
+    // When the registry feature flag is on and we were spawned with a
+    // workspace key, surface that for diagnostics. The slot itself is
+    // owned by the client that spawned us (see workspaceClient.ts) — when
+    // all clients exit, the slot dies via PID liveness GC and any
+    // subsequent client will spawn a fresh server. The orphaned server
+    // will exit on its idle timeout if one was set.
+    if (isRegistryEnabled() && workspaceKey !== undefined) {
+        debugStartup(
+            `registry-enabled spawn: workspace=${workspaceKey} port=${port}`,
+        );
+    }
+
     scheduleIdleShutdown();
 }
 
