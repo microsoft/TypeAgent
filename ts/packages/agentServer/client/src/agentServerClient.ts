@@ -434,17 +434,6 @@ async function waitForServer(
     );
 }
 
-/**
- * Ensure an agent server is running on the given (legacy, hardcoded)
- * port; spawns one if not.
- *
- * @deprecated Prefer `ensureAgentServerForWorkspace` (in
- * `@typeagent/agent-server-client/workspaceClient`), which routes
- * through the port registry when `TYPEAGENT_USE_PORT_REGISTRY=1` and
- * lets the registry assign the port instead of hardcoding it. This
- * overload remains as the flag-off fallback and will be removed once
- * the registry is the default.
- */
 export async function ensureAgentServer(
     port: number = 8999,
     hidden: boolean = false,
