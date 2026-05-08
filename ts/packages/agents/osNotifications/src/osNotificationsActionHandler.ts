@@ -310,7 +310,8 @@ class OsNotificationsTestCommandHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             message: {
-                description: "Notification body text (defaults to 'Hello World!')",
+                description:
+                    "Notification body text (defaults to 'Hello World!')",
                 implicitQuotes: true,
                 optional: true,
             },
@@ -427,10 +428,7 @@ export function instantiate(): AppAgent {
         // calls this right after the agent is enabled, after setup, and
         // on @config agent refresh. The result is cached.
         async checkReadiness(): Promise<ReadinessReport> {
-            return evaluateReadiness(
-                process.platform,
-                isWindowsHelperBuilt(),
-            );
+            return evaluateReadiness(process.platform, isWindowsHelperBuilt());
         },
 
         // Returns the same yes/no card the agent used to offer when

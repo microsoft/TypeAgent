@@ -1212,8 +1212,7 @@ export class ChatPanel {
         // for host-driven `showStatus()` calls that have no request context.
         if (
             appendMode === "temporary" &&
-            (requestId !== undefined ||
-                this.currentUserThreadId !== undefined)
+            (requestId !== undefined || this.currentUserThreadId !== undefined)
         ) {
             const tempContainer = this.getOrCreateAgentContainer(
                 source,
@@ -1745,8 +1744,7 @@ export class ChatPanel {
         }
         const threadId = this.resolveThreadId(requestId);
         const target = this.threadContainers.get(threadId);
-        const firstMessageMs =
-            this.firstMessageMsByRequestId.get(threadId);
+        const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
             // Mirror the Electron shell's "⚠ Cancelled" status line so the
             // user has visible confirmation that Stop / Esc cancelled the

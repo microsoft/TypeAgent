@@ -378,10 +378,7 @@ describe("checkAgentReady (pre-flight gate)", () => {
     test("throws with a setup hint when state is setup-required and the agent has setup", async () => {
         const sys = fakeSystemContext({
             readiness: new Map([
-                [
-                    "agentB",
-                    { state: "setup-required", message: "missing exe" },
-                ],
+                ["agentB", { state: "setup-required", message: "missing exe" }],
             ]),
             hasSetup: () => true,
         });
@@ -393,10 +390,7 @@ describe("checkAgentReady (pre-flight gate)", () => {
     test("throws with a refresh hint when the agent has no setup hook (manual config)", async () => {
         const sys = fakeSystemContext({
             readiness: new Map([
-                [
-                    "agentC",
-                    { state: "setup-required", message: "set FOO_VAR" },
-                ],
+                ["agentC", { state: "setup-required", message: "set FOO_VAR" }],
             ]),
             hasSetup: () => false,
         });
@@ -443,11 +437,7 @@ describe("checkAgentReady (pre-flight gate)", () => {
             setupOnFirstUse: true,
             runSetupImpl: async () => setupResult,
         });
-        const out = await checkAgentReady(
-            "agentF",
-            sys,
-            fakeActionContext(),
-        );
+        const out = await checkAgentReady("agentF", sys, fakeActionContext());
         expect(out).toBe(setupResult);
     });
 

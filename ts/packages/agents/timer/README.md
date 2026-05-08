@@ -7,21 +7,21 @@ to the chat without a preceding user request.
 
 ## Usage
 
-| Phrasing | Effect |
-| --- | --- |
-| `remind me to <message> in <duration>` | one-shot bubble (default) |
-| `remind me to <message> in <duration> as a bubble` | one-shot bubble (explicit) |
-| `remind me to <message> in <duration> as a toast` | one-shot toast |
-| `remind me to <message> in <duration> as an inline` | one-shot inline |
-| `toast me <message> in <duration>` | one-shot toast |
-| `flash <message> in <duration>` | one-shot inline |
-| `remind me to <message> every <duration>` | repeating bubble |
-| `remind me to <message> every <duration> as a toast` | repeating toast |
-| `remind me to <message> every <duration> as an inline` | repeating inline |
-| `tick <message> every <duration>` | repeating bubble (rapid-fire) |
-| `repeat reminder <message> every <duration>` | repeating bubble |
-| `show reminders` / `list reminders` | list pending |
-| `cancel reminder <id>` / `cancel all reminders` | cancel |
+| Phrasing                                               | Effect                        |
+| ------------------------------------------------------ | ----------------------------- |
+| `remind me to <message> in <duration>`                 | one-shot bubble (default)     |
+| `remind me to <message> in <duration> as a bubble`     | one-shot bubble (explicit)    |
+| `remind me to <message> in <duration> as a toast`      | one-shot toast                |
+| `remind me to <message> in <duration> as an inline`    | one-shot inline               |
+| `toast me <message> in <duration>`                     | one-shot toast                |
+| `flash <message> in <duration>`                        | one-shot inline               |
+| `remind me to <message> every <duration>`              | repeating bubble              |
+| `remind me to <message> every <duration> as a toast`   | repeating toast               |
+| `remind me to <message> every <duration> as an inline` | repeating inline              |
+| `tick <message> every <duration>`                      | repeating bubble (rapid-fire) |
+| `repeat reminder <message> every <duration>`           | repeating bubble              |
+| `show reminders` / `list reminders`                    | list pending                  |
+| `cancel reminder <id>` / `cancel all reminders`        | cancel                        |
 
 Pending reminders are persisted to `sessionStorage` (per-conversation),
 so they survive a dispatcher restart. A reminder whose fire time has

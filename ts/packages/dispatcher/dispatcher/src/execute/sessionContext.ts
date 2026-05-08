@@ -130,10 +130,7 @@ export function createSessionContext<T = unknown>(
                     mode: DisplayAppendMode = "block",
                 ) {
                     if (completed) throw completedError();
-                    context.clientIO.appendDisplay(
-                        buildMessage(content),
-                        mode,
-                    );
+                    context.clientIO.appendDisplay(buildMessage(content), mode);
                 },
                 complete() {
                     completed = true;

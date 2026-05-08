@@ -54,11 +54,8 @@ async function loadPersistedState(
         const data = await storage.read(STORAGE_FILE, "utf8");
         const parsed = JSON.parse(data);
         return {
-            nextId:
-                typeof parsed.nextId === "number" ? parsed.nextId : 0,
-            reminders: Array.isArray(parsed.reminders)
-                ? parsed.reminders
-                : [],
+            nextId: typeof parsed.nextId === "number" ? parsed.nextId : 0,
+            reminders: Array.isArray(parsed.reminders) ? parsed.reminders : [],
         };
     } catch {
         return { nextId: 0, reminders: [] };
@@ -67,10 +64,7 @@ async function loadPersistedState(
 
 // Best-effort save. Fire-and-forget — a failed write doesn't propagate
 // to the caller (e.g. the action result still succeeds).
-function persistAsync(
-    storage: Storage | undefined,
-    ctx: TimerContext,
-): void {
+function persistAsync(storage: Storage | undefined, ctx: TimerContext): void {
     if (!storage) return;
     const state: PersistedState = {
         nextId: ctx.nextId,

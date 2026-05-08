@@ -177,9 +177,9 @@ describe("beginAgentThread", () => {
         const sc = createSessionContext("myAgent", {}, ctx, false);
         const thread = sc.beginAgentThread("inline");
         thread.complete();
-        expect(() =>
-            thread.setDisplay({ type: "text", content: "x" }),
-        ).toThrow(/completed/);
+        expect(() => thread.setDisplay({ type: "text", content: "x" })).toThrow(
+            /completed/,
+        );
         expect(() =>
             thread.appendDisplay({ type: "text", content: "x" }),
         ).toThrow(/completed/);

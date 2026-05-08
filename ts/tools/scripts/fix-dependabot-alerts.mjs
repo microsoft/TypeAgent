@@ -639,9 +639,7 @@ function getResolvedVersions(whyData, pkg) {
 
     for (const entry of whyData) walk(entry);
 
-    return [...versions]
-        .filter((v) => semver.valid(v))
-        .sort(semver.compare);
+    return [...versions].filter((v) => semver.valid(v)).sort(semver.compare);
 }
 
 /**
@@ -2529,13 +2527,19 @@ async function analyzeVulnerabilities(byPackage) {
                     }
 
                     if (!patched) {
-                        const noPatchVersions = getResolvedVersions(whyData, pkg);
+                        const noPatchVersions = getResolvedVersions(
+                            whyData,
+                            pkg,
+                        );
                         e.currentVersion =
                             noPatchVersions.length > 0
                                 ? noPatchVersions[0]
                                 : null;
                     } else {
-                        const uniqueVersions = getResolvedVersions(whyData, pkg);
+                        const uniqueVersions = getResolvedVersions(
+                            whyData,
+                            pkg,
+                        );
                         const vulnVersions = uniqueVersions.filter((v) =>
                             semver.lt(v, patched),
                         );

@@ -236,9 +236,7 @@ export class AppAgentManager implements ActionConfigProvider {
     // fresh report. No-op (returns {state: "ready"}) for agents that don't
     // implement checkReadiness or whose session context isn't initialized.
     // Concurrent callers for the same agent share the in-flight probe.
-    public refreshReadiness(
-        appAgentName: string,
-    ): Promise<ReadinessReport> {
+    public refreshReadiness(appAgentName: string): Promise<ReadinessReport> {
         const existing = this.refreshInFlight.get(appAgentName);
         if (existing !== undefined) {
             return existing;
@@ -1460,9 +1458,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 if (appAgent.stopBackgroundTasks !== undefined) {
                     try {
                         await appAgent.stopBackgroundTasks(sessionContext);
-                        debug(
-                            `Background tasks stopped for ${record.name}`,
-                        );
+                        debug(`Background tasks stopped for ${record.name}`);
                     } catch (e) {
                         debugError(
                             `stopBackgroundTasks failed for ${record.name}. Error ignored`,
