@@ -823,6 +823,934 @@ function reanalyzeProbeResults(
 }
 
 // =============================================================================
+// Recovery-rank analysis (runtime-aware)
+//
+// At runtime, `llmSelect` is the *schema* selector — it picks a single schema
+// based on the embedding ranker's top-1 result, then the LLM translates the
+// request against that schema's full action list (plus "switch" stubs to
+// other schemas). The strategy choice (`first-match` / `score-rank` /
+// `priority` / `user-clarify`) operates on the cluster of candidates within
+// `scoreDeltaThreshold` of top-1, but only ever returns a *schema name*.
+//
+// This means a "MISROUTE" in our probe data — where the embedding's top-1
+// action is wrong — splits into very different runtime risks depending on
+// whether the *schema* was right:
+//
+//   sameSchema        — top-1 schema matches the expected schema. The
+//                       embedding's "wrong action" is a sibling within the
+//                       right schema. At runtime the LLM gets the full action
+//                       list and picks; this slice is probably benign and
+//                       not a real dispatch problem.
+//   crossInCluster    — top-1 schema differs, but the expected schema also
+//                       has a candidate within `scoreDeltaThreshold` of
+//                       top-1.  llmSelect would build a multi-schema cluster;
+//                       a non-default strategy (score-rank / priority /
+//                       user-clarify) could pick the right schema.  This is
+//                       the slice the E2.x rollout experiments target.
+//   crossOutOfCluster — top-1 schema differs, expected schema appears in the
+//                       top-K but no candidate from it is within delta of
+//                       top-1.  llmSelect doesn't flag a collision, so
+//                       strategy choice is irrelevant.  Would need a wider
+//                       threshold.
+//   crossOffList      — top-1 schema differs and the expected schema doesn't
+//                       appear in the top-K at all.  The embedding ranker is
+//                       genuinely losing the right *agent*.  Only rescue is
+//                       a switch-stub from the LLM during translation, or
+//                       upstream fixes (schema tightening, embedding scorer).
+//
+// The action-level rank-of-correct (where the *exact* expected action sits
+// in the top-K) is preserved as a secondary chart — it's the embedding
+// ranker's internal calibration view, not the runtime story.
+// =============================================================================
+
+type RuntimeBucket =
+    | "sameSchema"
+    | "crossInCluster"
+    | "crossOutOfCluster"
+    | "crossOffList";
+
+interface PerActionRecovery {
+    schemaName: string;
+    actionName: string;
+    misrouteCount: number;
+    sameSchema: number;
+    crossInCluster: number;
+    crossOutOfCluster: number;
+    crossOffList: number;
+}
+
+interface RecoveryAnalysis {
+    delta: number;
+    topK: number;
+    totalMisroutes: number;
+    buckets: Record<RuntimeBucket, number>;
+    perAction: PerActionRecovery[];
+}
+
+/** 1-based rank of the first row whose schemaName equals `expectedSchema`,
+ * or -1 if no row matches. Returns the row too so callers can inspect the
+ * score gap to top-1. */
+function findExpectedSchemaInRows(
+    rows: ProbeRow[],
+    expectedSchema: string,
+): { rank: number; row: ProbeRow | undefined } {
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].schemaName === expectedSchema) {
+            return { rank: i + 1, row: rows[i] };
+        }
+    }
+    return { rank: -1, row: undefined };
+}
+
+/** 1-based rank of the (prefix-matched) expected *action* in `rows`, or -1
+ * if not present. Used for the secondary "where does the action rank?"
+ * histogram — informative as embedding-ranker calibration. */
+function findExpectedActionRank(
+    rows: ProbeRow[],
+    expectedSchema: string,
+    expectedAction: string,
+): number {
+    for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (
+            prefixActionsMatch(
+                r.schemaName,
+                r.actionName,
+                expectedSchema,
+                expectedAction,
+            )
+        ) {
+            return i + 1;
+        }
+    }
+    return -1;
+}
+
+function bucketizeRuntime(
+    rows: ProbeRow[],
+    expectedSchema: string,
+    threshold: number,
+): RuntimeBucket {
+    if (rows.length === 0) return "crossOffList";
+    const top1 = rows[0];
+    if (top1.schemaName === expectedSchema) return "sameSchema";
+    const found = findExpectedSchemaInRows(rows, expectedSchema);
+    if (found.rank < 0 || !found.row) return "crossOffList";
+    if (top1.score - found.row.score < threshold) return "crossInCluster";
+    return "crossOutOfCluster";
+}
+
+function analyzeRecoveryRank(
+    probeFile: ProbeFile,
+    delta: number,
+): RecoveryAnalysis {
+    const buckets: Record<RuntimeBucket, number> = {
+        sameSchema: 0,
+        crossInCluster: 0,
+        crossOutOfCluster: 0,
+        crossOffList: 0,
+    };
+    const perAction = new Map<string, PerActionRecovery>();
+    let totalMisroutes = 0;
+
+    for (const r of probeFile.results) {
+        if (r.verdict !== "MISROUTE") continue;
+        totalMisroutes++;
+        const bucket = bucketizeRuntime(r.rows, r.schemaName, delta);
+        buckets[bucket]++;
+
+        const key = `${r.schemaName}.${r.actionName}`;
+        let row = perAction.get(key);
+        if (!row) {
+            row = {
+                schemaName: r.schemaName,
+                actionName: r.actionName,
+                misrouteCount: 0,
+                sameSchema: 0,
+                crossInCluster: 0,
+                crossOutOfCluster: 0,
+                crossOffList: 0,
+            };
+            perAction.set(key, row);
+        }
+        row.misrouteCount++;
+        row[bucket]++;
+    }
+
+    return {
+        delta,
+        topK: probeFile.summary.top,
+        totalMisroutes,
+        buckets,
+        perAction: [...perAction.values()].sort(
+            (a, b) =>
+                b.misrouteCount - a.misrouteCount ||
+                a.actionName.localeCompare(b.actionName),
+        ),
+    };
+}
+
+// =============================================================================
+// Recovery visualization payload + HTML
+// =============================================================================
+
+interface RecoveryVizPhrase {
+    expected: string;
+    actualTop1: string;
+    phrase: string;
+    bucket: RuntimeBucket;
+    /** Rank of the expected *action* in the top-K (1-based; -1 = off-list).
+     *  Independent of the bucket — informative for the embedding-rank
+     *  histogram only. */
+    actionRank: number;
+    /** Rank of the expected *schema* in the top-K (1-based; -1 = not present). */
+    schemaRank: number;
+    top1Score: number;
+    /** Score of the highest-scoring candidate in the expected schema (if any). */
+    expectedSchemaTopScore?: number | undefined;
+    deltaTop1ToExpectedSchema?: number | undefined;
+    model?: string | undefined;
+    style?: string | undefined;
+}
+
+interface RecoveryVizPerAction extends PerActionRecovery {
+    /** Anything *not* sameSchema or crossOffList — the slice that runtime
+     *  llmSelect strategy / threshold tuning could potentially reach. */
+    crossRescuable: number;
+    /** Fraction (0-100) of misroutes that are likely-benign (sameSchema). */
+    benignPct: number;
+}
+
+interface RecoveryVizPayload {
+    summary: {
+        totalMisroutes: number;
+        topK: number;
+        delta: number;
+        buckets: Record<RuntimeBucket, number>;
+    };
+    perAction: RecoveryVizPerAction[];
+    perAgent: Array<{
+        agent: string;
+        misrouteCount: number;
+        sameSchema: number;
+        crossInCluster: number;
+        crossOutOfCluster: number;
+        crossOffList: number;
+        crossRescuable: number;
+        benignPct: number;
+    }>;
+    /** Embedding-side calibration: at what rank does the expected *action*
+     *  appear in the top-K? Secondary chart (the schema-aware buckets are
+     *  the primary runtime story). */
+    actionRankHistogram: Array<{ rank: string; count: number }>;
+    phrases: RecoveryVizPhrase[];
+}
+
+function buildRecoveryPayload(
+    probeFile: ProbeFile,
+    delta: number,
+): RecoveryVizPayload {
+    const analysis = analyzeRecoveryRank(probeFile, delta);
+
+    const phrases: RecoveryVizPhrase[] = [];
+    const rankCounts: Record<string, number> = {};
+
+    for (const r of probeFile.results) {
+        if (r.verdict !== "MISROUTE") continue;
+        const top1 = r.rows[0];
+        const bucket = bucketizeRuntime(r.rows, r.schemaName, delta);
+        const actionRank = findExpectedActionRank(
+            r.rows,
+            r.schemaName,
+            r.actionName,
+        );
+        const expectedSchema = findExpectedSchemaInRows(r.rows, r.schemaName);
+        const rankKey = actionRank > 0 ? String(actionRank) : "off-list";
+        rankCounts[rankKey] = (rankCounts[rankKey] ?? 0) + 1;
+        phrases.push({
+            expected: `${r.schemaName}.${r.actionName}`,
+            actualTop1: r.top1
+                ? `${r.top1.schemaName}.${r.top1.actionName}`
+                : "—",
+            phrase: r.phraseText,
+            bucket,
+            actionRank,
+            schemaRank: expectedSchema.rank,
+            top1Score: top1?.score ?? 0,
+            expectedSchemaTopScore: expectedSchema.row?.score,
+            deltaTop1ToExpectedSchema:
+                top1 && expectedSchema.row
+                    ? top1.score - expectedSchema.row.score
+                    : undefined,
+            model: r.phraseSources?.[0]?.model,
+            style: r.phraseSources?.[0]?.style,
+        });
+    }
+
+    const actionRankHistogram: { rank: string; count: number }[] = [];
+    for (let r = 1; r <= analysis.topK; r++) {
+        actionRankHistogram.push({
+            rank: String(r),
+            count: rankCounts[String(r)] ?? 0,
+        });
+    }
+    actionRankHistogram.push({
+        rank: "off-list",
+        count: rankCounts["off-list"] ?? 0,
+    });
+
+    // Per-agent rollup (first segment of schema name).
+    const perAgentMap = new Map<
+        string,
+        {
+            agent: string;
+            misrouteCount: number;
+            sameSchema: number;
+            crossInCluster: number;
+            crossOutOfCluster: number;
+            crossOffList: number;
+        }
+    >();
+    for (const a of analysis.perAction) {
+        const agent = a.schemaName.split(".")[0];
+        let row = perAgentMap.get(agent);
+        if (!row) {
+            row = {
+                agent,
+                misrouteCount: 0,
+                sameSchema: 0,
+                crossInCluster: 0,
+                crossOutOfCluster: 0,
+                crossOffList: 0,
+            };
+            perAgentMap.set(agent, row);
+        }
+        row.misrouteCount += a.misrouteCount;
+        row.sameSchema += a.sameSchema;
+        row.crossInCluster += a.crossInCluster;
+        row.crossOutOfCluster += a.crossOutOfCluster;
+        row.crossOffList += a.crossOffList;
+    }
+    const perAgent = [...perAgentMap.values()]
+        .map((r) => ({
+            ...r,
+            crossRescuable: r.crossInCluster + r.crossOutOfCluster,
+            benignPct:
+                r.misrouteCount > 0
+                    ? (r.sameSchema / r.misrouteCount) * 100
+                    : 0,
+        }))
+        .sort((a, b) => b.misrouteCount - a.misrouteCount);
+
+    return {
+        summary: {
+            totalMisroutes: analysis.totalMisroutes,
+            topK: analysis.topK,
+            delta: analysis.delta,
+            buckets: analysis.buckets,
+        },
+        perAction: analysis.perAction.map((a) => ({
+            ...a,
+            crossRescuable: a.crossInCluster + a.crossOutOfCluster,
+            benignPct:
+                a.misrouteCount > 0
+                    ? (a.sameSchema / a.misrouteCount) * 100
+                    : 0,
+        })),
+        perAgent,
+        actionRankHistogram,
+        phrases,
+    };
+}
+
+function buildRecoveryHTML(payload: RecoveryVizPayload): string {
+    const json = JSON.stringify(payload).replace(/</g, "\\u003c");
+    return RECOVERY_HTML_PREFIX + json + RECOVERY_HTML_SUFFIX;
+}
+
+const RECOVERY_HTML_PREFIX = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TypeAgent collision recovery analysis</title>
+<style>
+  :root {
+    --bg: #0f1217; --panel: #161a22; --ink: #e8ecf3; --muted: #8a93a3;
+    --line: #242a36; --accent: #7aa2f7;
+    /* Bucket colors, ordered by severity:
+     *   sameSchema      — embedding picked the right schema; LLM rescues
+     *   crossInCluster  — wrong schema, but right schema in runtime cluster (strategy can save)
+     *   crossOutOfCluster — wrong schema, right schema in top-K but outside cluster (wider window needed)
+     *   crossOffList    — wrong schema, right schema not in top-K (structural / switch-stub only) */
+    --b-same:  #a3e635;
+    --b-in:    #60a5fa;
+    --b-out:   #f59e0b;
+    --b-off:   #f87171;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  header { padding: 22px 32px 10px 32px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0 0 4px 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  header .stats { color: var(--muted); font-size: 13px; }
+  header .stats b { color: var(--ink); font-weight: 600; }
+  main { padding: 22px 32px; display: grid; grid-template-columns: 1fr; gap: 24px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; }
+  section h2 { margin: 0 0 6px 0; font-size: 16px; font-weight: 600; }
+  section .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .controls input, .controls select {
+    background: #0a0d12; border: 1px solid var(--line); color: var(--ink);
+    border-radius: 5px; padding: 5px 8px; font: inherit;
+  }
+  .controls label { color: var(--muted); font-size: 12px; }
+
+  /* Headline stacked bar */
+  .headline-bar {
+    display: flex; height: 36px; border-radius: 4px; overflow: hidden;
+    margin-bottom: 12px; cursor: pointer; user-select: none;
+  }
+  .headline-bar .seg {
+    display: flex; align-items: center; justify-content: center;
+    color: #0f1217; font-weight: 600; font-size: 13px;
+    transition: filter 0.1s, opacity 0.1s;
+  }
+  .headline-bar .seg:hover { filter: brightness(1.15); }
+  .headline-bar .seg.dim { opacity: 0.35; }
+  .legend-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .legend-chips .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 14px; background: #11141b;
+    border: 1px solid var(--line); cursor: pointer; user-select: none;
+    font-size: 12px;
+    transition: opacity 0.08s, border-color 0.08s, background 0.08s;
+  }
+  .legend-chips .chip:hover { border-color: var(--ink); }
+  .legend-chips .chip.active { background: #1c2230; border-color: var(--ink); }
+  .legend-chips .chip.dim { opacity: 0.35; }
+  .legend-chips .chip i {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  }
+
+  .verdict {
+    margin-top: 10px; padding: 10px 12px;
+    border-left: 3px solid var(--b-off); background: rgba(248, 113, 113, 0.08);
+    font-size: 13px; border-radius: 0 4px 4px 0;
+  }
+  .verdict.tunable {
+    border-left-color: var(--b-same); background: rgba(163, 230, 53, 0.08);
+  }
+  .verdict b { color: var(--ink); }
+
+  /* Per-action profile */
+  .action-list { display: grid; grid-template-columns: 1fr; gap: 2px; }
+  .action-row {
+    display: grid;
+    grid-template-columns: 32ch 60px 1fr;
+    align-items: center; gap: 12px;
+    padding: 4px 8px;
+    border-radius: 4px; cursor: pointer;
+    transition: background 0.08s;
+  }
+  .action-row:hover { background: #1c212c; }
+  .action-row.expanded { background: #1c212c; }
+  .action-row .name {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px; color: var(--ink); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .action-row .total {
+    font-family: ui-monospace, monospace; font-size: 12px;
+    color: var(--muted); text-align: right;
+  }
+  .action-row .stack {
+    display: flex; height: 14px; border-radius: 2px; overflow: hidden;
+    background: #0a0d12;
+  }
+  .action-row .stack .seg { transition: filter 0.08s; }
+
+  .action-detail {
+    padding: 8px 16px 10px 44px;
+    background: #11141b; border-radius: 4px;
+    margin: 2px 0 6px 0;
+    font-size: 12px;
+  }
+  .action-detail .ph {
+    display: grid;
+    grid-template-columns: 56px 1fr 18ch;
+    gap: 10px; padding: 3px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .action-detail .ph:last-child { border-bottom: none; }
+  .action-detail .ph .rank {
+    font-family: ui-monospace, monospace; font-size: 11px;
+    text-align: right;
+  }
+  .action-detail .ph .text {
+    color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .action-detail .ph .actual {
+    font-family: ui-monospace, monospace; font-size: 11px;
+    color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Rank histogram */
+  .rank-hist {
+    display: grid; grid-template-columns: 64px 1fr 64px;
+    gap: 8px; align-items: center;
+    margin: 4px 0;
+  }
+  .rank-hist .label { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); text-align: right; }
+  .rank-hist .bar { height: 14px; background: var(--accent); border-radius: 2px; }
+  .rank-hist .count { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute; background: #0a0d12; border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 10px; pointer-events: none; font-size: 12px;
+    max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    color: var(--ink); z-index: 9999; opacity: 0; transition: opacity 0.08s;
+  }
+  .tooltip b { color: var(--ink); }
+  .tooltip .muted { color: var(--muted); }
+  .tooltip ul { margin: 4px 0 0; padding-left: 16px; }
+
+  .empty-state {
+    color: var(--muted); font-style: italic;
+    padding: 12px 0; font-size: 13px; text-align: center;
+  }
+
+  /* Collapsible "how to read" panel */
+  details.help {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 18px;
+  }
+  details.help > summary {
+    cursor: pointer; user-select: none;
+    font-weight: 600; font-size: 14px;
+    list-style: none; outline: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  details.help > summary::-webkit-details-marker { display: none; }
+  details.help > summary::before {
+    content: "▸"; color: var(--muted);
+    font-size: 11px; transition: transform 0.1s;
+    display: inline-block; width: 10px;
+  }
+  details.help[open] > summary::before { transform: rotate(90deg); }
+  details.help[open] > summary {
+    margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  details.help .help-body { font-size: 13px; color: var(--ink); }
+  details.help .help-body h3 {
+    margin: 14px 0 6px; font-size: 13px; font-weight: 600;
+    color: var(--ink);
+  }
+  details.help .help-body h3:first-child { margin-top: 0; }
+  details.help .help-body p { margin: 4px 0 8px; }
+  details.help .help-body ul { margin: 4px 0 8px; padding-left: 20px; }
+  details.help .help-body li { margin: 3px 0; }
+  details.help .help-body code {
+    background: #11141b; padding: 1px 5px; border-radius: 2px;
+    font-size: 12px; font-family: ui-monospace, monospace;
+  }
+  details.help .help-body .swatch {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; vertical-align: middle;
+    margin-right: 4px;
+  }
+  details.help .help-body .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Collision recovery analysis</h1>
+  <div class="stats" id="stats"></div>
+</header>
+<main>
+  <details class="help" open>
+    <summary>How to read these charts</summary>
+    <div class="help-body">
+      <h3>What's being measured</h3>
+      <p>Each input row is one phrase generated by an LLM for a specific intended action, replayed through the embedding ranker. A <b>MISROUTE</b> means the ranker's top-1 candidate wasn't the intended action. But what runtime <code>llmSelect</code> actually consumes from that ranking is the top-1 candidate's <i>schema</i> (the agent namespace), not the action — so this page splits misroutes by whether the embedding picked the right schema (likely benign — LLM rescues within the schema) versus the wrong schema (real runtime risk).</p>
+
+      <h3>How the runtime works</h3>
+      <p>At dispatch time, <code>llmSelect</code> calls <code>semanticSearchActionSchema</code> to rank actions, takes the top-1 result's schema name, and sends the LLM that schema's full action list (plus "switch" stubs to other schemas). The strategy choice (<code>first-match</code> / <code>score-rank</code> / <code>priority</code> / <code>user-clarify</code>) only fires when multiple <i>schemas</i> have candidates within <code>scoreDeltaThreshold</code> of top-1 — and it returns a schema name, not an action. So action-level disagreement within the same schema isn't a runtime collision; only cross-schema disagreement is.</p>
+
+      <h3>The four buckets</h3>
+      <ul>
+        <li><span class="swatch" style="background:var(--b-same)"></span><b>same-schema</b> — top-1 candidate is in the right schema, just not the right action. <span class="muted">Probably benign at runtime: the LLM gets the correct schema's full action list and disambiguates. Counted as a probe-level "misroute" but unlikely to be a dispatch error.</span></li>
+        <li><span class="swatch" style="background:var(--b-in)"></span><b>cross-schema, in cluster</b> — top-1 is in a different schema, but the expected schema has a candidate within <code>scoreDeltaThreshold</code> of top-1. <span class="muted">This is the slice <code>llmSelect</code> strategies act on — <code>first-match</code> picks wrong, but <code>score-rank</code> / <code>priority</code> / <code>user-clarify</code> can rescue. The <code>E2.x</code> rollout experiments target exactly this.</span></li>
+        <li><span class="swatch" style="background:var(--b-out)"></span><b>cross-schema, out of cluster</b> — wrong schema at top-1, expected schema appears in top-K but its best candidate is outside the threshold. <span class="muted"><code>llmSelect</code> doesn't even flag a collision here. Lever: widen the threshold. Strategy choice is irrelevant.</span></li>
+        <li><span class="swatch" style="background:var(--b-off)"></span><b>cross-schema, off-list</b> — wrong schema at top-1 and the expected schema doesn't appear in top-K at all. <span class="muted">The embedding ranker is genuinely losing the right agent. Rescue paths are limited to (a) the LLM picking a switch-stub during translation, or (b) upstream fixes (schema descriptions, grammar, embedding scorer).</span></li>
+      </ul>
+      <p>The first bucket is the embedding ranker being "wrong but not in a way that breaks dispatch." The middle two are <b>tunable inside <code>llmSelect</code></b>. The fourth is the irreducible structural slice. The verdict callout flips green when same-schema dominates, red when off-list dominates.</p>
+
+      <h3>Reading the headline bar</h3>
+      <p>The big horizontal bar is the four buckets stacked, sized by share. Click a segment (or any chip in the row below) to filter the per-action list and the action drill-downs to that bucket. Click again — or click <b>all</b> — to clear. The chips also act as a legend.</p>
+
+      <h3>Reading the per-action profile</h3>
+      <p>Each row is one action. The number is its total misroute count; the bar is its bucket mix scaled against the heaviest action so you can compare profiles at a glance.</p>
+      <ul>
+        <li><b>Mostly-green rows</b> are likely benign at runtime — embedding picked the right schema, LLM will sort it out.</li>
+        <li><b>Sea-of-red rows</b> are structural — embedding loses the right agent entirely.</li>
+        <li><b>Blue/amber rows</b> are <code>llmSelect</code>-tunable — strategy or threshold experiments would move the needle.</li>
+        <li><b>Click a row</b> to expand the actual phrases that misrouted. Hovering shows full bucket counts.</li>
+      </ul>
+      <p>Use the <b>sort</b> dropdown to reorder. Toggle the <b>view</b> dropdown to roll up to <b>per-agent</b> — useful for spotting agents that are wholly structural by design (e.g. the <code>vampire</code> test agent) versus agents whose misroutes are mostly same-schema noise.</p>
+
+      <h3>Reading the action-rank histogram</h3>
+      <p>Secondary view: of all MISROUTE phrases, where in the top-K does the correct <i>action</i> rank? This is embedding-ranker calibration, not the runtime story. A high rank-1 bar (yes, it can happen — same-schema phrases where the action match is via prefix-rule normalization) plus a long tail tells you how often the embedding has the action somewhere in its candidate set even when it's not picking right.</p>
+    </div>
+  </details>
+
+  <section>
+    <h2>Same-schema vs cross-schema breakdown</h2>
+    <div class="sub">Each MISROUTE phrase, bucketed by what runtime <code>llmSelect</code> would actually do. Click a bucket below or any chip in the row to filter the views beneath. Click again — or click <b>all</b> — to clear.</div>
+    <div class="headline-bar" id="headline"></div>
+    <div class="legend-chips" id="legend"></div>
+    <div id="verdict" class="verdict"></div>
+  </section>
+
+  <section>
+    <h2>Per-action profile</h2>
+    <div class="sub">Each row is one action; the bar shows that action's bucket mix scaled against the heaviest action. Mostly-green rows are likely benign; blue/amber are <code>llmSelect</code>-tunable; sea-of-red is structural. Click a row to see the actual misrouted phrases.</div>
+    <div class="controls">
+      <input type="text" id="actionSearch" placeholder="filter by schema or action…" style="width:340px">
+      <label>Sort by
+        <select id="actionSort">
+          <option value="total">total misroutes</option>
+          <option value="crossRescuable">cross-schema tunable</option>
+          <option value="crossOffList">structural (off-list)</option>
+          <option value="benignPct">% same-schema (benign)</option>
+          <option value="alpha">alphabetic</option>
+        </select>
+      </label>
+      <label>View
+        <select id="actionView">
+          <option value="action">per action</option>
+          <option value="agent">per agent</option>
+        </select>
+      </label>
+      <span class="muted" id="actionCount" style="color:var(--muted);font-size:12px;"></span>
+    </div>
+    <div class="action-list" id="actionList"></div>
+  </section>
+
+  <section>
+    <h2>Action-rank histogram (embedding calibration)</h2>
+    <div class="sub">Secondary view: where in the top-K does the expected <i>action</i> appear? This is the embedding ranker's behavior independent of the schema picker. Heavy rank-1 mass with same-schema misroutes happens when the action match is via prefix normalization; off-list mass means the action isn't even an embedding neighbor.</div>
+    <div id="rankHist"></div>
+  </section>
+</main>
+<div class="tooltip" id="tt"></div>
+<script id="payload" type="application/json">`;
+
+const RECOVERY_HTML_SUFFIX = `</script>
+<script>
+const PAYLOAD = JSON.parse(document.getElementById("payload").textContent);
+const tt = document.getElementById("tt");
+function showTip(html, evt) { tt.innerHTML = html; tt.style.opacity = "1"; moveTip(evt); }
+function moveTip(evt) {
+    const pad = 14, w = tt.offsetWidth, h = tt.offsetHeight;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    if (x + w > window.innerWidth - 8) x = evt.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = evt.clientY - h - pad;
+    tt.style.left = (x + window.scrollX) + "px";
+    tt.style.top  = (y + window.scrollY) + "px";
+}
+function hideTip() { tt.style.opacity = "0"; }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+const BUCKETS = [
+    { key: "sameSchema",        label: "same-schema",         color: "var(--b-same)", desc: "embedding picked the right schema; LLM rescues within it (likely benign)" },
+    { key: "crossInCluster",    label: "cross, in cluster",   color: "var(--b-in)",   desc: "wrong schema, but right schema in runtime cluster — llmSelect strategy can save" },
+    { key: "crossOutOfCluster", label: "cross, out of cluster", color: "var(--b-out)", desc: "wrong schema, right schema in top-K but outside cluster — wider threshold needed" },
+    { key: "crossOffList",      label: "cross, off-list",     color: "var(--b-off)",  desc: "wrong schema, right schema not in top-K — structural / switch-stub only" },
+];
+const BUCKET_BY_KEY = Object.fromEntries(BUCKETS.map(b => [b.key, b]));
+
+let activeBucket = null; // null = all
+
+// Header
+const summary = PAYLOAD.summary;
+document.getElementById("stats").innerHTML =
+    \`<b>\${summary.totalMisroutes}</b> MISROUTE phrase(s) · top-K=\${summary.topK} · llmSelect threshold=\${summary.delta}\`;
+
+// Headline stacked bar
+function renderHeadline() {
+    const total = summary.totalMisroutes || 1;
+    const bar = document.getElementById("headline");
+    bar.innerHTML = "";
+    for (const b of BUCKETS) {
+        const n = summary.buckets[b.key];
+        const seg = document.createElement("div");
+        seg.className = "seg" + (activeBucket && activeBucket !== b.key ? " dim" : "");
+        seg.style.width = ((n / total) * 100) + "%";
+        seg.style.background = b.color;
+        seg.style.flex = "0 0 auto";
+        seg.title = \`\${b.label}: \${n} (\${((n/total)*100).toFixed(1)}%)\`;
+        if (n / total >= 0.05) {
+            seg.textContent = \`\${n} (\${((n/total)*100).toFixed(0)}%)\`;
+        }
+        seg.addEventListener("click", () => {
+            activeBucket = (activeBucket === b.key) ? null : b.key;
+            renderAll();
+        });
+        seg.addEventListener("mouseenter", evt => {
+            showTip(\`<b>\${escapeHtml(b.label)}</b><br><span class="muted">\${escapeHtml(b.desc)}</span><br>\${n} (\${((n/total)*100).toFixed(1)}%)\`, evt);
+        });
+        seg.addEventListener("mousemove", moveTip);
+        seg.addEventListener("mouseleave", hideTip);
+        bar.appendChild(seg);
+    }
+}
+
+// Legend chips (also work as filters)
+function renderLegend() {
+    const total = summary.totalMisroutes || 1;
+    const wrap = document.getElementById("legend");
+    wrap.innerHTML = "";
+    const allChip = document.createElement("span");
+    allChip.className = "chip" + (activeBucket === null ? " active" : "");
+    allChip.innerHTML = \`<i style="background:#5a6273"></i>all <span class="muted">\${summary.totalMisroutes}</span>\`;
+    allChip.addEventListener("click", () => { activeBucket = null; renderAll(); });
+    wrap.appendChild(allChip);
+    for (const b of BUCKETS) {
+        const n = summary.buckets[b.key];
+        const chip = document.createElement("span");
+        chip.className = "chip" +
+            (activeBucket === b.key ? " active" : "") +
+            (activeBucket && activeBucket !== b.key ? " dim" : "");
+        chip.innerHTML = \`<i style="background:\${b.color}"></i>\${escapeHtml(b.label)} <span class="muted">\${n} (\${((n/total)*100).toFixed(1)}%)</span>\`;
+        chip.addEventListener("click", () => {
+            activeBucket = (activeBucket === b.key) ? null : b.key;
+            renderAll();
+        });
+        wrap.appendChild(chip);
+    }
+}
+
+// Verdict callout. Three regimes:
+//   benign-dominated  — sameSchema is the largest bucket. Most "misroutes"
+//                       are likely-OK at runtime (LLM rescue within schema).
+//   tunable-dominated — crossInCluster + crossOutOfCluster largest.
+//   structural-dominated — crossOffList largest. Embedding loses the agent.
+function renderVerdict() {
+    const total = summary.totalMisroutes || 1;
+    const same = summary.buckets.sameSchema;
+    const inCluster = summary.buckets.crossInCluster;
+    const outCluster = summary.buckets.crossOutOfCluster;
+    const offList = summary.buckets.crossOffList;
+    const tunable = inCluster + outCluster;
+    const pct = (n) => ((n / total) * 100).toFixed(1) + "%";
+    const v = document.getElementById("verdict");
+    let dom = "structural";
+    if (same >= tunable && same >= offList) dom = "benign";
+    else if (tunable > offList) dom = "tunable";
+    if (dom === "benign") {
+        v.className = "verdict tunable";
+        v.innerHTML = \`<b>Verdict: mostly benign.</b> \${same} of \${total} (\${pct(same)}) misroutes are <i>same-schema</i> — embedding picked the right schema, just not the right action; the LLM's translation pass over the schema's full action list should rescue these. Real runtime risk is the cross-schema slice: \${tunable + offList} (\${pct(tunable + offList)}), of which \${tunable} (\${pct(tunable)}) are <code>llmSelect</code>-tunable and \${offList} (\${pct(offList)}) are structural.\`;
+    } else if (dom === "tunable") {
+        v.className = "verdict tunable";
+        v.innerHTML = \`<b>Verdict: tunable.</b> \${tunable} of \${total} (\${pct(tunable)}) misroutes are cross-schema with the right schema reachable in top-\${summary.topK}. The lever is <code>llmSelect</code> strategy / threshold. Same-schema benign: \${same} (\${pct(same)}). Structural off-list: \${offList} (\${pct(offList)}).\`;
+    } else {
+        v.className = "verdict";
+        v.innerHTML = \`<b>Verdict: structural.</b> \${offList} of \${total} (\${pct(offList)}) misroutes are cross-schema with the expected schema not in top-\${summary.topK}. The embedding ranker is genuinely losing the right agent; <code>llmSelect</code> tuning can't reach these. Same-schema benign: \${same} (\${pct(same)}). Tunable cross-schema: \${tunable} (\${pct(tunable)}).\`;
+    }
+}
+
+// Per-action / per-agent list
+function rowDataset() {
+    const view = document.getElementById("actionView").value;
+    if (view === "agent") {
+        return PAYLOAD.perAgent.map(a => ({
+            key: a.agent,
+            label: a.agent,
+            misrouteCount: a.misrouteCount,
+            sameSchema: a.sameSchema,
+            crossInCluster: a.crossInCluster,
+            crossOutOfCluster: a.crossOutOfCluster,
+            crossOffList: a.crossOffList,
+            crossRescuable: a.crossRescuable,
+            benignPct: a.benignPct,
+        }));
+    }
+    return PAYLOAD.perAction.map(a => ({
+        key: a.schemaName + "." + a.actionName,
+        label: a.schemaName + "." + a.actionName,
+        misrouteCount: a.misrouteCount,
+        sameSchema: a.sameSchema,
+        crossInCluster: a.crossInCluster,
+        crossOutOfCluster: a.crossOutOfCluster,
+        crossOffList: a.crossOffList,
+        crossRescuable: a.crossRescuable,
+        benignPct: a.benignPct,
+    }));
+}
+
+const expanded = new Set(); // expanded rows
+
+function phrasesForKey(key, view) {
+    if (view === "agent") {
+        return PAYLOAD.phrases.filter(p => p.expected.split(".")[0] === key);
+    }
+    return PAYLOAD.phrases.filter(p => p.expected === key);
+}
+
+function renderActionList() {
+    const search = document.getElementById("actionSearch").value.trim().toLowerCase();
+    const sort = document.getElementById("actionSort").value;
+    const view = document.getElementById("actionView").value;
+    let rows = rowDataset();
+
+    // Apply bucket filter (highlight rows where activeBucket has count > 0)
+    if (activeBucket) {
+        rows = rows.filter(r => r[activeBucket] > 0);
+    }
+    if (search) {
+        rows = rows.filter(r => r.label.toLowerCase().includes(search));
+    }
+    rows.sort((a, b) => {
+        switch (sort) {
+            case "crossRescuable": return b.crossRescuable - a.crossRescuable;
+            case "crossOffList":   return b.crossOffList - a.crossOffList;
+            case "benignPct":      return b.benignPct - a.benignPct;
+            case "alpha":          return a.label.localeCompare(b.label);
+            case "total":
+            default:               return b.misrouteCount - a.misrouteCount;
+        }
+    });
+
+    document.getElementById("actionCount").textContent = \`\${rows.length} \${view === "agent" ? "agent" : "action"}(s)\`;
+    const list = document.getElementById("actionList");
+    list.innerHTML = "";
+    if (rows.length === 0) {
+        list.innerHTML = \`<div class="empty-state">No matches.</div>\`;
+        return;
+    }
+    const maxTotal = Math.max(...rows.map(r => r.misrouteCount), 1);
+
+    for (const r of rows) {
+        const row = document.createElement("div");
+        row.className = "action-row" + (expanded.has(r.key) ? " expanded" : "");
+        const stackHtml = BUCKETS.map(b => {
+            const n = r[b.key];
+            if (n === 0) return "";
+            const w = (n / maxTotal) * 100;
+            return \`<span class="seg" style="width:\${w}%;background:\${b.color};\${activeBucket && activeBucket !== b.key ? "opacity:0.25;" : ""}" title="\${b.label}: \${n}"></span>\`;
+        }).join("");
+        row.innerHTML = \`
+            <div class="name" title="\${escapeHtml(r.label)}">\${escapeHtml(r.label)}</div>
+            <div class="total">\${r.misrouteCount}</div>
+            <div class="stack">\${stackHtml}</div>
+        \`;
+        row.addEventListener("click", () => {
+            if (expanded.has(r.key)) expanded.delete(r.key);
+            else expanded.add(r.key);
+            renderActionList();
+        });
+        row.addEventListener("mouseenter", evt => {
+            const total = r.misrouteCount || 1;
+            const parts = BUCKETS.map(b => {
+                const n = r[b.key];
+                if (n === 0) return "";
+                return \`<li><span style="display:inline-block;width:8px;height:8px;background:\${b.color};border-radius:1px;vertical-align:middle;margin-right:4px"></span>\${escapeHtml(b.label)}: <b>\${n}</b> (\${((n/total)*100).toFixed(0)}%)</li>\`;
+            }).join("");
+            showTip(\`<b>\${escapeHtml(r.label)}</b><br><span class="muted">\${r.misrouteCount} misroute(s) · \${r.benignPct.toFixed(0)}% same-schema (likely benign)</span><ul>\${parts}</ul>\`, evt);
+        });
+        row.addEventListener("mousemove", moveTip);
+        row.addEventListener("mouseleave", hideTip);
+        list.appendChild(row);
+
+        if (expanded.has(r.key)) {
+            const detail = document.createElement("div");
+            detail.className = "action-detail";
+            const phrases = phrasesForKey(r.key, view).filter(p =>
+                !activeBucket || p.bucket === activeBucket
+            );
+            if (phrases.length === 0) {
+                detail.innerHTML = \`<div class="empty-state">No phrases for current filter.</div>\`;
+            } else {
+                // Sort by bucket severity (sameSchema first, off-list last)
+                // then by schema rank.
+                const bucketOrder = {
+                    sameSchema: 0,
+                    crossInCluster: 1,
+                    crossOutOfCluster: 2,
+                    crossOffList: 3,
+                };
+                phrases.sort((a, b) => {
+                    const ba = bucketOrder[a.bucket] ?? 9;
+                    const bb = bucketOrder[b.bucket] ?? 9;
+                    if (ba !== bb) return ba - bb;
+                    const ar = a.schemaRank < 0 ? 99 : a.schemaRank;
+                    const br = b.schemaRank < 0 ? 99 : b.schemaRank;
+                    return ar - br;
+                });
+                detail.innerHTML = phrases.map(p => {
+                    const bucket = BUCKET_BY_KEY[p.bucket];
+                    // Show schema rank (the runtime-relevant signal). For
+                    // same-schema cases this is always #1; for cross-schema
+                    // cases it tells you where the right schema landed.
+                    const rankLabel = p.schemaRank > 0 ? "#" + p.schemaRank : "off";
+                    return \`<div class="ph">
+                        <div class="rank" style="color:\${bucket.color}" title="\${escapeHtml(bucket.label)}">\${rankLabel}</div>
+                        <div class="text" title="\${escapeHtml(p.phrase)}">\${escapeHtml(p.phrase)}</div>
+                        <div class="actual" title="top-1: \${escapeHtml(p.actualTop1)}">→ \${escapeHtml(p.actualTop1)}</div>
+                    </div>\`;
+                }).join("");
+            }
+            list.appendChild(detail);
+        }
+    }
+}
+
+function renderRankHist() {
+    const total = summary.totalMisroutes || 1;
+    const max = Math.max(...PAYLOAD.actionRankHistogram.map(r => r.count), 1);
+    const wrap = document.getElementById("rankHist");
+    wrap.innerHTML = "";
+    for (const r of PAYLOAD.actionRankHistogram) {
+        const w = (r.count / max) * 100;
+        const isOff = r.rank === "off-list";
+        const color = isOff
+            ? "var(--b-off)"
+            : (r.rank === "1" ? "var(--b-same)"
+              : (r.rank === "2" ? "var(--b-in)" : "var(--b-out)"));
+        const label = isOff ? "off-list" : ("rank " + r.rank);
+        const html = \`<div class="rank-hist">
+            <div class="label">\${escapeHtml(label)}</div>
+            <div><span class="bar" style="display:block;width:\${w}%;background:\${color}"></span></div>
+            <div class="count">\${r.count} (\${((r.count/total)*100).toFixed(1)}%)</div>
+        </div>\`;
+        wrap.insertAdjacentHTML("beforeend", html);
+    }
+}
+
+document.getElementById("actionSearch").addEventListener("input", renderActionList);
+document.getElementById("actionSort").addEventListener("change", renderActionList);
+document.getElementById("actionView").addEventListener("change", () => {
+    expanded.clear();
+    renderActionList();
+});
+
+function renderAll() {
+    renderHeadline();
+    renderLegend();
+    renderVerdict();
+    renderActionList();
+}
+
+renderAll();
+renderRankHist();
+</script>
+</body>
+</html>`;
+
+// =============================================================================
 // Visualization payload
 // =============================================================================
 
@@ -2109,19 +3037,366 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
 }
 
 // =============================================================================
+// Handler: @collision corpus recovery
+// =============================================================================
+
+const RECOVERY_BUCKET_LABELS: Record<RuntimeBucket, string> = {
+    sameSchema: "same-schema (likely benign)",
+    crossInCluster: "cross, in cluster (llmSelect-tunable)",
+    crossOutOfCluster: "cross, out of cluster (widen threshold)",
+    crossOffList: "cross, off-list (structural)",
+};
+const RECOVERY_BUCKET_COLORS: Record<RuntimeBucket, string> = {
+    sameSchema: "#5a8", // green — embedding picked right schema
+    crossInCluster: "#36c", // blue — strategy can save
+    crossOutOfCluster: "#c80", // amber — wider threshold needed
+    crossOffList: "#c44", // red — structural
+};
+
+function renderRecoveryHTML(analysis: RecoveryAnalysis): string {
+    const total = analysis.totalMisroutes;
+    const pct = (n: number) =>
+        total === 0 ? "0.0%" : ((n / total) * 100).toFixed(1) + "%";
+    const C_MUTED = "#777";
+
+    if (total === 0) {
+        return (
+            `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;">` +
+            `<h3 style="margin:0 0 6px;font-size:14px;">Recovery-rank analysis</h3>` +
+            `<div style="color:${C_MUTED};">No MISROUTE results to analyze.</div></div>`
+        );
+    }
+
+    const order: RuntimeBucket[] = [
+        "sameSchema",
+        "crossInCluster",
+        "crossOutOfCluster",
+        "crossOffList",
+    ];
+    const barWidth = 600;
+    let cursor = 0;
+    const barSegments = order
+        .map((b) => {
+            const w = Math.round((analysis.buckets[b] / total) * barWidth);
+            const x = cursor;
+            cursor += w;
+            return `<rect x="${x}" y="0" width="${w}" height="22" fill="${RECOVERY_BUCKET_COLORS[b]}"></rect>`;
+        })
+        .join("");
+    const barSvg =
+        `<svg width="${barWidth}" height="22" style="display:block;border-radius:3px;overflow:hidden;margin:8px 0 12px;">${barSegments}</svg>`;
+
+    const legendRows = order
+        .map((b) => {
+            const n = analysis.buckets[b];
+            return `<tr>
+                <td style="padding:2px 8px 2px 0;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${RECOVERY_BUCKET_COLORS[b]};vertical-align:middle;"></span></td>
+                <td style="padding:2px 12px 2px 0;font-family:monospace;font-size:12px;">${RECOVERY_BUCKET_LABELS[b]}</td>
+                <td style="padding:2px 12px 2px 0;font-family:monospace;font-size:12px;text-align:right;font-weight:600;">${n}</td>
+                <td style="padding:2px 0;font-family:monospace;font-size:12px;color:${C_MUTED};text-align:right;">${pct(n)}</td>
+            </tr>`;
+        })
+        .join("");
+
+    // Top 25 actions by misroute count, with per-bucket breakdown.
+    const topActions = analysis.perAction.slice(0, 25);
+    const headStyle =
+        "padding:6px 8px;border-bottom:1px solid #ddd;text-align:right;font-weight:600;color:#555;font-size:11px;";
+    const cellStyle =
+        "padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-family:monospace;font-size:12px;";
+    const actionStyle =
+        "padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:left;font-family:monospace;font-size:12px;";
+    const actionRows = topActions
+        .map((a) => {
+            const cell = (n: number, color: string) =>
+                n > 0
+                    ? `<td style="${cellStyle}color:${color};font-weight:600;">${n}</td>`
+                    : `<td style="${cellStyle}color:#bbb;">·</td>`;
+            return `<tr>
+                <td style="${actionStyle}">${escapeShellHtml(a.schemaName + "." + a.actionName)}</td>
+                <td style="${cellStyle}font-weight:600;">${a.misrouteCount}</td>
+                ${cell(a.sameSchema, RECOVERY_BUCKET_COLORS.sameSchema)}
+                ${cell(a.crossInCluster, RECOVERY_BUCKET_COLORS.crossInCluster)}
+                ${cell(a.crossOutOfCluster, RECOVERY_BUCKET_COLORS.crossOutOfCluster)}
+                ${cell(a.crossOffList, RECOVERY_BUCKET_COLORS.crossOffList)}
+            </tr>`;
+        })
+        .join("");
+
+    // Three-way verdict: benign-dominated / tunable-dominated / structural.
+    const same = analysis.buckets.sameSchema;
+    const tunable =
+        analysis.buckets.crossInCluster + analysis.buckets.crossOutOfCluster;
+    const offList = analysis.buckets.crossOffList;
+    let verdict: string;
+    if (same >= tunable && same >= offList) {
+        verdict = `<div style="margin-top:10px;padding:8px 10px;background:#efe;color:#060;border-left:3px solid #5a8;font-size:12px;">
+            <b>Verdict: mostly benign.</b> ${same} of ${total} misroutes (${pct(same)}) are <i>same-schema</i> — embedding picked the right schema, the LLM should disambiguate within it.
+            Real runtime risk is the cross-schema slice: <code>${tunable}</code> tunable + <code>${offList}</code> structural (${pct(tunable + offList)} combined).
+          </div>`;
+    } else if (tunable > offList) {
+        verdict = `<div style="margin-top:10px;padding:8px 10px;background:#efe;color:#060;border-left:3px solid #080;font-size:12px;">
+            <b>Verdict: tunable.</b> ${tunable} of ${total} misroutes (${pct(tunable)}) are cross-schema with the right schema reachable in top-${analysis.topK}.
+            The lever is <code>llmSelect</code> strategy / threshold.
+            Same-schema benign: <code>${same}</code> (${pct(same)}). Structural: <code>${offList}</code> (${pct(offList)}).
+          </div>`;
+    } else {
+        verdict = `<div style="margin-top:10px;padding:8px 10px;background:#fee;color:#900;border-left:3px solid #c44;font-size:12px;">
+            <b>Verdict: structural.</b> ${offList} of ${total} misroutes (${pct(offList)}) are cross-schema with the expected schema not in top-${analysis.topK}.
+            Embedding ranker is genuinely losing the right agent. <code>llmSelect</code> tuning can't reach these.
+            Same-schema benign: <code>${same}</code> (${pct(same)}). Tunable cross-schema: <code>${tunable}</code> (${pct(tunable)}).
+          </div>`;
+    }
+
+    return (
+        `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:1000px;">` +
+        `<h3 style="margin:0 0 6px;font-size:14px;">Recovery analysis (runtime-aware)</h3>` +
+        `<div style="color:${C_MUTED};font-size:12px;margin-bottom:8px;">` +
+        `<b>${total}</b> MISROUTE result(s) · top-K=<code>${analysis.topK}</code> · llmSelect threshold=<code>${analysis.delta.toFixed(2)}</code></div>` +
+        barSvg +
+        `<table style="border-collapse:collapse;margin-bottom:6px;">${legendRows}</table>` +
+        verdict +
+        `<h4 style="margin:18px 0 6px;font-size:13px;">Top 25 actions by misroute count</h4>` +
+        `<table style="border-collapse:collapse;width:100%;font-size:12px;">` +
+        `<thead><tr style="background:#fafafa;">` +
+        `<th style="${headStyle}text-align:left;">Action</th>` +
+        `<th style="${headStyle}">total</th>` +
+        `<th style="${headStyle}color:${RECOVERY_BUCKET_COLORS.sameSchema};">same</th>` +
+        `<th style="${headStyle}color:${RECOVERY_BUCKET_COLORS.crossInCluster};">in</th>` +
+        `<th style="${headStyle}color:${RECOVERY_BUCKET_COLORS.crossOutOfCluster};">out</th>` +
+        `<th style="${headStyle}color:${RECOVERY_BUCKET_COLORS.crossOffList};">off</th>` +
+        `</tr></thead><tbody>${actionRows}</tbody></table>` +
+        `</div>`
+    );
+}
+
+function renderRecoveryText(analysis: RecoveryAnalysis): string[] {
+    const total = analysis.totalMisroutes;
+    const pct = (n: number) =>
+        total === 0 ? "0.0%" : ((n / total) * 100).toFixed(1) + "%";
+    const lines: string[] = [];
+    lines.push(
+        `Recovery analysis: ${total} misroute(s), top-K=${analysis.topK}, threshold=${analysis.delta}`,
+    );
+    if (total === 0) {
+        return lines;
+    }
+    lines.push("");
+    const order: RuntimeBucket[] = [
+        "sameSchema",
+        "crossInCluster",
+        "crossOutOfCluster",
+        "crossOffList",
+    ];
+    for (const b of order) {
+        const n = analysis.buckets[b];
+        lines.push(
+            `  ${RECOVERY_BUCKET_LABELS[b].padEnd(42)} ${String(n).padStart(5)} (${pct(n)})`,
+        );
+    }
+    const same = analysis.buckets.sameSchema;
+    const tunable =
+        analysis.buckets.crossInCluster + analysis.buckets.crossOutOfCluster;
+    const offList = analysis.buckets.crossOffList;
+    lines.push("");
+    if (same >= tunable && same >= offList) {
+        lines.push(
+            `  Verdict: MOSTLY BENIGN — ${pct(same)} same-schema. Cross-schema runtime risk = ${pct(tunable + offList)}.`,
+        );
+    } else if (tunable > offList) {
+        lines.push(
+            `  Verdict: TUNABLE — ${pct(tunable)} cross-schema reachable in top-${analysis.topK}. Lever is llmSelect strategy/threshold.`,
+        );
+    } else {
+        lines.push(
+            `  Verdict: STRUCTURAL — ${pct(offList)} cross-schema off-list. Embedding ranker is losing the agent.`,
+        );
+    }
+    lines.push("");
+    lines.push("Top 25 actions by misroute count:");
+    lines.push(
+        `  ${"action".padEnd(50)} ${"total".padStart(6)} ${"same".padStart(6)} ${"in".padStart(6)} ${"out".padStart(6)} ${"off".padStart(6)}`,
+    );
+    for (const a of analysis.perAction.slice(0, 25)) {
+        lines.push(
+            `  ${(a.schemaName + "." + a.actionName).padEnd(50)} ${String(a.misrouteCount).padStart(6)} ${String(a.sameSchema).padStart(6)} ${String(a.crossInCluster).padStart(6)} ${String(a.crossOutOfCluster).padStart(6)} ${String(a.crossOffList).padStart(6)}`,
+        );
+    }
+    return lines;
+}
+
+class CollisionCorpusRecoveryCommandHandler implements CommandHandler {
+    public readonly description =
+        "Decompose MISROUTE results by where the correct target ranks among the top-K candidates (which fix lever applies?)";
+    public readonly parameters = {
+        flags: {
+            in: {
+                description:
+                    "Input reclassified probe-results JSON. Default: <workdir>/probe-results-reclassified.json",
+                type: "string",
+                optional: true,
+            },
+            workdir: {
+                description:
+                    "Directory for default-named files. Default: <instanceDir>/collisions",
+                type: "string",
+                optional: true,
+            },
+            delta: {
+                description: `llmSelect threshold for the rank-2 tight/wide split (default ${DEFAULT_DELTA})`,
+                type: "number",
+                default: DEFAULT_DELTA,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const workdir = params.flags.workdir
+            ? resolveWorkdir(systemContext, params.flags.workdir)
+            : undefined;
+        const inPath = defaultPath(
+            systemContext,
+            params.flags.in,
+            workdir,
+            DEFAULT_FILES.reclassified,
+        );
+        if (!fs.existsSync(inPath)) {
+            displayWarn(
+                `Reclassified probe results not found: ${inPath}. Run \`@collision corpus reanalyze\` first.`,
+                context,
+            );
+            return;
+        }
+        const delta = Math.max(0, params.flags.delta ?? DEFAULT_DELTA);
+        const probeFile = JSON.parse(
+            fs.readFileSync(inPath, "utf8"),
+        ) as ProbeFile;
+        const analysis = analyzeRecoveryRank(probeFile, delta);
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: renderRecoveryHTML(analysis),
+            alternates: [
+                { type: "text", content: renderRecoveryText(analysis) },
+            ],
+        });
+    }
+}
+
+// =============================================================================
+// Handler: @collision corpus visualize-recovery
+// =============================================================================
+
+const DEFAULT_FILES_RECOVERY_HTML = "recovery-viz.html";
+
+class CollisionCorpusVisualizeRecoveryCommandHandler implements CommandHandler {
+    public readonly description =
+        "Build an interactive HTML visualization of recovery-rank analysis (which fix lever applies, per action and per agent)";
+    public readonly parameters = {
+        flags: {
+            in: {
+                description:
+                    "Input reclassified probe-results JSON. Default: <workdir>/probe-results-reclassified.json",
+                type: "string",
+                optional: true,
+            },
+            out: {
+                description:
+                    "Output HTML path. Default: <workdir>/recovery-viz.html",
+                type: "string",
+                optional: true,
+            },
+            delta: {
+                description: `llmSelect threshold for the rank-2 tight/wide split (default ${DEFAULT_DELTA})`,
+                type: "number",
+                default: DEFAULT_DELTA,
+            },
+            workdir: {
+                description:
+                    "Directory for default-named files. Default: <instanceDir>/collisions",
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const workdir = params.flags.workdir
+            ? resolveWorkdir(systemContext, params.flags.workdir)
+            : undefined;
+        const inPath = defaultPath(
+            systemContext,
+            params.flags.in,
+            workdir,
+            DEFAULT_FILES.reclassified,
+        );
+        const outPath = defaultPath(
+            systemContext,
+            params.flags.out,
+            workdir,
+            DEFAULT_FILES_RECOVERY_HTML,
+        );
+        if (!fs.existsSync(inPath)) {
+            displayWarn(
+                `Reclassified probe results not found: ${inPath}. Run \`@collision corpus reanalyze\` first.`,
+                context,
+            );
+            return;
+        }
+        const delta = Math.max(0, params.flags.delta ?? DEFAULT_DELTA);
+        ensureDir(path.dirname(outPath));
+
+        const probeFile = JSON.parse(
+            fs.readFileSync(inPath, "utf8"),
+        ) as ProbeFile;
+        const payload = buildRecoveryPayload(probeFile, delta);
+        const html = buildRecoveryHTML(payload);
+        fs.writeFileSync(outPath, html);
+
+        const sizeKB = (fs.statSync(outPath).size / 1024).toFixed(0);
+        const summaryHtml =
+            `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:900px;">` +
+            `<h3 style="margin:0 0 6px;font-size:14px;">Recovery visualization written</h3>` +
+            `<div style="font-size:12px;color:#777;margin-bottom:6px;">${payload.summary.totalMisroutes} misroute(s) · ${payload.perAction.length} action(s) · ${payload.perAgent.length} agent(s) · ${sizeKB} KB</div>` +
+            `<div style="font-size:12px;">→ <code>${escapeShellHtml(outPath)}</code></div>` +
+            `<div style="font-size:11px;color:#777;margin-top:4px;">Open in any browser. Click headline-bar segments or legend chips to filter; click an action row to drill into phrases.</div>` +
+            `</div>`;
+        const summaryText = [
+            `Recovery visualization written: ${outPath} (${sizeKB} KB)`,
+            `  ${payload.summary.totalMisroutes} misroute(s) · ${payload.perAction.length} action(s) · ${payload.perAgent.length} agent(s)`,
+            `  Open in any browser.`,
+        ];
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: summaryHtml,
+            alternates: [{ type: "text", content: summaryText }],
+        });
+    }
+}
+
+// =============================================================================
 // Subcommand table
 // =============================================================================
 
 export function getCollisionCorpusCommandHandlers(): CommandHandlerTable {
     return {
         description:
-            "Generate phrase corpora, probe through the embedding ranker, and build the collision-hotspot visualization",
+            "Generate phrase corpora, probe through the embedding ranker, and build the collision-hotspot visualizations",
         defaultSubCommand: "run",
         commands: {
             generate: new CollisionCorpusGenerateCommandHandler(),
             probe: new CollisionCorpusProbeCommandHandler(),
             reanalyze: new CollisionCorpusReanalyzeCommandHandler(),
+            recovery: new CollisionCorpusRecoveryCommandHandler(),
             visualize: new CollisionCorpusVisualizeCommandHandler(),
+            "visualize-recovery": new CollisionCorpusVisualizeRecoveryCommandHandler(),
             run: new CollisionCorpusRunCommandHandler(),
         },
     };

@@ -138,6 +138,33 @@ async function main() {
         }
         process.stderr.write("✓ reanalyze handler rewrote reclassified file\n");
 
+        process.stderr.write("\n--- @collision corpus recovery ---\n");
+        await dispatcher.processCommand(
+            `@collision corpus recovery --workdir "${workdir}"`,
+        );
+        process.stderr.write("✓ recovery handler ran\n");
+
+        process.stderr.write("\n--- @collision corpus visualize-recovery ---\n");
+        const recoveryHtml = path.join(workdir, "recovery-viz.html");
+        if (fs.existsSync(recoveryHtml)) fs.unlinkSync(recoveryHtml);
+        await dispatcher.processCommand(
+            `@collision corpus visualize-recovery --workdir "${workdir}"`,
+        );
+        if (!fs.existsSync(recoveryHtml)) {
+            throw new Error(
+                `Recovery HTML not created: ${recoveryHtml}`,
+            );
+        }
+        const rsizeKB = (fs.statSync(recoveryHtml).size / 1024).toFixed(0);
+        process.stderr.write(
+            `✓ visualize-recovery produced ${recoveryHtml} (${rsizeKB} KB)\n`,
+        );
+        const rhtml = fs.readFileSync(recoveryHtml, "utf8");
+        if (!rhtml.includes("rank2Tight") || !rhtml.includes("perAction")) {
+            throw new Error("Recovery HTML missing expected payload fields");
+        }
+        process.stderr.write("✓ recovery HTML payload looks well-formed\n");
+
         process.stderr.write("\nAll smoke tests passed.\n");
     } finally {
         await dispatcher.close();
