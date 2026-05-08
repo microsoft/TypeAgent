@@ -260,8 +260,13 @@ const _npmSem = new Semaphore(
  * @param {Function} opts.fetchFn   - async (key) => result
  * @param {Semaphore} [opts.semaphore] - optional concurrency limiter
  * @param {*}        [opts.fallback=null] - value to cache on failure
+ * @param {Function} [opts.isFatal] - (e) => boolean. When provided and it
+ *   returns true for a thrown error, the error is rethrown instead of
+ *   caching `fallback`. Use for failures (missing binaries, permission
+ *   errors) where treating the empty fallback as "no data" would mask a
+ *   broken environment and produce silently-wrong downstream results.
  */
-function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
+function cachedAsync(label, { fetchFn, semaphore, fallback = null, isFatal }) {
     const cache = new Map();
     const inflight = new Map();
 
@@ -276,6 +281,10 @@ function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
                 cache.set(key, result);
                 return result;
             } catch (e) {
+                // Some failures (e.g. missing binaries) are too dangerous to
+                // mask with a fallback — they let downstream code conclude
+                // "no data" when the real cause is a broken environment.
+                if (isFatal && isFatal(e)) throw e;
                 verbose(`${label}(${key}) failed: ${e.message}`);
                 cache.set(key, fallback);
                 return fallback;
@@ -358,7 +367,16 @@ function runCmdAsync(cmd, cmdArgs, { nothrow, ...opts } = {}) {
             { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
             (error, stdout, stderr) => {
                 if (error) {
-                    if (nothrow) {
+                    // `nothrow` should swallow non-zero exits but NOT spawn
+                    // failures (ENOENT, EACCES, etc.) — those usually indicate
+                    // a misconfigured environment (missing binary, missing
+                    // permissions) and silently treating them as "no output"
+                    // can mask real bugs (e.g. classifying vulnerable packages
+                    // as already-fixed because `pnpm why` couldn't even run).
+                    const isSpawnFailure =
+                        typeof error.code === "string" &&
+                        !Number.isFinite(Number(error.code));
+                    if (nothrow && !isSpawnFailure) {
                         verbose(
                             `${cmd} ${cmdArgs.join(" ")} failed: ${error.message}`,
                         );
@@ -546,8 +564,9 @@ function fmtDepChain(whyData, pkg) {
         }
     }
 
+    const reverseTree = toReverseTree(whyData, pkg);
     const roots = [];
-    for (const entry of whyData) {
+    for (const entry of reverseTree) {
         const tree = buildTree(entry, true);
         roots.push(...tree.children);
     }
@@ -642,6 +661,11 @@ async function verifyAllVersionsFixed(pkg, requiredVersion) {
 
 /**
  * Run `pnpm why <pkg> -r --json` and return parsed entries.
+ *
+ * Spawn-level failures (e.g. `pnpm` not on PATH) propagate to callers
+ * rather than getting masked as "no data" — see the `isFatal` clause.
+ * Without this, a missing pnpm shim would let analysis report every
+ * vulnerable package as `alreadyFixed`.
  */
 const getPnpmWhy = cachedAsync("getPnpmWhy", {
     fetchFn: async (pkg) => {
@@ -652,11 +676,15 @@ const getPnpmWhy = cachedAsync("getPnpmWhy", {
         return parsePaginatedJson(output);
     },
     fallback: [],
+    // runCmdAsync now throws on spawn failure even with nothrow; surface
+    // those instead of caching `[]`.
+    isFatal: (e) => /\bENOENT\b|\bEACCES\b|\bEPERM\b/.test(e?.message || ""),
 });
 
 async function findConstrainingParentsFromData(whyData, pkg) {
+    const reverseTree = toReverseTree(whyData, pkg);
     const pairs = deduplicateBy(
-        whyData.flatMap((entry) => entry.dependents || []),
+        reverseTree.flatMap((entry) => entry.dependents || []),
         (dep) => `${dep.name}@${dep.version}`,
     );
     const specs = await Promise.all(
@@ -673,6 +701,187 @@ async function findConstrainingParentsFromData(whyData, pkg) {
         version: dep.version,
         requiredSpec: specs[i],
     }));
+}
+
+/**
+ * Convert the forward-direction `pnpm why <pkg> -r --json` output into the
+ * reverse-direction `{version, dependents: [...]}` shape that the rest of
+ * the planner (planFixes, walkUpTree, fmtDepChain, extractWorkspaceRoots,
+ * findConstrainingParentsFromData) was originally written for.
+ *
+ * The current pnpm CLI emits forward-direction trees only:
+ *   [
+ *     { name: <ws-name>, version, path,
+ *       dependencies: { foo: { version, dependencies: { bar: {...} } } },
+ *       devDependencies: {...}, optionalDependencies: {...}
+ *     }, ...
+ *   ]
+ *
+ * walkUpTree / planFixes were written assuming each top-level entry is a
+ * distinct resolved version of `pkg` with a `dependents: [...]` array
+ * walking back toward the workspace roots — a shape that pnpm no longer
+ * produces (and may never have, depending on which version of pnpm the
+ * original code was tested against). With the wrong shape, every entry
+ * had `dependents === undefined`, the `if (!entry.dependents) continue;`
+ * guard in planFixes silently dropped every transitively-vulnerable
+ * package, and the planner reported them as `alreadyFixed`.
+ *
+ * This helper does a single forward walk per workspace, collecting every
+ * path that ends at `pkg`, then reverses each path and merges paths that
+ * share the same parent chain so the resulting reverse-tree has the
+ * dedup characteristics walkUpTree's cache assumes.
+ *
+ * Returned shape (matches what walkUpTree expects):
+ *   [
+ *     { version: <pkg-version>,
+ *       dependents: [
+ *         { name, version, dependents: [...] }, // intermediate
+ *         { name: <ws-name>, depField: <field> } // workspace (terminal;
+ *                                                // no `dependents` field)
+ *       ]
+ *     }, ...
+ *   ]
+ */
+function toReverseTree(whyData, pkg) {
+    if (!Array.isArray(whyData) || whyData.length === 0) return [];
+    const depFields = [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+    ];
+
+    // Collect every root→pkg path. Each entry in `path` is one node; the
+    // first node is the workspace and the last is `pkg`.
+    const paths = [];
+    const visited = new WeakSet();
+
+    function walk(node, path, fromWorkspaceField) {
+        if (!node || typeof node !== "object") return;
+        // Cycle guard: pnpm output should be tree-shaped but defend anyway.
+        if (visited.has(node)) return;
+        visited.add(node);
+        for (const field of depFields) {
+            const deps = node[field];
+            if (!deps || typeof deps !== "object") continue;
+            for (const [depName, depNode] of Object.entries(deps)) {
+                if (!depNode || typeof depNode !== "object") continue;
+                if (typeof depNode.version !== "string") continue;
+                const childEntry = {
+                    name: depName,
+                    version: depNode.version,
+                };
+                const newPath = [...path, childEntry];
+                if (depName === pkg) {
+                    // Record the workspace's depField on the path's
+                    // workspace node (path[0]) so the reverse tree can
+                    // surface it. Use the field nearest to the workspace
+                    // (i.e. the first traversal's field).
+                    paths.push({
+                        pkgVersion: depNode.version,
+                        chain: newPath,
+                        workspaceDepField: fromWorkspaceField ?? field,
+                    });
+                }
+                walk(depNode, newPath, fromWorkspaceField ?? field);
+            }
+        }
+        visited.delete(node);
+    }
+
+    for (const ws of whyData) {
+        if (!ws || typeof ws !== "object") continue;
+        walk(
+            ws,
+            [
+                {
+                    name: ws.name,
+                    version: ws.version,
+                    isWorkspace: true,
+                },
+            ],
+            null,
+        );
+    }
+
+    if (paths.length === 0) return [];
+
+    // Group paths by the resolved version of `pkg` they end at.
+    const byVersion = new Map();
+    for (const p of paths) {
+        if (!byVersion.has(p.pkgVersion)) byVersion.set(p.pkgVersion, []);
+        byVersion.get(p.pkgVersion).push(p);
+    }
+
+    // For each version, reverse the chains (drop the pkg leaf so the
+    // reverse-tree's first level holds pkg's *parents*) and merge nodes
+    // that share the same identity.
+    function buildLevel(reversedChains) {
+        const buckets = new Map();
+        for (const chain of reversedChains) {
+            if (chain.length === 0) continue;
+            const head = chain[0];
+            const key = head.isWorkspace
+                ? `ws:${head.name}`
+                : `${head.name}@${head.version}`;
+            if (!buckets.has(key)) {
+                buckets.set(key, { head, tails: [] });
+            }
+            buckets.get(key).tails.push(chain.slice(1));
+        }
+        const nodes = [];
+        for (const { head, tails } of buckets.values()) {
+            if (head.isWorkspace) {
+                // walkUpTree only checks `node.depField` truthiness to
+                // recognise workspace nodes; getWorkspaceDepInfo() reads
+                // the workspace's package.json directly to resolve the
+                // actual spec. The recorded depField is informational.
+                nodes.push({
+                    name: head.name,
+                    depField: head.workspaceDepField || "dependencies",
+                });
+            } else {
+                nodes.push({
+                    name: head.name,
+                    version: head.version,
+                    dependents: buildLevel(tails),
+                });
+            }
+        }
+        return nodes;
+    }
+
+    const result = [];
+    for (const [version, ps] of byVersion) {
+        const reversed = ps.map((p) => {
+            // Drop the pkg leaf, reverse, then attach workspaceDepField
+            // to the workspace node (now at the end after reversal).
+            const noLeaf = p.chain.slice(0, -1);
+            const reversedChain = [...noLeaf].reverse();
+            // The workspace is the last element of reversedChain; clone it
+            // before tagging — the same workspace identity object is shared
+            // across every path emitted from that workspace, so mutating
+            // workspaceDepField in place would let later paths overwrite
+            // earlier ones (and the chosen depField would become
+            // traversal-order dependent).
+            if (reversedChain.length > 0) {
+                const lastIdx = reversedChain.length - 1;
+                const wsNode = reversedChain[lastIdx];
+                if (wsNode.isWorkspace) {
+                    reversedChain[lastIdx] = {
+                        ...wsNode,
+                        workspaceDepField: p.workspaceDepField,
+                    };
+                }
+            }
+            return reversedChain;
+        });
+        result.push({
+            version,
+            dependents: buildLevel(reversed),
+        });
+    }
+
+    return result;
 }
 
 /**
@@ -1126,7 +1335,10 @@ async function planFixes(pkg, requiredVersion, whyData) {
     const allBlockReasons = [];
     const allConstraints = [];
 
-    for (const entry of whyData) {
+    // pnpm emits forward-direction trees; convert once per planFixes call.
+    const reverseTree = toReverseTree(whyData, pkg);
+
+    for (const entry of reverseTree) {
         if (!entry.version || !semver.valid(entry.version)) continue;
         if (semver.gte(entry.version, requiredVersion)) continue; // already OK
         if (!entry.dependents || entry.dependents.length === 0) continue;
@@ -1844,8 +2056,9 @@ function addOverrides(overridesMap) {
  * Extract workspace root names from pnpm-why data by walking the dependents
  * tree to find leaf nodes (those with a `depField` property).
  */
-function extractWorkspaceRoots(whyData) {
+function extractWorkspaceRoots(whyData, pkg) {
     const roots = new Set();
+    const reverseTree = toReverseTree(whyData, pkg);
     function walk(node) {
         if (node.depField) {
             roots.add(node.name);
@@ -1855,7 +2068,7 @@ function extractWorkspaceRoots(whyData) {
             for (const dep of node.dependents) walk(dep);
         }
     }
-    for (const entry of whyData) {
+    for (const entry of reverseTree) {
         if (entry.dependents) {
             for (const dep of entry.dependents) walk(dep);
         }
@@ -2023,7 +2236,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 
     // ── "Used by" — which workspace packages are affected ─────────────
     if (!isSimpleUpdate(entry)) {
-        const wsRoots = extractWorkspaceRoots(whyData);
+        const wsRoots = extractWorkspaceRoots(whyData, pkg);
         if (wsRoots.length > 0) {
             const rootsStr =
                 wsRoots
