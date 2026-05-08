@@ -353,6 +353,15 @@ export type RulesPart = {
      * tail call".
      */
     tailCall?: boolean | undefined;
+
+    /**
+     * Optimizer-only flag that disables per-entry memoization for
+     * this alternation.  Set when every alternative consists solely
+     * of `StringPart`s (no wildcards, numbers, nested rules, or
+     * phrase sets), making re-execution cheaper than the memo
+     * cache bookkeeping.
+     */
+    skipMemo?: boolean | undefined;
 };
 
 export type PhraseSetPart = {
@@ -472,6 +481,7 @@ export function createRulesPart(
         name?: string | undefined;
         repeat?: boolean | undefined;
         tailCall?: boolean | undefined;
+        skipMemo?: boolean | undefined;
     },
 ): RulesPart {
     return {
@@ -483,6 +493,7 @@ export function createRulesPart(
         name: options?.name,
         repeat: options?.repeat,
         tailCall: options?.tailCall,
+        skipMemo: options?.skipMemo,
     };
 }
 
@@ -579,6 +590,8 @@ export type RulePartJson = {
     repeat?: boolean | undefined;
     /** See `RulesPart.tailCall`. */
     tailCall?: boolean | undefined;
+    /** See `RulesPart.skipMemo`. */
+    skipMemo?: boolean | undefined;
 };
 
 export type PhraseSetPartJson = {

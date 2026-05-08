@@ -162,6 +162,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 }
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
+                if (p.skipMemo) part.skipMemo = true;
                 if (p.dispatch !== undefined) {
                     part.dispatch = dispatchIndexFor(p.dispatch);
                 }
