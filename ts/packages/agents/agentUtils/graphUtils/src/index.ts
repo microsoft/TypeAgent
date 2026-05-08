@@ -73,3 +73,11 @@ export {
     getAvailableEmailProviders,
     isEmailProviderConfigured,
 } from "./emailProviderFactory.js";
+
+// Shared readiness/setup helpers (calendar + email)
+export {
+    GraphAgentName,
+    GraphReadinessProbe,
+    evaluateGraphReadiness,
+    probeGraphConfig,
+} from "./readiness.js";

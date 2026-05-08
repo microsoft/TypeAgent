@@ -1247,6 +1247,9 @@ importers:
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
         version: 3.0.7(@azure/identity@4.10.0)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../../agentSdk
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../../utils/commonUtils
