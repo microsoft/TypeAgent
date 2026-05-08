@@ -4,7 +4,11 @@
     "composite": true
   },
   "include": [],
-  "references": [{ "path": "./src" }, { "path": "./test" }],
+  "references": [
+    { "path": "./src" },
+    { "path": "./test" },
+    { "path": "./scripts" }
+  ],
   "ts-node": {
     "esm": true
   }

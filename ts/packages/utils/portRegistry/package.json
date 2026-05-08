@@ -27,6 +27,7 @@
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "smoke": "node ./dist/scripts/smoke.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
