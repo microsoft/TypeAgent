@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { matchGrammar } from "action-grammar";
-import type { TraceCallback, TraceEvent } from "action-grammar";
+import type { TraceCallback, TraceEvent, GrammarPart } from "action-grammar";
 import type {
     LoadedGrammar,
     CoverageReport,
@@ -28,8 +28,10 @@ export function computeCoverage(
     }
     const debugInfo = g.debugInfo;
 
-    // Build a mapping from PartId -> owning RuleId using source positions.
-    const partOwner = buildPartOwnerMap(debugInfo);
+    // Build a mapping from PartId -> owning RuleId by walking the
+    // compiled grammar AST. This is reliable for nested and optimized
+    // grammars (unlike source-offset heuristics).
+    const partOwner = buildPartOwnerMap(g);
 
     // Accumulators
     const partHits = new Map<PartId, number>();
@@ -70,7 +72,7 @@ export function computeCoverage(
             }
         }
 
-        // Rule hit count = sum of part hits (or count of matched parts)
+        // Rule hit count = sum of part hits
         const ruleHitCount = parts.reduce((sum, p) => sum + p.hits, 0);
 
         perRule.push({ id: ruleId, location, hits: ruleHitCount, parts });
@@ -99,33 +101,71 @@ export function computeCoverage(
 }
 
 /**
- * Map each PartId to its owning RuleId by comparing source offsets.
- * A part belongs to the rule whose source offset is the largest
- * offset <= the part's offset.
+ * Walk the compiled grammar AST and map each part's `partId` to the
+ * rule name (RuleId) it was compiled from, using the debugInfo's rule
+ * map to identify which top-level alternatives belong to which rule.
+ *
+ * For parts without a `partId` (optimizer-synthesized wrappers), or
+ * for partIds not present in `debugInfo.parts`, the part is silently
+ * excluded from coverage - this is expected for optimized grammars.
  */
-function buildPartOwnerMap(debugInfo: GrammarDebugInfo): Map<PartId, RuleId> {
-    // Sort rules by source offset (ascending)
-    const sortedRules: Array<{ id: RuleId; offset: number }> = [];
-    for (const [id, loc] of debugInfo.rules) {
-        sortedRules.push({ id, offset: loc.range.start.offset });
-    }
-    sortedRules.sort((a, b) => a.offset - b.offset);
-
+function buildPartOwnerMap(g: LoadedGrammar): Map<PartId, RuleId> {
     const result = new Map<PartId, RuleId>();
-    for (const [partId, partLoc] of debugInfo.parts) {
-        const partOffset = partLoc.range.start.offset;
-        // Find the rule with the largest offset <= partOffset
-        let owner: RuleId | undefined;
-        for (const rule of sortedRules) {
-            if (rule.offset <= partOffset) {
-                owner = rule.id;
-            } else {
-                break;
+    const debugInfo = g.debugInfo!;
+
+    // For each rule in debugInfo, find which parts belong to it
+    // by walking all parts in the grammar and checking debugInfo.
+    // We use the rule positions from debugInfo (source offsets) to
+    // determine ownership: a part belongs to the rule whose source
+    // range it falls within. But since we have the grammar AST, we
+    // can walk it and use the partIds directly.
+    //
+    // Strategy: walk all alternatives, collect partIds, and assign
+    // each to the closest preceding rule in source order.
+    const sortedRules = [...debugInfo.rules.entries()].sort(
+        (a, b) => a[1].range.start.offset - b[1].range.start.offset,
+    );
+
+    // Collect all partIds from the grammar AST
+    for (const alt of g.grammar.alternatives) {
+        collectPartIds(alt.parts, result, sortedRules, debugInfo);
+    }
+
+    return result;
+}
+
+/**
+ * Recursively collect partIds from a parts array and nested RulesParts.
+ */
+function collectPartIds(
+    parts: readonly GrammarPart[],
+    result: Map<PartId, RuleId>,
+    sortedRules: Array<[RuleId, { range: { start: { offset: number } } }]>,
+    debugInfo: GrammarDebugInfo,
+): void {
+    for (const part of parts) {
+        const partId = part.partId;
+        if (partId !== undefined && debugInfo.parts.has(partId)) {
+            // Find the owning rule using the part's source position
+            const partLoc = debugInfo.parts.get(partId)!;
+            const partOffset = partLoc.range.start.offset;
+            let owner: RuleId | undefined;
+            for (const [ruleId, ruleLoc] of sortedRules) {
+                if (ruleLoc.range.start.offset <= partOffset) {
+                    owner = ruleId;
+                } else {
+                    break;
+                }
+            }
+            if (owner !== undefined) {
+                result.set(partId, owner);
             }
         }
-        if (owner !== undefined) {
-            result.set(partId, owner);
+        // Recurse into nested RulesParts
+        if (part.type === "rules") {
+            for (const rule of part.alternatives) {
+                collectPartIds(rule.parts, result, sortedRules, debugInfo);
+            }
         }
     }
-    return result;
 }

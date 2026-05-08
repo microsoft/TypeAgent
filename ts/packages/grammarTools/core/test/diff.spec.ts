@@ -5,6 +5,7 @@ import {
     diffGrammars,
     loadGrammarFromBuffer,
     MissingSourceError,
+    GrammarToolsError,
 } from "../src/index.js";
 import type { LoadedGrammar } from "../src/index.js";
 
@@ -137,5 +138,42 @@ describe("diffGrammars", () => {
         expect(diff.added).toContain("New");
         expect(diff.removed).toContain("Old");
         expect(diff.changed.some((c) => c.rule === "Action")).toBe(true);
+    });
+
+    it("treats whitespace-only differences as no change", () => {
+        // Same grammar with different whitespace in source
+        const sourceA = `<Start> = play -> "play";`;
+        const sourceB = `<Start>  =  play  ->  "play" ;`;
+
+        const a = loadGrammarFromBuffer("a.agr", sourceA);
+        const b = loadGrammarFromBuffer("b.agr", sourceB);
+        expect(a.ok).toBe(true);
+        expect(b.ok).toBe(true);
+        if (!a.ok || !b.ok) return;
+
+        // Canonical serialization should normalize whitespace
+        const diff = diffGrammars(a.grammar, b.grammar);
+        expect(diff.changed).toHaveLength(0);
+        expect(diff.added).toHaveLength(0);
+        expect(diff.removed).toHaveLength(0);
+    });
+
+    it("throws GrammarToolsError on unparseable source", () => {
+        const valid = loadGrammarFromBuffer(
+            "a.agr",
+            `<Start> = play -> "play";`,
+        );
+        expect(valid.ok).toBe(true);
+        if (!valid.ok) return;
+
+        // Create a grammar with corrupted source text
+        const corrupted: LoadedGrammar = {
+            ...valid.grammar,
+            files: [{ id: "bad.agr", text: "<<< not valid grammar %%%" }],
+        };
+
+        expect(() => diffGrammars(corrupted, valid.grammar)).toThrow(
+            GrammarToolsError,
+        );
     });
 });

@@ -113,8 +113,8 @@ type CompileContext = {
     derivedTypes: Map<GrammarRule[], SchemaType>; // cached derived output types for rule arrays (compile-time only)
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
-    /** Next part ID to assign. Incremented per part creation. */
-    nextPartId: number;
+    /** Shared counter for part IDs across all contexts in this compilation. */
+    partIdCounter: { value: number };
     /** Collector for part source positions (partId -> source offset). */
     debugCollector?: DebugInfoCollector | undefined;
 };
@@ -124,6 +124,7 @@ function createImportCompileContext(
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
     source: string,
+    partIdCounter?: { value: number },
 ): CompileContext {
     const fullPath = fileLoader.resolvePath(source, referencingFileName);
     if (grammarFileMap.has(fullPath)) {
@@ -140,6 +141,8 @@ function createImportCompileContext(
         fileLoader,
         result.definitions,
         result.imports,
+        undefined,
+        partIdCounter,
     );
     return importContext;
 }
@@ -250,6 +253,7 @@ function createCompileContext(
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
     schemaLoader?: SchemaLoader,
+    partIdCounter?: { value: number },
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
@@ -289,7 +293,7 @@ function createCompileContext(
         derivedTypes: new Map(),
         errors: [],
         warnings: [],
-        nextPartId: 0,
+        partIdCounter: partIdCounter ?? { value: 0 },
     };
 
     // Process definitions FIRST - this populates ruleDefMap
@@ -371,6 +375,7 @@ function createCompileContext(
                     grammarFileMap,
                     fullPath,
                     importStmt.source,
+                    context.partIdCounter,
                 );
 
                 const ruleNames =
@@ -458,6 +463,15 @@ export function compileGrammar(
         schemaLoader,
     );
     context.debugCollector = debugCollector;
+
+    // Propagate debugCollector and share the partId counter with all
+    // import contexts so imported rules get unique partIds and their
+    // source positions are recorded in the same collector.
+    for (const [, importCtx] of grammarFileMap) {
+        if (importCtx !== context) {
+            importCtx.debugCollector = debugCollector;
+        }
+    }
 
     const { grammarRules, hasValue } = createNamedGrammarRules(context, start);
 
@@ -794,7 +808,7 @@ function allocPartId(
     context: CompileContext,
     sourcePos: number | undefined,
 ): number {
-    const id = context.nextPartId++;
+    const id = context.partIdCounter.value++;
     if (context.debugCollector !== undefined && sourcePos !== undefined) {
         context.debugCollector.partPositions.set(id, sourcePos);
     }

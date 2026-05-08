@@ -114,4 +114,71 @@ describe("computeCoverage", () => {
         expect(report.totals.partHits).toBe(0);
         expect(report.unmatchedInputs).toHaveLength(0);
     });
+
+    it("tracks coverage across nested rule references", () => {
+        const nested = `<Start> = do $(x:<Action>) -> x;
+<Action> = play $(song:string) -> { action: "play", song };
+<Action> = pause -> { action: "pause" };`;
+
+        const result = loadGrammarFromBuffer("test.agr", nested);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const report = computeCoverage(result.grammar, ["do play something"]);
+
+        // Both Start and Action should have hits
+        const startRule = report.perRule.find((r) => r.id === "Start");
+        const actionRule = report.perRule.find((r) => r.id === "Action");
+        expect(startRule).toBeDefined();
+        expect(actionRule).toBeDefined();
+        if (startRule) expect(startRule.hits).toBeGreaterThan(0);
+        if (actionRule) expect(actionRule.hits).toBeGreaterThan(0);
+    });
+
+    it("assigns parts to the correct owning rule", () => {
+        const multiRule = `<Start> = play $(song:string) -> { action: "play", song };
+<Start> = do $(x:<Other>) -> x;
+<Other> = pause -> { action: "pause" };
+<Other> = stop -> { action: "stop" };`;
+
+        const result = loadGrammarFromBuffer("test.agr", multiRule);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const report = computeCoverage(result.grammar, ["play something"]);
+
+        // Check that there are per-rule entries for both Start and Other
+        const ruleNames = report.perRule.map((r) => r.id);
+        expect(ruleNames).toContain("Start");
+        expect(ruleNames).toContain("Other");
+
+        // Start should have hits, Other should not
+        const startHits = report.perRule
+            .filter((r) => r.id === "Start")
+            .reduce((sum, r) => sum + r.hits, 0);
+        const otherHits = report.perRule
+            .filter((r) => r.id === "Other")
+            .reduce((sum, r) => sum + r.hits, 0);
+        expect(startHits).toBeGreaterThan(0);
+        expect(otherHits).toBe(0);
+    });
+
+    it("reports correct totals for repeated inputs", () => {
+        const result = loadGrammarFromBuffer("test.agr", source);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const report = computeCoverage(result.grammar, [
+            "play a",
+            "play b",
+            "play c",
+            "pause",
+            "stop",
+        ]);
+
+        // All 5 inputs should match
+        expect(report.unmatchedInputs).toHaveLength(0);
+        // All rules should be hit
+        expect(report.perRule.every((r) => r.hits > 0)).toBe(true);
+    });
 });

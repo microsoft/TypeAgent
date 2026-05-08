@@ -9,7 +9,7 @@ import type {
     RuleChange,
     RuleId,
 } from "./types.js";
-import { MissingSourceError, hasSource } from "./types.js";
+import { MissingSourceError, hasSource, GrammarToolsError } from "./types.js";
 
 /**
  * Compute a structural rule-level diff between two grammars.
@@ -17,7 +17,7 @@ import { MissingSourceError, hasSource } from "./types.js";
  * includes the canonical text of both versions.
  *
  * Requires source files on both grammars (throws MissingSourceError
- * otherwise).
+ * otherwise). Throws GrammarToolsError if source files cannot be parsed.
  */
 export function diffGrammars(
     before: LoadedGrammar,
@@ -58,13 +58,7 @@ export function diffGrammars(
         if (beforeText !== afterText) {
             changed.push({
                 rule: name,
-                reason: classifyChange(
-                    beforeRules,
-                    afterRules,
-                    name,
-                    beforeText,
-                    afterText,
-                ),
+                reason: classifyChange(beforeText, afterText),
                 before: beforeText,
                 after: afterText,
             });
@@ -80,7 +74,7 @@ export function diffGrammars(
 
 /**
  * Parse source files and collect each rule's canonical text, keyed by
- * rule name.
+ * rule name. Throws GrammarToolsError if any source file fails to parse.
  */
 function collectRules(g: LoadedGrammar): Map<RuleId, string> {
     const rules = new Map<RuleId, string>();
@@ -88,8 +82,12 @@ function collectRules(g: LoadedGrammar): Map<RuleId, string> {
         let parsed;
         try {
             parsed = parseGrammarRules(file.id, file.text);
-        } catch {
-            continue; // skip unparseable files
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new GrammarToolsError(
+                "PARSE_ERROR",
+                `Failed to parse source file '${file.id}' for diff: ${msg}`,
+            );
         }
         for (const def of parsed.definitions) {
             const name = def.definitionName.name;
@@ -102,11 +100,10 @@ function collectRules(g: LoadedGrammar): Map<RuleId, string> {
 }
 
 /**
- * Serialize a single rule definition to its canonical text form.
+ * Serialize a single rule definition to its canonical text form
+ * using writeGrammarRules to ensure deterministic output.
  */
 function serializeSingleRule(def: RuleDefinition): string {
-    // Create a minimal parse result with just this one definition
-    // and use writeGrammarRules to get canonical text
     const singleResult = {
         imports: [],
         definitions: [def],
@@ -126,9 +123,6 @@ function serializeSingleRule(def: RuleDefinition): string {
  * "value" = only the value expression changed.
  */
 function classifyChange(
-    _beforeRules: Map<RuleId, string>,
-    _afterRules: Map<RuleId, string>,
-    _name: RuleId,
     beforeText: string,
     afterText: string,
 ): "signature" | "body" | "value" {
