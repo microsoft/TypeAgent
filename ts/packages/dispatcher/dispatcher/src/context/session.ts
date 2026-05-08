@@ -167,8 +167,12 @@ export type DispatcherConfig = {
         // surfaced (any in-chat yes/no card included), and the user's
         // original action/command is *not* automatically retried — the user
         // re-runs it after setup completes.
-        // Default: false. Per-session toggle via @config execution
-        // setupOnFirstUse on/off.
+        // Default: true. Once an agent population has setup hooks, the
+        // strict-error path becomes the worse UX (user sees a hint, has
+        // to copy/paste a command, gets the card they would have got
+        // anyway). Toggle off via @config execution setupOnFirstUse off
+        // for environments that prefer explicit setup invocations
+        // (CI / scripted / agents-as-libraries).
         setupOnFirstUse: boolean;
         // Controls how Entity objects are rendered into LLM prompts (translation + reasoning context).
         // "facets" (default): current shape `{id, name, type, facets: [{name, value}, ...]}`.
@@ -279,7 +283,7 @@ const defaultSessionConfig: SessionConfig = {
             legacy: true, // use the new memory behavior
         },
         reasoning: "none",
-        setupOnFirstUse: false,
+        setupOnFirstUse: true,
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
         // appending the Entity TS type to the reasoning system prompt produced 4 consistent
         // gains / 0 consistent regressions on a 20-test sample (median of 3 runs).
