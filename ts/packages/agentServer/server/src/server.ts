@@ -198,8 +198,11 @@ async function main() {
               ? parseInt(process.env.AGENT_SERVER_PORT, 10)
               : 8999;
 
+    const workspaceIdx = process.argv.indexOf("--workspace");
     const workspaceKey =
-        process.env.TYPEAGENT_AGENT_SERVER_WORKSPACE ?? undefined;
+        workspaceIdx !== -1 && workspaceIdx + 1 < process.argv.length
+            ? process.argv[workspaceIdx + 1]
+            : (process.env.TYPEAGENT_AGENT_SERVER_WORKSPACE ?? undefined);
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =

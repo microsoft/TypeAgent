@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import {
     connectAgentServer,
-    ensureAgentServer,
+    ensureAgentServerForWorkspace,
 } from "@typeagent/agent-server-client";
 import {
     ChatHistoryInput,
@@ -73,10 +73,13 @@ export default class ReplayCommand extends Command {
         const { args, flags } = await this.parse(ReplayCommand);
 
         const history = await readHistoryFile(args.history);
-        const url = `ws://localhost:${flags.port}`;
 
-        await ensureAgentServer(flags.port, !flags.show, 600);
-        const connection = await connectAgentServer(url);
+        const handle = await ensureAgentServerForWorkspace({
+            legacyPort: flags.port,
+            hidden: !flags.show,
+            idleTimeout: 600,
+        });
+        const connection = await connectAgentServer(handle.url);
 
         // Create an ephemeral conversation for replay isolation
         const ephemeralName = `cli-replay-${crypto.randomUUID()}`;

@@ -65,6 +65,7 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/completion-ui": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/port-registry": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",

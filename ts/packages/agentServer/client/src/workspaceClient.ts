@@ -25,6 +25,12 @@ export interface EnsureAgentServerOptions {
      * is enabled (TYPEAGENT_USE_PORT_REGISTRY=1).
      */
     workspaceKey?: string;
+    /**
+     * Port to use when the registry is **disabled** (legacy fallback).
+     * Defaults to {@link DEFAULT_AGENT_SERVER_PORT} (8999). Ignored when
+     * the registry is enabled — the registry assigns the port instead.
+     */
+    legacyPort?: number;
     hidden?: boolean;
     idleTimeout?: number;
 }
@@ -58,13 +64,14 @@ export async function ensureAgentServerForWorkspace(
     const hidden = options.hidden ?? false;
     const idleTimeout = options.idleTimeout ?? 0;
     const workspaceKey = options.workspaceKey ?? DEFAULT_WORKSPACE_KEY;
+    const legacyPort = options.legacyPort ?? DEFAULT_AGENT_SERVER_PORT;
 
     if (!isRegistryEnabled()) {
-        debug(`registry disabled — using default port ${DEFAULT_AGENT_SERVER_PORT}`);
-        await ensureAgentServer(DEFAULT_AGENT_SERVER_PORT, hidden, idleTimeout);
+        debug(`registry disabled — using port ${legacyPort}`);
+        await ensureAgentServer(legacyPort, hidden, idleTimeout);
         return {
-            port: DEFAULT_AGENT_SERVER_PORT,
-            url: `ws://localhost:${DEFAULT_AGENT_SERVER_PORT}`,
+            port: legacyPort,
+            url: `ws://localhost:${legacyPort}`,
         };
     }
 

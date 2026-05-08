@@ -3,7 +3,11 @@
 
 import * as vscode from "vscode";
 import * as os from "os";
-import { connectAgentServer } from "@typeagent/agent-server-client";
+import {
+    connectAgentServer,
+    lookupAgentServerForWorkspace,
+} from "@typeagent/agent-server-client";
+import { isRegistryEnabled } from "@typeagent/port-registry";
 import type {
     AgentServerConnection,
     ConversationDispatcher,
@@ -437,11 +441,25 @@ export class AgentServerBridge {
     }
 
     private async connectImpl(): Promise<void> {
-        const config = vscode.workspace.getConfiguration("typeagent");
-        const serverUrl = config.get<string>(
-            "serverUrl",
-            "ws://localhost:8999",
-        );
+        // Discovery: when the PortRegistry feature flag is on, look up
+        // the agent server's URL via the registry. Otherwise fall back to
+        // the user-configured serverUrl (default ws://localhost:8999).
+        let serverUrl: string;
+        if (isRegistryEnabled()) {
+            const handle = await lookupAgentServerForWorkspace();
+            if (handle === undefined) {
+                throw new Error(
+                    "TypeAgent agent server not found in port registry. Start one with 'agent-server' or via the shell.",
+                );
+            }
+            serverUrl = handle.url;
+        } else {
+            const config = vscode.workspace.getConfiguration("typeagent");
+            serverUrl = config.get<string>(
+                "serverUrl",
+                "ws://localhost:8999",
+            );
+        }
 
         try {
             this.connection = wrapLegacy(

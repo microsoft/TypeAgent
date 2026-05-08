@@ -18,7 +18,7 @@ import {
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
-    ensureAgentServer,
+    ensureAgentServerForWorkspace,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
@@ -182,7 +182,18 @@ export default class Connect extends Command {
         const isEphemeral = flags.memory;
 
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
-            const url = `ws://localhost:${flags.port}`;
+            // Resolve the agent server's URL up front. With the registry
+            // feature flag on, this is a registry lookup; otherwise it
+            // falls back to ws://localhost:${flags.port}.
+            const ensureServer = async () => {
+                const handle = await ensureAgentServerForWorkspace({
+                    legacyPort: flags.port,
+                    hidden: flags.hidden,
+                    idleTimeout: flags.idleTimeout,
+                });
+                return handle.url;
+            };
+            let url = await ensureServer();
 
             const onDisconnect = () => {
                 console.error("Disconnected from dispatcher");
@@ -191,11 +202,7 @@ export default class Connect extends Command {
 
             // Helper: find the "CLI" conversation by name (creating it if absent) and join it.
             const connectToCliConversation = async () => {
-                await ensureAgentServer(
-                    flags.port,
-                    flags.hidden,
-                    flags.idleTimeout,
-                );
+                url = await ensureServer();
                 const connection = await connectAgentServer(url, onDisconnect);
                 const existing = await connection.listConversations(
                     CLI_CONVERSATION_NAME,
@@ -227,11 +234,7 @@ export default class Connect extends Command {
 
             // Helper: create an ephemeral conversation for --memory flag.
             const connectToEphemeralConversation = async () => {
-                await ensureAgentServer(
-                    flags.port,
-                    flags.hidden,
-                    flags.idleTimeout,
-                );
+                url = await ensureServer();
                 const connection = await connectAgentServer(url, onDisconnect);
                 const ephemeralName = `cli-ephemeral-${crypto.randomUUID()}`;
                 const created =
@@ -272,11 +275,7 @@ export default class Connect extends Command {
                 const result =
                     persistedConversationId !== undefined
                         ? await (async () => {
-                              await ensureAgentServer(
-                                  flags.port,
-                                  flags.hidden,
-                                  flags.idleTimeout,
-                              );
+                              url = await ensureServer();
                               const conn = await connectAgentServer(
                                   url,
                                   onDisconnect,

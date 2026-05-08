@@ -42,9 +42,11 @@ import { isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
     ensureAgentServer,
+    ensureAgentServerForWorkspace,
     connectAgentServer,
     stopAgentServer,
 } from "@typeagent/agent-server-client";
+import { isRegistryEnabled } from "@typeagent/port-registry";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     loadUserSettings,
@@ -77,6 +79,7 @@ async function initializeDispatcher(
     connect?: number,
     hidden?: boolean,
     idleTimeout?: number,
+    workspace?: string,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -193,12 +196,29 @@ async function initializeDispatcher(
                 idleTimeout !== undefined
                     ? idleTimeout
                     : userSettings.server.idleTimeout;
-            await ensureAgentServer(
-                connect,
-                effectiveHidden,
-                effectiveIdleTimeout,
-            );
-            const url = `ws://localhost:${connect}`;
+
+            // Discovery: when the PortRegistry feature flag is on, the
+            // shell stops caring about the port number from --connect and
+            // looks up (or spawns) the agent server via the registry. The
+            // explicit port from --connect is preserved as a fallback when
+            // the flag is off.
+            let resolvedPort: number;
+            if (isRegistryEnabled()) {
+                const handle = await ensureAgentServerForWorkspace({
+                    workspaceKey: workspace ?? "default",
+                    hidden: effectiveHidden,
+                    idleTimeout: effectiveIdleTimeout,
+                });
+                resolvedPort = handle.port;
+            } else {
+                await ensureAgentServer(
+                    connect,
+                    effectiveHidden,
+                    effectiveIdleTimeout,
+                );
+                resolvedPort = connect;
+            }
+            const url = `ws://localhost:${resolvedPort}`;
 
             // Reconnect state. When the WebSocket drops we attempt a few
             // backoff retries before giving up and surfacing the modal
@@ -631,6 +651,7 @@ export function initializeInstance(
     hidden?: boolean,
     idleTimeout?: number,
     _resume?: boolean, // reserved: shell conversation resume not yet implemented
+    workspace?: string,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -685,6 +706,7 @@ export function initializeInstance(
         connect,
         hidden,
         idleTimeout,
+        workspace,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

@@ -4581,6 +4581,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
+      '@typeagent/port-registry':
+        specifier: workspace:*
+        version: link:../utils/portRegistry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
@@ -5060,6 +5063,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/port-registry':
+        specifier: workspace:*
+        version: link:../utils/portRegistry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

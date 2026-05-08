@@ -402,6 +402,7 @@ async function initialize() {
                 parsedArgs.hidden,
                 parsedArgs.idleTimeout,
                 parsedArgs.resume,
+                parsedArgs.workspace,
             );
     });
 
@@ -416,6 +417,7 @@ async function initialize() {
         parsedArgs.hidden,
         parsedArgs.idleTimeout,
         parsedArgs.resume,
+        parsedArgs.workspace,
     );
 
     shellWindow.waitForReady().then(() => {
@@ -459,6 +461,7 @@ export async function reloadInstance() {
             parsedArgs.hidden,
             parsedArgs.idleTimeout,
             parsedArgs.resume,
+            parsedArgs.workspace,
         );
     } finally {
         reloadingInstance = false;
