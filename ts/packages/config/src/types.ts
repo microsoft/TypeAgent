@@ -54,6 +54,46 @@ export enum ConfigSource {
 export type SourceMap = Record<string, ConfigSource>;
 
 /**
+ * Options for fetching a YAML configuration blob from Azure Key Vault.
+ *
+ * The default vault for TypeAgent dev work is `aisystems`; CI workflows
+ * pass an explicit vault name. The default secret name is
+ * `typeagent-config` (defined in `keyVault.ts`).
+ */
+export interface KeyVaultOptions {
+    /** Azure Key Vault name (e.g., `aisystems`). Required. */
+    vaultName: string;
+
+    /**
+     * Secret name holding the YAML blob. Defaults to
+     * `typeagent-config`.
+     */
+    secretName?: string;
+
+    /**
+     * Custom Azure credential. Defaults to `DefaultAzureCredential`,
+     * which mirrors the rest of the TypeAgent codebase.
+     */
+    credential?: import("@azure/identity").TokenCredential;
+
+    /**
+     * Custom fetcher (vault, secret) -> raw string | null. Used by
+     * tests to bypass the live Azure SDK; production callers should
+     * leave this undefined.
+     */
+    fetcher?: (vaultName: string, secretName: string) => Promise<string | null>;
+
+    /**
+     * If `true`, throw on fetch / parse / validation errors. If
+     * `false` (the default), errors are logged and the layer is
+     * skipped — the loader falls through to lower-precedence layers,
+     * matching the offline-friendly behavior the migration plan
+     * requires.
+     */
+    failOnError?: boolean;
+}
+
+/**
  * Options accepted by `loadConfig`. All fields are optional; sensible
  * defaults locate `config.defaults.yaml` / `config.local.yaml` / `.env`
  * relative to the TypeAgent `ts/` workspace root.
@@ -86,6 +126,14 @@ export interface LoadConfigOptions {
      * release.
      */
     dotEnvPath?: string;
+
+    /**
+     * If supplied, the loader fetches the YAML blob from the named
+     * Azure Key Vault secret and inserts it into the precedence
+     * chain between `defaults` and `local` (matches the locked
+     * design). Async-only — `loadConfigSync` ignores this option.
+     */
+    keyVault?: KeyVaultOptions;
 
     /**
      * If `true`, populate `process.env` with the merged result.

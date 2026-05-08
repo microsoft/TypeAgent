@@ -32,6 +32,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/identity": "^4.10.0",
+    "@azure/keyvault-secrets": "^4.9.0",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "js-yaml": "^4.1.0",

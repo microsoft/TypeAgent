@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import registerDebug from "debug";
 
 import { flatten, mergeFlat } from "./flatten.js";
+import { fetchKeyVaultConfig } from "./keyVault.js";
 import { validateConfigTree } from "./schema.js";
 import {
     ConfigSource,
@@ -174,16 +175,152 @@ export function loadConfigSync(
 }
 
 /**
- * Async loader. In Phase 1 this is a thin wrapper around
- * `loadConfigSync`; Phase 2 will add the Key Vault fetch step here.
+ * Async loader. Performs the same work as `loadConfigSync` plus the
+ * optional Key Vault fetch when `options.keyVault` is supplied.
  *
  * Existing entry points should `await loadConfig()` once at startup,
  * before any code that reads `process.env`.
+ *
+ * Precedence (low → high): `.env` → defaults → Key Vault → local →
+ * pre-existing `process.env`.
  */
 export async function loadConfig(
     options: LoadConfigOptions = {},
 ): Promise<LoadConfigResult> {
-    return loadConfigSync(options);
+    if (!options.keyVault) {
+        return loadConfigSync(options);
+    }
+
+    // Fetch the Key Vault layer first, then run the sync loader with
+    // the rest of the precedence chain. We splice the KV layer in at
+    // the correct position by routing through a custom assembly path.
+    const root = options.workspaceRoot ?? defaultWorkspaceRoot();
+    const defaultsPath =
+        options.defaultsPath ?? path.join(root, "config.defaults.yaml");
+    const localPath = options.localPath ?? path.join(root, "config.local.yaml");
+    const dotEnvPath = options.dotEnvPath ?? path.join(root, ".env");
+    const trackSources = options.trackSources ?? false;
+    const populateProcessEnv = options.populateProcessEnv ?? true;
+    const strict = options.strict ?? true;
+
+    debug(
+        "loading config with key vault (workspaceRoot=%s, vault=%s)",
+        root,
+        options.keyVault.vaultName,
+    );
+
+    const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
+
+    // .env
+    pushFileLayer(
+        layers,
+        ConfigSource.DotEnv,
+        () => readDotEnvFile(dotEnvPath),
+        strict,
+        ".env",
+    );
+
+    // defaults
+    pushYamlLayer(layers, ConfigSource.Defaults, defaultsPath, strict);
+
+    // Key Vault (between defaults and local, per the locked design)
+    try {
+        const tree = await fetchKeyVaultConfig({
+            ...options.keyVault,
+            failOnError: options.keyVault.failOnError ?? strict,
+        });
+        if (tree) {
+            layers.push({
+                source: ConfigSource.KeyVault,
+                flat: flatten(tree),
+            });
+        }
+    } catch (err) {
+        if (strict) throw err;
+        debug("key vault layer skipped: %s", err);
+    }
+
+    // local
+    pushYamlLayer(layers, ConfigSource.Local, localPath, strict);
+
+    return finalize(layers, populateProcessEnv, trackSources);
+}
+
+/**
+ * Push a flat env layer (read from a `.env` file) into the layers
+ * array, honoring `strict` mode for error handling. Helper extracted
+ * so `loadConfig` and `loadConfigSync` share identical semantics.
+ */
+function pushFileLayer(
+    layers: { source: ConfigSource; flat: FlatEnv }[],
+    source: ConfigSource,
+    read: () => FlatEnv,
+    strict: boolean,
+    label: string,
+): void {
+    try {
+        const flat = read();
+        if (Object.keys(flat).length > 0) {
+            layers.push({ source, flat });
+        }
+    } catch (err) {
+        if (strict) throw err;
+        debug("error reading %s (continuing): %s", label, err);
+    }
+}
+
+/**
+ * Push a YAML layer into the layers array, honoring `strict` mode.
+ */
+function pushYamlLayer(
+    layers: { source: ConfigSource; flat: FlatEnv }[],
+    source: ConfigSource,
+    filePath: string,
+    strict: boolean,
+): void {
+    try {
+        const tree = readYamlFile(filePath);
+        if (tree) {
+            layers.push({ source, flat: flatten(tree) });
+        }
+    } catch (err) {
+        if (strict) throw err;
+        debug("error reading %s (continuing): %s", filePath, err);
+    }
+}
+
+/**
+ * Merge layers in precedence order, optionally produce a source map,
+ * and (optionally) push the result into `process.env`.
+ */
+function finalize(
+    layers: { source: ConfigSource; flat: FlatEnv }[],
+    populateProcessEnv: boolean,
+    trackSources: boolean,
+): LoadConfigResult {
+    const merged: FlatEnv = mergeFlat(...layers.map((l) => l.flat));
+
+    let sources: SourceMap | undefined;
+    if (trackSources) {
+        sources = {};
+        for (const layer of layers) {
+            for (const k of Object.keys(layer.flat)) {
+                sources[k] = layer.source;
+            }
+        }
+    }
+
+    if (populateProcessEnv) {
+        applyToProcessEnv(merged, sources);
+    }
+
+    debug(
+        "loaded %d keys from %d layer(s)",
+        Object.keys(merged).length,
+        layers.length,
+    );
+
+    return sources !== undefined ? { env: merged, sources } : { env: merged };
 }
 
 /**
