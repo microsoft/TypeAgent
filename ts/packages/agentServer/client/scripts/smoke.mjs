@@ -72,6 +72,10 @@ try {
         "discovery file has port",
         typeof record.port === "number" && record.port > 0,
     );
+    check(
+        "discovery file port is OS-assigned (not legacy 8999)",
+        record.port !== 8999,
+    );
     check("discovery file pid alive", isProcessAlive(record.pid));
 
     const url = `ws://localhost:${record.port}`;

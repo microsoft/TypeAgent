@@ -259,6 +259,7 @@ Conversation metadata is stored at `~/.typeagent/profiles/dev/conversations/conv
 - [protocol/README.md](protocol/README.md) — channel names, RPC types, conversation types, client-type registry
 - [client/README.md](client/README.md) — discovery model, `ensureAgentServerViaDiscovery`, `lookupAgentServerViaDiscovery`, `connectAgentServer`, smoke driver
 - [server/README.md](server/README.md) — server entry point, ephemeral port + discovery file publication, `ConversationManager`, `SharedDispatcher`, routing ClientIO
+- [docs/manual-smoke.md](docs/manual-smoke.md) — manual smoke scenarios (multi-instance, UI flows, idle timeout, etc.) not covered by the automated smoke driver
 
 ---
 
