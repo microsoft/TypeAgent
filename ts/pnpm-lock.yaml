@@ -1153,9 +1153,6 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
-      '@typeagent/port-registry':
-        specifier: workspace:*
-        version: link:../../utils/portRegistry
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -1221,9 +1218,6 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
-      '@typeagent/port-registry':
-        specifier: workspace:*
-        version: link:../../utils/portRegistry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -4581,9 +4575,6 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
-      '@typeagent/port-registry':
-        specifier: workspace:*
-        version: link:../utils/portRegistry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
@@ -4895,34 +4886,6 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/utils/portRegistry:
-    dependencies:
-      debug:
-        specifier: ^4.4.0
-        version: 4.4.3(supports-color@8.1.1)
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.12
-        version: 4.1.12
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.25
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   packages/utils/typechatUtils:
     dependencies:
       '@azure-rest/maps-search':
@@ -5063,9 +5026,6 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
-      '@typeagent/port-registry':
-        specifier: workspace:*
-        version: link:../utils/portRegistry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

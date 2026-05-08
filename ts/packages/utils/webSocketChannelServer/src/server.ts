@@ -16,6 +16,8 @@ let nextId = 0;
 
 type WebSocketChannelServer = {
     close: () => void;
+    /** TCP port the underlying server is bound to (resolved after `listening`). */
+    port: number;
 };
 export async function createWebSocketChannelServer(
     options: WebSocket.ServerOptions,
@@ -98,8 +100,10 @@ export async function createWebSocketChannelServer(
 
     const promise = createPromiseWithResolvers<WebSocketChannelServer>();
     const listeningHandler = () => {
-        debugWss("WebSocketServer listening on:", wss.address());
-        promise.resolve({ close: () => wss.close() });
+        const addr = wss.address();
+        debugWss("WebSocketServer listening on:", addr);
+        const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+        promise.resolve({ close: () => wss.close(), port });
         wss.off("listening", listeningHandler);
         wss.off("error", errorHandler);
     };

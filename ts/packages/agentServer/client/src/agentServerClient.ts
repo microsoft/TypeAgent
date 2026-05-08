@@ -24,62 +24,42 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
+import {
+    DiscoveryRecord,
+    isProcessAlive,
+    readDiscoveryFile,
+    removeDiscoveryFile,
+    writeDiscoveryFile,
+} from "./discovery.js";
 
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
 
-function getServerPidPath(port: number): string {
-    return path.join(os.homedir(), ".typeagent", `server-${port}.pid`);
+// Backward-compat exports — the discovery file replaces the legacy
+// per-port pid file, but a few callers still import these names.
+export function writeServerPid(_port: number, pid: number): void {
+    // Resolve the port we actually publish from the discovery file
+    // path: callers that use this helper are about to start the
+    // server on `_port` themselves, so just record it.
+    writeDiscoveryFile(_port, pid);
 }
 
-export function writeServerPid(port: number, pid: number): void {
-    const pidPath = getServerPidPath(port);
-    const dir = path.dirname(pidPath);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(pidPath, String(pid));
+export function removeServerPid(_port: number): void {
+    removeDiscoveryFile();
 }
 
-export function removeServerPid(port: number): void {
-    try {
-        fs.unlinkSync(getServerPidPath(port));
-    } catch {
-        // Already gone
-    }
-}
-
-function readServerPid(port: number): number | undefined {
-    try {
-        const content = fs.readFileSync(getServerPidPath(port), "utf-8").trim();
-        const pid = parseInt(content, 10);
-        return isNaN(pid) ? undefined : pid;
-    } catch {
-        return undefined;
-    }
-}
-
-function isProcessAlive(pid: number): boolean {
-    try {
-        process.kill(pid, 0); // signal 0 = existence check
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-function forceKillServer(port: number): boolean {
-    const pid = readServerPid(port);
-    if (pid === undefined || !isProcessAlive(pid)) {
-        removeServerPid(port);
+function forceKillServer(): boolean {
+    const record = readDiscoveryFile();
+    if (record === undefined || !isProcessAlive(record.pid)) {
+        removeDiscoveryFile();
         return false;
     }
     try {
-        process.kill(pid, "SIGKILL");
+        process.kill(record.pid, "SIGKILL");
     } catch {
         // Already dead
     }
-    removeServerPid(port);
+    removeDiscoveryFile();
     return true;
 }
 
@@ -330,16 +310,19 @@ export function isServerRunning(url: string): Promise<boolean> {
 
 function spawnAgentServer(
     serverPath: string,
-    port: number,
+    port: number | undefined,
     hidden: boolean = false,
     idleTimeout: number = 0,
 ): void {
     // Use an exclusive lock file to prevent two concurrent client processes from
     // both concluding the server is down and each spawning their own copy.
     // fs.openSync with 'wx' is atomic: exactly one caller creates the file.
+    // For ephemeral-port spawns we share a single lock — only one AS can be
+    // running per machine anyway (lockInstanceDir).
+    const lockKey = port !== undefined ? `port-${port}` : "default";
     const lockFile = path.join(
         os.tmpdir(),
-        `typeagent-server-${port}.spawn.lock`,
+        `typeagent-server-${lockKey}.spawn.lock`,
     );
     let fd: number;
     try {
@@ -352,6 +335,7 @@ function spawnAgentServer(
         return;
     }
 
+    const portArgs = port !== undefined ? ["--port", String(port)] : [];
     const extraArgs =
         idleTimeout > 0 ? ["--idle-timeout", String(idleTimeout)] : [];
 
@@ -364,7 +348,7 @@ function spawnAgentServer(
                 // for the child and any processes it spawns. To avoid this,
                 // spawn via cmd /c start /B which runs the process truly in
                 // the background with no visible windows.
-                const args = [serverPath, "--port", String(port), ...extraArgs];
+                const args = [serverPath, ...portArgs, ...extraArgs];
                 const child = spawn(
                     "cmd.exe",
                     ["/c", "start", "/B", "node", ...args],
@@ -380,7 +364,8 @@ function spawnAgentServer(
             } else {
                 const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
                 const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
-                const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
+                const portFragment = port !== undefined ? ` --port ${port}` : "";
+                const psCommand = `node "${serverPath}"${portFragment}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
                 const child = spawn(
                     "cmd.exe",
@@ -398,7 +383,7 @@ function spawnAgentServer(
         } else {
             const child = spawn(
                 "node",
-                [serverPath, "--port", String(port), ...extraArgs],
+                [serverPath, ...portArgs, ...extraArgs],
                 {
                     detached: true,
                     stdio: "ignore",
@@ -434,11 +419,70 @@ async function waitForServer(
     );
 }
 
+/**
+ * Wait for the discovery file to appear with a live process. Polls
+ * every 250ms until the timeout elapses.
+ */
+export async function waitForDiscoveryFile(
+    timeoutMs: number = 60000,
+    pollIntervalMs: number = 250,
+): Promise<DiscoveryRecord> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const record = readDiscoveryFile();
+        if (record && isProcessAlive(record.pid)) {
+            // Also confirm the WebSocket is reachable.
+            const url = `ws://localhost:${record.port}`;
+            if (await isServerRunning(url)) {
+                return record;
+            }
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
+    throw new Error(
+        `Agent server discovery file did not appear within ${timeoutMs}ms`,
+    );
+}
+
+/**
+ * Ensure an agent server is running.
+ *
+ * - When `port` is omitted, uses the discovery file. If a live AS is
+ *   already published, returns its port; otherwise spawns the AS
+ *   (which will pick its own ephemeral port and write the discovery
+ *   file) and waits for the file to appear.
+ * - When `port` is provided, uses the legacy explicit-port path:
+ *   probes that port, spawns the AS bound to it on miss, and waits
+ *   for the WebSocket to come up.
+ */
 export async function ensureAgentServer(
-    port: number = 8999,
+    port?: number,
     hidden: boolean = false,
     idleTimeout: number = 0,
-): Promise<void> {
+): Promise<number> {
+    if (port === undefined) {
+        const existing = readDiscoveryFile();
+        if (existing && isProcessAlive(existing.pid)) {
+            const url = `ws://localhost:${existing.port}`;
+            if (await isServerRunning(url)) {
+                console.log(
+                    `Connecting to existing TypeAgent server on port ${existing.port}...`,
+                );
+                return existing.port;
+            }
+        }
+        if (hidden) {
+            console.log("Starting TypeAgent server in the background...");
+        } else {
+            console.log("Starting TypeAgent server in a new window...");
+        }
+        const serverPath = getAgentServerEntryPoint();
+        spawnAgentServer(serverPath, undefined, hidden, idleTimeout);
+        const record = await waitForDiscoveryFile();
+        console.log("TypeAgent server started.");
+        return record.port;
+    }
+
     const url = `ws://localhost:${port}`;
     if (await isServerRunning(url)) {
         console.log(
@@ -455,30 +499,31 @@ export async function ensureAgentServer(
         await waitForServer(url);
         console.log("TypeAgent server started.");
     }
+    return port;
 }
 
 export async function ensureAndConnectDispatcher(
     clientIO: ClientIO,
-    port: number = 8999,
+    port?: number,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
     hidden: boolean = false,
 ): Promise<Dispatcher> {
-    await ensureAgentServer(port, hidden);
-    const url = `ws://localhost:${port}`;
+    const resolvedPort = await ensureAgentServer(port, hidden);
+    const url = `ws://localhost:${resolvedPort}`;
     return connectDispatcher(clientIO, url, options, onDisconnect);
 }
 
 export async function ensureAndConnectConversation(
     clientIO: ClientIO,
-    port: number = 8999,
+    port?: number,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
     hidden: boolean = false,
     idleTimeout: number = 0,
 ): Promise<ConversationDispatcher> {
-    await ensureAgentServer(port, hidden, idleTimeout);
-    const url = `ws://localhost:${port}`;
+    const resolvedPort = await ensureAgentServer(port, hidden, idleTimeout);
+    const url = `ws://localhost:${resolvedPort}`;
     const connection = await connectAgentServer(url, onDisconnect);
     const conversation = await connection.joinConversation(clientIO, options);
     conversation.dispatcher.close = async () => {
@@ -488,10 +533,20 @@ export async function ensureAndConnectConversation(
 }
 
 export async function stopAgentServer(
-    port: number = 8999,
+    port?: number,
     force: boolean = false,
 ): Promise<void> {
-    const url = `ws://localhost:${port}`;
+    // If no port specified, fall back to the discovery file.
+    let resolvedPort = port;
+    if (resolvedPort === undefined) {
+        const record = readDiscoveryFile();
+        if (record === undefined) {
+            console.log("Agent server is not running.");
+            return;
+        }
+        resolvedPort = record.port;
+    }
+    const url = `ws://localhost:${resolvedPort}`;
 
     // Try graceful shutdown first
     const gracefulShutdown = (): Promise<void> => {
@@ -555,7 +610,7 @@ export async function stopAgentServer(
     } catch {
         // Graceful failed — force kill
         debug("Graceful shutdown failed, attempting force kill");
-        if (forceKillServer(port)) {
+        if (forceKillServer()) {
             console.log("Agent server force-stopped via PID file.");
         } else {
             console.log("Agent server is not running (no live process found).");

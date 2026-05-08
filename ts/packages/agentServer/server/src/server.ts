@@ -34,7 +34,6 @@ import {
     writeServerPid,
     removeServerPid,
 } from "@typeagent/agent-server-client";
-import { globalRegistry, isRegistryEnabled } from "@typeagent/port-registry";
 import registerDebug from "debug";
 import os from "node:os";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -191,12 +190,14 @@ async function main() {
     debugStartup("prewarm complete");
 
     const portIdx = process.argv.indexOf("--port");
-    const port =
+    // Default to ephemeral port (0) — the OS picks a free port and we
+    // publish it via ~/.typeagent/agent-server.json (discovery file).
+    const requestedPort =
         portIdx !== -1
             ? parseInt(process.argv[portIdx + 1], 10)
             : process.env.AGENT_SERVER_PORT
               ? parseInt(process.env.AGENT_SERVER_PORT, 10)
-              : 8999;
+              : 0;
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
@@ -210,11 +211,12 @@ async function main() {
     // Shared shutdown logic — used by RPC handler, idle timer, and clientIO intercept.
     // The wss variable is assigned after createWebSocketChannelServer resolves below.
     let wss: Awaited<ReturnType<typeof createWebSocketChannelServer>>;
+    let boundPort = 0;
     async function shutdownServer() {
         console.log("Shutdown requested, stopping agent server...");
         wss.close();
         await conversationManager.close();
-        removeServerPid(port);
+        removeServerPid(boundPort);
         process.exit(0);
     }
 
@@ -233,7 +235,7 @@ async function main() {
     }
 
     wss = await createWebSocketChannelServer(
-        { port },
+        { port: requestedPort },
         (channelProvider: ChannelProvider, closeFn: () => void) => {
             connectionCount++;
             if (idleShutdownTimer !== undefined) {
@@ -420,28 +422,16 @@ async function main() {
         },
     );
 
-    console.log(`Agent server started at ws://localhost:${port}`);
-    writeServerPid(port, process.pid);
+    boundPort = wss.port;
+    console.log(`Agent server started at ws://localhost:${boundPort}`);
+    writeServerPid(boundPort, process.pid);
 
-    // When the registry feature flag is on, the agent server is the
-    // canonical long-lived registry host. The slot itself is owned by
-    // the client that spawned us (see registryClient.ts) — when all
-    // clients exit, the slot dies via PID liveness GC and any
-    // subsequent client will spawn a fresh server. The orphaned server
-    // will exit on its idle timeout if one was set.
-    if (isRegistryEnabled()) {
-        debugStartup(`registry-enabled spawn: port=${port}`);
-        // Mark this process as server-eligible so that, on a future
-        // failed registry call, it can self-promote and take over from
-        // the (potentially short-lived) spawner that allocated our
-        // slot. ensure() races to bind the well-known registry port
-        // now; if another process already hosts it we stay in client
-        // mode and promote later if needed.
-        globalRegistry.enableServerMode();
-        await globalRegistry.ensure().catch((err) => {
-            debugStartup(`globalRegistry.ensure() failed: ${err}`);
-        });
-    }
+    // Single-machine discovery: the bound port is published in
+    // ~/.typeagent/agent-server.json via writeServerPid() above. The
+    // OS-level instance lock (lockInstanceDir) guarantees there is at
+    // most one agent-server per machine, so clients can rely on the
+    // discovery file to find us. Cross-machine port coordination is
+    // not a goal — connect from another host with explicit URL.
 
     scheduleIdleShutdown();
 }

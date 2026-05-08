@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { RequestAction, fromJsonActions } from "agent-cache";
 import {
     connectAgentServer,
-    ensureAgentServerViaRegistry,
+    ensureAgentServerViaDiscovery,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
@@ -92,8 +92,7 @@ export default class ExplainCommand extends Command {
             command.push(testRequest.toString());
         }
 
-        const handle = await ensureAgentServerViaRegistry({
-            legacyPort: flags.port,
+        const handle = await ensureAgentServerViaDiscovery({
             hidden: !flags.show,
             idleTimeout: 600,
         });

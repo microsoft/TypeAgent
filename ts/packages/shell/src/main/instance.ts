@@ -41,12 +41,10 @@ import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/clie
 import { isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
-    ensureAgentServer,
-    ensureAgentServerViaRegistry,
+    ensureAgentServerViaDiscovery,
     connectAgentServer,
     stopAgentServer,
 } from "@typeagent/agent-server-client";
-import { isRegistryEnabled } from "@typeagent/port-registry";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     loadUserSettings,
@@ -163,8 +161,8 @@ async function initializeDispatcher(
                     connection
                         .shutdown()
                         .catch(() => {
-                            // Graceful failed — force kill via PID file
-                            return stopAgentServer(connect!, true);
+                            // Graceful failed — force kill via discovery file
+                            return stopAgentServer(undefined, true);
                         })
                         .catch(() => {
                             // Best-effort: server may already be stopped.
@@ -196,26 +194,17 @@ async function initializeDispatcher(
                     ? idleTimeout
                     : userSettings.server.idleTimeout;
 
-            // Discovery: when the PortRegistry feature flag is on, the
-            // shell stops caring about the port number from --connect and
-            // looks up (or spawns) the agent server via the registry. The
-            // explicit port from --connect is preserved as a fallback when
-            // the flag is off.
-            let resolvedPort: number;
-            if (isRegistryEnabled()) {
-                const handle = await ensureAgentServerViaRegistry({
-                    hidden: effectiveHidden,
-                    idleTimeout: effectiveIdleTimeout,
-                });
-                resolvedPort = handle.port;
-            } else {
-                await ensureAgentServer(
-                    connect,
-                    effectiveHidden,
-                    effectiveIdleTimeout,
-                );
-                resolvedPort = connect;
-            }
+            // Discovery: the shell does not pin the agent-server's
+            // port. It looks up (or spawns) the AS via the discovery
+            // file (~/.typeagent/agent-server.json). The `--connect
+            // <port>` flag is retained as a compatibility alias —
+            // present meaning "auto-discover", absent meaning "no
+            // remote dispatcher".
+            const handle = await ensureAgentServerViaDiscovery({
+                hidden: effectiveHidden,
+                idleTimeout: effectiveIdleTimeout,
+            });
+            const resolvedPort = handle.port;
             const url = `ws://localhost:${resolvedPort}`;
 
             // Reconnect state. When the WebSocket drops we attempt a few

@@ -1,15 +1,51 @@
 # agent-server-client
 
-Client library for connecting to a running agentServer, used by the Shell and CLI.
+Client library for connecting to a running agentServer, used by the Shell, vscode-shell, and CLI.
+
+## Discovery model
+
+The agent-server picks an **ephemeral TCP port** at startup (the OS assigns a free port) and publishes it to a discovery file at `~/.typeagent/agent-server.json`:
+
+```json
+{ "port": 64357, "pid": 22940, "startedAt": "2026-05-08T22:47:37.875Z" }
+```
+
+Clients on the same machine read this file to find the server — there is no well-known port. The server takes an exclusive OS-level lock on its instance directory at startup, so at most one agent-server is ever running per machine. Cross-machine discovery is out of scope: connect from another host with an explicit URL via `connectAgentServer(url)`.
+
+The high-level helpers `ensureAgentServerViaDiscovery()` and `lookupAgentServerViaDiscovery()` encapsulate this flow — most callers should use them rather than the low-level building blocks.
 
 ## API
+
+### `ensureAgentServerViaDiscovery(options?)` — recommended
+
+Discovery-file-aware ensure: returns a `{port, url}` handle. Reads the discovery file; if a live server is published, returns its port. Otherwise spawns a fresh agent-server (which picks its own ephemeral port and writes the file), waits for the file to appear, and returns the new port.
+
+```typescript
+const { port, url } = await ensureAgentServerViaDiscovery({
+    hidden: true, // spawn without showing a console window
+    idleTimeout: 600, // 10 min idle shutdown
+});
+const connection = await connectAgentServer(url);
+```
+
+### `lookupAgentServerViaDiscovery()` — recommended
+
+Read-only discovery: returns `{port, url}` if an agent-server is published in the discovery file and reachable, `undefined` otherwise. Never spawns. Use this from extensions / IDE integrations that should not auto-start an agent-server.
+
+```typescript
+const handle = await lookupAgentServerViaDiscovery();
+if (handle === undefined) {
+    throw new Error("No agent-server is running. Start one via the shell or `agent-server`.");
+}
+const connection = await connectAgentServer(handle.url);
+```
 
 ### `connectAgentServer(url, onDisconnect?)`
 
 Opens a WebSocket to an already-running agentServer and returns an `AgentServerConnection` with full conversation management support.
 
 ```typescript
-const connection = await connectAgentServer("ws://localhost:8999");
+const connection = await connectAgentServer(url);
 
 // Join a conversation
 const { dispatcher, conversationId } = await connection.joinConversation(
@@ -45,69 +81,47 @@ await connection.close();
 
 ### `ensureAgentServer(port?, hidden?, idleTimeout?)`
 
-Ensures the agentServer is running, spawning it if needed.
-
-1. Calls `isServerRunning(url)` to check whether a server is already listening.
-2. If not, calls `spawnAgentServer(hidden, idleTimeout)` to start it as a detached child process.
-3. Polls until the server is ready (500 ms interval, 60 s timeout).
+Lower-level ensure: when `port` is omitted, behaves like `ensureAgentServerViaDiscovery` (and returns the discovered port). When `port` is provided, uses the legacy explicit-port path: probes that port, spawns an agent-server bound to it on miss, and returns the same port. Returns the resolved port number.
 
 ```typescript
-// Start hidden with 10-minute idle shutdown — used by non-interactive CLI commands
-await ensureAgentServer(8999, true, 600);
+// Discovery-file path (recommended)
+const port = await ensureAgentServer();
 
-// Start in a visible window, no idle shutdown — used by interactive connect
-await ensureAgentServer(8999, false);
-
-const connection = await connectAgentServer("ws://localhost:8999");
+// Explicit-port path (tests, remote-host)
+await ensureAgentServer(9000, true, 600);
 ```
 
-| Parameter     | Type      | Default | Description                                                                          |
-| ------------- | --------- | ------- | ------------------------------------------------------------------------------------ |
-| `port`        | `number`  | `8999`  | Port to check and spawn on                                                           |
-| `hidden`      | `boolean` | `false` | When spawning, suppress the terminal/window (`true` = hidden)                        |
-| `idleTimeout` | `number`  | `0`     | Pass `--idle-timeout` to the spawned server; `0` disables (server runs indefinitely) |
+| Parameter     | Type                  | Default     | Description                                                                          |
+| ------------- | --------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `port`        | `number \| undefined` | `undefined` | If set, pin to that port; otherwise use the discovery file                           |
+| `hidden`      | `boolean`             | `false`     | When spawning, suppress the terminal/window                                          |
+| `idleTimeout` | `number`              | `0`         | Pass `--idle-timeout` to the spawned server; `0` disables (server runs indefinitely) |
 
 ### `isServerRunning(url)`
 
 Returns `true` if a server is already listening at the given WebSocket URL.
 
-```typescript
-if (await isServerRunning("ws://localhost:8999")) {
-  console.log("Server is up");
-}
-```
+### `stopAgentServer(port?, force?)`
 
-### `stopAgentServer(port?)`
+Connects to the running server (port from the discovery file when `port` is omitted) and sends `shutdown()`. With `force: true`, falls back to SIGKILL via the discovery file if graceful shutdown times out.
 
-Connects to the running server on the given port and sends a `shutdown()` RPC.
+### Low-level discovery helpers
 
-### `ensureAndConnectConversation(clientIO, port?, options?, onDisconnect?, hidden?, idleTimeout?)`
+For tools that need to inspect the discovery file directly:
 
-Convenience wrapper: ensures the server is running, connects, and joins a conversation in one call. Returns a `ConversationDispatcher` directly.
+| Function                           | Description                                                        |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| `getDiscoveryFilePath()`           | Returns the absolute path to `~/.typeagent/agent-server.json`      |
+| `readDiscoveryFile()`              | Returns `{port, pid, startedAt}` or `undefined` if missing/invalid |
+| `writeDiscoveryFile(port, pid)`    | Writes a new record (used by the agent-server itself)              |
+| `removeDiscoveryFile()`            | Deletes the file (used during graceful shutdown)                   |
+| `isProcessAlive(pid)`              | Cross-platform process-existence check (handles Windows EPERM)     |
+| `waitForDiscoveryFile(timeoutMs?)` | Polls until the file exists with a live pid and reachable port     |
 
-```typescript
-const conversation = await ensureAndConnectConversation(
-  clientIO,
-  8999,
-  { conversationId },
-  onDisconnect,
-  true,
-  600,
-);
-```
+## Smoke test
 
-| Parameter      | Type                       | Default      | Description                                           |
-| -------------- | -------------------------- | ------------ | ----------------------------------------------------- |
-| `clientIO`     | `ClientIO`                 | _(required)_ | Client IO implementation                              |
-| `port`         | `number`                   | `8999`       | Port to connect to                                    |
-| `options`      | `DispatcherConnectOptions` | `undefined`  | Conversation join options (e.g. `conversationId`)     |
-| `onDisconnect` | `() => void`               | `undefined`  | Called when the WebSocket disconnects                 |
-| `hidden`       | `boolean`                  | `false`      | Suppress terminal/window when spawning                |
-| `idleTimeout`  | `number`                   | `0`          | Pass `--idle-timeout` to spawned server; `0` disables |
+`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile directory, validates the discovery file is written with a live pid, opens a WebSocket connection, sends `shutdown()`, and asserts that the discovery file is removed when the server exits.
 
-### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)` _(deprecated)_
-
-Convenience wrapper that auto-spawns the server if needed and joins a conversation, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinConversation()` separately for full control.
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
 

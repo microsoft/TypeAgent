@@ -11,18 +11,27 @@ export {
     ensureAndConnectConversation,
     stopAgentServer,
     isServerRunning,
+    waitForDiscoveryFile,
     writeServerPid,
     removeServerPid,
 } from "./agentServerClient.js";
 export {
-    DEFAULT_AGENT_SERVER_PORT,
-    ensureAgentServerViaRegistry,
-    lookupAgentServerViaRegistry,
-} from "./registryClient.js";
+    ensureAgentServerViaDiscovery,
+    lookupAgentServerViaDiscovery,
+} from "./discoveryClient.js";
 export type {
     AgentServerHandle,
     EnsureAgentServerOptions,
-} from "./registryClient.js";
+} from "./discoveryClient.js";
+export {
+    DISCOVERY_FILE_NAME,
+    getDiscoveryFilePath,
+    readDiscoveryFile,
+    writeDiscoveryFile,
+    removeDiscoveryFile,
+    isProcessAlive,
+} from "./discovery.js";
+export type { DiscoveryRecord } from "./discovery.js";
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {
     ConversationInfo,

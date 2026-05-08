@@ -5,9 +5,8 @@ import * as vscode from "vscode";
 import * as os from "os";
 import {
     connectAgentServer,
-    lookupAgentServerViaRegistry,
+    lookupAgentServerViaDiscovery,
 } from "@typeagent/agent-server-client";
-import { isRegistryEnabled } from "@typeagent/port-registry";
 import type {
     AgentServerConnection,
     ConversationDispatcher,
@@ -441,24 +440,25 @@ export class AgentServerBridge {
     }
 
     private async connectImpl(): Promise<void> {
-        // Discovery: when the PortRegistry feature flag is on, look up
-        // the agent server's URL via the registry. Otherwise fall back to
-        // the user-configured serverUrl (default ws://localhost:8999).
+        // Discovery: locate the running agent-server via
+        // ~/.typeagent/agent-server.json. The vscode-shell extension
+        // does not spawn an agent-server itself — it expects one to
+        // already be running (started by the Electron shell, the CLI,
+        // or `agent-server` directly). The legacy serverUrl setting
+        // is retained as an explicit override.
         let serverUrl: string;
-        if (isRegistryEnabled()) {
-            const handle = await lookupAgentServerViaRegistry();
+        const config = vscode.workspace.getConfiguration("typeagent");
+        const explicitUrl = config.get<string>("serverUrl", "");
+        if (explicitUrl) {
+            serverUrl = explicitUrl;
+        } else {
+            const handle = await lookupAgentServerViaDiscovery();
             if (handle === undefined) {
                 throw new Error(
-                    "TypeAgent agent server not found in port registry. Start one with 'agent-server' or via the shell.",
+                    "TypeAgent agent server is not running. Start one via the Electron shell, the `agent-server` CLI, or set the `typeagent.serverUrl` setting to an explicit URL.",
                 );
             }
             serverUrl = handle.url;
-        } else {
-            const config = vscode.workspace.getConfiguration("typeagent");
-            serverUrl = config.get<string>(
-                "serverUrl",
-                "ws://localhost:8999",
-            );
         }
 
         try {
