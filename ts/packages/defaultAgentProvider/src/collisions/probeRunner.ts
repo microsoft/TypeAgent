@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Standalone probe runner: spins up the dispatcher with the default agent
 // providers, runs `@collision probe "<phrase>"` for each phrase in the
 // PROBES list, and prints the captured text output.
@@ -11,30 +14,31 @@
 //     and never produces an action
 // Run while you're using your computer; nothing here will click anywhere.
 //
-// Usage (from repo root, ts/):
-//   node packages/cli/scripts/probe-runner.mjs
+// Usage (from ts/, after building):
+//   node packages/defaultAgentProvider/dist/collisions/probeRunner.js
 
 import { config as loadDotenv } from "dotenv";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
-
-// Load ts/.env (relative to this script: ../../../.env from packages/cli/scripts/)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoTsRoot = path.resolve(__dirname, "../../..");
-loadDotenv({ path: path.join(repoTsRoot, ".env") });
+loadDotenv();
 
 import { createDispatcher } from "agent-dispatcher";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
-} from "default-agent-provider";
-import { getInstanceDir } from "agent-dispatcher/helpers/data";
+} from "../index.js";
+import type { DisplayContent, MessageContent } from "@typeagent/agent-sdk";
+import type { IAgentMessage } from "agent-dispatcher";
+import { silentClientIO } from "./silentClientIO.js";
 
 // --- Probe phrases ----------------------------------------------------------
 
-const PROBES = [
+interface Probe {
+    phrase: string;
+    expected?: string;
+}
+
+const PROBES: Probe[] = [
     // Cluster 1 — 7 members, "toggle developer mode" cluster
     { phrase: "toggle developer mode", expected: "config.toggleDeveloperMode" },
     { phrase: "turn on wifi", expected: "desktop.EnableWifi" },
@@ -77,22 +81,19 @@ const PROBES = [
 
 // --- Output capture ---------------------------------------------------------
 
-/**
- * Walk a DisplayContent message and return any text alternate.  The
- * probe handler emits HTML with a text alternate; the text version is
- * what's useful here.
- */
-function extractText(message) {
+/** Walk a DisplayContent message and return any text alternate. The probe
+ * handler emits HTML with a text alternate; the text version is what we want
+ * here. */
+function extractText(message: DisplayContent): string {
     if (typeof message === "string") return message;
     if (Array.isArray(message)) return message.join("\n");
     if (!message || typeof message !== "object") return "";
-    if (message.type === "text") {
-        return Array.isArray(message.content)
-            ? message.content.join("\n")
-            : String(message.content);
+    const m = message as { type?: string; content?: MessageContent; alternates?: { type: string; content: MessageContent }[] };
+    if (m.type === "text") {
+        return Array.isArray(m.content) ? m.content.join("\n") : String(m.content);
     }
-    if (message.alternates) {
-        for (const alt of message.alternates) {
+    if (m.alternates) {
+        for (const alt of m.alternates) {
             if (alt.type === "text") {
                 return Array.isArray(alt.content)
                     ? alt.content.join("\n")
@@ -100,43 +101,22 @@ function extractText(message) {
             }
         }
     }
-    if (typeof message.content === "string") return message.content;
+    if (typeof m.content === "string") return m.content;
     return "";
 }
 
-// Buffer of text fragments captured from the most recent processCommand call.
-let captured = [];
+let captured: string[] = [];
 
-const noop = () => {};
-const noopAsync = async () => {};
-
-const captureClientIO = {
-    clear: noop,
-    exit: noop,
-    shutdown: noop,
-    setUserRequest: noop,
-    setDisplayInfo: noop,
-    setDisplay(msg) {
+const captureClientIO = silentClientIO({
+    setDisplay(msg: IAgentMessage) {
         const text = extractText(msg.message);
         if (text) captured.push(text);
     },
-    appendDisplay(msg) {
+    appendDisplay(msg: IAgentMessage) {
         const text = extractText(msg.message);
         if (text) captured.push(text);
     },
-    appendDiagnosticData: noop,
-    setDynamicDisplay: noop,
-    question: async () => 0,
-    proposeAction: async () => undefined,
-    notify: noop,
-    openLocalView: noopAsync,
-    closeLocalView: noopAsync,
-    requestChoice: noop,
-    requestInteraction: noop,
-    interactionResolved: noop,
-    interactionCancelled: noop,
-    takeAction: noop,
-};
+});
 
 // --- Run --------------------------------------------------------------------
 
@@ -144,8 +124,7 @@ async function main() {
     const instanceDir = getInstanceDir();
     const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
     const defaultConstructionProvider = getDefaultConstructionProvider();
-    const indexingServiceRegistry =
-        await getIndexingServiceRegistry(instanceDir);
+    const indexingServiceRegistry = await getIndexingServiceRegistry(instanceDir);
 
     process.stderr.write(
         "Spinning up dispatcher (read-only — no actions / translation / cache)…\n",
@@ -162,38 +141,43 @@ async function main() {
     });
     process.stderr.write("Dispatcher ready.\n\n");
 
-    for (const probe of PROBES) {
-        // Always pass --include-inactive: the dispatcher we spun up has most
-        // agents inactive by default (no real session state), so without
-        // this flag the probe filters out the very actions we want to test.
-        const cmd = probe.expected
-            ? `@collision probe "${probe.phrase}" -e ${probe.expected} --include-inactive`
-            : `@collision probe "${probe.phrase}" --include-inactive`;
+    try {
+        for (const probe of PROBES) {
+            // Always pass --include-inactive: the dispatcher we spun up has
+            // most agents inactive by default (no real session state), so
+            // without this flag the probe filters out the very actions we want
+            // to test.
+            const cmd = probe.expected
+                ? `@collision probe "${probe.phrase}" -e ${probe.expected} --include-inactive`
+                : `@collision probe "${probe.phrase}" --include-inactive`;
 
-        captured = [];
-        try {
-            await dispatcher.processCommand(cmd);
-        } catch (err) {
-            process.stdout.write(
-                `[ERROR for "${probe.phrase}"]: ${err?.message ?? err}\n\n`,
-            );
-            continue;
-        }
+            captured = [];
+            try {
+                await dispatcher.processCommand(cmd);
+            } catch (err) {
+                process.stdout.write(
+                    `[ERROR for "${probe.phrase}"]: ${err instanceof Error ? err.message : String(err)}\n\n`,
+                );
+                continue;
+            }
 
-        const allText = captured.join("\n").trim() || "(no output captured)";
-        process.stdout.write("=".repeat(72) + "\n");
-        process.stdout.write(`PROBE: ${probe.phrase}\n`);
-        if (probe.expected) {
-            process.stdout.write(`EXPECTED: ${probe.expected}\n`);
+            const allText = captured.join("\n").trim() || "(no output captured)";
+            process.stdout.write("=".repeat(72) + "\n");
+            process.stdout.write(`PROBE: ${probe.phrase}\n`);
+            if (probe.expected) {
+                process.stdout.write(`EXPECTED: ${probe.expected}\n`);
+            }
+            process.stdout.write("\n" + allText + "\n\n");
         }
-        process.stdout.write("\n" + allText + "\n\n");
+        process.stderr.write(`\nDone. ${PROBES.length} probe(s) run.\n`);
+    } finally {
+        await dispatcher.close();
     }
-
-    await dispatcher.close();
-    process.stderr.write(`\nDone. ${PROBES.length} probe(s) run.\n`);
 }
 
 main().catch((err) => {
-    process.stderr.write(`probe-runner failed: ${err?.stack ?? err}\n`);
+    process.stderr.write(
+        `probe-runner failed: ${err instanceof Error ? err.stack : String(err)}\n`,
+    );
     process.exit(1);
 });
