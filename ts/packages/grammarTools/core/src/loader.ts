@@ -2,25 +2,54 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRulesNoThrow } from "action-grammar";
-import type { Grammar } from "action-grammar";
+import type { Grammar, DebugInfoCollector, FileLoader } from "action-grammar";
 import type {
     GrammarIdentifierIndex,
+    GrammarDebugInfo,
     GrammarSource,
     LoadedGrammar,
     LoadResult,
     GrammarSnapshot,
     SourceFile,
+    SourceLocation,
     Diagnostic,
     SourceRange,
 } from "./types.js";
 
 /**
  * Load a grammar from a file path on disk.
+ * Supports .agr file imports (import ... from "./other.agr").
  */
-export async function loadGrammarFromFile(path: string): Promise<LoadResult> {
+export async function loadGrammarFromFile(
+    filePath: string,
+): Promise<LoadResult> {
+    const nodePath = await import("path");
+    const nodeFs = await import("fs");
     const { readFile } = await import("fs/promises");
-    const text = await readFile(path, "utf-8");
-    return loadFromText(text, { kind: "file", path });
+
+    const resolvedPath = nodePath.resolve(filePath);
+    const text = await readFile(resolvedPath, "utf-8");
+    const displayPath = nodePath.relative(process.cwd(), resolvedPath);
+
+    const fileLoader: FileLoader = {
+        resolvePath: (name: string, ref?: string) =>
+            ref
+                ? nodePath.resolve(nodePath.dirname(ref), name)
+                : nodePath.resolve(name),
+        readContent: (fullPath: string) => {
+            if (!nodeFs.existsSync(fullPath)) {
+                throw new Error(`File not found: ${fullPath}`);
+            }
+            return nodeFs.readFileSync(fullPath, "utf-8");
+        },
+        displayPath: (fullPath: string) =>
+            nodePath.relative(process.cwd(), fullPath),
+    };
+
+    return loadFromFileLoader(resolvedPath, text, displayPath, fileLoader, {
+        kind: "file",
+        path: filePath,
+    });
 }
 
 /**
@@ -59,18 +88,95 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
     const file: SourceFile = { id: sourceId(source), text };
     const errors: string[] = [];
     const warnings: string[] = [];
+    const collector: DebugInfoCollector = {
+        partPositions: new Map(),
+        rulePositions: new Map(),
+        fileId: sourceId(source),
+    };
     const grammar = loadGrammarRulesNoThrow(
         sourceId(source),
         text,
         errors,
         warnings,
+        { debugCollector: collector },
     );
 
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
+        const debugInfo = buildDebugInfo(collector, text, sourceId(source));
         const loaded: LoadedGrammar = {
             source,
             grammar,
+            debugInfo,
+            files: [file],
+            identifiers,
+        };
+        const diagnostics: Diagnostic[] | undefined =
+            warnings.length > 0
+                ? warnings.map((message) => ({
+                      range: extractRange(message, text),
+                      severity: "warning" as const,
+                      message,
+                      source: "grammar-tools-core" as const,
+                  }))
+                : undefined;
+        if (diagnostics) {
+            return { ok: true, grammar: loaded, diagnostics };
+        }
+        return { ok: true, grammar: loaded };
+    }
+
+    const diagnostics: Diagnostic[] = [
+        ...errors.map((message) => ({
+            range: extractRange(message, text),
+            severity: "error" as const,
+            message,
+            source: "grammar-tools-core" as const,
+        })),
+        ...warnings.map((message) => ({
+            range: extractRange(message, text),
+            severity: "warning" as const,
+            message,
+            source: "grammar-tools-core" as const,
+        })),
+    ];
+    return { ok: false, diagnostics, files: [file] };
+}
+
+/**
+ * Load a grammar using a FileLoader so the compiler can resolve
+ * `import ... from "./other.agr"` statements.
+ */
+function loadFromFileLoader(
+    fullPath: string,
+    text: string,
+    displayPath: string,
+    fileLoader: FileLoader,
+    source: GrammarSource,
+): LoadResult {
+    const file: SourceFile = { id: sourceId(source), text };
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const collector: DebugInfoCollector = {
+        partPositions: new Map(),
+        rulePositions: new Map(),
+        fileId: displayPath,
+    };
+    const grammar = loadGrammarRulesNoThrow(
+        fullPath,
+        fileLoader,
+        errors,
+        warnings,
+        { debugCollector: collector },
+    );
+
+    if (grammar && errors.length === 0) {
+        const identifiers = buildIdentifierIndex(grammar);
+        const debugInfo = buildDebugInfo(collector, text, displayPath);
+        const loaded: LoadedGrammar = {
+            source,
+            grammar,
+            debugInfo,
             files: [file],
             identifiers,
         };
@@ -181,4 +287,68 @@ function positionToOffset(
         offset++;
     }
     return offset + character;
+}
+
+/**
+ * Convert a character offset in `text` to a line/character position.
+ */
+function offsetToPosition(
+    text: string,
+    offset: number,
+): { line: number; character: number } {
+    let line = 0;
+    let lineStart = 0;
+    for (let i = 0; i < offset && i < text.length; i++) {
+        if (text[i] === "\n") {
+            line++;
+            lineStart = i + 1;
+        } else if (text[i] === "\r") {
+            line++;
+            if (i + 1 < text.length && text[i + 1] === "\n") {
+                i++; // skip \n in \r\n
+            }
+            lineStart = i + 1;
+        }
+    }
+    return { line, character: offset - lineStart };
+}
+
+/**
+ * Build a `GrammarDebugInfo` from the raw offsets collected during compilation.
+ */
+function buildDebugInfo(
+    collector: DebugInfoCollector,
+    text: string,
+    fileId: string,
+): GrammarDebugInfo {
+    const rules = new Map<string, SourceLocation>();
+    for (const [ruleId, offset] of collector.rulePositions) {
+        const start = offsetToPosition(text, offset);
+        rules.set(ruleId, {
+            fileId,
+            displayPath: fileId,
+            range: {
+                start: { ...start, offset },
+                end: { ...start, offset },
+            },
+        });
+    }
+
+    const parts = new Map<number, SourceLocation>();
+    for (const [partId, offset] of collector.partPositions) {
+        const start = offsetToPosition(text, offset);
+        parts.set(partId, {
+            fileId,
+            displayPath: fileId,
+            range: {
+                start: { ...start, offset },
+                end: { ...start, offset },
+            },
+        });
+    }
+
+    // Simple hash: length + first/last chars + part count
+    const grammarHash = `${text.length}:${collector.partPositions.size}:${collector.rulePositions.size}`;
+
+    return { grammarHash, rules, parts };
 }

@@ -109,6 +109,60 @@ describe("loader", () => {
     });
 
     // ---------------------------------------------------------------
+    // GrammarDebugInfo
+    // ---------------------------------------------------------------
+
+    it("populates debugInfo with part and rule positions", () => {
+        const source = `<Start> = hello world -> true;
+<Start> = goodbye -> false;`;
+        const result = loadGrammarFromBuffer("debug.agr", source);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            const dbg = result.grammar.debugInfo;
+            expect(dbg).toBeDefined();
+            expect(dbg!.rules.size).toBeGreaterThan(0);
+            expect(dbg!.parts.size).toBeGreaterThan(0);
+            // Every source location should have valid line/character
+            for (const loc of dbg!.parts.values()) {
+                expect(loc.range.start.line).toBeGreaterThanOrEqual(0);
+                expect(loc.range.start.character).toBeGreaterThanOrEqual(0);
+                expect(loc.range.start.offset).toBeGreaterThanOrEqual(0);
+            }
+            for (const loc of dbg!.rules.values()) {
+                expect(loc.range.start.line).toBeGreaterThanOrEqual(0);
+                expect(loc.range.start.character).toBeGreaterThanOrEqual(0);
+            }
+        }
+    });
+
+    it("debugInfo part positions point to correct source offsets", () => {
+        const source = `<Start> = play $(song:string) -> { action: "play", song };`;
+        const result = loadGrammarFromBuffer("pos.agr", source);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            const dbg = result.grammar.debugInfo;
+            expect(dbg).toBeDefined();
+            // At least one part should reference a position in the source
+            for (const loc of dbg!.parts.values()) {
+                expect(loc.range.start.offset).toBeLessThan(source.length);
+                expect(loc.fileId).toBe("pos.agr");
+            }
+        }
+    });
+
+    it("debugInfo grammarHash is populated", () => {
+        const source = `<Start> = hello -> true;`;
+        const result = loadGrammarFromBuffer("hash.agr", source);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.grammar.debugInfo!.grammarHash).toBeDefined();
+            expect(
+                result.grammar.debugInfo!.grammarHash.length,
+            ).toBeGreaterThan(0);
+        }
+    });
+
+    // ---------------------------------------------------------------
     // File I/O (loadGrammarFromFile)
     // ---------------------------------------------------------------
 

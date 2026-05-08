@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { TraceEvent } from "action-grammar";
-import type { MatchTrace } from "./types.js";
+import type { GrammarDebugInfo, MatchTrace, SourceLocation } from "./types.js";
 
 export interface FormatTraceOptions {
     /** Include the input string and result summary header. Default: true. */
@@ -13,6 +13,13 @@ export interface FormatTraceOptions {
     showPos?: boolean;
     /** Max width for input excerpts. Default: 20. */
     excerptWidth?: number;
+    /** Debug info for resolving partId/rule to source locations. */
+    debugInfo?: GrammarDebugInfo | undefined;
+    /**
+     * Append source locations to part and rule events.
+     * Default: true when `debugInfo` is provided, false otherwise.
+     */
+    showSourceLocations?: boolean;
 }
 
 /**
@@ -27,6 +34,9 @@ export function formatTrace(
     const showSeq = options?.showSeq ?? false;
     const showPos = options?.showPos ?? true;
     const excerptWidth = options?.excerptWidth ?? 20;
+    const debugInfo = options?.debugInfo;
+    const showSourceLocations =
+        options?.showSourceLocations ?? debugInfo !== undefined;
 
     const lines: string[] = [];
     if (showHeader) {
@@ -69,6 +79,7 @@ export function formatTrace(
                 showSeq,
                 showPos,
                 excerptWidth,
+                debugInfo: showSourceLocations ? debugInfo : undefined,
             }),
         );
     }
@@ -81,21 +92,31 @@ function formatEvent(
     input: string,
     depth: number,
     lastAttemptPos: number,
-    opts: { showSeq: boolean; showPos: boolean; excerptWidth: number },
+    opts: {
+        showSeq: boolean;
+        showPos: boolean;
+        excerptWidth: number;
+        debugInfo: GrammarDebugInfo | undefined;
+    },
 ): string {
     const indent = "  ".repeat(depth);
     const pos = opts.showPos ? ` @${event.inputPos}` : "";
     const seq = opts.showSeq ? `[${event.seq}] ` : "";
+    const dbg = opts.debugInfo;
 
     switch (event.kind) {
-        case "ruleEntered":
-            return `${seq}${indent}\u25b6 ${event.rule}${pos}`;
+        case "ruleEntered": {
+            const src = dbg ? locStr(dbg.rules.get(event.rule)) : "";
+            return `${seq}${indent}\u25b6 ${event.rule}${pos}${src}`;
+        }
         case "ruleExited": {
             const icon = event.result === "matched" ? "\u2713" : "\u2717";
             return `${seq}${indent}${icon} ${event.rule} ${event.result}${pos}`;
         }
-        case "partAttempted":
-            return `${seq}${indent}  \u251c try ${event.partKind}[${event.part}]${pos}`;
+        case "partAttempted": {
+            const src = dbg ? locStr(dbg.parts.get(event.part)) : "";
+            return `${seq}${indent}  \u251c try ${event.partKind}[${event.part}]${pos}${src}`;
+        }
         case "partMatched": {
             const span = excerpt(
                 input,
@@ -129,4 +150,15 @@ function excerpt(
     const slice = input.slice(start, end);
     if (slice.length <= maxWidth) return slice;
     return slice.slice(0, maxWidth - 1) + "\u2026";
+}
+
+/**
+ * Format a SourceLocation as a short " (file:line:col)" suffix.
+ * Returns empty string when loc is undefined.
+ */
+function locStr(loc: SourceLocation | undefined): string {
+    if (!loc) return "";
+    const line = loc.range.start.line + 1; // 0-based → 1-based
+    const col = loc.range.start.character + 1;
+    return ` (${loc.displayPath}:${line}:${col})`;
 }

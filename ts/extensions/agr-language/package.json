@@ -23,6 +23,13 @@
     "clean": "rimraf dist"
   },
   "contributes": {
+    "commands": [
+      {
+        "command": "agr.traceMatch",
+        "title": "Trace Match",
+        "category": "Action Grammar"
+      }
+    ],
     "grammars": [
       {
         "language": "agr",

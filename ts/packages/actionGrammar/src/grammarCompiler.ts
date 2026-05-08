@@ -49,6 +49,20 @@ export type FileLoader = {
 };
 
 /**
+ * Mutable collector for debug info gathered during compilation.
+ * Passed into the compile pipeline; the compiler populates it
+ * with partId-to-source-offset and ruleId-to-source-offset mappings.
+ */
+export type DebugInfoCollector = {
+    /** Maps partId -> source character offset. */
+    partPositions: Map<number, number>;
+    /** Maps ruleId (e.g. "Start") -> source character offset of the definition. */
+    rulePositions: Map<string, number>;
+    /** The file path or id the grammar was loaded from. */
+    fileId: string;
+};
+
+/**
  * Resolves a type name imported from a .ts file to its parsed schema definition.
  * @param typeName - The type name to resolve (e.g., "PlayAction")
  * @param source - The resolved absolute path to the source file. The compiler
@@ -99,6 +113,10 @@ type CompileContext = {
     derivedTypes: Map<GrammarRule[], SchemaType>; // cached derived output types for rule arrays (compile-time only)
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
+    /** Shared counter for part IDs across all contexts in this compilation. */
+    partIdCounter: { value: number };
+    /** Collector for part source positions (partId -> source offset). */
+    debugCollector?: DebugInfoCollector | undefined;
 };
 
 function createImportCompileContext(
@@ -106,6 +124,7 @@ function createImportCompileContext(
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
     source: string,
+    partIdCounter?: { value: number },
 ): CompileContext {
     const fullPath = fileLoader.resolvePath(source, referencingFileName);
     if (grammarFileMap.has(fullPath)) {
@@ -122,6 +141,8 @@ function createImportCompileContext(
         fileLoader,
         result.definitions,
         result.imports,
+        undefined,
+        partIdCounter,
     );
     return importContext;
 }
@@ -232,6 +253,7 @@ function createCompileContext(
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
     schemaLoader?: SchemaLoader,
+    partIdCounter?: { value: number },
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
@@ -271,6 +293,7 @@ function createCompileContext(
         derivedTypes: new Map(),
         errors: [],
         warnings: [],
+        partIdCounter: partIdCounter ?? { value: 0 },
     };
 
     // Process definitions FIRST - this populates ruleDefMap
@@ -352,6 +375,7 @@ function createCompileContext(
                     grammarFileMap,
                     fullPath,
                     importStmt.source,
+                    context.partIdCounter,
                 );
 
                 const ruleNames =
@@ -425,6 +449,7 @@ export function compileGrammar(
     imports?: ImportStatement[],
     schemaLoader?: SchemaLoader,
     optimizations?: GrammarOptimizationOptions,
+    debugCollector?: DebugInfoCollector,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
@@ -437,6 +462,16 @@ export function compileGrammar(
         imports,
         schemaLoader,
     );
+    context.debugCollector = debugCollector;
+
+    // Propagate debugCollector and share the partId counter with all
+    // import contexts so imported rules get unique partIds and their
+    // source positions are recorded in the same collector.
+    for (const [, importCtx] of grammarFileMap) {
+        if (importCtx !== context) {
+            importCtx.debugCollector = debugCollector;
+        }
+    }
 
     const { grammarRules, hasValue } = createNamedGrammarRules(context, start);
 
@@ -765,6 +800,21 @@ const emptyRecord: ResolvedDefinitionRecord = {
 //   record.nullable ?? false   →  propagate ruleNullable (treat back-refs
 //                                 conservatively as non-nullable)
 
+/**
+ * Allocate a new partId and, if a debug collector is active, record the
+ * source offset for this part.
+ */
+function allocPartId(
+    context: CompileContext,
+    sourcePos: number | undefined,
+): number {
+    const id = context.partIdCounter.value++;
+    if (context.debugCollector !== undefined && sourcePos !== undefined) {
+        context.debugCollector.partPositions.set(id, sourcePos);
+    }
+    return id;
+}
+
 function createNamedGrammarRules(
     context: CompileContext,
     name: string,
@@ -839,6 +889,14 @@ function createNamedGrammarRules(
         record.compiling = false;
         record.nullable = nullable;
         context.currentDefinition = prev;
+
+        // Record rule source position for debug info
+        if (context.debugCollector !== undefined) {
+            const firstDef = record.definitions[0];
+            if (firstDef.pos !== undefined) {
+                context.debugCollector.rulePositions.set(name, firstDef.pos);
+            }
+        }
 
         // Track valueType entries as used imported types
         if (record.valueType !== undefined) {
@@ -1101,7 +1159,11 @@ function createGrammarRule(
     for (const expr of expressions) {
         switch (expr.type) {
             case "string": {
-                const part = createStringPart(expr.value);
+                const part = createStringPart(
+                    expr.value,
+                    undefined,
+                    allocPartId(context, expr.pos),
+                );
                 // TODO: create regexp
                 parts.push(part);
                 // default value of the string
@@ -1137,6 +1199,7 @@ function createGrammarRule(
                             optional: expr.optional,
                             variable: name,
                             name: referencedName,
+                            partId: allocPartId(context, pos),
                         }),
                     );
                     if (!expr.optional) {
@@ -1151,7 +1214,13 @@ function createGrammarRule(
                             ruleNullable && (record.nullable ?? false);
                     }
                 } else if (referencedName === "number") {
-                    parts.push(createNumberPart(name, expr.optional));
+                    parts.push(
+                        createNumberPart(
+                            name,
+                            expr.optional,
+                            allocPartId(context, pos),
+                        ),
+                    );
                     if (!expr.optional) consumedInput();
                 } else {
                     // Validate type name references
@@ -1183,7 +1252,12 @@ function createGrammarRule(
                     }
 
                     parts.push(
-                        createWildcardPart(name, referencedName, expr.optional),
+                        createWildcardPart(
+                            name,
+                            referencedName,
+                            expr.optional,
+                            allocPartId(context, pos),
+                        ),
                     );
                     if (!expr.optional) consumedInput();
                 }
@@ -1201,7 +1275,13 @@ function createGrammarRule(
                     !isLocallyDefined &&
                     globalPhraseSetRegistry.isPhraseSetName(expr.refName.name)
                 ) {
-                    parts.push(createPhraseSetPart(expr.refName.name));
+                    parts.push(
+                        createPhraseSetPart(
+                            expr.refName.name,
+                            undefined,
+                            allocPartId(context, expr.pos),
+                        ),
+                    );
                     // Phrase sets don't produce a captured value on their own.
                     // Use defaultValue=true so single-part rules using a phrase set
                     // don't trip the "Start rule does not produce a value" check.
@@ -1221,6 +1301,7 @@ function createGrammarRule(
                 parts.push(
                     createRulesPart(record.grammarRules, {
                         name: expr.refName.name,
+                        partId: allocPartId(context, expr.pos),
                     }),
                 );
                 // RuleRefExpr has no optional modifier; it is always non-optional.
@@ -1246,6 +1327,7 @@ function createGrammarRule(
                     createRulesPart(grammarRules, {
                         optional,
                         repeat,
+                        partId: allocPartId(context, undefined),
                     }),
                 );
                 if (!optional && !groupNullable) consumedInput();
