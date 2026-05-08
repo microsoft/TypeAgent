@@ -395,7 +395,7 @@ async function status() {
         if (e?.statusCode !== 404) throw e;
     }
     console.log(
-        `  pwd   '${passwordSecretName}': ${pwInVault ? chalk.green("present") : chalk.yellow("missing (will be generated on next pull)")}`,
+        `  pwd   [password secret]: ${pwInVault ? chalk.green("present") : chalk.yellow("missing (will be generated on next pull)")}`,
     );
 
     console.log(`\nLocal: ${chalk.cyanBright(localPfxPath)}`);
