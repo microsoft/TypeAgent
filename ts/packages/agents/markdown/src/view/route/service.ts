@@ -18,6 +18,7 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import registerDebug from "debug";
 import sanitizeFilename from "sanitize-filename";
+import { getBoundPort } from "@typeagent/common-utils";
 
 const debug = registerDebug("typeagent:markdown:service");
 
@@ -2245,7 +2246,7 @@ debug(`[SIGNAL] Y.js WebSocket server integrated`);
 
 // Start the HTTP server (which includes WebSocket support)
 server.listen(port, () => {
-    const boundPort = (server.address() as { port: number }).port;
+    const boundPort = getBoundPort(server);
     debug(
         `Express server with WebSocket support listening on port ${boundPort}`,
     );

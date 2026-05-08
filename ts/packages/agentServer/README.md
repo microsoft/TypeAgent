@@ -13,11 +13,14 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 ## Architecture
 
 ```
-Shell (Electron)              CLI (Node.js)
-   │  in-process (default)       │  always remote
-   │  OR WebSocket               │
-   └──────────────┬──────────────┘
-                  │ ws://localhost:8999
+Shell (Electron)              CLI (Node.js)              vscode-shell
+   │  in-process (default)       │  always remote            │  always remote
+   │  OR --connect               │                           │
+   └──────────────┬──────────────┴──────────────┬────────────┘
+                  │                             │
+                  │   ws://localhost:<ephemeral port>
+                  │   (port discovered via ~/.typeagent/agent-server.json)
+                  │
          ┌────────▼────────┐
          │   agentServer   │
          │                 │
@@ -33,6 +36,14 @@ Shell (Electron)              CLI (Node.js)
 ```
 
 Each conversation has its own `SharedDispatcher` instance with isolated chat history, conversation memory, display log, and persist directory. Clients connected to the same conversation share one dispatcher; clients in different conversations are fully isolated.
+
+### Single-instance, ephemeral port, file-based discovery
+
+The agent-server picks an **ephemeral TCP port** at startup (the OS assigns a free port via `{ port: 0 }`) and publishes its `{port, pid, startedAt}` to a discovery file at `~/.typeagent/agent-server.json`. Clients on the same machine read this file to find the server — there is **no well-known port**.
+
+There is at most one agent-server per machine: the server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so a second `agent-server` invocation exits with `ERR_INSTANCE_LOCKED`. Concurrent client spawns therefore land on the same agent-server rather than racing to start two.
+
+Cross-machine discovery is explicitly out of scope: connect from another host with an explicit URL via `connectAgentServer(url)`.
 
 ### RPC channels per connection
 
@@ -58,27 +69,37 @@ From the `ts/` directory:
 # Build (if not already built)
 pnpm run build agentServer
 
-# Start
+# Start (picks an ephemeral port, writes ~/.typeagent/agent-server.json)
 pnpm --filter agent-server start
 
 # Start with a named config (e.g. loads config.test.json)
 pnpm --filter agent-server start -- --config test
 
-# Stop (sends shutdown via RPC)
+# Pin to a specific port (for tests or remote-host setups)
+pnpm --filter agent-server start -- --port 9000
+
+# Stop (sends shutdown via RPC; resolves port from the discovery file)
 pnpm --filter agent-server stop
 ```
 
 ### With node directly
 
 ```bash
-# From the repo root
+# From the repo root — picks an ephemeral port
 node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js
 
 # With optional config name
 node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js --config test
 ```
 
-The server listens on `ws://localhost:8999` and logs `Agent server started at ws://localhost:8999` when ready.
+On startup the server logs `Agent server started at ws://localhost:<port>` (where `<port>` is the OS-assigned ephemeral port unless `--port` was passed) and writes a discovery file:
+
+```json
+// ~/.typeagent/agent-server.json
+{ "port": 64357, "pid": 22940, "startedAt": "2026-05-08T22:47:37.875Z" }
+```
+
+The file is removed on graceful shutdown. A stale file (process dead, or port not answering) is treated as "no server" and the next client to call `ensureAgentServerViaDiscovery()` spawns a fresh one.
 
 ---
 
@@ -105,12 +126,17 @@ Conversation dispatchers are automatically evicted from memory after 5 minutes w
 ## Connection lifecycle
 
 ```
-Client calls ensureAgentServer(port, hidden)
+Client calls ensureAgentServerViaDiscovery({ hidden?, idleTimeout? })
   │
-  └─ Is server already listening on ws://localhost:<port>?
-      └─ No → spawnAgentServer() — detached child process, survives parent exit
-               hidden=true suppresses the terminal/window
-
+  ├─ Read ~/.typeagent/agent-server.json
+  │   ├─ File present, pid alive, port answers
+  │   │   └─ Return { port, url } — no spawn
+  │   └─ Missing or stale
+  │       ├─ spawnAgentServer() — detached child, no --port flag
+  │       │   (lockInstanceDir resolves concurrent spawn races)
+  │       ├─ Wait for discovery file to appear with a live pid + reachable port (60 s timeout)
+  │       └─ Return { port, url }
+  │
 Client calls connectAgentServer(url)
   │
   ├─ Open WebSocket → create RPC channels
@@ -120,6 +146,8 @@ Client calls connectAgentServer(url)
   │
   └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
+
+Read-only discovery (e.g. for the vscode-shell extension, which never spawns its own AS) goes through `lookupAgentServerViaDiscovery()` — same lookup, returns `undefined` instead of spawning when no live AS is published.
 
 On disconnect, the server removes all of that connection's conversations from its routing table.
 
@@ -135,11 +163,13 @@ On disconnect, the server removes all of that connection's conversations from it
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ in-process Dispatcher
 ```
 
-**Connected (`--connect <port>`)** — connects to a running agentServer.
+**Connected (`--connect`)** — connects to a running agentServer (or auto-spawns one) via the discovery file.
 
 ```
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ WebSocket ↔ agentServer
 ```
+
+The shell does not pin a port — `--connect` simply means "auto-discover or auto-spawn the agent-server" rather than running the dispatcher in-process.
 
 ---
 
@@ -153,11 +183,11 @@ Terminal ↔ ConsoleClientIO ↔ WebSocket ↔ agentServer
 
 ### `agent-cli connect` (interactive)
 
-`connect` calls `ensureAgentServer(port, hidden, idleTimeout)` to auto-spawn the server if needed, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
+`connect` calls `ensureAgentServerViaDiscovery({ hidden, idleTimeout })` to auto-spawn the server if no live AS is published in the discovery file, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
 
 ### `agent-cli run` (non-interactive)
 
-The `run request`, `run translate`, and `run explain` subcommands also call `ensureAgentServer()` — but default to **hidden** (no window), with `--show` to opt into a visible window. All three support `--conversation <id>` to target a specific conversation instead of the default `"CLI"` conversation. When spawning, passes `--idle-timeout 600` so the server exits 10 minutes after the last client disconnects.
+The `run request`, `run translate`, and `run explain` subcommands also call `ensureAgentServerViaDiscovery()` — but default to **hidden** (no window), with `--show` to opt into a visible window. All three support `--conversation <id>` to target a specific conversation instead of the default `"CLI"` conversation. When spawning, passes `--idle-timeout 600` so the server exits 10 minutes after the last client disconnects.
 
 ### `agent-cli replay`
 
@@ -183,32 +213,36 @@ Shell launches → createDispatcher() in-process → no server involved
 **Shell or CLI — server already running**
 
 ```
-Client → ensureAgentServer(port=8999, hidden)
-       → server already running → no-op
-Client → connectAgentServer() → joinConversation() → Dispatcher proxy
+Client → ensureAgentServerViaDiscovery({ hidden })
+       → reads ~/.typeagent/agent-server.json
+       → pid alive, port answers → return existing { port, url }
+Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 ```
 
 **Shell or CLI — server not yet running**
 
 ```
-Client → ensureAgentServer(port=8999, hidden, idleTimeout)
-       → server not found → spawnAgentServer() (hidden or visible window)
-       → poll until ready (60 s timeout)
-Client → connectAgentServer() → joinConversation() → Dispatcher proxy
+Client → ensureAgentServerViaDiscovery({ hidden, idleTimeout })
+       → discovery file missing or stale
+       → spawnAgentServer() (hidden or visible window, no --port flag)
+       → server picks ephemeral port, writes ~/.typeagent/agent-server.json
+       → poll discovery file until pid alive + port answers (60 s timeout)
+Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 ```
 
 **Headless server**
 
 ```
 pnpm --filter agent-server start
-→ listens on ws://localhost:8999
+→ picks an ephemeral port
+→ writes ~/.typeagent/agent-server.json
 → any number of Shell/CLI clients can connect and share conversations
 ```
 
 **Stopping the server**
 
 ```bash
-agent-cli server stop              # via CLI (recommended)
+agent-cli server stop              # via CLI (resolves port from the discovery file)
 pnpm --filter agent-server stop    # via pnpm script
 ```
 
@@ -223,8 +257,8 @@ Conversation metadata is stored at `~/.typeagent/profiles/dev/conversations/conv
 ## Sub-package details
 
 - [protocol/README.md](protocol/README.md) — channel names, RPC types, conversation types, client-type registry
-- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectConversation`, `stopAgentServer`
-- [server/README.md](server/README.md) — server entry point, `ConversationManager`, `SharedDispatcher`, routing ClientIO
+- [client/README.md](client/README.md) — discovery model, `ensureAgentServerViaDiscovery`, `lookupAgentServerViaDiscovery`, `connectAgentServer`, smoke driver
+- [server/README.md](server/README.md) — server entry point, ephemeral port + discovery file publication, `ConversationManager`, `SharedDispatcher`, routing ClientIO
 
 ---
 

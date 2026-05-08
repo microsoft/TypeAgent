@@ -40,6 +40,7 @@
     "@milkdown/theme-nord": "^7.3.6",
     "@milkdown/utils": "^7.3.6",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "debug": "^4.3.4",
     "dompurify": "^3.4.0",

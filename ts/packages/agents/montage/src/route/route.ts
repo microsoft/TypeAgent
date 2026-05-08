@@ -10,6 +10,7 @@ import path from "path";
 import sharp from "sharp";
 import fs from "node:fs";
 import registerDebug from "debug";
+import { getBoundPort } from "@typeagent/common-utils";
 
 const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
@@ -274,7 +275,7 @@ process.on("disconnect", () => {
 
 // Start the server
 const server = app.listen(port, () => {
-    const boundPort = (server.address() as { port: number }).port;
+    const boundPort = getBoundPort(server);
     debug(`Montage server started on port ${boundPort}`);
     process.send?.({ success: true, port: boundPort });
 });

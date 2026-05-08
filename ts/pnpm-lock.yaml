@@ -2056,6 +2056,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient

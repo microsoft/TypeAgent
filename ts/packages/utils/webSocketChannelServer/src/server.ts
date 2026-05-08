@@ -7,7 +7,7 @@ import {
 } from "@typeagent/agent-rpc/channel";
 import WebSocket, { WebSocketServer } from "ws";
 import registerDebug from "debug";
-import { createPromiseWithResolvers } from "@typeagent/common-utils";
+import { createPromiseWithResolvers, getBoundPort } from "@typeagent/common-utils";
 
 const debugWss = registerDebug("typeagent:transport:wss");
 const debugWssError = registerDebug("typeagent:transport:wss:error");
@@ -100,9 +100,8 @@ export async function createWebSocketChannelServer(
 
     const promise = createPromiseWithResolvers<WebSocketChannelServer>();
     const listeningHandler = () => {
-        const addr = wss.address();
-        debugWss("WebSocketServer listening on:", addr);
-        const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+        const port = getBoundPort(wss);
+        debugWss("WebSocketServer listening on port:", port);
         promise.resolve({ close: () => wss.close(), port });
         wss.off("listening", listeningHandler);
         wss.off("error", errorHandler);
