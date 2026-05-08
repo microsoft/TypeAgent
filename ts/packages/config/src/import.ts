@@ -71,11 +71,24 @@ export function parseDotEnvText(text: string): FlatEnv {
  * the round-trip verification continuing to enforce equivalence.
  */
 export function flatEnvToConfigTree(flat: FlatEnv): ConfigTree {
+    const identity: string[] = [];
     const extras: Record<string, string> = {};
     for (const [k, v] of Object.entries(flat)) {
-        extras[k] = v;
+        if (v === "identity") {
+            identity.push(k);
+        } else {
+            extras[k] = v;
+        }
     }
-    return Object.keys(extras).length > 0 ? { extra: extras } : {};
+    const tree: ConfigTree = {};
+    if (identity.length > 0) {
+        identity.sort();
+        tree.identity = identity;
+    }
+    if (Object.keys(extras).length > 0) {
+        tree.extra = extras;
+    }
+    return tree;
 }
 
 /**
@@ -121,11 +134,12 @@ export function importDotEnv(filePath: string): ImportResult {
     }
 
     const extras = (tree.extra as Record<string, string> | undefined) ?? {};
+    const identity = (tree.identity as string[] | undefined) ?? [];
     return {
         tree,
         roundTrip,
         counts: {
-            structured: 0,
+            structured: identity.length,
             extras: Object.keys(extras).length,
             total: Object.keys(flat).length,
         },

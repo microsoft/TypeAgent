@@ -12,6 +12,19 @@ import type { ConfigTree, FlatEnv } from "./types.js";
 const PASSTHROUGH_KEYS = new Set(["env", "extra"]);
 
 /**
+ * Top-level shorthand keys whose value is an array of bare env-var
+ * names. Each listed name is emitted into the flat env with the
+ * shorthand key's own name as the value. Lets users write:
+ *
+ *   identity:
+ *     - AZURE_OPENAI_API_KEY
+ *     - AZURE_OPENAI_API_KEY_DALLE
+ *
+ * instead of repeating `: identity` on every line.
+ */
+const VALUE_GROUP_KEYS = new Set(["identity"]);
+
+/**
  * Flatten a parsed YAML configuration tree into a flat env-var map of
  * the shape consumed by `aiclient`'s `getEnvSetting` and the rest of
  * TypeAgent's existing `process.env`-based code.
@@ -64,6 +77,10 @@ function walk(
         for (const [rawKey, value] of Object.entries(
             node as Record<string, unknown>,
         )) {
+            if (path.length === 0 && VALUE_GROUP_KEYS.has(rawKey)) {
+                expandValueGroup(rawKey, value, out);
+                continue;
+            }
             const isPassthroughBoundary =
                 path.length === 0 && PASSTHROUGH_KEYS.has(rawKey);
             walk(
@@ -91,6 +108,28 @@ function toEnvKey(path: string[]): string {
     // Join with underscore and uppercase. Each segment may already
     // contain underscores; we keep them as-is.
     return path.join("_").toUpperCase();
+}
+
+function expandValueGroup(
+    groupName: string,
+    value: unknown,
+    out: FlatEnv,
+): void {
+    if (!Array.isArray(value)) {
+        throw new Error(
+            `Top-level '${groupName}:' must be an array of env-var ` +
+                `names (each will be set to '${groupName}').`,
+        );
+    }
+    for (const entry of value) {
+        if (typeof entry !== "string" || entry.length === 0) {
+            throw new Error(
+                `'${groupName}:' entries must be non-empty strings; ` +
+                    `got ${JSON.stringify(entry)}.`,
+            );
+        }
+        out[entry] = groupName;
+    }
 }
 
 function scalarToString(value: unknown): string | undefined {

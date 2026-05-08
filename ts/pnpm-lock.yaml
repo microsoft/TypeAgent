@@ -150,7 +150,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3427,7 +3427,7 @@ importers:
         version: 4.0.9
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -4527,6 +4527,9 @@ importers:
       '@typeagent/completion-ui':
         specifier: workspace:*
         version: link:../completionUI
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
@@ -4563,6 +4566,9 @@ importers:
       jose:
         specifier: ^5.9.6
         version: 5.10.0
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.1.1
       markdown-it:
         specifier: ^14.1.1
         version: 14.1.1
@@ -4603,6 +4609,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -15208,7 +15217,7 @@ snapshots:
 
   '@anthropic-ai/claude-agent-sdk@0.2.105':
     dependencies:
-      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.81.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.29.0
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -18483,7 +18492,7 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod-to-json-schema: 3.25.1(zod@4.1.13)
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
 

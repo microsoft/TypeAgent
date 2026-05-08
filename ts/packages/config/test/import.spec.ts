@@ -83,8 +83,8 @@ describe("importDotEnv", () => {
             );
             const result = importDotEnv(envPath);
             expect(result.counts.total).toBe(4);
-            expect(result.counts.extras).toBe(4);
-            expect(result.counts.structured).toBe(0);
+            expect(result.counts.extras).toBe(3);
+            expect(result.counts.structured).toBe(1);
             expect(result.intentionalRewrites).toEqual([]);
             // Round-trip is the contract.
             expect(result.roundTrip.AZURE_OPENAI_API_KEY).toBe("sk-test");

@@ -117,10 +117,13 @@ describe("show command", () => {
                 // may or may not be picked up depending on workspace
                 // detection. The smoke test is that show exits 0 and
                 // any secret keys it does see are redacted.
-                if (io.out.includes("AZURE_OPENAI_API_KEY")) {
-                    expect(io.out).toContain(
-                        `AZURE_OPENAI_API_KEY=${REDACTED}`,
-                    );
+                if (io.out.includes("AZURE_OPENAI_API_KEY=")) {
+                    // Either the value is the literal "identity"
+                    // (Azure managed identity, never a secret) or
+                    // it has been redacted.
+                    const m = io.out.match(/AZURE_OPENAI_API_KEY=(\S+)/);
+                    expect(m).not.toBeNull();
+                    expect([REDACTED, "identity"]).toContain(m![1]);
                 }
             } finally {
                 process.chdir(prev);
