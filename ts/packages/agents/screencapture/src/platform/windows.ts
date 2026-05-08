@@ -66,7 +66,9 @@ async function enumerateWindows(): Promise<WindowInfo[]> {
 // gdigrab accepts `title=<exact window title>` as input.
 // Passing it as a single spawn argument avoids any shell-quoting issues.
 function inputForTarget(target: WindowInfo | null): string[] {
-    return target === null ? ["-i", "desktop"] : ["-i", `title=${target.title}`];
+    return target === null
+        ? ["-i", "desktop"]
+        : ["-i", `title=${target.title}`];
 }
 
 async function buildScreenshotArgs(

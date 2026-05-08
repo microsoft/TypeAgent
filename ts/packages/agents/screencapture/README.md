@@ -7,11 +7,11 @@ screen on Windows and Linux (X11), including by program / window name.
 
 This agent shells out to system binaries — they are **not** bundled.
 
-| Tool      | Purpose                                | Windows install                                                                | Linux install                                                                                       |
-| --------- | -------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `ffmpeg`  | All capture and recording              | `winget install Gyan.FFmpeg` (or download from <https://ffmpeg.org>)           | `sudo apt install ffmpeg` / `sudo dnf install ffmpeg` / `sudo pacman -S ffmpeg`                     |
-| `wmctrl`  | List visible windows (Linux only)      | _n/a_                                                                          | `sudo apt install wmctrl`                                                                           |
-| `xdotool` | Per-window geometry lookup (Linux only)| _n/a_                                                                          | `sudo apt install xdotool`                                                                          |
+| Tool      | Purpose                                 | Windows install                                                      | Linux install                                                                   |
+| --------- | --------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `ffmpeg`  | All capture and recording               | `winget install Gyan.FFmpeg` (or download from <https://ffmpeg.org>) | `sudo apt install ffmpeg` / `sudo dnf install ffmpeg` / `sudo pacman -S ffmpeg` |
+| `wmctrl`  | List visible windows (Linux only)       | _n/a_                                                                | `sudo apt install wmctrl`                                                       |
+| `xdotool` | Per-window geometry lookup (Linux only) | _n/a_                                                                | `sudo apt install xdotool`                                                      |
 
 If a required tool is missing the agent will surface an actionable install hint
 the first time you invoke an action that needs it. Restart the shell / CLI

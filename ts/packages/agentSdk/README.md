@@ -40,6 +40,31 @@ Action API:
 - `executeAction` - After the dispatcher translates a user request using the provided translator schema in the manifest, it will route to the agent and call this function to perform the action. All sub-translator actions route to the same API, and the agent will need to handle further routing to handlers.
 - `streamPartialAction` - For cases action can be handled while the translation result is being streamed from the LLM. Look at `chat.generateResponse` as an example.
 
+Readiness / Setup APIs:
+
+- `checkReadiness` — Cheap probe (file-existence / env-var read level) that reports whether the agent can actually run. Returns a `ReadinessReport` with state `"ready"` / `"setup-required"` / `"unsupported"`. The dispatcher caches the result and pre-flights it before every action and command, blocking execution with a friendly error when the agent isn't ready. Agents that don't implement it default to `"ready"`.
+- `setup` — Optional in-chat configuration flow that brings the agent from `"setup-required"` to `"ready"`. Returns an `ActionResult`, so it can use the yes/no choice card pattern (`createYesNoChoiceResult`) to confirm before doing real work. The dispatcher refreshes readiness automatically after `setup` returns AND after the user's choice click resolves, so deferred work behind a choice card still ends with a fresh readiness state.
+- `handleChoice` — Routes the user's yes/no (or multi-choice) response back to the agent's `ChoiceManager` so the registered callback can run. Required if `setup` (or any other action) emits a `pendingChoice`.
+
+`player` ([packages/agents/player](../agents/player/)) and `osNotifications` ([packages/agents/osNotifications](../agents/osNotifications/)) are the canonical examples — `player` shows the manual-config shape (env vars, no `setup` hook — point the user at `@config agent refresh` after editing `.env`), and `osNotifications` shows the in-chat-setup shape (yes/no card → defer work into `handleChoice`, mutex-protected).
+
+#### Onboarding rollout
+
+Agents we plan to onboard, ordered by impact (silent-failure cases first). Mark off as we land each.
+
+- [x] **player** — Spotify env vars (`SPOTIFY_APP_CLI`, `SPOTIFY_APP_CLISEC`, `SPOTIFY_APP_PORT`). Manual config; no `setup` hook.
+- [x] **osNotifications** — Windows helper exe (WinAppSDK sparse package). `setup` runs `dotnet publish` + sign + register.
+- [x] **screencapture** — ffmpeg + platform CLIs (`wmctrl`/`xdotool` on Linux). `setup` runs winget on Windows / `sudo -n apt-get` on Linux. Wayland and macOS report `"unsupported"`.
+- [ ] **github-cli** — `gh` on PATH + `gh auth status` succeeded. Currently spawns `gh` per-action with no preflight; failures are opaque.
+- [ ] **calendar** — Microsoft Graph OAuth. Currently throws "Calendar provider not initialized" on first action; same shape as `player`'s Spotify auth, natural next candidate to validate the framework against an OAuth flow.
+- [ ] **email** — Microsoft Graph (or Google) OAuth. Same pattern as `calendar`.
+- [ ] **code** — VS Code extension WebSocket on `CODE_WEBSOCKET_PORT`. Currently throws "Unable to contact code backend" per-action; cheap port probe in `checkReadiness` would catch it upfront.
+- [ ] **desktop** — `autoShell.exe` (.NET, Windows-only). Good `"unsupported"` candidate on macOS/Linux + `"setup-required"` when the binary hasn't been built.
+- [ ] **playerLocal** — needs one of `afplay` / `mpv` / `ffplay` / VLC depending on platform. Falls back gracefully today; upfront guidance would help.
+- [ ] **markdown** / **montage** — local-view subprocess + port. Low priority; subprocess lifecycle makes this trickier.
+- [ ] **image** — relies on the dispatcher's OpenAI key. No agent-local readiness probe today.
+- [ ] **browser** — subprocess + WebSocket bridge. Low priority; subprocess failures are caught but errors are confusing.
+
 Cache extensions:
 
 - `validateWildcardMatch` - For parameters is can be wildcards, this function provide the agent to validate the wildcard match from the cache to avoid over generalization.

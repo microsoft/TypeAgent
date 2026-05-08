@@ -136,6 +136,15 @@ export class AppAgentManager implements ActionConfigProvider {
     // {state: "ready"} for them. Cleared on agent disable; re-populated by
     // setup() and explicit refresh().
     private readonly readiness = new Map<string, ReadinessReport>();
+    // Persistent per-app-agent load failure cache. Populated in the failure
+    // branches of setState (action/command init paths — provider load,
+    // initializeAgentContext, etc.) and cleared on successful (re-)enable.
+    // Surfaced as a red icon in `@config agent` so users can see at a
+    // glance which agents failed to load and why (tooltip carries the
+    // error message). Without this, a failure like an MCP server failing
+    // to connect would only flash a one-time error and leave the agent
+    // looking like a normally-disabled one in the table.
+    private readonly loadErrors = new Map<string, Error>();
     // Re-entrancy guards. With multiple clients (CLI, shell, web) hitting
     // the same agent server, two callers can race into runSetup or
     // refreshReadiness for the same agent. We collapse concurrent setups
@@ -195,6 +204,12 @@ export class AppAgentManager implements ActionConfigProvider {
     // execution.
     public getReadiness(appAgentName: string): ReadinessReport {
         return this.readiness.get(appAgentName) ?? { state: "ready" };
+    }
+
+    // Returns the most recent load failure for this agent, or undefined if
+    // it loaded cleanly. See `loadErrors` field comment for lifecycle.
+    public getLoadError(appAgentName: string): Error | undefined {
+        return this.loadErrors.get(appAgentName);
     }
 
     // True if the agent implements an in-chat setup hook. The dispatcher's
@@ -996,8 +1011,17 @@ export class AppAgentManager implements ActionConfigProvider {
                                     context,
                                 );
                                 changedActions.push([name, enableAction]);
+                                // Successful enable / disable — clear any
+                                // stale load error for this agent. Keyed
+                                // on appAgentName, not schema name.
+                                if (enableAction) {
+                                    this.loadErrors.delete(record.name);
+                                }
                             } catch (e: any) {
                                 failedActions.push([name, enableAction, e]);
+                                if (enableAction) {
+                                    this.loadErrors.set(record.name, e);
+                                }
                             }
                         })(),
                     );
@@ -1030,6 +1054,9 @@ export class AppAgentManager implements ActionConfigProvider {
                                     record.name,
                                     enableCommands,
                                 ]);
+                                // Successful enable — clear any stale
+                                // load error for this agent.
+                                this.loadErrors.delete(record.name);
                                 debug(`Command enabled ${record.name}`);
                             } catch (e: any) {
                                 failedCommands.push([
@@ -1037,6 +1064,9 @@ export class AppAgentManager implements ActionConfigProvider {
                                     enableCommands,
                                     e,
                                 ]);
+                                // Persist for the table renderer; next
+                                // successful enable will clear it.
+                                this.loadErrors.set(record.name, e);
                             }
                         })(),
                     );

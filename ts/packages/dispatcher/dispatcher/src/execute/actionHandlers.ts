@@ -293,7 +293,13 @@ export async function executeAction(
 // `schemaName: appAgentName` as placeholders. Choice routing keys on
 // `choiceId`, not actionIndex; schemaName is only used as the source label
 // on the choice card.
-function emitActionResult(
+//
+// Exported for @config agent setup, which needs to route a target agent's
+// setup result (display + pendingChoice) under the TARGET agent's name —
+// not the system agent that owns the @config command. Without this, the
+// yes/no choice card's response is routed to the wrong agent's
+// handleChoice, and the registered callback never fires.
+export function emitActionResult(
     result: ActionResult,
     actionContext: ActionContext<unknown>,
     systemContext: CommandHandlerContext,

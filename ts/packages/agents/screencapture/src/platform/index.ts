@@ -22,29 +22,63 @@ export interface PlatformBackend {
     extensions: { screenshot: string; recording: string };
 }
 
+export type PlatformSupport =
+    | {
+          supported: true;
+          platformName: "windows" | "linux";
+          // Extra CLI tools (besides ffmpeg) the platform needs on PATH.
+          extraTools: string[];
+      }
+    | { supported: false; reason: string };
+
+// Pure decision: does this (platform, session-type) combination support the
+// screen capture agent, and if so, what extra CLI tools does it need? Split
+// out from resolvePlatform so the readiness check (and unit tests) can run
+// without dynamically importing the heavyweight backend modules.
+export function describePlatformSupport(
+    platform: NodeJS.Platform,
+    xdgSessionType: string | undefined,
+): PlatformSupport {
+    if (platform === "win32") {
+        return { supported: true, platformName: "windows", extraTools: [] };
+    }
+    if (platform === "linux") {
+        if (xdgSessionType === "wayland") {
+            return {
+                supported: false,
+                reason: "Wayland sessions are not supported in this version of the screen capture agent. Switch to an X11 session at the login screen and try again.",
+            };
+        }
+        return {
+            supported: true,
+            platformName: "linux",
+            extraTools: ["wmctrl", "xdotool"],
+        };
+    }
+    return {
+        supported: false,
+        reason: `The screen capture agent does not support platform "${platform}". Supported: Windows and Linux (X11).`,
+    };
+}
+
 export type PlatformResolution =
     | { ok: true; backend: PlatformBackend; platformName: "windows" | "linux" }
     | { ok: false; reason: string };
 
 export async function resolvePlatform(): Promise<PlatformResolution> {
-    if (process.platform === "win32") {
+    const support = describePlatformSupport(
+        process.platform,
+        process.env.XDG_SESSION_TYPE,
+    );
+    if (!support.supported) {
+        return { ok: false, reason: support.reason };
+    }
+    if (support.platformName === "windows") {
         const { windowsBackend } = await import("./windows.js");
         return { ok: true, backend: windowsBackend, platformName: "windows" };
     }
-    if (process.platform === "linux") {
-        if (process.env.XDG_SESSION_TYPE === "wayland") {
-            return {
-                ok: false,
-                reason: "Wayland sessions are not supported in this version of the screen capture agent. Switch to an X11 session at the login screen and try again.",
-            };
-        }
-        const { linuxBackend } = await import("./linux.js");
-        return { ok: true, backend: linuxBackend, platformName: "linux" };
-    }
-    return {
-        ok: false,
-        reason: `The screen capture agent does not support platform "${process.platform}". Supported: Windows and Linux (X11).`,
-    };
+    const { linuxBackend } = await import("./linux.js");
+    return { ok: true, backend: linuxBackend, platformName: "linux" };
 }
 
 // Reports the first missing tool, or undefined if all required tools are
@@ -74,4 +108,27 @@ export function toolInstallHint(tool: string): string {
         );
     }
     return `\`${tool}\` is required but was not found on PATH.`;
+}
+
+// Multi-tool install guidance for the readiness `details` field. Per-platform
+// so the user gets a copy-pasteable command for their distribution.
+export function installDetailsFor(
+    platformName: "windows" | "linux",
+    missingTools: string[],
+): string {
+    if (missingTools.length === 0) return "";
+    if (platformName === "windows") {
+        // Only ffmpeg can be missing on Windows (extraTools is []).
+        return "Install ffmpeg with `winget install Gyan.FFmpeg` (or download from https://ffmpeg.org), then run `@config agent refresh screencapture`.";
+    }
+    // Linux — bucket what package managers each tool typically lives in.
+    const aptPkgs = missingTools
+        .map((t) => (t === "ffmpeg" ? "ffmpeg" : t))
+        .join(" ");
+    return [
+        `Install the missing tools, then run \`@config agent refresh screencapture\`:`,
+        `  - Debian/Ubuntu: \`sudo apt install ${aptPkgs}\``,
+        `  - Fedora: \`sudo dnf install ${aptPkgs}\``,
+        `  - Arch: \`sudo pacman -S ${aptPkgs}\``,
+    ].join("\n");
 }

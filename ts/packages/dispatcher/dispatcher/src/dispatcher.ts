@@ -344,6 +344,24 @@ export function createDispatcherFromContext(
                         }
                     } finally {
                         closeActionContext();
+                        // Choice callbacks are how setup hooks defer their
+                        // actual work — setup() returns the yes/no card
+                        // immediately, then the install/build/whatever runs
+                        // later when the user clicks. runSetup's own readiness
+                        // refresh fires when setup() returns (before the
+                        // click), so the cache reflects the pre-work state.
+                        // Refresh again here, after the deferred work, so a
+                        // successful install / build is picked up without the
+                        // user having to manually run @config agent refresh.
+                        // Wrapped to avoid masking handleChoice's own errors.
+                        try {
+                            await context.agents.refreshReadiness(
+                                pending.agentName,
+                            );
+                        } catch {
+                            // Non-fatal — the agent will reconcile on the
+                            // next explicit refresh or setupOnFirstUse pass.
+                        }
                     }
                 } finally {
                     const result = context.commandResult;

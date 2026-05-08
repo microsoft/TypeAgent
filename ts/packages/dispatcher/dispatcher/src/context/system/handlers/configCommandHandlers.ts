@@ -8,8 +8,11 @@ import {
 import {
     CommandHandlerContext,
     changeContextConfig,
+    getRequestId,
 } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
+import { getActionContext } from "../../../execute/actionContext.js";
+import { emitActionResult } from "../../../execute/actionHandlers.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
@@ -210,6 +213,7 @@ function buildAgentStatusHtml(
     agents: {
         getAppAgentEmoji(name: string): string;
         getReadiness(name: string): ReadinessReport;
+        getLoadError(name: string): Error | undefined;
     },
     showSchema: boolean,
     showAction: boolean,
@@ -234,15 +238,22 @@ function buildAgentStatusHtml(
         const bb = isAppAgent ? "1px solid #f1f5f9" : "none";
         const tdStyle = `text-align:center;padding:3px 8px;border-bottom:${bb}`;
 
-        // Readiness warning badge — only on the app-agent row.
+        // Per-agent badges (app-agent rows only): load failure first, then
+        // readiness warning. Distinct icons + colors so they don't get
+        // conflated with the disabled-state ❌ in the status columns.
         let warning = "";
         if (isAppAgent) {
+            const loadError = agents.getLoadError(name);
+            if (loadError !== undefined) {
+                const tip = `Failed to load: ${loadError.message ?? String(loadError)}`;
+                warning += ` <span title="${escapeAttr(tip)}" style="color:#dc2626;cursor:help" aria-label="${escapeAttr(tip)}">⛔</span>`;
+            }
             const report = agents.getReadiness(name);
             if (report.state !== "ready") {
                 const tip = report.message
                     ? `${report.state}: ${report.message}`
                     : report.state;
-                warning = ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+                warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
             }
         }
 
@@ -348,10 +359,15 @@ function showAgentStatus(
         const isAppAgentName = getAppAgentName(name) === name;
         let displayName = isAppAgentName ? name : `  ${name}`;
         if (isAppAgentName) {
+            // Plain marker glyphs so they render in CLI/console without
+            // needing emoji/glyph fonts. Hover detail lives in the HTML.
+            // "(err)" — load failure (provider load / context init / etc.).
+            // "(!)"   — agent loaded but reports setup-required / unsupported.
+            if (agents.getLoadError(name) !== undefined) {
+                displayName = `${displayName} ${chalk.red("(err)")}`;
+            }
             const report = agents.getReadiness(name);
             if (report.state !== "ready") {
-                // Plain "(!)" so it renders cleanly in CLI/console without
-                // needing emoji/glyph fonts. Hover detail lives in the HTML.
                 displayName = `${displayName} ${chalk.yellow("(!)")}`;
             }
         }
@@ -615,7 +631,41 @@ class AgentSetupCommandHandler implements CommandHandler {
             return;
         }
         // setup-required — invoke the agent's setup hook (if any).
-        const result = await agents.runSetup(name, context);
+        // The setup hook expects an actionContext bound to the target
+        // agent's sessionContext (so `actionContext.sessionContext.agentContext`
+        // resolves to the agent's own state, not this @config command's
+        // CommandHandlerContext). The action-execution path already does
+        // this via getActionContext when running NL/action invocations;
+        // we mirror it here so `@config agent setup <name>` and the
+        // setupOnFirstUse pre-flight path are wired identically.
+        //
+        // We then emit the result manually via emitActionResult under the
+        // TARGET agent's name. If we returned the result for executeCommand
+        // to auto-emit, the pendingChoice route would key on the system
+        // agent (the one that owns @config), and the user's Yes/No click
+        // would be routed to the wrong agent's handleChoice — the
+        // registered callback in the target agent's ChoiceManager would
+        // never fire, leaving the card silently unactionable.
+        const requestId = getRequestId(systemContext);
+        const { actionContext: agentActionContext, closeActionContext } =
+            getActionContext(name, systemContext, requestId);
+        let result;
+        try {
+            result = await agents.runSetup(name, agentActionContext);
+            if (result !== undefined) {
+                emitActionResult(
+                    result,
+                    agentActionContext,
+                    systemContext,
+                    requestId,
+                    name,
+                    0,
+                    name,
+                );
+            }
+        } finally {
+            closeActionContext();
+        }
         if (result === undefined) {
             // Agent reports setup-required but doesn't implement a setup
             // hook — typically a manual-config case (env vars, files
@@ -634,7 +684,11 @@ class AgentSetupCommandHandler implements CommandHandler {
             displayWarn(lines.join("\n"), context);
             return;
         }
-        return result;
+        // emitActionResult above already rendered the display content and
+        // wired pendingChoice to the target agent. Returning undefined
+        // here keeps executeCommand from re-emitting under the system
+        // agent's name (which would mis-route the choice click).
+        return;
     }
 
     public async getCompletion(
