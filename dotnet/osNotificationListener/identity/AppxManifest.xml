@@ -2,7 +2,7 @@
 <!--
   Identity (sparse) package manifest for the OS notifications helper.
 
-  The exe itself stays at <pkg>/bin/OsNotificationListener/publish/. This
+  The exe itself stays at dotnet/osNotificationListener/publish/. This
   manifest only declares identity + capabilities — when registered against
   the publish/ directory via `Add-AppxPackage -ExternalLocation`, the exe
   inherits package identity at runtime, which unlocks the

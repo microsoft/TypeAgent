@@ -5,12 +5,12 @@ Small .NET console exe that subscribes to
 notification events as JSON-per-line on stdout.
 
 The TypeScript watcher in
-[`../../src/watchers/windowsWatcher.ts`](../../src/watchers/windowsWatcher.ts)
+[`../../ts/packages/agents/osNotifications/src/watchers/windowsWatcher.ts`](../../ts/packages/agents/osNotifications/src/watchers/windowsWatcher.ts)
 spawns this binary, parses the lines, and forwards them to the agent.
 
 ## Build
 
-The agent's [`@config agent setup osNotifications`](../../README.md#sync-and-setup)
+The agent's [`@config agent setup osNotifications`](../../ts/packages/agents/osNotifications/README.md#sync-and-setup)
 flow runs the full build/sign/register pipeline end-to-end. Use this manual
 path when iterating on `Program.cs` or the identity manifest, where running
 the full setup over and over is overkill.

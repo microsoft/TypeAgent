@@ -49,7 +49,7 @@ export function startWindowsWatcher(
         listener({
             kind: "error",
             message:
-                "OS notification helper exe not found. Build it with `dotnet publish` from packages/agents/osNotifications/bin/OsNotificationListener and place the output in dist/bin/OsNotificationListener/.",
+                "OS notification helper exe not found. Build it with `dotnet publish` from dotnet/osNotificationListener and place the output in dotnet/osNotificationListener/publish/.",
         });
         return {
             async stop() {},
@@ -173,43 +173,38 @@ export function isWindowsHelperBuilt(): boolean {
     return resolveHelperPath() !== undefined;
 }
 
-function resolveHelperPath(): string | undefined {
-    // After build, postbuild copies bin/** -> dist/bin/**, and this module is
-    // in dist/watchers/. Resolve relative to import.meta.url.
+// Resolves the directory holding the C# helper project. The project lives at
+// <repo>/dotnet/osNotificationListener/, alongside other repo C# projects.
+// This module compiles into dist/watchers/, so we walk six levels up to the
+// repo root (dist/watchers -> dist -> osNotifications -> agents -> packages
+// -> ts -> repo).
+function resolveHelperProjectDir(): string | undefined {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const projDirCandidates = [
-        path.resolve(here, "..", "bin", "OsNotificationListener"),
-        path.resolve(here, "..", "..", "bin", "OsNotificationListener"),
-    ];
-    for (const projDir of projDirCandidates) {
-        // Preferred location — what buildWindowsHelper produces.
-        const inPublish = path.join(
-            projDir,
-            HELPER_PUBLISH_SUBDIR,
-            HELPER_EXE_NAME,
-        );
-        if (existsSync(inPublish)) return inPublish;
-        // Legacy / hand-built location: directly in the project dir.
-        const inRoot = path.join(projDir, HELPER_EXE_NAME);
-        if (existsSync(inRoot)) return inRoot;
-    }
+    const projDir = path.resolve(
+        here,
+        "..",
+        "..",
+        "..",
+        "..",
+        "..",
+        "..",
+        "dotnet",
+        "osNotificationListener",
+    );
+    const proj = path.join(projDir, "OsNotificationListener.csproj");
+    if (existsSync(proj)) return projDir;
     return undefined;
 }
 
-// Resolves the directory containing the C# helper's .csproj (which is also
-// where we want `dotnet publish` to write the output). The postbuild step
-// copies bin/** -> dist/bin/**, so the project file is colocated with where
-// the exe should land.
-function resolveHelperProjectDir(): string | undefined {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const candidates = [
-        path.resolve(here, "..", "bin", "OsNotificationListener"),
-        path.resolve(here, "..", "..", "bin", "OsNotificationListener"),
-    ];
-    for (const c of candidates) {
-        const proj = path.join(c, "OsNotificationListener.csproj");
-        if (existsSync(proj)) return c;
-    }
+function resolveHelperPath(): string | undefined {
+    const projDir = resolveHelperProjectDir();
+    if (projDir === undefined) return undefined;
+    // Preferred location — what buildWindowsHelper produces.
+    const inPublish = path.join(projDir, HELPER_PUBLISH_SUBDIR, HELPER_EXE_NAME);
+    if (existsSync(inPublish)) return inPublish;
+    // Legacy / hand-built location: directly in the project dir.
+    const inRoot = path.join(projDir, HELPER_EXE_NAME);
+    if (existsSync(inRoot)) return inRoot;
     return undefined;
 }
 

@@ -157,7 +157,7 @@ The yes/no card spells out what's about to happen. Build progress streams inline
 For manual builds (debugging, CI):
 
 ```powershell
-cd ts/packages/agents/osNotifications/bin/OsNotificationListener
+cd dotnet/osNotificationListener
 dotnet publish -c Release -r win-x64 -o publish
 
 # pack identity MSIX
@@ -168,9 +168,9 @@ signtool sign /sha1 <thumbprint> /fd SHA256 TypeAgent.OsNotificationListener.msi
 Add-AppxPackage -Path TypeAgent.OsNotificationListener.msix -ExternalLocation publish
 ```
 
-The exe ends up in `dist/bin/OsNotificationListener/publish/OsNotificationListener.exe`. The TypeScript watcher locates it via `import.meta.url` — checks `publish/` first, falls back to the project root for legacy hand-built copies.
+The exe ends up in `dotnet/osNotificationListener/publish/OsNotificationListener.exe`. The TypeScript watcher locates it via `import.meta.url` — checks `publish/` first, falls back to the project root for legacy hand-built copies.
 
-See [`bin/OsNotificationListener/README.md`](bin/OsNotificationListener/README.md) for the C# helper details.
+See [`../../../../dotnet/osNotificationListener/README.md`](../../../../dotnet/osNotificationListener/README.md) for the C# helper details.
 
 ### Linux
 
@@ -245,14 +245,9 @@ src/
     windowsWatcher.ts              # spawns the helper; isWindowsHelperBuilt(); buildWindowsHelper() (full sign+register pipeline)
     linuxWatcher.ts                # in-process dbus-next eavesdrop
     noopWatcher.ts                 # macOS / unsupported platforms
-
-bin/
-  OsNotificationListener/          # C# helper source (Windows only)
-    Program.cs                     # subscribes to UserNotificationListener.NotificationChanged; reads "sync" stdin commands
-    OsNotificationListener.csproj  # net8.0-windows10.x with sparse-package side-by-side <msix> in app.manifest
-    identity/                      # AppxManifest.xml for the sparse identity package (userNotificationListener capability)
-    README.md
 ```
+
+The C# helper lives outside this package, alongside the other repo .NET projects: [`dotnet/osNotificationListener/`](../../../../dotnet/osNotificationListener/) (Program.cs, OsNotificationListener.csproj, identity/AppxManifest.xml).
 
 ## Trademarks
 
