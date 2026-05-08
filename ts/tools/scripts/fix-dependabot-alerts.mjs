@@ -261,7 +261,7 @@ const _npmSem = new Semaphore(
  * @param {Semaphore} [opts.semaphore] - optional concurrency limiter
  * @param {*}        [opts.fallback=null] - value to cache on failure
  */
-function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
+function cachedAsync(label, { fetchFn, semaphore, fallback = null, isFatal }) {
     const cache = new Map();
     const inflight = new Map();
 
@@ -276,6 +276,10 @@ function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
                 cache.set(key, result);
                 return result;
             } catch (e) {
+                // Some failures (e.g. missing binaries) are too dangerous to
+                // mask with a fallback — they let downstream code conclude
+                // "no data" when the real cause is a broken environment.
+                if (isFatal && isFatal(e)) throw e;
                 verbose(`${label}(${key}) failed: ${e.message}`);
                 cache.set(key, fallback);
                 return fallback;
@@ -358,7 +362,16 @@ function runCmdAsync(cmd, cmdArgs, { nothrow, ...opts } = {}) {
             { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
             (error, stdout, stderr) => {
                 if (error) {
-                    if (nothrow) {
+                    // `nothrow` should swallow non-zero exits but NOT spawn
+                    // failures (ENOENT, EACCES, etc.) — those usually indicate
+                    // a misconfigured environment (missing binary, missing
+                    // permissions) and silently treating them as "no output"
+                    // can mask real bugs (e.g. classifying vulnerable packages
+                    // as already-fixed because `pnpm why` couldn't even run).
+                    const isSpawnFailure =
+                        typeof error.code === "string" &&
+                        !Number.isFinite(Number(error.code));
+                    if (nothrow && !isSpawnFailure) {
                         verbose(
                             `${cmd} ${cmdArgs.join(" ")} failed: ${error.message}`,
                         );
@@ -642,6 +655,11 @@ async function verifyAllVersionsFixed(pkg, requiredVersion) {
 
 /**
  * Run `pnpm why <pkg> -r --json` and return parsed entries.
+ *
+ * Spawn-level failures (e.g. `pnpm` not on PATH) propagate to callers
+ * rather than getting masked as "no data" — see the `isFatal` clause.
+ * Without this, a missing pnpm shim would let analysis report every
+ * vulnerable package as `alreadyFixed`.
  */
 const getPnpmWhy = cachedAsync("getPnpmWhy", {
     fetchFn: async (pkg) => {
@@ -652,6 +670,9 @@ const getPnpmWhy = cachedAsync("getPnpmWhy", {
         return parsePaginatedJson(output);
     },
     fallback: [],
+    // runCmdAsync now throws on spawn failure even with nothrow; surface
+    // those instead of caching `[]`.
+    isFatal: (e) => /\bENOENT\b|\bEACCES\b|\bEPERM\b/.test(e?.message || ""),
 });
 
 async function findConstrainingParentsFromData(whyData, pkg) {
