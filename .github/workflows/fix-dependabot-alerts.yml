@@ -260,9 +260,14 @@ jobs:
             fi
 
             # ── Step 2: Apply fixes one package at a time ───────────
-            LOCK_SHA=$(sha256sum pnpm-lock.yaml 2>/dev/null | awk '{print $1}' || echo "no-lock")
             for PKG in $FIXABLE; do
               echo "::group::Fixing $WS_DIR/$PKG"
+
+              # Recompute LOCK_SHA per package: earlier successful fixes in
+              # the same run mutate pnpm-lock.yaml, so a once-per-workspace
+              # snapshot would make the rollback cooldown skip key drift away
+              # from the actual on-disk lockfile state.
+              LOCK_SHA=$(sha256sum pnpm-lock.yaml 2>/dev/null | awk '{print $1}' || echo "no-lock")
 
               # Skip if this (workspace,pkg,lockSha) recently rolled back.
               ROLLBACK_KEY="$WS_DIR/$PKG"

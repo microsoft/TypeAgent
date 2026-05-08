@@ -260,6 +260,11 @@ const _npmSem = new Semaphore(
  * @param {Function} opts.fetchFn   - async (key) => result
  * @param {Semaphore} [opts.semaphore] - optional concurrency limiter
  * @param {*}        [opts.fallback=null] - value to cache on failure
+ * @param {Function} [opts.isFatal] - (e) => boolean. When provided and it
+ *   returns true for a thrown error, the error is rethrown instead of
+ *   caching `fallback`. Use for failures (missing binaries, permission
+ *   errors) where treating the empty fallback as "no data" would mask a
+ *   broken environment and produce silently-wrong downstream results.
  */
 function cachedAsync(label, { fetchFn, semaphore, fallback = null, isFatal }) {
     const cache = new Map();
@@ -730,8 +735,9 @@ async function findConstrainingParentsFromData(whyData, pkg) {
  *   [
  *     { version: <pkg-version>,
  *       dependents: [
- *         { name, version, dependents: [...] },           // intermediate
- *         { name: <ws-name>, depField: <field>, dependents: [] } // workspace
+ *         { name, version, dependents: [...] }, // intermediate
+ *         { name: <ws-name>, depField: <field> } // workspace (terminal;
+ *                                                // no `dependents` field)
  *       ]
  *     }, ...
  *   ]
@@ -851,11 +857,20 @@ function toReverseTree(whyData, pkg) {
             // to the workspace node (now at the end after reversal).
             const noLeaf = p.chain.slice(0, -1);
             const reversedChain = [...noLeaf].reverse();
-            // The workspace is the last element of reversedChain; tag it.
+            // The workspace is the last element of reversedChain; clone it
+            // before tagging — the same workspace identity object is shared
+            // across every path emitted from that workspace, so mutating
+            // workspaceDepField in place would let later paths overwrite
+            // earlier ones (and the chosen depField would become
+            // traversal-order dependent).
             if (reversedChain.length > 0) {
-                const wsNode = reversedChain[reversedChain.length - 1];
+                const lastIdx = reversedChain.length - 1;
+                const wsNode = reversedChain[lastIdx];
                 if (wsNode.isWorkspace) {
-                    wsNode.workspaceDepField = p.workspaceDepField;
+                    reversedChain[lastIdx] = {
+                        ...wsNode,
+                        workspaceDepField: p.workspaceDepField,
+                    };
                 }
             }
             return reversedChain;
