@@ -9,11 +9,9 @@ export type RuleId = string;
 
 /**
  * Stable identifier for a part within a rule. Compile-time integer
- * assigned on the source AST at parse time and propagated through
- * every optimizer pass.
- *
- * Not yet assigned by the parser (chunk 02 part 2); until then,
- * trace events use the runtime part index as a stand-in.
+ * assigned during grammar compilation and propagated through
+ * every optimizer pass. Falls back to the runtime part index when
+ * the grammar was loaded without debug info.
  */
 export type PartId = number;
 

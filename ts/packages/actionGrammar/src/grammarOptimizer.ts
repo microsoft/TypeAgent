@@ -2564,6 +2564,7 @@ function tryDispatchifyRulesPart(
         name: part.name,
         repeat: part.repeat,
         tailCall: part.tailCall,
+        partId: part.partId,
     });
 }
 
@@ -3100,6 +3101,7 @@ function tryPromoteTrailing(
         tailCall: true,
         name: last.name,
         dispatch: newDispatch,
+        partId: last.partId,
     });
 
     const newParts = parts.slice();

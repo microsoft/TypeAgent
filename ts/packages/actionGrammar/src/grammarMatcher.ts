@@ -2939,12 +2939,13 @@ export function matchState(state: MatchState, request: string) {
         }
 
         if (trace !== undefined) {
+            const tracePartId = part.partId ?? partIndex;
             trace({
                 seq: state.traceSeq++,
                 inputPos: state.index,
                 kind: "partAttempted",
                 rule: state.name,
-                part: partIndex,
+                part: tracePartId,
                 partKind: part.type,
             });
         }
@@ -2958,7 +2959,7 @@ export function matchState(state: MatchState, request: string) {
                             inputPos: state.index,
                             kind: "partFailed",
                             rule: state.name,
-                            part: partIndex,
+                            part: part.partId ?? partIndex,
                         });
                     }
                     return false;
@@ -2973,7 +2974,7 @@ export function matchState(state: MatchState, request: string) {
                             inputPos: state.index,
                             kind: "partFailed",
                             rule: state.name,
-                            part: partIndex,
+                            part: part.partId ?? partIndex,
                         });
                     }
                     return false;
@@ -2988,7 +2989,7 @@ export function matchState(state: MatchState, request: string) {
                             inputPos: state.index,
                             kind: "partFailed",
                             rule: state.name,
-                            part: partIndex,
+                            part: part.partId ?? partIndex,
                         });
                     }
                     return false;
@@ -3003,7 +3004,7 @@ export function matchState(state: MatchState, request: string) {
                                 inputPos: state.index,
                                 kind: "partFailed",
                                 rule: state.name,
-                                part: partIndex,
+                                part: part.partId ?? partIndex,
                             });
                         }
                         return false;
@@ -3047,7 +3048,7 @@ export function matchState(state: MatchState, request: string) {
                 inputPos: state.index,
                 kind: "partMatched",
                 rule: state.name,
-                part: partIndex,
+                part: part.partId ?? partIndex,
                 endPos: state.index,
             });
         }

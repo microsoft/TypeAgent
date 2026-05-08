@@ -2,14 +2,16 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRulesNoThrow } from "action-grammar";
-import type { Grammar } from "action-grammar";
+import type { Grammar, DebugInfoCollector } from "action-grammar";
 import type {
     GrammarIdentifierIndex,
+    GrammarDebugInfo,
     GrammarSource,
     LoadedGrammar,
     LoadResult,
     GrammarSnapshot,
     SourceFile,
+    SourceLocation,
     Diagnostic,
     SourceRange,
 } from "./types.js";
@@ -59,18 +61,26 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
     const file: SourceFile = { id: sourceId(source), text };
     const errors: string[] = [];
     const warnings: string[] = [];
+    const collector: DebugInfoCollector = {
+        partPositions: new Map(),
+        rulePositions: new Map(),
+        fileId: sourceId(source),
+    };
     const grammar = loadGrammarRulesNoThrow(
         sourceId(source),
         text,
         errors,
         warnings,
+        { debugCollector: collector },
     );
 
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
+        const debugInfo = buildDebugInfo(collector, text, sourceId(source));
         const loaded: LoadedGrammar = {
             source,
             grammar,
+            debugInfo,
             files: [file],
             identifiers,
         };
@@ -181,4 +191,68 @@ function positionToOffset(
         offset++;
     }
     return offset + character;
+}
+
+/**
+ * Convert a character offset in `text` to a line/character position.
+ */
+function offsetToPosition(
+    text: string,
+    offset: number,
+): { line: number; character: number } {
+    let line = 0;
+    let lineStart = 0;
+    for (let i = 0; i < offset && i < text.length; i++) {
+        if (text[i] === "\n") {
+            line++;
+            lineStart = i + 1;
+        } else if (text[i] === "\r") {
+            line++;
+            if (i + 1 < text.length && text[i + 1] === "\n") {
+                i++; // skip \n in \r\n
+            }
+            lineStart = i + 1;
+        }
+    }
+    return { line, character: offset - lineStart };
+}
+
+/**
+ * Build a `GrammarDebugInfo` from the raw offsets collected during compilation.
+ */
+function buildDebugInfo(
+    collector: DebugInfoCollector,
+    text: string,
+    fileId: string,
+): GrammarDebugInfo {
+    const rules = new Map<string, SourceLocation>();
+    for (const [ruleId, offset] of collector.rulePositions) {
+        const start = offsetToPosition(text, offset);
+        rules.set(ruleId, {
+            fileId,
+            displayPath: fileId,
+            range: {
+                start: { ...start, offset },
+                end: { ...start, offset },
+            },
+        });
+    }
+
+    const parts = new Map<number, SourceLocation>();
+    for (const [partId, offset] of collector.partPositions) {
+        const start = offsetToPosition(text, offset);
+        parts.set(partId, {
+            fileId,
+            displayPath: fileId,
+            range: {
+                start: { ...start, offset },
+                end: { ...start, offset },
+            },
+        });
+    }
+
+    // Simple hash: length + first/last chars + part count
+    const grammarHash = `${text.length}:${collector.partPositions.size}:${collector.rulePositions.size}`;
+
+    return { grammarHash, rules, parts };
 }

@@ -224,11 +224,16 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     function grammarPartFromJson(p: GrammarPartJson): GrammarPart {
         switch (p.type) {
             case "string":
-                return createStringPart(p.value, p.variable);
+                return createStringPart(p.value, p.variable, p.partId);
             case "wildcard":
-                return createWildcardPart(p.variable, p.typeName, p.optional);
+                return createWildcardPart(
+                    p.variable,
+                    p.typeName,
+                    p.optional,
+                    p.partId,
+                );
             case "number":
-                return createNumberPart(p.variable, p.optional);
+                return createNumberPart(p.variable, p.optional, p.partId);
             case "rules": {
                 // A `tailCall` part with no `index` AND no
                 // `dispatch` has zero effective members - it can
@@ -269,10 +274,11 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                     tailCall: p.tailCall,
                     skipMemo: p.skipMemo,
                     dispatch,
+                    partId: p.partId,
                 });
             }
             case "phraseSet":
-                return createPhraseSetPart(p.matcherName, p.variable);
+                return createPhraseSetPart(p.matcherName, p.variable, p.partId);
         }
     }
 
