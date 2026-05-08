@@ -1,116 +1,198 @@
 # @typeagent/port-registry
 
-Centralized port allocation and resource discovery for TypeAgent processes.
+Centralized port allocation and discovery for TypeAgent processes that
+bind sockets — agent server, language-extension bridges, dev daemons.
 
-## Why
+The package replaces hardcoded port constants (`8999`, `5680`,
+`5677`/`5678`/`5679`, …) with a single registry that allocates ephemeral
+ports on demand and lets other processes look them up by name. It also
+provides forward-compat hooks (`workspaceKey`, named resources) for
+multi-instance scenarios that today are single-instance because of other
+constraints.
 
-TypeAgent has many components that bind sockets:
+## The problem
 
-- The agent server (`8999`)
-- Visual Studio bridge (`5680`)
-- Excel bridge (`5678`/`5679`)
-- The Excel `BridgeRegistry` (`5677`)
+Every TypeAgent component that binds a socket today picks a port
+unilaterally:
 
-Each of these uses a hardcoded port. That fails the moment a second
-instance launches in a different VS Code window, with a different
-solution, or against a different workbook. This package replaces all of
-those hardcoded ports with a single registry that:
+| Component               | Port               | Failure mode when contended         |
+|-------------------------|--------------------|-------------------------------------|
+| `agentServer`           | `8999`             | Second VS Code window can't start   |
+| `visualStudio` agent    | `5680`             | Second VS instance: `EADDRINUSE`    |
+| Excel `BridgeRegistry`  | `5677`             | Second Excel add-in can't start     |
+| Excel bridge            | `5678` / `5679`    | Second workbook collides            |
 
-1. Allocates ephemeral ports on demand.
-2. Maps logical resource names (workbook name, solution path, workspace
-   key) to their owning process's ports.
-3. Cleans up after dead owners (PID liveness check).
-4. Survives any one process dying (multi-process leader election with
-   self-promotion, inherited from the existing Excel `BridgeRegistry`
-   pattern).
-
-## API
+Clients that talk to those processes are equally hardcoded:
 
 ```ts
-import { globalRegistry, Namespaces } from "@typeagent/port-registry";
-
-// Allocate two ports for an Excel bridge and reserve a workbook name
-// in one call.
-const { slotId, ports: [wsPort, evalPort] } = await globalRegistry.allocate(
-    Namespaces.Excel,
-    { count: 2, key: "MyWorkbook.xlsx" },
-);
-
-// Register additional resources later (e.g. a second loaded workbook
-// in the same Excel process).
-await globalRegistry.register(slotId, "OtherWorkbook.xlsx");
-
-// Discover from another process (or the Office add-in via HTTP).
-const { ports } = await globalRegistry.lookup(
-    Namespaces.Excel,
-    "MyWorkbook.xlsx",
-);
-
-// Cleanup
-await globalRegistry.unregister(slotId, "MyWorkbook.xlsx");
-await globalRegistry.release(slotId);
+const url = "ws://localhost:8999";          // CLI, vscode-shell, electron shell
+const port = parseInt(arg ?? "8999", 10);   // electron shell --connect
 ```
 
-## Layered model
+There's no central authority that says "the agent server is on port X
+right now," so neither side can adapt to a port being unavailable, and
+nobody can run two of anything.
 
-The registry separates two distinct concerns:
+The Excel agent already has the right shape for the solution — its
+`BridgeRegistry` runs as a per-machine HTTP service that hands out
+workbook-keyed slots to the bridge processes that the Office add-in then
+discovers via `/lookup`. This package generalizes that pattern so every
+TypeAgent component can use it.
 
-| Concern | API | Lifetime |
-|---|---|---|
-| Port allocation (process-scoped) | `allocate` / `release` | bridge process |
-| Resource routing (optional) | `register` / `unregister` / `lookup` | per resource |
+## Architecture overview
 
-For consumers that only need a unique port and no name-based discovery
-(e.g. the agent server itself), `allocate` alone is sufficient.
+```
+              ┌──────────── well-known port 5681 ────────────┐
+              │                                              │
+   ┌─────────────────────┐          HTTP                ┌────────────────┐
+   │  registry server    │ ◄──────────────────────────► │ registry client│
+   │  (one process wins) │   /allocate /register        │ (every other   │
+   │                     │   /unregister /release       │  process)      │
+   │  - slot map         │   /lookup /status            │                │
+   │  - PID liveness GC  │                              │ - shadow map   │
+   │  - ephemeral alloc  │                              │ - self-promote │
+   └─────────────────────┘                              └────────────────┘
+              ▲                                                ▲
+              │                                                │
+              └────────── consumed by `globalRegistry` ────────┘
+                          (process-local singleton)
+```
 
-## Multi-process semantics
+Three layers, each with a clear responsibility:
 
-The first process to call `globalRegistry.ensure()` (implicitly invoked by
-`allocate`/`lookup`/etc.) binds the well-known HTTP port and becomes the
-**server**. Subsequent processes get `EADDRINUSE`, enter **client mode**,
-and forward all calls to the server over HTTP. Each client also keeps a
-shadow copy of the slots it owns so it can replay them after a
-self-promotion.
+1. **Allocator** (`allocator.ts`) — pure helper that returns OS-assigned
+   ephemeral ports via `net.createServer().listen(0)`. Stateless. No
+   knowledge of namespaces, slots, or the registry.
+2. **Server** (`server.ts`) — owns the canonical slot map. Exposes a
+   small HTTP API on the well-known port. Knows nothing about who its
+   clients are.
+3. **Client** (`client.ts`) — `PortRegistry` class that every consumer
+   talks to. Tries to start the server itself; if the well-known port is
+   already bound, it falls into client mode and forwards every call over
+   HTTP. Also keeps a local **shadow map** so it can replay its slots
+   after a self-promotion.
 
-If the server process dies, the next client whose HTTP call fails attempts
-to bind the well-known port itself and replays its shadow. Whichever
-client wins the race becomes the new server.
+The whole thing has zero dependencies beyond `node:net`, `node:http`,
+and `debug`. No daemon, no install step, no IPC framework.
 
-This pattern is inherited from the original Excel `BridgeRegistry`.
+## Two-layer API
 
-## Wire protocol
+The registry separates **port allocation** from **named resource
+discovery**, because they have different lifetimes:
 
-The server exposes a small HTTP API on the well-known port (default
-`5681`, override via `TYPEAGENT_PORT_REGISTRY_PORT`):
+| Concern                | API                              | Lifetime                |
+|------------------------|----------------------------------|-------------------------|
+| Port allocation        | `allocate(ns, …)` / `release`    | the bridge process      |
+| Resource routing       | `register` / `unregister` / `lookup` | the resource (workbook, solution, …) |
 
-| Method   | Path           | Body / Query                                    | Returns                        |
-|----------|----------------|-------------------------------------------------|--------------------------------|
-| `POST`   | `/allocate`    | `{ namespace, count?, key?, ownerPid }`         | `{ slotId, ports: number[] }`  |
-| `POST`   | `/register`    | `{ slotId, resource }`                          | `{ ok: true }`                 |
-| `DELETE` | `/unregister`  | `?slotId=&resource=`                            | `{ ok: true }`                 |
-| `DELETE` | `/release`     | `?slotId=`                                      | `{ ok: true }`                 |
-| `GET`    | `/lookup`      | `?ns=&key=` (key optional → singleton lookup)   | `{ slotId, ports }` or nulls   |
-| `GET`    | `/status`      | -                                               | `{ entries: StatusEntry[] }`   |
+A bridge process allocates a slot once at startup and releases it at
+shutdown. While alive, it can attach and detach **resources** to that
+slot — for Excel, each workbook the user opens; for Visual Studio, each
+loaded solution. External clients (the Office add-in JS, a CLI command)
+look up resources by name and get back the bridge's port.
+
+For consumers that only need "a unique port" with no resource layer
+(e.g. the agent server today), `allocate` alone is sufficient — pass a
+single static `key` (or `"default"`) and the slot doubles as both
+allocation and lookup record.
+
+## Multi-process election
+
+When `PortRegistry.ensure()` is called for the first time in any
+process, it tries to bind the well-known HTTP port (`5681` by default,
+overridable via `TYPEAGENT_PORT_REGISTRY_PORT`):
+
+- **First process wins.** It binds, becomes the server, and starts
+  serving HTTP. Its mode is `"server"` — it dispatches calls to its own
+  in-memory state directly without a network round-trip.
+- **Every later process loses.** It gets `EADDRINUSE`, transitions to
+  `"client"` mode, and forwards `allocate`/`register`/etc. as HTTP
+  requests to whoever bound the port.
+
+Each client also keeps a **shadow map** of slots it owns. If the
+authoritative server dies, the next HTTP call from any client will fail.
+That client then re-attempts to bind the well-known port; whichever
+client wins the bind race becomes the new server, replays its own
+shadow into the new state, and continues. Other clients re-discover the
+new server on their next call (`ECONNREFUSED` → re-bind attempt → if
+already bound by a peer, fall back to client mode).
+
+This means:
+
+- **No supervisor.** Every TypeAgent process can be started and stopped
+  independently. The registry survives any one of them dying.
+- **No startup ordering.** Whoever happens to come up first becomes the
+  server.
+- **No persistence.** State is in-memory; if every participating process
+  exits, the slot map vanishes, and the next process to start gets a
+  clean slate. That's correct because slots only describe currently
+  running processes anyway.
+
+The pattern is lifted directly from the existing Excel `BridgeRegistry`,
+which has been running this way in production. This package generalizes
+it to N namespaces and packages it for reuse.
 
 ## Liveness
 
-Slots carry the `ownerPid` of the process that allocated them. On every
-`lookup` and on a 30-second timer the server sweeps slots with dead
-owners (`process.kill(pid, 0)` returns ENOENT) and removes them.
+Slots carry the `ownerPid` of the process that allocated them. The
+server sweeps stale slots in two places:
+
+1. **On every `lookup`** — checked inline so callers never see slots
+   pointing at zombie processes.
+2. **On a 30s timer** — background sweep keeps `/status` honest and
+   reclaims slots whose owners died without releasing.
+
+The liveness check is `process.kill(pid, 0)`. On Windows, an `EPERM`
+result means *the process exists but we can't signal it* — that's still
+"alive" for our purposes. Only `ESRCH` ("no such process") removes the
+slot. The timer is `unref`'d so it doesn't keep an otherwise-idle Node
+process alive.
+
+## Wire protocol
+
+| Method   | Path          | Body / Query                                  | Returns                        |
+|----------|---------------|-----------------------------------------------|--------------------------------|
+| `POST`   | `/allocate`   | `{ namespace, count?, key?, ownerPid }`       | `{ slotId, ports: number[] }`  |
+| `POST`   | `/register`   | `{ slotId, resource }`                        | `{ ok: true }`                 |
+| `DELETE` | `/unregister` | `?slotId=&resource=`                          | `{ ok: true }`                 |
+| `DELETE` | `/release`    | `?slotId=`                                    | `{ ok: true }`                 |
+| `GET`    | `/lookup`     | `?ns=&key=` (key optional → singleton lookup) | `{ slotId, ports }` or `null`s |
+| `GET`    | `/status`     | —                                             | `{ entries: StatusEntry[] }`   |
+
+JSON over HTTP, CORS enabled. Designed to be consumable from any
+language — including the C# Visual Studio extension and the JS Office
+add-in, which can't reasonably depend on the Node-side client library.
 
 ## Feature flag
 
-The `TYPEAGENT_USE_PORT_REGISTRY` env var (`1` or `true` to enable) gates
-whether downstream consumers route through the registry. Default off
-during the introduction PR; flipped on in a follow-up after verification.
+`TYPEAGENT_USE_PORT_REGISTRY` (`1` / `true` to enable; default **off**)
+gates whether downstream consumers route through the registry at all.
+When off, every consumer falls back to its hardcoded behavior exactly as
+before — no new failure modes, no new dependencies at runtime. When on,
+the new code paths take effect.
+
+The flag exists only to land the package and the per-consumer wiring
+incrementally. It will flip to default-on once every consumer has been
+migrated and validated, and removed once stable.
+
+## Forward compatibility: `workspaceKey`
+
+The agent-server-client API takes a `workspaceKey: string` parameter
+even though today only one agent server can run per machine (the
+`lockInstanceDir` constraint in the dispatcher gates that). Wiring the
+key through the API surface — and through the registry's slot key —
+means that when per-workspace `instanceDir` lands, the protocol doesn't
+change. Until then, every consumer passes `"default"` and the system
+behaves single-instance.
 
 ## Allocation race
 
-`reservePorts` binds via `listen(0)` then closes to read the OS-assigned
-port. There is a small window between close and the consumer's bind
-during which another process could grab the port. In practice the OS
-does not reuse ports rapidly. Consumers that get `EADDRINUSE` at bind
-time should retry with a fresh allocation.
+`reservePorts` binds via `listen(0)`, reads the OS-assigned port, and
+closes the listener so the consumer can rebind. Between close and
+rebind there's a tiny window during which the OS could hand the same
+port to an unrelated process. In practice the OS does not reuse ports
+that fast — but consumers that hit `EADDRINUSE` should retry with a
+fresh allocation rather than treat it as fatal.
 
 ## Layout
 
@@ -121,3 +203,32 @@ time should retry with a fresh allocation.
 | `server.ts`    | `RegistryState` + `startRegistryServer` HTTP handler           |
 | `client.ts`    | `PortRegistry` with server/client mode + self-promotion        |
 | `index.ts`     | Barrel exports                                                 |
+| `test/`        | 13 unit tests: allocator, server lifecycle, slot CRUD, GC, self-promotion |
+
+## Quick reference
+
+```ts
+import { globalRegistry, Namespaces, isRegistryEnabled }
+    from "@typeagent/port-registry";
+
+if (isRegistryEnabled()) {
+    // Bridge process: claim a slot at startup.
+    const { slotId, ports } = await globalRegistry.allocate(
+        Namespaces.Excel,
+        { count: 2, key: "MyWorkbook.xlsx" },
+    );
+    const [wsPort, evalPort] = ports;
+
+    // Attach more resources later (Excel: a second workbook).
+    await globalRegistry.register(slotId, "OtherWorkbook.xlsx");
+
+    // Discover from another process (or via HTTP from a non-Node client).
+    const { ports: lookedUp } = await globalRegistry.lookup(
+        Namespaces.Excel,
+        "MyWorkbook.xlsx",
+    );
+
+    // Cleanup on shutdown.
+    await globalRegistry.release(slotId);
+}
+```
