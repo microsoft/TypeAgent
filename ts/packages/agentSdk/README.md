@@ -56,10 +56,10 @@ Agents we plan to onboard, ordered by impact (silent-failure cases first). Mark 
 - [x] **osNotifications** — Windows helper exe (WinAppSDK sparse package). `setup` runs `dotnet publish` + sign + register.
 - [x] **screencapture** — ffmpeg + platform CLIs (`wmctrl`/`xdotool` on Linux). `setup` runs winget on Windows / `sudo -n apt-get` on Linux. Wayland and macOS report `"unsupported"`.
 - [x] **github-cli** — `gh auth status` probe distinguishes ENOENT (not installed) from non-zero exit (not authenticated). Manual config; no `setup` hook (`gh auth login` is interactive).
+- [x] **desktop** — `autoShell.exe` (.NET, Windows-only). `"unsupported"` on macOS/Linux; `"setup-required"` when the binary hasn't been built; `setup` runs `dotnet build` on `dotnet/autoShell/autoShell.csproj`.
 - [ ] **calendar** — Microsoft Graph OAuth. Currently throws "Calendar provider not initialized" on first action; same shape as `player`'s Spotify auth, natural next candidate to validate the framework against an OAuth flow.
 - [ ] **email** — Microsoft Graph (or Google) OAuth. Same pattern as `calendar`.
 - [ ] **code** — VS Code extension WebSocket on `CODE_WEBSOCKET_PORT`. Currently throws "Unable to contact code backend" per-action; cheap port probe in `checkReadiness` would catch it upfront.
-- [ ] **desktop** — `autoShell.exe` (.NET, Windows-only). Good `"unsupported"` candidate on macOS/Linux + `"setup-required"` when the binary hasn't been built.
 - [ ] **playerLocal** — needs one of `afplay` / `mpv` / `ffplay` / VLC depending on platform. Falls back gracefully today; upfront guidance would help.
 - [ ] **markdown** / **montage** — local-view subprocess + port. Low priority; subprocess lifecycle makes this trickier.
 - [ ] **image** — relies on the dispatcher's OpenAI key. No agent-local readiness probe today.
