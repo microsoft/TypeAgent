@@ -31,7 +31,7 @@ export interface BridgeClientIOContext {
      */
     rememberServerRequestId(clientId: string, serverId: string): void;
     /** Handle a "vscode-shell-action" routed from the code agent. */
-    handleShellAction(data: unknown): Promise<void>;
+    handleShellAction(requestId: RequestId, data: unknown): Promise<void>;
 }
 
 /**
@@ -157,9 +157,9 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
         requestInteraction: (_interaction: PendingInteractionRequest) => {},
         interactionResolved: () => {},
         interactionCancelled: () => {},
-        takeAction: (_requestId, action, data) => {
+        takeAction: (requestId, action, data) => {
             if (action === "vscode-shell-action") {
-                ctx.handleShellAction(data).catch((e: any) => {
+                ctx.handleShellAction(requestId, data).catch((e: any) => {
                     vscode.window.showErrorMessage(
                         `Shell action failed: ${e?.message ?? String(e)}`,
                     );

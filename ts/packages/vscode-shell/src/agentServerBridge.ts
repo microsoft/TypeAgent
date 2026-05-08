@@ -16,6 +16,7 @@ import type {
     BridgeToWebviewMessage,
 } from "./bridge/messages.js";
 import { createBridgeClientIO } from "./bridge/clientIO.js";
+import { clientIdOf } from "./bridge/requestIds.js";
 import { toHistoryReplayMessage } from "./bridge/historyReplay.js";
 
 import {
@@ -1266,7 +1267,31 @@ export class AgentServerBridge {
             rememberServerRequestId: (clientId, serverId) => {
                 this.clientToServerRequestId.set(clientId, serverId);
             },
-            handleShellAction: (data) => this.handleShellAction(data),
+            handleShellAction: (requestId, data) =>
+                this.handleShellAction(requestId, data),
+        });
+    }
+
+    /**
+     * Overwrite the action bubble's body for `requestId` with an error
+     * message. Used when the bridge detects that the user-visible outcome
+     * differs from the optimistic message returned by the action handler
+     * (e.g. "create" colliding with an existing name, "delete" of the
+     * current conversation).
+     */
+    private overwriteActionBubble(
+        requestId: any,
+        markdown: string,
+        source: string = "code.code-vscode-shell",
+    ): void {
+        this.broadcastToWebviews({
+            type: "setDisplay",
+            requestId: clientIdOf(requestId),
+            message: {
+                message: markdown,
+                source,
+                requestId,
+            } as any,
         });
     }
 
@@ -1275,7 +1300,10 @@ export class AgentServerBridge {
      * to the originating client by the agent server's takeAction routing,
      * so only this bridge (the originator's bridge) receives it.
      */
-    private async handleShellAction(data: any): Promise<void> {
+    private async handleShellAction(
+        requestId: any,
+        data: any,
+    ): Promise<void> {
         if (!data || typeof data !== "object") return;
         const actionName = data.actionName as string | undefined;
         const params = (data.parameters ?? {}) as {
@@ -1285,7 +1313,7 @@ export class AgentServerBridge {
 
         switch (actionName) {
             case "newConversation":
-                await this.newConversationFromAgent(params.name);
+                await this.newConversationFromAgent(requestId, params.name);
                 break;
             case "renameConversation":
                 if (params.newName) {
@@ -1297,6 +1325,9 @@ export class AgentServerBridge {
             case "switchConversation":
                 await this.switchConversationFromAgent(params.name);
                 break;
+            case "deleteConversation":
+                await this.deleteConversationFromAgent(requestId, params.name);
+                break;
         }
     }
 
@@ -1304,7 +1335,10 @@ export class AgentServerBridge {
      * Create a new conversation programmatically (from a chat-issued
      * action). If `name` is omitted, falls back to the interactive prompt.
      */
-    private async newConversationFromAgent(name?: string): Promise<void> {
+    private async newConversationFromAgent(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
         if (!this.connection) {
             vscode.window.showWarningMessage("Not connected to agent server.");
             return;
@@ -1322,6 +1356,10 @@ export class AgentServerBridge {
         if (existing) {
             vscode.window.showWarningMessage(
                 `A conversation named "${trimmed}" already exists; switching to it.`,
+            );
+            this.overwriteActionBubble(
+                requestId,
+                `A conversation named "${trimmed}" already exists. Switching to it instead of creating a new one.`,
             );
             await this.joinSpecificSession(existing.sessionId, existing.name);
             return;
@@ -1376,7 +1414,9 @@ export class AgentServerBridge {
 
     /**
      * Switch to a conversation by display name (from chat). Falls back to
-     * the interactive picker if no name was provided or no match found.
+     * the interactive picker if no name was provided. If a name is given
+     * but no conversation matches, creates a new conversation with that
+     * name and switches to it.
      */
     private async switchConversationFromAgent(name?: string): Promise<void> {
         if (!this.connection) {
@@ -1394,8 +1434,12 @@ export class AgentServerBridge {
             (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
         );
         if (!match) {
-            vscode.window.showWarningMessage(
-                `No conversation named "${trimmed}" found.`,
+            // Create-on-switch: user asked to switch to a conversation
+            // that doesn't exist yet, so create it and switch to it.
+            const info = await this.connection.createSession(trimmed);
+            await this.joinSpecificSession(info.sessionId, trimmed);
+            vscode.window.showInformationMessage(
+                `Created and switched to new conversation "${trimmed}".`,
             );
             return;
         }
@@ -1403,6 +1447,71 @@ export class AgentServerBridge {
             return;
         }
         await this.joinSpecificSession(match.sessionId, match.name);
+    }
+
+    /**
+     * Delete a conversation by display name (from chat). Prompts the user
+     * for confirmation before deleting. Falls back to the interactive
+     * picker if no name was provided. Refuses to delete the currently
+     * active conversation.
+     */
+    private async deleteConversationFromAgent(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+        if (!name || !name.trim()) {
+            await this.deleteSession();
+            return;
+        }
+
+        const trimmed = name.trim();
+        const sessions = await this.connection.listSessions();
+        const match = sessions.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (!match) {
+            vscode.window.showWarningMessage(
+                `No conversation named "${trimmed}" found.`,
+            );
+            this.overwriteActionBubble(
+                requestId,
+                `No conversation named "${trimmed}" found to delete.`,
+            );
+            return;
+        }
+        if (match.sessionId === this.session?.sessionId) {
+            vscode.window.showWarningMessage(
+                `Cannot delete the currently active conversation "${trimmed}".`,
+            );
+            this.overwriteActionBubble(
+                requestId,
+                `Cannot delete the currently active conversation "${match.name}". Switch to a different conversation first.`,
+            );
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete conversation "${match.name}"? This cannot be undone.`,
+            { modal: true },
+            "Delete",
+        );
+        if (confirm !== "Delete") {
+            this.overwriteActionBubble(
+                requestId,
+                `Delete of conversation "${match.name}" was cancelled.`,
+            );
+            return;
+        }
+
+        await this.connection.deleteSession(match.sessionId);
+        vscode.window.showInformationMessage(
+            `Deleted conversation "${match.name}".`,
+        );
+        this.onStatusChanged?.();
     }
 
     public notifyDemoState(

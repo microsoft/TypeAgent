@@ -1634,7 +1634,11 @@ export class ChatPanel {
             );
         }
         if (requestId) {
-            this.agentContainersByRequestId.delete(requestId);
+            // Keep the bubble's per-request lookup alive after completion so
+            // late setDisplay calls (e.g. validation results from a host's
+            // takeAction handler that runs out-of-band with the action's
+            // own ActionResult) can still target the existing bubble
+            // instead of creating a new empty one.
             this.requestStartByRequestId.delete(requestId);
             this.firstMessageMsByRequestId.delete(requestId);
         }

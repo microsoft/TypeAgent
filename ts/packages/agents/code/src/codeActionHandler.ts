@@ -305,7 +305,7 @@ async function executeConversationAction(
         case "newConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Created new conversation "${action.parameters.name}".`
+                    ? `Creating conversation "${action.parameters.name}".`
                     : "Creating a new conversation.",
             );
         case "renameConversation":
@@ -315,8 +315,14 @@ async function executeConversationAction(
         case "switchConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Switched to conversation "${action.parameters.name}".`
+                    ? `Switching to conversation "${action.parameters.name}".`
                     : "Switching conversation.",
+            );
+        case "deleteConversation":
+            return createActionResult(
+                action.parameters.name
+                    ? `Deleting conversation "${action.parameters.name}".`
+                    : "Deleting conversation.",
             );
         default: {
             const _exhaustive: never = action;
