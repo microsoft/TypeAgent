@@ -15,11 +15,14 @@ import {
     setupDesktopActionContext,
 } from "./connector.js";
 import { AllDesktopActions } from "./allActionsSchema.js";
+import { checkDesktopReadiness, setupDesktop } from "./readiness.js";
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeDesktopContext,
         updateAgentContext: updateDesktopContext,
         executeAction: executeDesktopAction,
+        checkReadiness: checkDesktopReadiness,
+        setup: setupDesktop,
     };
 }
 
