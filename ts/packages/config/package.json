@@ -1,0 +1,51 @@
+{
+  "name": "@typeagent/config",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Layered YAML configuration loader for TypeAgent (defaults + Key Vault + local overrides + .env fallback).",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/config"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../prettierignore",
+    "test": "npm run test:local",
+    "test:live": "echo \"no live tests in phase 1\"",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "debug": "^4.4.0",
+    "dotenv": "^16.3.1",
+    "js-yaml": "^4.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
+    "@types/js-yaml": "^4.0.9",
+    "jest": "^29.7.0",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
