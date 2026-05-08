@@ -200,7 +200,11 @@ function resolveHelperPath(): string | undefined {
     const projDir = resolveHelperProjectDir();
     if (projDir === undefined) return undefined;
     // Preferred location — what buildWindowsHelper produces.
-    const inPublish = path.join(projDir, HELPER_PUBLISH_SUBDIR, HELPER_EXE_NAME);
+    const inPublish = path.join(
+        projDir,
+        HELPER_PUBLISH_SUBDIR,
+        HELPER_EXE_NAME,
+    );
     if (existsSync(inPublish)) return inPublish;
     // Legacy / hand-built location: directly in the project dir.
     const inRoot = path.join(projDir, HELPER_EXE_NAME);

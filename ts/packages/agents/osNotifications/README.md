@@ -124,25 +124,25 @@ The Windows watcher spawns a small .NET console exe that subscribes to `Windows.
 
 1. **Pull the dev code-signing cert from Azure Key Vault** — the dev cert is held in the `aisystems` Key Vault as `TypeAgent-Development-Certificate` (with its PFX password as a sibling secret). The included [`getCert.mjs`](../../../tools/getCert.mjs) tool wraps the download:
 
-    ```powershell
-    # Pull cert + password to %TEMP%\TypeAgent-Development-Certificate.pfx
-    node ts/tools/scripts/getCert.mjs pull
-    ```
+   ```powershell
+   # Pull cert + password to %TEMP%\TypeAgent-Development-Certificate.pfx
+   node ts/tools/scripts/getCert.mjs pull
+   ```
 
 2. **Install the cert into both CurrentUser and LocalMachine stores.** AppX deployment runs in SYSTEM context and only honors LocalMachine certs, so the cert must live there for `Add-AppxPackage` to accept the MSIX signature. SignTool itself uses CurrentUser. Use the helper in elevated PowerShell:
 
-    ```powershell
-    node ts/tools/scripts/getCert.mjs install --trusted-root
-    ```
+   ```powershell
+   node ts/tools/scripts/getCert.mjs install --trusted-root
+   ```
 
-    `install` puts the cert in `CurrentUser\My`, `CurrentUser\TrustedPeople`, `LocalMachine\My`, `LocalMachine\TrustedPeople`. `--trusted-root` additionally adds it to `LocalMachine\Root` so AppX deployment trusts the chain (interactive — Windows will prompt for consent on the root install).
+   `install` puts the cert in `CurrentUser\My`, `CurrentUser\TrustedPeople`, `LocalMachine\My`, `LocalMachine\TrustedPeople`. `--trusted-root` additionally adds it to `LocalMachine\Root` so AppX deployment trusts the chain (interactive — Windows will prompt for consent on the root install).
 
 3. **Cert renewal.** If signtool fails with "no Code Signing EKU found", the cert needs a new version with the right EKU:
 
-    ```powershell
-    node ts/tools/scripts/getCert.mjs renew
-    node ts/tools/scripts/getCert.mjs install --trusted-root
-    ```
+   ```powershell
+   node ts/tools/scripts/getCert.mjs renew
+   node ts/tools/scripts/getCert.mjs install --trusted-root
+   ```
 
 **Build the helper:**
 
