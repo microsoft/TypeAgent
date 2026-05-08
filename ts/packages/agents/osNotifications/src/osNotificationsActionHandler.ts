@@ -310,8 +310,9 @@ class OsNotificationsTestCommandHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             message: {
-                description: "Notification body text",
+                description: "Notification body text (defaults to 'Hello World!')",
                 implicitQuotes: true,
+                optional: true,
             },
         },
         flags: {
@@ -334,7 +335,7 @@ class OsNotificationsTestCommandHandler implements CommandHandler {
         const action: TestOsNotificationAction = {
             actionName: "testOsNotification",
             parameters: {
-                message: params.args.message,
+                message: params.args.message ?? "Hello World!",
                 app: params.flags.app as string,
                 title: params.flags.title as string,
             },
