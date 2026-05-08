@@ -58,7 +58,7 @@ Agents we plan to onboard, ordered by impact (silent-failure cases first). Mark 
 - [x] **github-cli** — `gh auth status` probe distinguishes ENOENT (not installed) from non-zero exit (not authenticated). Manual config; no `setup` hook (`gh auth login` is interactive).
 - [x] **desktop** — `autoShell.exe` (.NET, Windows-only). `"unsupported"` on macOS/Linux; `"setup-required"` when the binary hasn't been built; `setup` runs `dotnet build` on `dotnet/autoShell/autoShell.csproj`.
 - [x] **calendar** + **email** — Microsoft Graph or Google OAuth. Shared evaluator in `graph-utils/readiness.ts` (`evaluateGraphReadiness` + `probeGraphConfig`) reports `setup-required` for missing env vars (manual config) and unauthenticated providers (in-chat sign-in via yes/no card → `provider.login()` device-code flow).
-- [ ] **code** — VS Code extension WebSocket on `CODE_WEBSOCKET_PORT`. Currently throws "Unable to contact code backend" per-action; cheap port probe in `checkReadiness` would catch it upfront.
+- [x] **code** — VS Code extension WebSocket. The agent IS the WebSocket server; "ready" means the Coda extension client has an open connection. `setup` spawns `code --new-window` and polls the server for client connection up to 30s (yes/no card → poll w/ progress).
 - [ ] **playerLocal** — needs one of `afplay` / `mpv` / `ffplay` / VLC depending on platform. Falls back gracefully today; upfront guidance would help.
 - [ ] **markdown** / **montage** — local-view subprocess + port. Low priority; subprocess lifecycle makes this trickier.
 - [ ] **image** — relies on the dispatcher's OpenAI key. No agent-local readiness probe today.
