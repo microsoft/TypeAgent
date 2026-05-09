@@ -7,10 +7,16 @@ import {
     AppAgentManifest,
     SessionContext,
     DisplayContent,
+    type GrammarValidationRequest,
+    type GrammarValidationResult,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { IndexData } from "image-memory";
 import { IndexManager } from "../context/indexManager.js";
+import { validateGrammarPatternsImpl } from "../validation/grammarValidationService.mjs";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:dispatcher:sessionContext");
 
 export function createSessionContext<T = unknown>(
     name: string,
@@ -169,6 +175,23 @@ export function createSessionContext<T = unknown>(
         },
         async reloadAgentSchema(): Promise<void> {
             await context.agents.reloadAgentSchema(name, context);
+        },
+        async validateGrammarPatterns(
+            request: GrammarValidationRequest,
+        ): Promise<GrammarValidationResult> {
+            debug(
+                `[${name}] Validating ${request.patterns.length} patterns for "${request.actionName}"`,
+            );
+
+            // Use command lock for thread safety
+            return context.commandLock(async () => {
+                return await validateGrammarPatternsImpl(
+                    name,
+                    request,
+                    context.agentGrammarRegistry,
+                    context.agentCache,
+                );
+            });
         },
     };
 

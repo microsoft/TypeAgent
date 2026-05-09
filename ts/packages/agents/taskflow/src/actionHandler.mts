@@ -8,6 +8,7 @@ import {
     type SessionContext,
     type SchemaContent,
     type GrammarContent,
+    AppAgentEvent,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
@@ -209,6 +210,51 @@ async function handleTaskFlowAction(
                 return createActionResultFromError(
                     `Script validation failed: ${errors.join("; ")}`,
                 );
+            }
+
+            // Validate grammar patterns before saving
+            if (grammarPatterns.length > 0 && context.sessionContext.validateGrammarPatterns) {
+                const validationResult =
+                    await context.sessionContext.validateGrammarPatterns({
+                        actionName: flowName,
+                        description,
+                        patterns: grammarPatterns,
+                    });
+
+                if (!validationResult.approved) {
+                    const errorMsg = [
+                        "❌ Grammar pattern validation failed:",
+                        "",
+                        ...(validationResult.errors ?? []),
+                    ].join("\n");
+
+                    const suggestionMsg = validationResult.suggestions
+                        ? [
+                              "",
+                              "Suggestions:",
+                              ...validationResult.suggestions,
+                          ].join("\n")
+                        : "";
+
+                    return createActionResultFromError(
+                        errorMsg + suggestionMsg,
+                    );
+                }
+
+                if (validationResult.warnings && validationResult.warnings.length > 0) {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Warning,
+                        `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+                    );
+                }
+
+                // Use refined patterns if provided
+                if (
+                    validationResult.patterns &&
+                    validationResult.patterns.length > 0
+                ) {
+                    grammarPatterns = validationResult.patterns;
+                }
             }
 
             // Create recipe

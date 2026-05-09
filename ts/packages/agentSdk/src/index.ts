@@ -22,6 +22,8 @@ export {
     AppAgentInitSettings,
     ResolveEntityResult,
     ActivityCacheSpec,
+    type GrammarValidationRequest,
+    type GrammarValidationResult,
 } from "./agentInterface.js";
 
 export {

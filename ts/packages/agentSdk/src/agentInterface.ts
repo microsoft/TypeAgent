@@ -234,6 +234,12 @@ export interface SessionContext<T = unknown> {
 
     // Experimental: get the available indexes
     indexes(type: "image" | "email" | "website" | "all"): Promise<any[]>;
+
+    // Validate grammar patterns before creating a workflow.
+    // Tests patterns for quality and collisions against all registered agents.
+    validateGrammarPatterns?(
+        request: GrammarValidationRequest,
+    ): Promise<GrammarValidationResult>;
 }
 
 // TODO: only utf8 & base64 is supported for now.
@@ -295,3 +301,59 @@ export interface ActionContext<T = void> {
         active: boolean,
     ): Promise<void>;
 }
+
+//==============================================================================
+// Grammar Validation Types
+//==============================================================================
+
+/**
+ * Request for grammar pattern validation before creating a workflow.
+ */
+export type GrammarValidationRequest = {
+    /** Name of the action being created */
+    actionName: string;
+    /** Description of what the action does */
+    description: string;
+    /** Grammar patterns to validate (AGR format patterns) */
+    patterns: string[];
+    /** Optional: Parameter definitions for context */
+    parameters?: Record<
+        string,
+        {
+            type: string;
+            required: boolean;
+            description: string;
+            default?: unknown;
+        }
+    >;
+};
+
+/**
+ * Result of grammar pattern validation.
+ */
+export type GrammarValidationResult = {
+    /** Whether patterns are approved for use */
+    approved: boolean;
+    /** Refined/improved patterns (use these if provided) */
+    patterns?: string[];
+    /** Non-blocking warnings */
+    warnings?: string[];
+    /** Blocking errors (why approval failed) */
+    errors?: string[];
+    /** Suggestions for improvement */
+    suggestions?: string[];
+    /** Pattern quality scores */
+    qualityScores?: Array<{
+        pattern: string;
+        score: number; // 1-5
+        reasoning: string;
+    }>;
+    /** Detected collisions */
+    collisions?: Array<{
+        pattern: string;
+        collidingAgent: string;
+        collidingAction: string;
+        testUtterance: string;
+        severity: "critical" | "warning" | "info";
+    }>;
+};

@@ -133,6 +133,7 @@ export class BenchmarkRunner {
             "grammar-match.json",
             "grammar-subschemas.json",
             "grammar-competition.json",
+            "grammar-collision.json",
             "execution.json",
             "llm-translation.json",
             "fallback-chain.json",
