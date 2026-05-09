@@ -60,12 +60,8 @@ export function assembleDynamicGrammar(
     builtInRuleNames?: string[],
     builtInRuleTexts?: string[],
 ): string {
-    const ruleNames: string[] = builtInRuleNames
-        ? [...builtInRuleNames]
-        : [];
-    const ruleTexts: string[] = builtInRuleTexts
-        ? [...builtInRuleTexts]
-        : [];
+    const ruleNames: string[] = builtInRuleNames ? [...builtInRuleNames] : [];
+    const ruleTexts: string[] = builtInRuleTexts ? [...builtInRuleTexts] : [];
 
     for (const entry of entries) {
         if (entry.enabled === false) continue;

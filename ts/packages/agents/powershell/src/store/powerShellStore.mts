@@ -449,9 +449,7 @@ export class PowerShellStore {
     }
 
     getDynamicGrammarText(): string {
-        return assembleDynamicGrammar(
-            Object.values(this.index.flows),
-        );
+        return assembleDynamicGrammar(Object.values(this.index.flows));
     }
 
     private async regenerateGrammarRules(): Promise<void> {

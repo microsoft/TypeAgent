@@ -36,18 +36,14 @@ const GENERIC_FLOW_PARAMS =
 export function createSandboxDeclarationGenerator(
     config: SandboxDeclarationConfig,
 ): {
-    generate(
-        parameters?: Record<string, FlowParameterDefinition>,
-    ): string;
+    generate(parameters?: Record<string, FlowParameterDefinition>): string;
     generateGeneric(): string;
 } {
     let cachedSandboxDts: string | undefined;
 
     function getSandboxDts(): string {
         if (!cachedSandboxDts) {
-            const dtsPath = config.candidatePaths.find((p) =>
-                fs.existsSync(p),
-            );
+            const dtsPath = config.candidatePaths.find((p) => fs.existsSync(p));
             if (!dtsPath) {
                 throw new Error(
                     `${config.sandboxName} not found in any candidate path`,
@@ -59,9 +55,7 @@ export function createSandboxDeclarationGenerator(
     }
 
     return {
-        generate(
-            parameters?: Record<string, FlowParameterDefinition>,
-        ): string {
+        generate(parameters?: Record<string, FlowParameterDefinition>): string {
             const paramsInterface = parameters
                 ? generateFlowParamsInterface(parameters)
                 : GENERIC_FLOW_PARAMS;

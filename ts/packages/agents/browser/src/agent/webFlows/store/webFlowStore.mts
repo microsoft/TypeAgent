@@ -232,9 +232,7 @@ export class WebFlowStore {
     // ── Dynamic grammar ────────────────────────────────────────────────
 
     getDynamicGrammarText(): string {
-        return assembleDynamicGrammar(
-            Object.values(this.index?.flows ?? {}),
-        );
+        return assembleDynamicGrammar(Object.values(this.index?.flows ?? {}));
     }
 
     // ── Dynamic schema ─────────────────────────────────────────────────

@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createScriptExecutor, BLOCKED_IDENTIFIERS } from "@typeagent/agent-flows";
+import {
+    createScriptExecutor,
+    BLOCKED_IDENTIFIERS,
+} from "@typeagent/agent-flows";
 import { WebFlowBrowserAPI } from "./webFlowBrowserApi.mjs";
 import { WebFlowResult } from "./types.js";
 

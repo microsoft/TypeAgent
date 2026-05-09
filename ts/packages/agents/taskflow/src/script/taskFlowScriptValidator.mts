@@ -34,9 +34,7 @@ export function validateTaskFlowScript(
     return validator.validate(
         source,
         declaredParams,
-        flowParameters as
-            | Record<string, FlowParameterDefinition>
-            | undefined,
+        flowParameters as Record<string, FlowParameterDefinition> | undefined,
     );
 }
 

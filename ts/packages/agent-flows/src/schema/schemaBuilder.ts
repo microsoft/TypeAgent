@@ -49,10 +49,7 @@ export function generateFlowActionTypes(enabledFlows: FlowSchemaEntry[]): {
     return { typeDefinitions: lines.join("\n"), typeNames };
 }
 
-export function buildUnionType(
-    unionName: string,
-    typeNames: string[],
-): string {
+export function buildUnionType(unionName: string, typeNames: string[]): string {
     if (typeNames.length === 0) {
         return `export type ${unionName} = never;`;
     }

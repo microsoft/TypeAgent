@@ -30,15 +30,14 @@ export function validateWebFlowScript(
     declaredParams: string[],
     flow?: WebFlowDefinition,
 ): ValidationResult {
-    const flowParams: Record<string, FlowParameterDefinition> | undefined =
-        flow
-            ? Object.fromEntries(
-                  Object.entries(flow.parameters).map(([k, v]) => [
-                      k,
-                      { type: v.type, required: v.required },
-                  ]),
-              )
-            : undefined;
+    const flowParams: Record<string, FlowParameterDefinition> | undefined = flow
+        ? Object.fromEntries(
+              Object.entries(flow.parameters).map(([k, v]) => [
+                  k,
+                  { type: v.type, required: v.required },
+              ]),
+          )
+        : undefined;
     return validator.validate(source, declaredParams, flowParams);
 }
 
