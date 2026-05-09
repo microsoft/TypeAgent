@@ -52,10 +52,16 @@ import { PowerShellProcessesActions } from "./processesActionsSchema.mts";
       -> { actionName: "stopProcess", parameters: { name } };
 
 <StartProcess> =
-    (start|run|launch|open) $(path:wildcard)
+    (start|launch|run) (application|program|app) $(path:wildcard)
+      -> { actionName: "startProcess", parameters: { path } }
+  | (start|launch) (process|executable) $(path:wildcard)
       -> { actionName: "startProcess", parameters: { path } }
   | (start|run|launch) $(path:wildcard) (with)? $(arguments:wildcard)
-      -> { actionName: "startProcess", parameters: { path, arguments } };
+      -> { actionName: "startProcess", parameters: { path, arguments } }
+  | run (script|command|executable) $(path:wildcard)
+      -> { actionName: "startProcess", parameters: { path } }
+  | open (application|program) $(path:wildcard)
+      -> { actionName: "startProcess", parameters: { path } };
 
 <WaitProcess> =
     wait for (process)? $(name:wildcard) (to)? (exit|finish|complete)?
