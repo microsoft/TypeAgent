@@ -27,6 +27,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-flows": "workspace:*",
     "debug": "^4.3.4",
     "typescript": "~5.4.5"
   },

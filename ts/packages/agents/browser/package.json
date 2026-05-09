@@ -61,6 +61,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/agent-flows": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
