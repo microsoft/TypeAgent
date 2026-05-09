@@ -349,6 +349,9 @@ function registerClient(
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
+                    // Keep all Info/Warning/Error events in the @notify
+                    // buffer (including osNotifications) so @notify show can
+                    // surface them consistently.
                     notifications.push({
                         event,
                         source,
