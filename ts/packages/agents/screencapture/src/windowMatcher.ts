@@ -87,14 +87,15 @@ export function createProgramNameIndex(
             SimilarityType.Dot,
         );
 
-        return topN.map((m: { item: { toString: () => any }; score: any }) => {
-            const itemIndex = Number(m.item);
+        return topN.map((m) => {
+            const itemIndex = m.item;
+            const programName = programNames[itemIndex];
 
             return {
                 score: m.score,
                 item: {
-                    name: m.item.toString(),
-                    value: programNames[itemIndex],
+                    name: programName,
+                    value: programName,
                 },
             };
         });
