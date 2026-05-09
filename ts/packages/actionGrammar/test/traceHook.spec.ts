@@ -207,4 +207,27 @@ describe("trace hook", () => {
             );
         }
     });
+
+    // ---------------------------------------------------------------
+    // Rule names populated in trace events
+    // ---------------------------------------------------------------
+
+    it("populates non-empty rule names on trace events", () => {
+        const { events } = collect(simple, "pause");
+        const withRule = events.filter((e) => e.kind !== "backtrack");
+        expect(withRule.length).toBeGreaterThan(0);
+        for (const e of withRule) {
+            expect((e as RuleEnteredEvent).rule).toBeTruthy();
+        }
+    });
+
+    it("rule names include the grammar rule name", () => {
+        const { events } = collect(nested, "do play");
+        const entered = events.filter(
+            (e): e is RuleEnteredEvent => e.kind === "ruleEntered",
+        );
+        const names = entered.map((e) => e.rule);
+        expect(names.some((n) => n.includes("Start"))).toBe(true);
+        expect(names.some((n) => n.includes("Action"))).toBe(true);
+    });
 });

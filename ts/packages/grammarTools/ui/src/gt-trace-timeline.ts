@@ -137,6 +137,16 @@ export class GtTraceTimeline extends LitElement {
             .depth-indent {
                 display: inline-block;
             }
+            .group-toggle {
+                display: inline-block;
+                width: 1.2em;
+                font-size: 1.3em;
+                line-height: 1;
+                vertical-align: middle;
+                cursor: pointer;
+                user-select: none;
+                color: var(--vscode-descriptionForeground, #9d9d9d);
+            }
             .slots {
                 padding: 2px 8px 2px 40px;
                 font-family: var(--gt-mono-font-family, monospace);
@@ -184,6 +194,9 @@ export class GtTraceTimeline extends LitElement {
 
     @state()
     private _expandedRows: Set<number> = new Set();
+
+    @state()
+    private _collapsedGroups: Set<number> = new Set();
 
     @state()
     private _hiddenKinds: Set<EventKindFilter> = new Set();
@@ -242,12 +255,73 @@ export class GtTraceTimeline extends LitElement {
         this._expandedRows = next;
     }
 
-    private _visibleEvents(): Array<{ event: TraceEvent; index: number }> {
+    private _toggleCollapse(idx: number): void {
+        const next = new Set(this._collapsedGroups);
+        if (next.has(idx)) {
+            next.delete(idx);
+        } else {
+            next.add(idx);
+        }
+        this._collapsedGroups = next;
+    }
+
+    private _visibleEvents(): Array<{
+        event: TraceEvent;
+        index: number;
+        depth: number;
+        groupSize: number; // >0 for ruleEntered with children
+    }> {
         if (!this._trace) return [];
-        return this._trace.events
-            .map((event, index) => ({ event, index }))
+        const events = this._trace.events;
+        const n = events.length;
+
+        // Compute depth for every event.  ruleEntered carries an
+        // explicit depth and sits at that level; events that follow
+        // (partAttempted, partMatched, etc.) are *inside* the rule,
+        // so they render one level deeper.
+        const depths: number[] = new Array(n);
+        let curDepth = 0;
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "ruleEntered") {
+                curDepth = e.depth;
+                depths[i] = curDepth;
+            } else {
+                depths[i] = curDepth + 1;
+            }
+        }
+
+        // For each ruleEntered, compute how many events belong to
+        // its group (events at a strictly greater depth).
+        const groupSize: number[] = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) {
+            if (events[i].kind === "ruleEntered") {
+                const d = depths[i];
+                let j = i + 1;
+                while (j < n && depths[j] > d) j++;
+                groupSize[i] = j - i - 1;
+            }
+        }
+
+        // Build the hidden set from collapsed groups.
+        const hidden = new Set<number>();
+        for (const gi of this._collapsedGroups) {
+            const d = depths[gi];
+            for (let j = gi + 1; j < n && depths[j] > d; j++) {
+                hidden.add(j);
+            }
+        }
+
+        return events
+            .map((event, index) => ({
+                event,
+                index,
+                depth: depths[index],
+                groupSize: groupSize[index],
+            }))
             .filter(
-                ({ event }) =>
+                ({ event, index }) =>
+                    !hidden.has(index) &&
                     !this._hiddenKinds.has(event.kind as EventKindFilter),
             );
     }
@@ -355,86 +429,113 @@ export class GtTraceTimeline extends LitElement {
                           <thead>
                               <tr>
                                   <th>#</th>
-                                  <th>Event</th>
                                   <th>Rule</th>
-                                  <th>Pos</th>
+                                  <th>Event</th>
+                                  <th>Input Pos</th>
                                   <th>Detail</th>
                               </tr>
                           </thead>
                           <tbody>
-                              ${visible.map(({ event, index }) => {
-                                  const depth =
-                                      event.kind === "ruleEntered"
-                                          ? event.depth
-                                          : 0;
-                                  const ruleName =
-                                      event.kind !== "backtrack"
-                                          ? event.rule
-                                          : undefined;
-                                  const hasSlots =
-                                      event.kind === "partMatched" &&
-                                      "slots" in event;
-                                  return html`
-                                      <tr
-                                          class="${this._selectedRow === index
-                                              ? "selected"
-                                              : ""}"
-                                          @mouseenter=${() => {
-                                              this._hoveredRow = index;
-                                          }}
-                                          @mouseleave=${() => {
-                                              this._hoveredRow = -1;
-                                          }}
-                                          @click=${() => {
-                                              this._selectedRow = index;
-                                              if (hasSlots)
-                                                  this._toggleExpand(index);
-                                          }}
-                                      >
-                                          <td>${index + 1}</td>
-                                          <td>
-                                              <span
-                                                  class="event-icon"
-                                                  style="color: ${EVENT_COLORS[
-                                                      event.kind
-                                                  ]}"
-                                                  >${EVENT_ICONS[
-                                                      event.kind
-                                                  ]}</span
-                                              >
-                                              ${event.kind}
-                                          </td>
-                                          <td>
-                                              <span
-                                                  class="depth-indent"
-                                                  style="width: ${depth * 12}px"
-                                              ></span>
-                                              ${this._renderRuleLink(
-                                                  ruleName ?? "",
-                                              )}
-                                          </td>
-                                          <td>${event.inputPos}</td>
-                                          <td>${this._eventDetail(event)}</td>
-                                      </tr>
-                                      ${hasSlots &&
-                                      this._expandedRows.has(index)
-                                          ? html`<tr>
-                                                <td colspan="5">
-                                                    <div class="slots">
-                                                        slots:
-                                                        ${JSON.stringify(
-                                                            (
-                                                                event as PartMatchedEvent & {
-                                                                    slots: unknown;
-                                                                }
-                                                            ).slots,
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>`
-                                          : nothing}
-                                  `;
-                              })}
+                              ${visible.map(
+                                  ({ event, index, depth, groupSize }) => {
+                                      const ruleName =
+                                          event.kind !== "backtrack"
+                                              ? event.rule
+                                              : undefined;
+                                      const hasSlots =
+                                          event.kind === "partMatched" &&
+                                          "slots" in event;
+                                      const isGroup = groupSize > 0;
+                                      const collapsed =
+                                          this._collapsedGroups.has(index);
+                                      return html`
+                                          <tr
+                                              class="${this._selectedRow ===
+                                              index
+                                                  ? "selected"
+                                                  : ""}"
+                                              @mouseenter=${() => {
+                                                  this._hoveredRow = index;
+                                              }}
+                                              @mouseleave=${() => {
+                                                  this._hoveredRow = -1;
+                                              }}
+                                              @click=${() => {
+                                                  this._selectedRow = index;
+                                                  if (hasSlots)
+                                                      this._toggleExpand(index);
+                                              }}
+                                          >
+                                              <td>${index + 1}</td>
+                                              <td>
+                                                  <span
+                                                      class="depth-indent"
+                                                      style="width: ${depth *
+                                                      12}px"
+                                                  ></span
+                                                  >${isGroup
+                                                      ? html`<span
+                                                            class="group-toggle"
+                                                            @click=${(
+                                                                e: Event,
+                                                            ) => {
+                                                                e.stopPropagation();
+                                                                this._toggleCollapse(
+                                                                    index,
+                                                                );
+                                                            }}
+                                                            >${collapsed
+                                                                ? "\u25B6"
+                                                                : "\u25BC"}</span
+                                                        >`
+                                                      : nothing}
+                                                  ${this._renderRuleLink(
+                                                      ruleName ?? "",
+                                                  )}${isGroup && collapsed
+                                                      ? html`<span
+                                                            class="muted"
+                                                        >
+                                                            (${groupSize})</span
+                                                        >`
+                                                      : nothing}
+                                              </td>
+                                              <td>
+                                                  <span
+                                                      class="event-icon"
+                                                      style="color: ${EVENT_COLORS[
+                                                          event.kind
+                                                      ]}"
+                                                      >${EVENT_ICONS[
+                                                          event.kind
+                                                      ]}</span
+                                                  >
+                                                  ${event.kind}
+                                              </td>
+                                              <td>${event.inputPos}</td>
+                                              <td>
+                                                  ${this._eventDetail(event)}
+                                              </td>
+                                          </tr>
+                                          ${hasSlots &&
+                                          this._expandedRows.has(index)
+                                              ? html`<tr>
+                                                    <td colspan="5">
+                                                        <div class="slots">
+                                                            slots:
+                                                            ${JSON.stringify(
+                                                                (
+                                                                    event as PartMatchedEvent & {
+                                                                        slots: unknown;
+                                                                    }
+                                                                ).slots,
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>`
+                                              : nothing}
+                                      `;
+                                  },
+                              )}
                           </tbody>
                       </table>
 
