@@ -1387,6 +1387,9 @@ importers:
       '@azure/identity':
         specifier: ^4.9.1
         version: 4.10.0
+      '@azure/identity-broker':
+        specifier: ^1.4.0
+        version: 1.4.0
       '@azure/identity-cache-persistence':
         specifier: ^1.1.1
         version: 1.2.0
@@ -5719,6 +5722,10 @@ packages:
     resolution: {integrity: sha512-fPnfL4JsmJJ/jEYUhlznKfrEr2pMvJwBncGVcUC2Xi7Nlj0MrUMRE+UOrptl/lRV2W7l68Br+b9Ikzm0KiZZHg==}
     engines: {node: '>=20.0.0'}
 
+  '@azure/identity-broker@1.4.0':
+    resolution: {integrity: sha512-0JQhUf+VNqurmwfXK7oBSoOg0eEnPEr6yKvArDeMlM4B4eN4ugrKoLUEFgDWUNfixgSGg0SbOrH5iwoBUj1CpQ==}
+    engines: {node: '>=20.0.0'}
+
   '@azure/identity-cache-persistence@1.2.0':
     resolution: {integrity: sha512-ZYr6iiE6d/Tkt4jck0cQv9grZ1BR4u5LXJmB1vblU/WGIHspO6Bv3TJMvQat2sQSOG4Wz7busgg0pajP4gNJzA==}
     engines: {node: '>=18.0.0'}
@@ -5767,16 +5774,31 @@ packages:
     resolution: {integrity: sha512-EotmBz42apYGjqiIV9rDUdptaMptpTn4TdGf3JfjLvFvinSe9BJ6ywU92K9ky+t/b0ghbeTSe9RfqlgLh8f2jA==}
     engines: {node: '>=0.8.0'}
 
+  '@azure/msal-common@16.6.0':
+    resolution: {integrity: sha512-FemGljX0csPlBMUE5GUan7BfRn1emeMRUhHSARhqzLN6LA9nt+MgzmAQ1xVqdLm+6plVoxsq9mS5eoyKtpPSgA==}
+    engines: {node: '>=0.8.0'}
+
   '@azure/msal-node-extensions@1.5.13':
     resolution: {integrity: sha512-5JQaPS/hGN5iL1rNBr+t17eVrpIjp8oXnCIrkj8WX4a8YbhlHaw+GhQthetdkMMvJE5RwbdzEN4Vm6zKX9ArGQ==}
     engines: {node: '>=16'}
 
+  '@azure/msal-node-extensions@5.2.0':
+    resolution: {integrity: sha512-3qrb4wxYBfJarrG9NRG5jRVhZfL9vZaDpeq2RDKPiNnA+e0/TKS8JzvXfIZqxn4VIP6/9P6/SSCJS+Y18LIAuw==}
+    engines: {node: '>=20'}
+
   '@azure/msal-node-runtime@0.18.2':
     resolution: {integrity: sha512-v45fyBQp80BrjZAeGJXl+qggHcbylQiFBihr0ijO2eniDCW9tz5TZBKYsqzH06VuiRaVG/Sa0Hcn4pjhJqFSTw==}
+
+  '@azure/msal-node-runtime@0.20.5':
+    resolution: {integrity: sha512-DqY28Lpx67AsMbT3FYal3MnDZx62Pblnhp1qA+HGtgEsm3jK8COkJVCrhVsprn80PKQfAOdKRuxgVYyvmv2rOg==}
 
   '@azure/msal-node@3.5.3':
     resolution: {integrity: sha512-c5mifzHX5mwm5JqMIlURUyp6LEEdKF1a8lmcNRLBo0lD7zpSYPHupa4jHyhJyg9ccLwszLguZJdk2h3ngnXwNw==}
     engines: {node: '>=16'}
+
+  '@azure/msal-node@5.2.0':
+    resolution: {integrity: sha512-b/ak8XAqpnGk1N1nsyTVV0Remp48BP3QrGQZ1uCMcvg2S8X1eSXzhHQZEae2oX276Q4KFAqCUswanDtcvIKLrw==}
+    engines: {node: '>=20'}
 
   '@azure/opentelemetry-instrumentation-azure-sdk@1.0.0-beta.8':
     resolution: {integrity: sha512-8R+gRqNhbK1lv6CIGt55a73LsuK9EKU54323FFrQqSpGduQjENpRa3Wy+AWzw/i5YGzTuLL8NN5vifCOJdeJcg==}
@@ -12886,9 +12908,6 @@ packages:
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
-  nan@2.26.2:
-    resolution: {integrity: sha512-0tTvBTYkt3tdGw22nrAy50x7gpbGCCFH3AFcyS5WiUu7Eu4vWlri1woE6qHBSfy11vksDqkiwjOnlR7WV8G1Hw==}
-
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -14981,9 +15000,6 @@ packages:
     resolution: {integrity: sha512-KMWqdlOcjCYdtIJpicDSFBQ8nFwS2i9sslAd6f4+CBGcU4gist2REnr2fxj2YocvJFxSF3ZOHLYLVZnUxv4BZQ==}
     engines: {node: '>=0.10.0'}
 
-  usocket@0.3.0:
-    resolution: {integrity: sha512-V/H02RNiaOCJZuPoKont/y12VJaImC6C5xW7OzPFjYu9qnig0yv9hyp9E7Wqjm6d8yZuZouH3NAfDATVMgh2SQ==}
-
   utf8-byte-length@1.0.4:
     resolution: {integrity: sha512-4+wkEYLBbWxqTahEsWrhxepcoVOJ+1z5PGIjPZxRkytcdSUaNjIjBM7Xn8E+pdSuV7SzvWovBFA54FO0JSoqhA==}
 
@@ -16465,6 +16481,16 @@ snapshots:
       - '@azure/core-client'
       - supports-color
 
+  '@azure/identity-broker@1.4.0':
+    dependencies:
+      '@azure/core-auth': 1.10.1
+      '@azure/identity': 4.10.0
+      '@azure/msal-node': 5.2.0
+      '@azure/msal-node-extensions': 5.2.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@azure/identity-cache-persistence@1.2.0':
     dependencies:
       '@azure/core-auth': 1.9.0
@@ -16598,19 +16624,34 @@ snapshots:
 
   '@azure/msal-common@15.6.0': {}
 
+  '@azure/msal-common@16.6.0': {}
+
   '@azure/msal-node-extensions@1.5.13':
     dependencies:
       '@azure/msal-common': 15.6.0
       '@azure/msal-node-runtime': 0.18.2
       keytar: 7.9.0
 
+  '@azure/msal-node-extensions@5.2.0':
+    dependencies:
+      '@azure/msal-common': 16.6.0
+      '@azure/msal-node-runtime': 0.20.5
+      keytar: 7.9.0
+
   '@azure/msal-node-runtime@0.18.2': {}
+
+  '@azure/msal-node-runtime@0.20.5': {}
 
   '@azure/msal-node@3.5.3':
     dependencies:
       '@azure/msal-common': 15.6.0
       jsonwebtoken: 9.0.2
       uuid: 8.3.2
+
+  '@azure/msal-node@5.2.0':
+    dependencies:
+      '@azure/msal-common': 16.6.0
+      jsonwebtoken: 9.0.2
 
   '@azure/opentelemetry-instrumentation-azure-sdk@1.0.0-beta.8':
     dependencies:
@@ -22230,10 +22271,7 @@ snapshots:
       jsbi: 2.0.5
       long: 4.0.0
       safe-buffer: 5.2.1
-      usocket: 0.3.0
       xml2js: 0.4.23
-    transitivePeerDependencies:
-      - supports-color
 
   debug@2.6.9:
     dependencies:
@@ -25923,8 +25961,6 @@ snapshots:
       object-assign: 4.1.1
       thenify-all: 1.6.0
 
-  nan@2.26.2: {}
-
   nanoid@3.3.11: {}
 
   nanoid@5.1.5: {}
@@ -28446,14 +28482,6 @@ snapshots:
   user-home@2.0.0:
     dependencies:
       os-homedir: 1.0.2
-
-  usocket@0.3.0:
-    dependencies:
-      bindings: 1.5.0
-      nan: 2.26.2
-      node-gyp: 12.2.0
-    transitivePeerDependencies:
-      - supports-color
 
   utf8-byte-length@1.0.4: {}
 
