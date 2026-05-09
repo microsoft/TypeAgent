@@ -1027,6 +1027,16 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agent-flows:
+    dependencies:
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+
   packages/agentRpc:
     dependencies:
       '@typeagent/agent-sdk':
@@ -1373,6 +1383,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../actionSchema
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -2506,6 +2519,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.92
         version: 0.2.105(zod@4.3.6)
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2632,6 +2648,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.101
         version: 0.2.105(zod@4.3.6)
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk

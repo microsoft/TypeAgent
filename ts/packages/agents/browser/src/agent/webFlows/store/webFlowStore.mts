@@ -9,6 +9,12 @@ import {
     WebFlowScope,
 } from "../types.js";
 import { Storage } from "@typeagent/agent-sdk";
+import {
+    generateGrammarRuleText,
+    assembleDynamicGrammar,
+    generateFlowActionTypes,
+    buildUnionType,
+} from "@typeagent/agent-flows";
 
 /**
  * Persistent storage for WebFlow definitions and scripts.
@@ -226,24 +232,7 @@ export class WebFlowStore {
     // ── Dynamic grammar ────────────────────────────────────────────────
 
     getDynamicGrammarText(): string {
-        const ruleNames: string[] = [];
-        const ruleTexts: string[] = [];
-
-        for (const entry of Object.values(this.index?.flows ?? {})) {
-            if (!entry.grammarRuleText) continue;
-            ruleTexts.push(entry.grammarRuleText);
-            for (const line of entry.grammarRuleText.split("\n")) {
-                const m = line.match(/^<(\w+)>/);
-                if (m && !ruleNames.includes(m[1])) {
-                    ruleNames.push(m[1]);
-                }
-            }
-        }
-
-        if (ruleNames.length === 0) return "";
-
-        const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
-        return `${startRule}\n\n${ruleTexts.join("\n\n")}`;
+        return assembleDynamicGrammar(Object.values(this.index?.flows ?? {}));
     }
 
     // ── Dynamic schema ─────────────────────────────────────────────────
@@ -257,7 +246,7 @@ export class WebFlowStore {
                 ? flowNames.map((n) => `"${n}"`).join(" | ")
                 : "string";
 
-        const lines: string[] = [
+        const builtInTypes = [
             "// List available web flows",
             "export type ListWebFlows = {",
             '    actionName: "listWebFlows";',
@@ -283,57 +272,38 @@ export class WebFlowStore {
             "        description?: string;",
             "    };",
             "};",
-        ];
+        ].join("\n");
 
-        const flowTypeNames: string[] = [];
-        for (const [name, entry] of entries) {
-            const typeName =
-                name.charAt(0).toUpperCase() + name.slice(1) + "Action";
-            flowTypeNames.push(typeName);
-
+        // Build flow entries with scope labels in descriptions
+        const flowEntries = entries.map(([name, entry]) => {
             const scopeLabel =
                 entry.scope.type === "site" && entry.scope.domains
                     ? ` [${entry.scope.domains.join(", ")}]`
                     : "";
+            return {
+                actionName: name,
+                description: `${entry.description}${scopeLabel}`,
+                parameters: entry.parameters,
+            };
+        });
 
-            lines.push("");
-            lines.push(`// ${entry.description}${scopeLabel}`);
-            lines.push(`export type ${typeName} = {`);
-            lines.push(`    actionName: "${name}";`);
+        const { typeDefinitions, typeNames } =
+            generateFlowActionTypes(flowEntries);
 
-            if ((entry.parameters ?? []).length > 0) {
-                lines.push("    parameters: {");
-                for (const p of entry.parameters ?? []) {
-                    const tsType =
-                        p.type === "number"
-                            ? "number"
-                            : p.type === "boolean"
-                              ? "boolean"
-                              : "string";
-                    const opt = p.required ? "" : "?";
-                    const comment = p.valueOptions?.length
-                        ? ` // Options: ${p.valueOptions.join(", ")}`
-                        : "";
-                    lines.push(`        ${p.name}${opt}: ${tsType};${comment}`);
-                }
-                lines.push("    };");
-            }
+        const allTypeNames = [
+            "ListWebFlows",
+            "DeleteWebFlow",
+            "EditWebFlow",
+            ...typeNames,
+        ];
 
-            lines.push("};");
-        }
-
-        lines.push("");
-        lines.push("export type WebFlowActions =");
-        lines.push("    | ListWebFlows");
-        lines.push("    | DeleteWebFlow");
-        lines.push("    | EditWebFlow");
-        for (const typeName of flowTypeNames) {
-            lines.push(`    | ${typeName}`);
-        }
-        lines.push(";");
-        lines.push("");
-
-        return lines.join("\n");
+        return [
+            builtInTypes,
+            typeDefinitions,
+            "",
+            buildUnionType("WebFlowActions", allTypeNames),
+            "",
+        ].join("\n");
     }
 
     // ── Similarity search ──────────────────────────────────────────────
@@ -461,29 +431,7 @@ export class WebFlowStore {
     }
 }
 
-// ── Grammar generation ──────────────────────────────────────────────────────
-
-function generateGrammarRuleText(
-    actionName: string,
-    grammarPatterns: string[],
-): string {
-    const rules: string[] = [];
-
-    for (const pattern of grammarPatterns) {
-        const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
-            (m) => m[1],
-        );
-        const paramJson =
-            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
-
-        rules.push(
-            `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
-        );
-    }
-
-    return rules.join("\n");
-}
+// ── Grammar generation (uses @typeagent/workflow) ──────────────────────────
 
 function createEmptyIndex(): WebFlowIndex {
     return {
