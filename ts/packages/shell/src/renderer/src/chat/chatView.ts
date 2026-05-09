@@ -563,7 +563,10 @@ export class ChatView {
      * to know about the marker scanner.
      */
     public applyUserIconState(iconDiv: HTMLElement) {
-        const initial = (this.userGivenName || "U").trim().charAt(0).toUpperCase();
+        const initial = (this.userGivenName || "U")
+            .trim()
+            .charAt(0)
+            .toUpperCase();
         iconDiv.innerText = initial || "U";
         if (this.signedIn) {
             iconDiv.style.cursor = "default";
@@ -577,7 +580,8 @@ export class ChatView {
     }
 
     private refreshAllUserIcons() {
-        const icons = this.messageDiv.querySelectorAll<HTMLElement>(".user-icon");
+        const icons =
+            this.messageDiv.querySelectorAll<HTMLElement>(".user-icon");
         icons.forEach((el) => this.applyUserIconState(el));
     }
 

@@ -177,7 +177,9 @@ export class MailClient extends GraphClient {
             // useful message instead of returning a generic falsy result.
             await client.api(`me/messages/${msg_id}/forward`).post(message);
             this.logger(
-                chalk.green(`Mail forwarded successfully for msg_id: ${msg_id}`),
+                chalk.green(
+                    `Mail forwarded successfully for msg_id: ${msg_id}`,
+                ),
             );
             return true;
         } catch (error) {

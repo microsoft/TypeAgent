@@ -964,7 +964,10 @@ async function handleFindEmailAction(
             msgRef.senders,
             emailProvider,
         );
-        const resolved = await resolveRecipients(expandedSenders, emailProvider);
+        const resolved = await resolveRecipients(
+            expandedSenders,
+            emailProvider,
+        );
         if (resolved.length > 0) {
             searchQuery.sender = resolved[0];
         }

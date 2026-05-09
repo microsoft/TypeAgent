@@ -2175,9 +2175,8 @@ export class ChatPanel {
     }
 
     private refreshAllUserIcons() {
-        const icons = this.messageDiv.querySelectorAll<HTMLElement>(
-            ".user-icon",
-        );
+        const icons =
+            this.messageDiv.querySelectorAll<HTMLElement>(".user-icon");
         icons.forEach((el) => this.applyUserIconState(el));
     }
 
