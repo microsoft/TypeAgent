@@ -11,6 +11,8 @@ export {
     SchemaManifest,
     AppAgent,
     AppAgentEvent,
+    AgentMessageKind,
+    AgentThreadHandle,
     SessionContext,
     StorageListOptions,
     Storage,
@@ -24,6 +26,8 @@ export {
     ActivityCacheSpec,
     type GrammarValidationRequest,
     type GrammarValidationResult,
+    ReadinessReport,
+    ReadinessState,
 } from "./agentInterface.js";
 
 export {

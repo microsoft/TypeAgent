@@ -7,8 +7,10 @@ import {
     EmailProviderType,
     EmailSearchQuery,
     createEmailProviderFromConfig,
+    evaluateGraphReadiness,
     GoogleEmailClient,
     parseDayRange,
+    probeGraphConfig,
 } from "graph-utils";
 import chalk from "chalk";
 import {
@@ -22,15 +24,21 @@ import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
 import {
     ActionContext,
+    ActionResult,
     AppAgent,
     AppAgentEvent,
+    ReadinessReport,
     SessionContext,
     TypeAgentAction,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
+    ChoiceManager,
     createActionResult,
+    createActionResultFromError,
     createActionResultFromHtmlDisplay,
+    createActionResultFromTextDisplay,
+    createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ActionResultSuccess } from "@typeagent/agent-sdk";
 import {
@@ -243,6 +251,13 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeEmailContext,
         updateAgentContext: updateEmailContext,
         executeAction: executeEmailAction,
+        checkReadiness: checkEmailReadiness,
+        setup: setupEmail,
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<EmailActionContext>)
+                .sessionContext.agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
         ...getCommandInterface(handlers),
     };
 }
@@ -255,6 +270,11 @@ type EmailActionContext = {
     sessionContext?: SessionContext<EmailActionContext>;
     /** Whether a background index operation is currently running */
     indexingInProgress: boolean;
+    /**
+     * Manages yes/no choice callbacks (currently only the setup-flow card).
+     * The AppAgent.handleChoice in instantiate() delegates back to this.
+     */
+    choiceManager: ChoiceManager;
 };
 
 async function initializeEmailContext(): Promise<EmailActionContext> {
@@ -269,7 +289,130 @@ async function initializeEmailContext(): Promise<EmailActionContext> {
         providerType: undefined,
         kpIndex,
         indexingInProgress: false,
+        choiceManager: new ChoiceManager(),
     };
+}
+
+// HH:MM timestamp for setup status updates — same convention as
+// calendar / desktop / screencapture.
+function emailTs(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// Cheap readiness probe: env config + provider.isAuthenticated().
+// See graphUtils/readiness.ts for the decision logic — shared with the
+// calendar agent since both use the same provider abstraction and env vars.
+async function checkEmailReadiness(
+    context: SessionContext<EmailActionContext>,
+): Promise<ReadinessReport> {
+    const config = probeGraphConfig(process.env);
+    let provider = context.agentContext?.emailProvider;
+    if (!provider && (config.msGraphConfigured || config.googleConfigured)) {
+        provider = createEmailProviderFromConfig();
+    }
+    return evaluateGraphReadiness("email", {
+        ...config,
+        isAuthenticated: provider?.isAuthenticated() === true,
+        providerName: provider?.providerName,
+    });
+}
+
+// setup hook — drives the device-code / OAuth login flow. Mirrors the
+// calendar agent's setup; the only differences are the agent name in
+// messaging and which factory we call.
+async function setupEmail(
+    actionContext: ActionContext<EmailActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const config = probeGraphConfig(process.env);
+    if (!config.msGraphConfigured && !config.googleConfigured) {
+        return createActionResultFromError(
+            "No email provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh email`.",
+        );
+    }
+    if (!ctx.emailProvider) {
+        ctx.emailProvider = createEmailProviderFromConfig();
+        if (ctx.emailProvider) {
+            ctx.providerType = ctx.emailProvider
+                .providerName as EmailProviderType;
+        }
+    }
+    const provider = ctx.emailProvider;
+    if (!provider) {
+        return createActionResultFromError(
+            "Email env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+        );
+    }
+    if (provider.isAuthenticated()) {
+        return createActionResultFromTextDisplay("Already signed in to email.");
+    }
+    const providerLabel =
+        ctx.providerType === "google" ? "Gmail" : "Microsoft 365";
+    return createYesNoChoiceResult(
+        ctx.choiceManager,
+        `Sign in to ${providerLabel}? You'll be shown a device code (or browser link) to complete the flow. Sign-in usually takes under a minute — I'll post the result here.`,
+        async (confirmed, liveActionContext) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Sign-in skipped. Run `@email login` later to sign in.",
+                );
+            }
+            return runEmailLogin(
+                liveActionContext as ActionContext<EmailActionContext>,
+            );
+        },
+    );
+}
+
+// Drives provider.login() in the choice callback. Exported for unit tests.
+export async function runEmailLogin(
+    actionContext: ActionContext<EmailActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const provider = ctx.emailProvider;
+    if (!provider) {
+        return createActionResultFromError("Email provider not initialized.");
+    }
+    actionContext.actionIO.appendDisplay(
+        {
+            type: "text",
+            content: `[${emailTs()}] Starting sign-in…`,
+            kind: "status",
+        },
+        "block",
+    );
+    try {
+        const success = await provider.login(
+            (_userCode, _verificationUri, message) => {
+                actionContext.actionIO.appendDisplay(
+                    {
+                        type: "text",
+                        content: `[${emailTs()}] ${message}`,
+                        kind: "status",
+                    },
+                    "block",
+                );
+            },
+        );
+        if (!success) {
+            const tip =
+                ctx.providerType === "google"
+                    ? " You can also try `@email google-auth <code>` with a manual authorization code."
+                    : "";
+            return createActionResultFromError(
+                `[${emailTs()}] Sign-in failed.${tip}`,
+            );
+        }
+        const user = await provider.getUser();
+        return createActionResultFromTextDisplay(
+            `[${emailTs()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your email command — readiness was re-checked automatically.`,
+        );
+    } catch (e: any) {
+        return createActionResultFromError(
+            `[${emailTs()}] Sign-in failed: ${e?.message ?? e}`,
+        );
+    }
 }
 
 async function updateEmailContext(

@@ -2,14 +2,18 @@
 // Licensed under the MIT License.
 
 import {
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgentEvent,
     AppAgent,
     AppAgentManifest,
+    DisplayAppendMode,
     SessionContext,
     DisplayContent,
     type GrammarValidationRequest,
     type GrammarValidationResult,
 } from "@typeagent/agent-sdk";
+import { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { IndexData } from "image-memory";
 import { IndexManager } from "../context/indexManager.js";
@@ -17,6 +21,7 @@ import { validateGrammarPatternsImpl } from "../validation/grammarValidationServ
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:dispatcher:sessionContext");
+import { randomUUID } from "node:crypto";
 
 export function createSessionContext<T = unknown>(
     name: string,
@@ -102,6 +107,41 @@ export function createSessionContext<T = unknown>(
             notificationId?: string,
         ) {
             context.clientIO.notify(notificationId, event, message, name);
+        },
+        beginAgentThread(kind: AgentMessageKind): AgentThreadHandle {
+            const clientRequestId = `agent-${name}-${randomUUID()}`;
+            const requestId: RequestId = {
+                requestId: "",
+                clientRequestId,
+            };
+            let completed = false;
+            const buildMessage = (content: DisplayContent): IAgentMessage => ({
+                message: content,
+                requestId,
+                source: name,
+                kind,
+            });
+            const completedError = () =>
+                new Error(
+                    `Agent thread ${clientRequestId} is completed; call beginAgentThread() to start a new thread.`,
+                );
+            return {
+                kind,
+                setDisplay(content: DisplayContent) {
+                    if (completed) throw completedError();
+                    context.clientIO.setDisplay(buildMessage(content));
+                },
+                appendDisplay(
+                    content: DisplayContent,
+                    mode: DisplayAppendMode = "block",
+                ) {
+                    if (completed) throw completedError();
+                    context.clientIO.appendDisplay(buildMessage(content), mode);
+                },
+                complete() {
+                    completed = true;
+                },
+            };
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {

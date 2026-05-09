@@ -82,5 +82,11 @@
   },
   "vault": {
     "shared": "aisystems"
+  },
+  "cert": {
+    "vault": "aisystems",
+    "name": "TypeAgent-Development-Certificate",
+    "passwordSecretName": "TypeAgent-Development-Certificate-Password",
+    "localPfxPath": "~/.typeagent/TypeAgent-Development-Certificate.pfx"
   }
 }

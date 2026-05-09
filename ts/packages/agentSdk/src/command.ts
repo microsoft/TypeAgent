@@ -4,6 +4,7 @@
 // Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
 // getCommandCompletion): docs/architecture/completion.md — §3 Agent SDK
 
+import { ActionResult } from "./action.js";
 import { ActionContext, SessionContext } from "./agentInterface.js";
 import { ParameterDefinitions, ParsedCommandParams } from "./parameters.js";
 
@@ -177,11 +178,19 @@ export interface AppAgentCommandInterface {
         direction?: CompletionDirection,
     ): Promise<CompletionGroups>;
 
-    // Execute a resolved command.  Exception from the execution are treated as errors and displayed to the user.
+    // Execute a resolved command. Exception from the execution are treated
+    // as errors and displayed to the user.
+    //
+    // Optional return: command handlers MAY return an ActionResult, which is
+    // processed by the same post-execution pipeline used for actions. This
+    // lets a command's `displayContent` / `pendingChoice` (in-chat yes/no
+    // card via createYesNoChoiceResult) / `dynamicDisplayId` flow through
+    // the standard rendering path. Returning `void` / `undefined` keeps the
+    // legacy "use actionIO directly" pattern — both are supported.
     executeCommand(
         commands: string[], // path to the command descriptors
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
         context: ActionContext<unknown>,
         attachments?: string[],
-    ): Promise<void>;
+    ): Promise<ActionResult | undefined>;
 }

@@ -506,6 +506,18 @@ export class ChatView {
         this.commandBackStack = [];
     }
 
+    // Removes a notification message group (created via addNotificationMessage)
+    // by its clientRequestId. Used by OS-notification dismiss handling — the
+    // OS reports a notification has left the action center and we drop the
+    // corresponding chat bubble. No-op if the group doesn't exist.
+    public removeNotificationGroup(clientRequestId: string): boolean {
+        const group = this.clientMessageGroups.get(clientRequestId);
+        if (group === undefined) return false;
+        group.dispose();
+        this.clientMessageGroups.delete(clientRequestId);
+        return true;
+    }
+
     async addUserMessage(
         request: string | { type: "html"; content: string },
         hidden: boolean = false,

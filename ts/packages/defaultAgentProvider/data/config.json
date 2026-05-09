@@ -65,11 +65,21 @@
     "powershell": {
       "name": "powershell-typeagent"
     },
+    "screencapture": {
+      "name": "screencapture-agent",
+      "execMode": "separate"
+    },
     "utility": {
       "name": "utility-typeagent"
     },
     "onboarding": {
       "name": "onboarding-agent"
+    },
+    "osNotifications": {
+      "name": "os-notifications-agent"
+    },
+    "timer": {
+      "name": "timer-agent"
     },
     "github-cli": {
       "name": "github-cli-agent"

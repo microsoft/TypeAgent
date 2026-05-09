@@ -382,9 +382,18 @@ function runCmdAsync(cmd, cmdArgs, { nothrow, ...opts } = {}) {
                         );
                         resolve(null);
                     } else {
+                        // pnpm prints its actionable error context (e.g.
+                        // ERR_PNPM_OVERRIDE_NO_VERSIONS_MATCH) to stdout —
+                        // include both streams so callers can diagnose the
+                        // failure without re-running with verbose output.
+                        const detail =
+                            [stderr, stdout]
+                                .map((s) => (s || "").trim())
+                                .filter(Boolean)
+                                .join("\n") || error.message;
                         reject(
                             new Error(
-                                `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${stderr || error.message}`,
+                                `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${detail}`,
                             ),
                         );
                     }
@@ -2701,6 +2710,55 @@ async function executeResolutions(analyses) {
     }
 
     /**
+     * Try raising a stale `pnpm.overrides[pkg]` entry that allows the
+     * vulnerable version, then `pnpm install` and re-verify. Returns
+     *   { outcome: "ok" }     – raise + install + verify all succeeded
+     *   { outcome: "blocked", check } – raise applied but still unfixed
+     *   { outcome: "noop" }   – no stale override; nothing attempted
+     *   { outcome: "failed", error } – raise install threw
+     * Always restores package.json + lockfile if anything goes wrong.
+     */
+    async function tryRaiseStaleOverride(a) {
+        const existing = readExistingOverride(a.pkg);
+        if (!existing || !overrideAllowsVulnerable(existing, a.patched)) {
+            return { outcome: "noop" };
+        }
+        const newSpec = raiseOverrideSpec(existing, a.patched);
+        verbose(
+            `Stale override pnpm.overrides["${a.pkg}"] = "${existing}" allows vulnerable versions — raising to "${newSpec}"`,
+        );
+        const snap = snapshotRoot();
+        addOverrides(new Map([[a.pkg, newSpec]]));
+        let check;
+        try {
+            // Use --no-frozen-lockfile because we just mutated
+            // pnpm.overrides; in CI (CI=true) pnpm install defaults to
+            // --frozen-lockfile and will refuse to proceed with
+            // ERR_PNPM_LOCKFILE_CONFIG_MISMATCH because the new override
+            // doesn't match what's recorded in pnpm-lock.yaml. Updating
+            // the lockfile is exactly the intent of the raise.
+            await runCmdAsync("pnpm", ["install", "--no-frozen-lockfile"], {
+                timeout: 180000,
+            });
+            check = await verifyAllVersionsFixed(a.pkg, a.patched);
+        } catch (e) {
+            await restoreRoot(snap);
+            return { outcome: "failed", error: e, existing, newSpec };
+        }
+        if (check.ok) {
+            ok(
+                `Raised pnpm.overrides["${a.pkg}"] from "${existing}" to "${newSpec}" — all versions fixed: ${check.versions.join(", ")}`,
+            );
+            return { outcome: "ok" };
+        }
+        warn(
+            `Raised pnpm.overrides["${a.pkg}"] to "${newSpec}" but still unfixed: ${check.unfixed.join(", ")} — rolling back`,
+        );
+        await restoreRoot(snap);
+        return { outcome: "blocked", check, existing, newSpec };
+    }
+
+    /**
      * Run `pnpm update <pkg> -r` and verify all versions are fixed.
      * Returns "ok" | "blocked" | "failed".
      */
@@ -2723,36 +2781,17 @@ async function executeResolutions(analyses) {
             // remaining vulnerability gate is a stale override (e.g. an
             // earlier security bump that has since been superseded by a new
             // advisory) get classified as blocked.
-            const existing = readExistingOverride(a.pkg);
-            if (existing && overrideAllowsVulnerable(existing, a.patched)) {
-                const newSpec = raiseOverrideSpec(existing, a.patched);
-                verbose(
-                    `Stale override pnpm.overrides["${a.pkg}"] = "${existing}" allows ${check.unfixed.join(", ")} — raising to "${newSpec}"`,
+            const raised = await tryRaiseStaleOverride(a);
+            if (raised.outcome === "ok") return "ok";
+            if (raised.outcome === "failed") {
+                fail(
+                    `Override raise install failed for ${a.pkg}: ${raised.error.message}`,
                 );
-                // Snapshot before mutating so we can roll back cleanly if the
-                // raise doesn't actually fix the vulnerability.
-                const snap = snapshotRoot();
-                addOverrides(new Map([[a.pkg, newSpec]]));
-                try {
-                    await runCmdAsync("pnpm", ["install"], { timeout: 180000 });
-                    check = await verifyAllVersionsFixed(a.pkg, a.patched);
-                } catch (e) {
-                    await restoreRoot(snap);
-                    throw e;
-                }
-                if (check.ok) {
-                    ok(
-                        `Raised pnpm.overrides["${a.pkg}"] from "${existing}" to "${newSpec}" — all versions fixed: ${check.versions.join(", ")}`,
-                    );
-                    return "ok";
-                }
-                // Re-verify still failed — undo the override + lockfile
-                // changes so this package's blocked outcome doesn't leak
-                // into the next package's analysis.
-                warn(
-                    `Raised pnpm.overrides["${a.pkg}"] to "${newSpec}" but still unfixed: ${check.unfixed.join(", ")} — rolling back`,
-                );
-                await restoreRoot(snap);
+                a.error = raised.error.message;
+                return "failed";
+            }
+            if (raised.outcome === "blocked") {
+                check = raised.check;
             }
 
             warn(
@@ -2763,6 +2802,21 @@ async function executeResolutions(analyses) {
             );
             return "blocked";
         } catch (e) {
+            // pnpm update threw — most often a stale `pnpm.overrides[pkg]`
+            // entry whose lower bound now excludes any non-vulnerable version
+            // makes pnpm refuse to resolve the install entirely. Try the
+            // same override-raise recovery path before giving up.
+            const raised = await tryRaiseStaleOverride(a);
+            if (raised.outcome === "ok") return "ok";
+            if (raised.outcome === "blocked") {
+                a.blockingReasons.push(
+                    `pnpm update threw and raised override still leaves unfixed versions: ${raised.check.unfixed.join(", ")}`,
+                );
+                return "blocked";
+            }
+            // Either no stale override was found (noop) or the raised
+            // install also threw (failed) — surface the original update
+            // error since that's the actionable signal.
             fail(`pnpm update failed for ${a.pkg}: ${e.message}`);
             a.error = e.message;
             return "failed";

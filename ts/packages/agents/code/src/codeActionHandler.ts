@@ -7,6 +7,7 @@ import {
     ActionContext,
     AppAction,
     AppAgent,
+    ReadinessReport,
     SessionContext,
 } from "@typeagent/agent-sdk";
 import Database from "better-sqlite3";
@@ -17,9 +18,16 @@ import os from "os";
 import registerDebug from "debug";
 import chalk from "chalk";
 import {
+    ChoiceManager,
     createActionResult,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
+import {
+    evaluateCodeReadiness,
+    resolveCodePort,
+    setupCode,
+    whichExists,
+} from "./readiness.js";
 
 const debug = registerDebug("typeagent:code");
 
@@ -50,6 +58,22 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeCodeContext,
         updateAgentContext: updateCodeContext,
         executeAction: executeCodeAction,
+        checkReadiness: checkCodeReadiness,
+        setup: (actionContext) => {
+            const ctx = (actionContext as ActionContext<CodeActionContext>)
+                .sessionContext.agentContext;
+            return setupCode(
+                actionContext,
+                ctx.choiceManager,
+                () => ctx.webSocketServer?.isConnected() === true,
+                resolveCodePort(process.env),
+            );
+        },
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<CodeActionContext>)
+                .sessionContext.agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
     };
 }
 
@@ -63,6 +87,9 @@ type CodeActionContext = {
             context?: ActionContext<CodeActionContext> | undefined;
         }
     >;
+    // Manages yes/no choice callbacks (currently only the setup-flow card).
+    // Hooked up via the AppAgent.handleChoice in instantiate() above.
+    choiceManager: ChoiceManager;
 };
 
 async function initializeCodeContext(): Promise<CodeActionContext> {
@@ -70,7 +97,37 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
         enabled: new Set(),
         webSocketServer: undefined,
         pendingCall: new Map(),
+        choiceManager: new ChoiceManager(),
     };
+}
+
+// Cheap readiness probe — checks (1) whether any client is connected to
+// the WebSocket server, and (2) whether the `code` CLI is on PATH. (2)
+// is the cheap proxy for "VS Code is installed at all" so we can
+// distinguish a real configuration gap from the common transient case
+// of VS Code just being closed. See evaluateCodeReadiness for the
+// branching messages.
+//
+// The `webSocketServer` field is undefined until updateAgentContext
+// fires (on first enable), so initial probes can show setup-required
+// even when the agent is healthy. The dispatcher's post-handleChoice
+// readiness refresh + explicit `@config agent refresh code` are the
+// recovery paths.
+async function checkCodeReadiness(
+    context: SessionContext<CodeActionContext>,
+): Promise<ReadinessReport> {
+    const clientConnected =
+        context.agentContext?.webSocketServer?.isConnected() === true;
+    // Skip the PATH probe when we already know the answer is "ready" —
+    // saves a subprocess on every refresh of a healthy agent.
+    const vsCodeCliInstalled = clientConnected
+        ? true
+        : await whichExists("code");
+    return evaluateCodeReadiness({
+        clientConnected,
+        vsCodeCliInstalled,
+        port: resolveCodePort(process.env),
+    });
 }
 
 async function updateCodeContext(

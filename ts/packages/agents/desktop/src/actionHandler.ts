@@ -28,6 +28,7 @@ import {
     setupDesktopActionContext,
 } from "./connector.js";
 import { AllDesktopActions } from "./allActionsSchema.js";
+import { checkDesktopReadiness, setupDesktop } from "./readiness.js";
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeDesktopContext,
@@ -44,11 +45,14 @@ export function instantiate(): AppAgent {
                 return await state.choiceManager.handleChoice(
                     choiceId,
                     response,
+                    context,
                 );
             } finally {
                 state.pendingChoiceContext = null;
             }
         },
+        checkReadiness: checkDesktopReadiness,
+        setup: setupDesktop,
     };
 }
 

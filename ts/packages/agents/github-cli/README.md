@@ -7,6 +7,8 @@
 - [GitHub CLI](https://cli.github.com/) installed and on your `PATH`
 - Authenticated via `gh auth login`
 
+The agent runs a `gh auth status` readiness probe at startup and pre-flights it before every action — if `gh` isn't installed or you're not logged in, the dispatcher surfaces the fix (install link or `gh auth login`) instead of failing per-action. After fixing, run `@config agent refresh github-cli` to re-probe. There's no automated `setup` hook (login is interactive and must run in a terminal).
+
 ## Supported Actions
 
 | Category          | Actions                                                                                               |

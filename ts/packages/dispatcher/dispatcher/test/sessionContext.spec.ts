@@ -93,6 +93,99 @@ describe("createSessionContext storage routing", () => {
     });
 });
 
+describe("beginAgentThread", () => {
+    function makeContextWithClientIO() {
+        const calls: any[] = [];
+        const ctx = {
+            session: {
+                getSessionDirPath: () => undefined,
+                getConfig: () => ({}),
+            },
+            storageProvider: { getStorage: () => ({}) as any },
+            persistDir: undefined,
+            instanceDir: undefined,
+            commandLock: async (fn: any) => fn(),
+            agents: {
+                getTransientState: () => undefined,
+                getSharedLocalHostPort: async () => undefined,
+                setLocalHostPort: () => {},
+            },
+            clientIO: {
+                setDisplay: (msg: any) => calls.push({ type: "set", msg }),
+                appendDisplay: (msg: any, mode: string) =>
+                    calls.push({ type: "append", msg, mode }),
+                notify: () => {},
+                question: async () => 0,
+            },
+            translatorCache: { clear: () => {} },
+            lastActionSchemaName: undefined,
+            conversationManager: undefined,
+        } as any;
+        return { ctx, calls };
+    }
+
+    test("setDisplay routes to clientIO with synthetic agent-* clientRequestId and kind", () => {
+        const { ctx, calls } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const thread = sc.beginAgentThread("bubble");
+        thread.setDisplay({ type: "text", content: "hi" });
+
+        expect(calls).toHaveLength(1);
+        expect(calls[0].type).toBe("set");
+        const msg = calls[0].msg;
+        expect(msg.source).toBe("myAgent");
+        expect(msg.kind).toBe("bubble");
+        expect(msg.message).toEqual({ type: "text", content: "hi" });
+        expect(msg.requestId.requestId).toBe("");
+        expect(msg.requestId.clientRequestId).toMatch(/^agent-myAgent-/);
+    });
+
+    test("appendDisplay carries mode through and reuses the same clientRequestId", () => {
+        const { ctx, calls } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const thread = sc.beginAgentThread("toast");
+        thread.appendDisplay({ type: "text", content: "a" }, "inline");
+        thread.appendDisplay({ type: "text", content: "b" });
+
+        expect(calls).toHaveLength(2);
+        expect(calls[0].mode).toBe("inline");
+        expect(calls[1].mode).toBe("block");
+        expect(calls[0].msg.kind).toBe("toast");
+        expect(calls[0].msg.requestId.clientRequestId).toBe(
+            calls[1].msg.requestId.clientRequestId,
+        );
+    });
+
+    test("two threads get distinct clientRequestIds", () => {
+        const { ctx, calls } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false);
+        sc.beginAgentThread("bubble").setDisplay({
+            type: "text",
+            content: "1",
+        });
+        sc.beginAgentThread("bubble").setDisplay({
+            type: "text",
+            content: "2",
+        });
+        expect(calls[0].msg.requestId.clientRequestId).not.toBe(
+            calls[1].msg.requestId.clientRequestId,
+        );
+    });
+
+    test("setDisplay/appendDisplay throw after complete()", () => {
+        const { ctx } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const thread = sc.beginAgentThread("inline");
+        thread.complete();
+        expect(() => thread.setDisplay({ type: "text", content: "x" })).toThrow(
+            /completed/,
+        );
+        expect(() =>
+            thread.appendDisplay({ type: "text", content: "x" }),
+        ).toThrow(/completed/);
+    });
+});
+
 describe("initializeCommandHandlerContext option validation", () => {
     test("instanceDir without storageProvider throws", async () => {
         await expect(

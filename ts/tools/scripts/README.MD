@@ -77,7 +77,15 @@ If you use key vault to store service settings and keys.
 
 - **[getKeys.mjs](./getKeys.mjs)** This script is responsible for connecting to a keyvault to download secret values for placement in the .env configuration file. This script is intended to be used in cases where there is frequent key rotation or in situations where you need to easily switch between various endpoints. This script also has the ability to elevate PIM roles for key vault access or use direct access for persistent RBAC configurations. **Commits by default** (both `pull` and `push`); pass `--dry-run` to preview without writing the .env (pull) or the vault (push).
 
-- **[getKeys.config.json](./getKeys.config.json)** contains the names of the secret values to obtain from the named keyvault and to write to the .env configuration file. You can also specify secrets that are to be deprecated/removed from the .env configuration file. Regional pool secrets (`AZURE-OPENAI-*-<REGION>`, `AZURE-OPENAI-POOL-<MODEL>`) are admitted via the `sharedPatterns` regex list so new regions don't require editing this file.
+- **[getKeys.config.json](./getKeys.config.json)** contains the names of the secret values to obtain from the named keyvault and to write to the .env configuration file. You can also specify secrets that are to be deprecated/removed from the .env configuration file. Regional pool secrets (`AZURE-OPENAI-*-<REGION>`, `AZURE-OPENAI-POOL-<MODEL>`) are admitted via the `sharedPatterns` regex list so new regions don't require editing this file. The `cert` section drives `getCert.mjs` (below).
+
+- **[getCert.mjs](./getCert.mjs)** Companion to `getKeys.mjs` for the X.509 dev code-signing cert (used to sign the OS notifications agent's MSIX helper, and any future packaged Windows artifacts). Subcommands:
+
+  - `pull` — fetch the cert from Key Vault, generate (or reuse) a PFX password and store it as a sibling secret in the same vault, write a password-protected PFX to `~/.typeagent/...`.
+  - `install` — `pull` + import into `CurrentUser\My` and `CurrentUser\TrustedPeople`. `--trusted-root` also installs into `CurrentUser\Root` (one-time UAC/confirm prompt; required for self-signed MSIX trust).
+  - `status` — show vault / local-PFX / cert-store state. Read-only.
+
+  Cert and password names default to `TypeAgent-Development-Certificate` and `TypeAgent-Development-Certificate-Password` in the `aisystems` vault — configurable in `getKeys.config.json` under the `cert` key.
 
 ### RBAC and PIM control
 

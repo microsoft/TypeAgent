@@ -1,0 +1,160 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Generated grammar for timerSchema.
+// Types: wildcard = 1+ words, word = exactly 1 word.
+
+// setReminder — natural-language patterns.
+//
+// Kind variants come first so the parser prefers them over the
+// kind-less fallthrough (which leaves kind unspecified and defaults
+// to "bubble" in the handler). Anchor phrases like "as a toast" /
+// "as an inline" / "as a bubble" terminate the $(when:wildcard) capture
+// — without them, the wildcard would greedily swallow everything to
+// end-of-input.
+<SetReminder> = remind me to $(message:wildcard) in $(when:wildcard) as (a)? toast -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "toast"
+    }
+}
+  | remind me to $(message:wildcard) in $(when:wildcard) as (an)? inline -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "inline"
+    }
+}
+  | remind me to $(message:wildcard) in $(when:wildcard) as (a)? bubble -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "bubble"
+    }
+}
+  | toast me $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "toast"
+    }
+}
+  | flash $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "inline"
+    }
+}
+  | remind me to $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+}
+  | remind me $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+}
+  | (set)? (a)? reminder (to)? $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+}
+  | remind me to $(message:wildcard) at $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+};
+
+// repeatReminder — fires every interval. The literal "every" anchors
+// the right edge of the message wildcard (mirrors how setReminder uses
+// "in" / "at").
+<RepeatReminder> = remind me to $(message:wildcard) every $(every:wildcard) as (a)? toast -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every,
+        kind: "toast"
+    }
+}
+  | remind me to $(message:wildcard) every $(every:wildcard) as (an)? inline -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every,
+        kind: "inline"
+    }
+}
+  | remind me to $(message:wildcard) every $(every:wildcard) -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every
+    }
+}
+  | tick $(message:wildcard) every $(every:wildcard) -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every
+    }
+}
+  | repeat (a)? reminder (to)? $(message:wildcard) every $(every:wildcard) -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every
+    }
+};
+
+// listReminders — show all pending reminders.
+<ListReminders> = (show)? (list)? (my)? reminders -> {
+    actionName: "listReminders",
+    parameters: {}
+}
+  | what (are)? (my)? (pending)? reminders -> {
+    actionName: "listReminders",
+    parameters: {}
+};
+
+// cancelReminder — by id, or all of them.
+<CancelReminder> = cancel reminder $(id:wildcard) -> {
+    actionName: "cancelReminder",
+    parameters: {
+        id
+    }
+}
+  | cancel all (my)? reminders -> {
+    actionName: "cancelReminder",
+    parameters: {
+        id: "all"
+    }
+}
+  | clear (all)? (my)? reminders -> {
+    actionName: "cancelReminder",
+    parameters: {
+        id: "all"
+    }
+};
+
+import { TimerAction } from "./timerSchema.ts";
+
+<Start> : TimerAction = <SetReminder>
+  | <RepeatReminder>
+  | <ListReminders>
+  | <CancelReminder>;

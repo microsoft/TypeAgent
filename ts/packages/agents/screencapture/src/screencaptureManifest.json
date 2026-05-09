@@ -1,0 +1,14 @@
+{
+  "emojiChar": "🎥",
+  "description": "Take screenshots and record the screen or specific application windows",
+  "schema": {
+    "description": "Screen capture and recording. Take screenshots of the full screen or a named window. Start and stop screen recordings. List visible windows by name.",
+    "originalSchemaFile": "./screencaptureSchema.ts",
+    "schemaFile": "../dist/screencaptureSchema.pas.json",
+    "grammarFile": "../dist/screencaptureSchema.ag.json",
+    "schemaType": {
+      "action": "ScreencaptureAction",
+      "activity": "ScreencaptureActivity"
+    }
+  }
+}
