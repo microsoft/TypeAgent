@@ -4586,6 +4586,10 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["command"],
                             properties: {
                                 command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
                                 cwd: { type: "string" },
                             },
                         },
@@ -4599,7 +4603,11 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         inputs: {
-                            command: "pwd" as Template,
+                            command: "node" as Template,
+                            args: [
+                                "-e",
+                                "process.stdout.write(process.cwd())",
+                            ] as unknown as Template,
                             cwd: tmpdir() as Template,
                         },
                         bind: "result",
