@@ -33,6 +33,7 @@
       {
         "command": "agr.openDebugPanel",
         "title": "Open Debug Panel",
+        "icon": "$(debug)",
         "category": "Action Grammar"
       },
       {
@@ -58,6 +59,15 @@
         "path": "./syntaxes/agr.tmLanguage.json"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "agr.openDebugPanel",
+          "when": "editorLangId == agr",
+          "group": "navigation"
+        }
+      ]
+    },
     "languages": [
       {
         "id": "agr",

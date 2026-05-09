@@ -21,6 +21,7 @@ import {
     format,
     type LoadedGrammar,
     type LoadResult,
+    type CompletionOptions,
 } from "grammar-tools-core";
 
 /**
@@ -42,25 +43,25 @@ interface WebviewResponse {
 }
 
 /**
- * Manages the Grammar Debug Panel webview.
+ * A single debug panel instance, associated with one .agr file.
+ * Owns its own webview, grammar handle map, and save listener.
  */
-export class DebugPanelManager implements Disposable {
-    private panel: WebviewPanel | undefined;
+class DebugPanelInstance implements Disposable {
+    private panel: WebviewPanel;
     private disposables: Disposable[] = [];
     private grammars = new Map<string, LoadedGrammar>();
     private grammarSeq = 0;
+    private saveListener: Disposable;
 
-    constructor(private readonly context: ExtensionContext) {}
-
-    show(): void {
-        if (this.panel) {
-            this.panel.reveal(ViewColumn.Beside);
-            return;
-        }
-
+    constructor(
+        private readonly context: ExtensionContext,
+        readonly fileUri: Uri,
+        private readonly onDisposed: (instance: DebugPanelInstance) => void,
+    ) {
+        const name = path.basename(fileUri.fsPath);
         this.panel = window.createWebviewPanel(
             "agrDebugPanel",
-            "Grammar Debug",
+            `Grammar Debug: ${name}`,
             ViewColumn.Beside,
             {
                 enableScripts: true,
@@ -81,22 +82,39 @@ export class DebugPanelManager implements Disposable {
 
         this.panel.onDidDispose(
             () => {
-                this.panel = undefined;
                 this.grammars.clear();
+                this.saveListener.dispose();
+                this.onDisposed(this);
             },
             undefined,
             this.disposables,
         );
+
+        // Watch for saves of the associated file
+        this.saveListener = workspace.onDidSaveTextDocument((doc) => {
+            if (doc.uri.toString() === this.fileUri.toString()) {
+                this.pushGrammarFromFile();
+            }
+        });
+
+        // Push initial grammar
+        this.pushGrammarFromFile();
+    }
+
+    reveal(): void {
+        this.panel.reveal(ViewColumn.Beside);
     }
 
     dispose(): void {
-        this.panel?.dispose();
+        this.saveListener.dispose();
+        this.panel.dispose();
         for (const d of this.disposables) d.dispose();
         this.disposables = [];
+        this.grammars.clear();
     }
 
     private getHtml(): string {
-        const webview = this.panel!.webview;
+        const webview = this.panel.webview;
         const scriptUri = webview.asWebviewUri(
             Uri.joinPath(
                 this.context.extensionUri,
@@ -138,7 +156,7 @@ export class DebugPanelManager implements Disposable {
     private async handleMessage(msg: WebviewRequest): Promise<void> {
         const respond = (result?: unknown, error?: string) => {
             const response: WebviewResponse = { id: msg.id, result, error };
-            this.panel?.webview.postMessage(response);
+            this.panel.webview.postMessage(response);
         };
 
         try {
@@ -165,19 +183,21 @@ export class DebugPanelManager implements Disposable {
                 return this.storeGrammar(result);
             }
             case "loadGrammarFromActiveEditor": {
-                const editor = window.activeTextEditor;
-                if (!editor || editor.document.languageId !== "agr") {
-                    return { ok: false, diagnostics: [], files: [] };
-                }
-                const text = editor.document.getText();
-                const fileId = path.basename(editor.document.fileName);
+                // Always use the associated file for this panel
+                const doc = await workspace.openTextDocument(this.fileUri);
+                const text = doc.getText();
+                const fileId = path.basename(this.fileUri.fsPath);
                 const result = loadGrammarFromBuffer(fileId, text);
                 return this.storeGrammar(result);
             }
             case "previewCompletion": {
-                const [handle, input] = params as [string, string];
+                const [handle, input, options] = params as [
+                    string,
+                    string,
+                    CompletionOptions | undefined,
+                ];
                 const grammar = this.getGrammar(handle);
-                return previewCompletion(grammar, input);
+                return previewCompletion(grammar, input, options);
             }
             case "traceMatch": {
                 const [handle, input] = params as [string, string];
@@ -202,7 +222,6 @@ export class DebugPanelManager implements Disposable {
                 return format(source);
             }
             case "listAgents": {
-                // Scan workspace for agents with .agr files
                 const files = await workspace.findFiles(
                     "**/packages/agents/*/src/*.agr",
                     null,
@@ -223,10 +242,6 @@ export class DebugPanelManager implements Disposable {
         }
     }
 
-    /**
-     * Store a LoadedGrammar and return a serializable LoadResult with a
-     * handle string replacing the opaque grammar object.
-     */
     private storeGrammar(result: LoadResult): unknown {
         if (!result.ok) {
             return result;
@@ -257,8 +272,70 @@ export class DebugPanelManager implements Disposable {
         }
         return grammar;
     }
+
+    private async pushGrammarFromFile(): Promise<void> {
+        try {
+            const doc = await workspace.openTextDocument(this.fileUri);
+            const text = doc.getText();
+            const fileId = path.basename(this.fileUri.fsPath);
+            const result = loadGrammarFromBuffer(fileId, text);
+            const serialized = this.storeGrammar(result);
+            this.panel.webview.postMessage({
+                type: "grammarLoaded",
+                result: serialized,
+            });
+        } catch {
+            // Best-effort
+        }
+    }
 }
 
+/**
+ * Registry that manages one DebugPanelInstance per .agr file.
+ */
+export class DebugPanelManager implements Disposable {
+    private instances = new Map<string, DebugPanelInstance>();
+
+    constructor(private readonly context: ExtensionContext) {}
+
+    /**
+     * Show or create a debug panel for the given file URI.
+     * If no URI is provided, uses the active editor.
+     */
+    show(fileUri?: Uri): void {
+        if (!fileUri) {
+            const editor = window.activeTextEditor;
+            if (!editor || editor.document.languageId !== "agr") {
+                window.showErrorMessage("Open an .agr file first.");
+                return;
+            }
+            fileUri = editor.document.uri;
+        }
+
+        const key = fileUri.toString();
+        const existing = this.instances.get(key);
+        if (existing) {
+            existing.reveal();
+            return;
+        }
+
+        const instance = new DebugPanelInstance(
+            this.context,
+            fileUri,
+            (disposed) => {
+                this.instances.delete(disposed.fileUri.toString());
+            },
+        );
+        this.instances.set(key, instance);
+    }
+
+    dispose(): void {
+        for (const instance of this.instances.values()) {
+            instance.dispose();
+        }
+        this.instances.clear();
+    }
+}
 function getNonce(): string {
     let text = "";
     const chars =

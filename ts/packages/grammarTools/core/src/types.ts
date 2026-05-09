@@ -129,6 +129,19 @@ export type SeparatorMode =
 
 export type AfterWildcard = "none" | "some" | "all";
 
+export type CompletionDirection = "forward" | "backward";
+
+export type WildcardPolicy = "exhaustive" | "shortest";
+export type OptionalPolicy = "exhaustive" | "preferTake" | "preferSkip";
+export type RepeatPolicy = "exhaustive" | "greedy" | "nonGreedy";
+
+export interface CompletionOptions {
+    direction?: CompletionDirection;
+    wildcardPolicy?: WildcardPolicy;
+    optionalPolicy?: OptionalPolicy;
+    repeatPolicy?: RepeatPolicy;
+}
+
 export interface CompletionGroup {
     completions: string[];
     separatorMode: SeparatorMode;

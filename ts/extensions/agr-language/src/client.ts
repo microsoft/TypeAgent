@@ -99,7 +99,12 @@ export function activate(context: ExtensionContext): void {
     context.subscriptions.push(debugPanelManager);
     context.subscriptions.push(
         commands.registerCommand("agr.openDebugPanel", () => {
-            debugPanelManager.show();
+            const editor = window.activeTextEditor;
+            const fileUri =
+                editor?.document.languageId === "agr"
+                    ? editor.document.uri
+                    : undefined;
+            debugPanelManager.show(fileUri);
         }),
     );
 

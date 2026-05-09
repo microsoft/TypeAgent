@@ -115,19 +115,28 @@ export class GtDebugPanel extends LitElement {
     @property({ type: Boolean, attribute: "live-available" })
     liveAvailable: boolean = false;
 
+    @property({ type: Boolean, attribute: "show-picker" })
+    showPicker: boolean = true;
+
     @property({ type: Array, attribute: "enabled-tabs" })
-    enabledTabs: TabId[] = [
-        "completions",
-        "trace",
-        "coverage",
-        "diff",
-    ];
+    enabledTabs: TabId[] = ["completions", "trace", "coverage", "diff"];
 
     @property({ attribute: false })
     onSourceClick: ((loc: SourceLocation) => void) | undefined;
 
     @state()
     private _grammar: LoadedGrammar | undefined;
+
+    /** Allow external code to set the grammar directly. */
+    set grammar(g: LoadedGrammar | undefined) {
+        this._grammar = g;
+        this._coverageReport = undefined;
+        this._diffResult = undefined;
+    }
+
+    get grammar(): LoadedGrammar | undefined {
+        return this._grammar;
+    }
 
     @state()
     private _activeTab: TabId = "completions";
@@ -209,14 +218,17 @@ export class GtDebugPanel extends LitElement {
 
         return html`
             <div class="panel">
-                <div class="picker-section">
-                    <gt-source-view
-                        .backend=${this.backend}
-                        .agents=${this.agents}
-                        ?live-available=${this.liveAvailable}
-                        .onLoad=${(r: LoadResult) => this._onGrammarLoaded(r)}
-                    ></gt-source-view>
-                </div>
+                ${this.showPicker
+                    ? html`<div class="picker-section">
+                          <gt-source-view
+                              .backend=${this.backend}
+                              .agents=${this.agents}
+                              ?live-available=${this.liveAvailable}
+                              .onLoad=${(r: LoadResult) =>
+                                  this._onGrammarLoaded(r)}
+                          ></gt-source-view>
+                      </div>`
+                    : nothing}
 
                 <div class="tab-bar">
                     ${tabs.map(
@@ -256,7 +268,9 @@ export class GtDebugPanel extends LitElement {
     private _renderActiveTab() {
         if (!this._grammar) {
             return html`<div class="notice">
-                Load a grammar to get started
+                ${this.showPicker
+                    ? "Load a grammar to get started"
+                    : "Waiting for grammar..."}
             </div>`;
         }
 

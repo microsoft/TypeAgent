@@ -5,6 +5,7 @@ import type {
     LoadResult,
     LoadedGrammar,
     CompletionPreview,
+    CompletionOptions,
     MatchTrace,
     CoverageReport,
     GrammarDiff,
@@ -25,6 +26,7 @@ export interface GrammarBackend {
     previewCompletion(
         grammar: LoadedGrammar,
         input: string,
+        options?: CompletionOptions,
     ): Promise<CompletionPreview>;
 
     traceMatch(grammar: LoadedGrammar, input: string): Promise<MatchTrace>;

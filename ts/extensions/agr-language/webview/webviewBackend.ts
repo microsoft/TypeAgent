@@ -10,6 +10,7 @@ import type {
     LoadResult,
     LoadedGrammar,
     CompletionPreview,
+    CompletionOptions,
     MatchTrace,
     CoverageReport,
     GrammarDiff,
@@ -47,7 +48,7 @@ interface WebviewResponse {
  * Serialized LoadResult returned from the extension host.
  * The grammar object is replaced with a string handle.
  */
-interface SerializedLoadResult {
+export interface SerializedLoadResult {
     ok: true;
     handle: string;
     identifiers: GrammarIdentifierIndex;
@@ -95,7 +96,7 @@ function rpc(method: string, ...params: unknown[]): Promise<unknown> {
  * The actual grammar object lives in the extension host; the webview
  * only keeps the handle and metadata needed for rendering.
  */
-function hydrateLoadResult(raw: SerializedLoadResult): LoadResult {
+export function hydrateLoadResult(raw: SerializedLoadResult): LoadResult {
     const debugInfo: GrammarDebugInfo | undefined = raw.debugInfo
         ? {
               grammarHash: raw.debugInfo.grammarHash,
@@ -192,11 +193,13 @@ export class WebviewBackend implements GrammarBackend {
     async previewCompletion(
         grammar: LoadedGrammar,
         input: string,
+        options?: CompletionOptions,
     ): Promise<CompletionPreview> {
         return (await rpc(
             "previewCompletion",
             getHandle(grammar),
             input,
+            options,
         )) as CompletionPreview;
     }
 

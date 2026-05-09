@@ -48,6 +48,20 @@ export const baseStyles = css`
         border-color: var(--vscode-focusBorder, #007fd4);
     }
 
+    select {
+        background: var(--vscode-input-background, #3c3c3c);
+        color: var(--vscode-input-foreground, #cccccc);
+        border: 1px solid var(--vscode-input-border, #3c3c3c);
+        padding: 4px 8px;
+        font-size: inherit;
+        font-family: inherit;
+        outline: none;
+    }
+
+    select:focus {
+        border-color: var(--vscode-focusBorder, #007fd4);
+    }
+
     button {
         background: var(--vscode-button-background, #0e639c);
         color: var(--vscode-button-foreground, #ffffff);

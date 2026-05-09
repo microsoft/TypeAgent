@@ -32,6 +32,11 @@ export type {
     // Completion
     SeparatorMode,
     AfterWildcard,
+    CompletionDirection,
+    WildcardPolicy,
+    OptionalPolicy,
+    RepeatPolicy,
+    CompletionOptions,
     CompletionGroup,
     CompletionProperty,
     CompletionPreview,
