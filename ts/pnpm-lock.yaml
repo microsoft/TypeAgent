@@ -3671,6 +3671,9 @@ importers:
 
   packages/completionUI:
     devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4455,8 +4458,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/memory/conversation:
     dependencies:
@@ -4800,8 +4803,8 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/security/validation:
     dependencies:
@@ -4816,8 +4819,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/shell:
     dependencies:
@@ -12886,9 +12889,6 @@ packages:
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
-  nan@2.26.2:
-    resolution: {integrity: sha512-0tTvBTYkt3tdGw22nrAy50x7gpbGCCFH3AFcyS5WiUu7Eu4vWlri1woE6qHBSfy11vksDqkiwjOnlR7WV8G1Hw==}
-
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -14833,11 +14833,6 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
   typical@4.0.0:
     resolution: {integrity: sha512-VAH4IvQ7BDFYglMd7BPRDfLgxZZX4O4TFcRDA6EN5X7erNJJq+McIEp8np9aVtxrCJ6qx4GTYVfOWNjcqwZgRw==}
     engines: {node: '>=8'}
@@ -14980,9 +14975,6 @@ packages:
   user-home@2.0.0:
     resolution: {integrity: sha512-KMWqdlOcjCYdtIJpicDSFBQ8nFwS2i9sslAd6f4+CBGcU4gist2REnr2fxj2YocvJFxSF3ZOHLYLVZnUxv4BZQ==}
     engines: {node: '>=0.10.0'}
-
-  usocket@0.3.0:
-    resolution: {integrity: sha512-V/H02RNiaOCJZuPoKont/y12VJaImC6C5xW7OzPFjYu9qnig0yv9hyp9E7Wqjm6d8yZuZouH3NAfDATVMgh2SQ==}
 
   utf8-byte-length@1.0.4:
     resolution: {integrity: sha512-4+wkEYLBbWxqTahEsWrhxepcoVOJ+1z5PGIjPZxRkytcdSUaNjIjBM7Xn8E+pdSuV7SzvWovBFA54FO0JSoqhA==}
@@ -22230,10 +22222,7 @@ snapshots:
       jsbi: 2.0.5
       long: 4.0.0
       safe-buffer: 5.2.1
-      usocket: 0.3.0
       xml2js: 0.4.23
-    transitivePeerDependencies:
-      - supports-color
 
   debug@2.6.9:
     dependencies:
@@ -25923,8 +25912,6 @@ snapshots:
       object-assign: 4.1.1
       thenify-all: 1.6.0
 
-  nan@2.26.2: {}
-
   nanoid@3.3.11: {}
 
   nanoid@5.1.5: {}
@@ -28309,8 +28296,6 @@ snapshots:
 
   typescript@5.4.5: {}
 
-  typescript@5.9.3: {}
-
   typical@4.0.0: {}
 
   typical@7.3.0: {}
@@ -28446,14 +28431,6 @@ snapshots:
   user-home@2.0.0:
     dependencies:
       os-homedir: 1.0.2
-
-  usocket@0.3.0:
-    dependencies:
-      bindings: 1.5.0
-      nan: 2.26.2
-      node-gyp: 12.2.0
-    transitivePeerDependencies:
-      - supports-color
 
   utf8-byte-length@1.0.4: {}
 
