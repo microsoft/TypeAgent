@@ -4,6 +4,8 @@ A single-pass walkthrough covering everything the automated smoke (`pnpm -F @typ
 
 Total run time: ~10 min. Run from `cwd = ts/` after `pnpm install && pnpm run build`. **Commands assume PowerShell** (Windows). On macOS/Linux, translate the env-var and `Remove-Item` syntax accordingly.
 
+The `agent-cli` command requires the CLI to be linked globally — from `ts/packages/cli`, run `pnpm link --global` once (see `packages/cli/README.md`). Otherwise substitute `pnpm -F agent-cli start --` for `agent-cli` in the steps below.
+
 > Discovery file = `~/.typeagent/agent-server.json` (referred to below as `$file`).
 
 ---
