@@ -70,7 +70,6 @@ export class GtCompletionPanel extends LitElement {
             .input-stack .input-colors .unmatched {
                 text-decoration: wavy underline
                     var(--vscode-editorWarning-foreground, #cca700);
-                text-underline-offset: 3px;
             }
             .status-bar {
                 display: flex;
@@ -131,14 +130,25 @@ export class GtCompletionPanel extends LitElement {
                 color: var(--vscode-editorInfo-foreground, #3794ff);
                 text-decoration: underline;
             }
+            .options-panel {
+                border-bottom: 1px solid var(--vscode-panel-border, #80808059);
+                font-size: 0.85em;
+            }
+            .options-panel summary {
+                padding: 4px 8px;
+                cursor: pointer;
+                user-select: none;
+                color: var(--vscode-descriptionForeground, #9d9d9d);
+            }
+            .options-panel summary:hover {
+                color: var(--vscode-foreground, #cccccc);
+            }
             .options-bar {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
                 align-items: center;
-                padding: 4px 8px;
-                font-size: 0.85em;
-                border-bottom: 1px solid var(--vscode-panel-border, #80808059);
+                padding: 4px 8px 8px;
             }
             .options-bar label {
                 display: flex;
@@ -415,6 +425,124 @@ export class GtCompletionPanel extends LitElement {
         const hasInput = this._input.length > 0;
 
         return html`
+            <details class="options-panel">
+                <summary>Match Options</summary>
+                <div class="options-bar">
+                    <label
+                        ><strong>Direction:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._direction = (
+                                    e.target as HTMLSelectElement
+                                ).value as CompletionDirection;
+                                this._queryCompletion();
+                            }}
+                        >
+                            <option
+                                value="forward"
+                                ?selected=${this._direction === "forward"}
+                            >
+                                forward
+                            </option>
+                            <option
+                                value="backward"
+                                ?selected=${this._direction === "backward"}
+                            >
+                                backward
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Wildcard:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._wildcardPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as WildcardPolicy;
+                                this._queryCompletion();
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._wildcardPolicy ===
+                                "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="shortest"
+                                ?selected=${this._wildcardPolicy === "shortest"}
+                            >
+                                shortest
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Optional:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._optionalPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as OptionalPolicy;
+                                this._queryCompletion();
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._optionalPolicy ===
+                                "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="preferTake"
+                                ?selected=${this._optionalPolicy ===
+                                "preferTake"}
+                            >
+                                preferTake
+                            </option>
+                            <option
+                                value="preferSkip"
+                                ?selected=${this._optionalPolicy ===
+                                "preferSkip"}
+                            >
+                                preferSkip
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Repeat:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._repeatPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as RepeatPolicy;
+                                this._queryCompletion();
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._repeatPolicy === "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="greedy"
+                                ?selected=${this._repeatPolicy === "greedy"}
+                            >
+                                greedy
+                            </option>
+                            <option
+                                value="nonGreedy"
+                                ?selected=${this._repeatPolicy === "nonGreedy"}
+                            >
+                                nonGreedy
+                            </option>
+                        </select></label
+                    >
+                </div>
+            </details>
+
             <div class="input-row">
                 <div class="input-stack">
                     <input
@@ -435,122 +563,12 @@ export class GtCompletionPanel extends LitElement {
                 </div>
             </div>
 
-            <div class="options-bar">
-                <label
-                    ><strong>Direction:</strong>
-                    <select
-                        @change=${(e: Event) => {
-                            this._direction = (e.target as HTMLSelectElement)
-                                .value as CompletionDirection;
-                            this._queryCompletion();
-                        }}
-                    >
-                        <option
-                            value="forward"
-                            ?selected=${this._direction === "forward"}
-                        >
-                            forward
-                        </option>
-                        <option
-                            value="backward"
-                            ?selected=${this._direction === "backward"}
-                        >
-                            backward
-                        </option>
-                    </select></label
-                >
-                <label
-                    ><strong>Wildcard:</strong>
-                    <select
-                        @change=${(e: Event) => {
-                            this._wildcardPolicy = (
-                                e.target as HTMLSelectElement
-                            ).value as WildcardPolicy;
-                            this._queryCompletion();
-                        }}
-                    >
-                        <option
-                            value="exhaustive"
-                            ?selected=${this._wildcardPolicy === "exhaustive"}
-                        >
-                            exhaustive
-                        </option>
-                        <option
-                            value="shortest"
-                            ?selected=${this._wildcardPolicy === "shortest"}
-                        >
-                            shortest
-                        </option>
-                    </select></label
-                >
-                <label
-                    ><strong>Optional:</strong>
-                    <select
-                        @change=${(e: Event) => {
-                            this._optionalPolicy = (
-                                e.target as HTMLSelectElement
-                            ).value as OptionalPolicy;
-                            this._queryCompletion();
-                        }}
-                    >
-                        <option
-                            value="exhaustive"
-                            ?selected=${this._optionalPolicy === "exhaustive"}
-                        >
-                            exhaustive
-                        </option>
-                        <option
-                            value="preferTake"
-                            ?selected=${this._optionalPolicy === "preferTake"}
-                        >
-                            preferTake
-                        </option>
-                        <option
-                            value="preferSkip"
-                            ?selected=${this._optionalPolicy === "preferSkip"}
-                        >
-                            preferSkip
-                        </option>
-                    </select></label
-                >
-                <label
-                    ><strong>Repeat:</strong>
-                    <select
-                        @change=${(e: Event) => {
-                            this._repeatPolicy = (e.target as HTMLSelectElement)
-                                .value as RepeatPolicy;
-                            this._queryCompletion();
-                        }}
-                    >
-                        <option
-                            value="exhaustive"
-                            ?selected=${this._repeatPolicy === "exhaustive"}
-                        >
-                            exhaustive
-                        </option>
-                        <option
-                            value="greedy"
-                            ?selected=${this._repeatPolicy === "greedy"}
-                        >
-                            greedy
-                        </option>
-                        <option
-                            value="nonGreedy"
-                            ?selected=${this._repeatPolicy === "nonGreedy"}
-                        >
-                            nonGreedy
-                        </option>
-                    </select></label
-                >
-            </div>
-
             ${p
                 ? html`
                       <div class="status-bar">
                           <span
-                              ><strong>Matched:</strong>
-                              <span class="matched-highlight">${matchLen}</span>
-                              / ${this._input.length} chars</span
+                              ><strong>Matched:</strong> ${matchLen} /
+                              ${this._input.length} chars</span
                           >
                           <span
                               ><strong>Wildcard:</strong>

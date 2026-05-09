@@ -9,6 +9,9 @@ import type {
     TraceEvent,
     PartMatchedEvent,
     SourceLocation,
+    WildcardPolicy,
+    OptionalPolicy,
+    RepeatPolicy,
 } from "grammar-tools-core";
 import type { GrammarBackend } from "./backend.js";
 import { baseStyles } from "./styles.js";
@@ -48,6 +51,35 @@ export class GtTraceTimeline extends LitElement {
     static override styles = [
         baseStyles,
         css`
+            .options-panel {
+                border-bottom: 1px solid var(--vscode-panel-border, #80808059);
+                font-size: 0.85em;
+                margin-bottom: 8px;
+            }
+            .options-panel summary {
+                padding: 4px 8px;
+                cursor: pointer;
+                user-select: none;
+                color: var(--vscode-descriptionForeground, #9d9d9d);
+            }
+            .options-panel summary:hover {
+                color: var(--vscode-foreground, #cccccc);
+            }
+            .options-bar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+                padding: 4px 8px 8px;
+            }
+            .options-bar label {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .options-bar select {
+                font-size: inherit;
+            }
             .input-row {
                 display: flex;
                 gap: 8px;
@@ -200,6 +232,15 @@ export class GtTraceTimeline extends LitElement {
 
     @state()
     private _hiddenKinds: Set<EventKindFilter> = new Set();
+
+    @state()
+    private _wildcardPolicy: WildcardPolicy = "exhaustive";
+
+    @state()
+    private _optionalPolicy: OptionalPolicy = "exhaustive";
+
+    @state()
+    private _repeatPolicy: RepeatPolicy = "exhaustive";
 
     private _initialized = false;
 
@@ -376,6 +417,97 @@ export class GtTraceTimeline extends LitElement {
         ];
 
         return html`
+            <details class="options-panel">
+                <summary>Match Options</summary>
+                <div class="options-bar">
+                    <label
+                        ><strong>Wildcard:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._wildcardPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as WildcardPolicy;
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._wildcardPolicy ===
+                                "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="shortest"
+                                ?selected=${this._wildcardPolicy === "shortest"}
+                            >
+                                shortest
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Optional:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._optionalPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as OptionalPolicy;
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._optionalPolicy ===
+                                "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="preferTake"
+                                ?selected=${this._optionalPolicy ===
+                                "preferTake"}
+                            >
+                                preferTake
+                            </option>
+                            <option
+                                value="preferSkip"
+                                ?selected=${this._optionalPolicy ===
+                                "preferSkip"}
+                            >
+                                preferSkip
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Repeat:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._repeatPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as RepeatPolicy;
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._repeatPolicy === "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="greedy"
+                                ?selected=${this._repeatPolicy === "greedy"}
+                            >
+                                greedy
+                            </option>
+                            <option
+                                value="nonGreedy"
+                                ?selected=${this._repeatPolicy === "nonGreedy"}
+                            >
+                                nonGreedy
+                            </option>
+                        </select></label
+                    >
+                </div>
+            </details>
+
             <div class="input-row">
                 <input
                     type="text"

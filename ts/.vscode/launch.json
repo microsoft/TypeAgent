@@ -452,7 +452,7 @@
       "outFiles": [
         "${workspaceFolder}/extensions/agr-language/dist/**/*.js"
       ],
-      "preLaunchTask": "npm run build"
+      "preLaunchTask": "build agr-language"
     }
   ]
 }
