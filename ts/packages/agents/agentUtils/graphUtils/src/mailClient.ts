@@ -41,48 +41,21 @@ export class MailClient extends GraphClient {
         message: Message | DynamicObject,
         addrTo: AddressToType,
     ) {
-        if (addrs && addrs.length > 0) {
-            switch (addrTo) {
-                case AddressToType.to:
-                    addrs.forEach((addr) => {
-                        if (addr) {
-                            message.toRecipients = [];
-                            const recipient = {
-                                emailAddress: {
-                                    address: addr,
-                                },
-                            };
-                            message.toRecipients?.push(recipient);
-                        }
-                    });
-                    break;
-                case AddressToType.cc:
-                    addrs.forEach((addr) => {
-                        if (addr) {
-                            message.ccRecipients = [];
-                            const recipient = {
-                                emailAddress: {
-                                    address: addr,
-                                },
-                            };
-                            message.ccRecipients?.push(recipient);
-                        }
-                    });
-                    break;
-                case AddressToType.bcc:
-                    addrs.forEach((addr) => {
-                        if (addr) {
-                            message.bccRecipients = [];
-                            const recipient = {
-                                emailAddress: {
-                                    address: addr,
-                                },
-                            };
-                            message.bccRecipients?.push(recipient);
-                        }
-                    });
-                    break;
-            }
+        if (!addrs || addrs.length === 0) return;
+        const recipients = addrs
+            .filter((addr) => !!addr)
+            .map((addr) => ({ emailAddress: { address: addr } }));
+        if (recipients.length === 0) return;
+        switch (addrTo) {
+            case AddressToType.to:
+                message.toRecipients = recipients;
+                break;
+            case AddressToType.cc:
+                message.ccRecipients = recipients;
+                break;
+            case AddressToType.bcc:
+                message.bccRecipients = recipients;
+                break;
         }
     }
 
@@ -118,20 +91,17 @@ export class MailClient extends GraphClient {
                 this.addEmailsToMessage(bcc_addrs, message, AddressToType.bcc);
             }
 
-            await client
-                .api("me/sendMail")
-                .post({
-                    message: message,
-                })
-                .then(async (response) => {
-                    this.logger(chalk.green(`Mail sent successfully`));
-                    fSent = true;
-                })
-                .catch((error) => {
-                    this.logger(chalk.red(`Error sending mail: ${error}`));
-                });
+            // Let Graph errors propagate to the caller so the handler can
+            // surface a useful message ("recipient not found", "throttled",
+            // missing permissions, etc.) instead of a generic failure.
+            await client.api("me/sendMail").post({
+                message: message,
+            });
+            this.logger(chalk.green(`Mail sent successfully`));
+            fSent = true;
         } catch (error) {
             this.logger(chalk.red(`Error sending mail: ${error}`));
+            throw error;
         }
         return fSent;
     }
@@ -165,22 +135,17 @@ export class MailClient extends GraphClient {
                 );
             }
 
-            let res = await client
-                .api(`me/messages/${msg_id}/reply`)
-                .post(reply);
-
-            if (res) {
-                this.logger(
-                    chalk.green(
-                        `Mail replied successfully to msg_id: ${msg_id}`,
-                    ),
-                );
-                return true;
-            }
+            // Let Graph errors propagate so the handler can surface a
+            // useful message instead of returning a generic falsy result.
+            await client.api(`me/messages/${msg_id}/reply`).post(reply);
+            this.logger(
+                chalk.green(`Mail replied successfully to msg_id: ${msg_id}`),
+            );
+            return true;
         } catch (error) {
             this.logger(chalk.red(`Error replying to mail: ${error}`));
+            throw error;
         }
-        return false;
     }
 
     public async forwardMailAsync(
@@ -208,22 +173,17 @@ export class MailClient extends GraphClient {
                 this.addEmailsToMessage(bcc_addrs, message, AddressToType.bcc);
             }
 
-            let res = await client
-                .api(`me/messages/${msg_id}/forward`)
-                .post(message);
-
-            if (res) {
-                this.logger(
-                    chalk.green(
-                        `Mail replied successfully to msg_id: ${msg_id}`,
-                    ),
-                );
-                return true;
-            }
+            // Let Graph errors propagate so the handler can surface a
+            // useful message instead of returning a generic falsy result.
+            await client.api(`me/messages/${msg_id}/forward`).post(message);
+            this.logger(
+                chalk.green(`Mail forwarded successfully for msg_id: ${msg_id}`),
+            );
+            return true;
         } catch (error) {
-            this.logger(chalk.red(`Error replying to mail: ${error}`));
+            this.logger(chalk.red(`Error forwarding mail: ${error}`));
+            throw error;
         }
-        return false;
     }
 
     public async findEmailAsync(

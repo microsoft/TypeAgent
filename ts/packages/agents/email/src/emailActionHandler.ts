@@ -66,6 +66,51 @@ import { emailsToChunks } from "./emailKpBridge.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:email");
 
+/**
+ * Permissive RFC-5321-ish check: a single `@`, at least one char on each
+ * side, and a `.` in the domain. Intentionally not a full RFC validator —
+ * we just want to identify inputs that are *already* email addresses so
+ * we can skip the directory lookup (which needs `User.Read.All` admin
+ * consent on MS Graph). Display-name lookups still go through the
+ * provider for inputs that don't look like addresses.
+ */
+const EMAIL_ADDRESS_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+function isLikelyEmailAddress(input: string): boolean {
+    return EMAIL_ADDRESS_RE.test(input.trim());
+}
+
+/**
+ * Split recipient inputs into "already-an-address" (passthrough) and
+ * "needs directory lookup" (delegated to the provider's resolveUserEmails).
+ * Combined result is a flat list of resolved addresses.
+ *
+ * Lets users send mail to literal addresses (`robgruen@microsoft.com`) even
+ * when the directory lookup permission isn't granted, while preserving the
+ * name-resolution path for inputs like `"robert gruen"`.
+ */
+async function resolveRecipients(
+    inputs: string[],
+    provider: IEmailProvider,
+): Promise<string[]> {
+    if (inputs.length === 0) return [];
+    const direct: string[] = [];
+    const needsLookup: string[] = [];
+    for (const input of inputs) {
+        const trimmed = input.trim();
+        if (isLikelyEmailAddress(trimmed)) {
+            direct.push(trimmed);
+        } else {
+            needsLookup.push(input);
+        }
+    }
+    const resolved =
+        needsLookup.length > 0
+            ? await provider.resolveUserEmails(needsLookup)
+            : [];
+    return [...direct, ...resolved];
+}
+
 class EmailLoginCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log into email service";
     public async run(context: ActionContext<EmailActionContext>) {
@@ -90,18 +135,33 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
             context,
         );
 
-        const success = await provider.login(
-            (userCode, verificationUri, message) => {
-                displayStatus(message, context);
-            },
-        );
+        const success = await provider.login((prompt) => {
+            if (prompt.kind === "error") {
+                displayWarn(prompt.message, context);
+            } else {
+                // Both deviceCode and browser surface the message as-is; the
+                // device-code message contains the URL+code, the browser
+                // message says "opening your browser...".
+                displayStatus(prompt.message, context);
+            }
+        });
 
         if (success) {
             const user = await provider.getUser();
+            const name = user.displayName || "Unknown";
+            const email = user.email || "Unknown";
             displaySuccess(
-                `Successfully logged in as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
+                `Successfully logged in as ${name} <${email}>`,
                 context,
             );
+            // Hidden marker the chat-ui / shell scan for after each agent
+            // message. Lifts the signed-in identity into UI state so the
+            // user-letter avatar shows the real initial and stops triggering
+            // login on click.
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}" hidden></span>`,
+            });
 
             // Kick off async index build/sync after successful login
             const agentCtx = context.sessionContext.agentContext;
@@ -128,11 +188,19 @@ class EmailLogoutCommandHandler implements CommandHandlerNoParams {
         if (provider === undefined) {
             throw new Error("Email provider not initialized");
         }
-        if (provider.logout()) {
+        const wasLoggedIn = provider.logout();
+        if (wasLoggedIn) {
             displaySuccess("Successfully logged out", context);
         } else {
             displayWarn("Already logged out", context);
         }
+        // Reset the chat UI's user-letter avatar back to "U" / clickable.
+        // Emitted regardless of wasLoggedIn so the avatar resyncs even if a
+        // prior @calendar logout already cleared the in-memory client.
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: `<span class="typeagent-user-signed-out" hidden></span>`,
+        });
     }
 }
 
@@ -383,18 +451,16 @@ export async function runEmailLogin(
         "block",
     );
     try {
-        const success = await provider.login(
-            (_userCode, _verificationUri, message) => {
-                actionContext.actionIO.appendDisplay(
-                    {
-                        type: "text",
-                        content: `[${emailTs()}] ${message}`,
-                        kind: "status",
-                    },
-                    "block",
-                );
-            },
-        );
+        const success = await provider.login((prompt) => {
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${emailTs()}] ${prompt.message}`,
+                    kind: "status",
+                },
+                "block",
+            );
+        });
         if (!success) {
             const tip =
                 ctx.providerType === "google"
@@ -488,7 +554,7 @@ async function handleEmailAction(
                     action.parameters.to,
                     emailProvider,
                 );
-                to_addrs = await emailProvider.resolveUserEmails(expandedTo);
+                to_addrs = await resolveRecipients(expandedTo, emailProvider);
             }
 
             let cc_addrs: string[] | undefined = [];
@@ -497,7 +563,7 @@ async function handleEmailAction(
                     action.parameters.cc,
                     emailProvider,
                 );
-                cc_addrs = await emailProvider.resolveUserEmails(expandedCc);
+                cc_addrs = await resolveRecipients(expandedCc, emailProvider);
             }
 
             let bcc_addrs: string[] | undefined = [];
@@ -506,7 +572,7 @@ async function handleEmailAction(
                     action.parameters.bcc,
                     emailProvider,
                 );
-                bcc_addrs = await emailProvider.resolveUserEmails(expandedBcc);
+                bcc_addrs = await resolveRecipients(expandedBcc, emailProvider);
             }
 
             let genContent: string = "";
@@ -541,13 +607,35 @@ async function handleEmailAction(
             emailBody = await resolveBodyPlaceholders(emailBody, emailProvider);
 
             debug(chalk.green("Handling sendEmail action ..."));
-            res = await emailProvider.sendEmail(
-                action.parameters.subject,
-                emailBody,
-                to_addrs,
-                cc_addrs,
-                bcc_addrs,
-            );
+            // Reject early if recipient resolution dropped everything —
+            // empty arrays would otherwise produce an unhelpful Graph 400.
+            if (
+                (!to_addrs || to_addrs.length === 0) &&
+                (!cc_addrs || cc_addrs.length === 0) &&
+                (!bcc_addrs || bcc_addrs.length === 0)
+            ) {
+                const requested = [
+                    ...(action.parameters.to ?? []),
+                    ...(action.parameters.cc ?? []),
+                    ...(action.parameters.bcc ?? []),
+                ];
+                return `Could not resolve any recipients for: ${requested.map((s) => `"${s}"`).join(", ")}. Pass a full email address (e.g. user@domain.com), or grant admin consent on User.Read.All so name lookups work.`;
+            }
+            try {
+                res = await emailProvider.sendEmail(
+                    action.parameters.subject,
+                    emailBody,
+                    to_addrs,
+                    cc_addrs,
+                    bcc_addrs,
+                );
+            } catch (e: any) {
+                // Surface the underlying Graph/Gmail error to the user
+                // instead of the prior generic "Error encountered when
+                // sending email!" — providers throw rather than swallow.
+                const detail = e?.message ?? String(e);
+                return `Error sending email: ${detail}`;
+            }
 
             if (res) {
                 return "Email sent ...";
@@ -586,7 +674,7 @@ async function handleForwardOrReplyAction(
 
         let senders: string[] | undefined = [];
         if (msgRef.senders && msgRef.senders.length > 0) {
-            senders = await emailProvider.resolveUserEmails(msgRef.senders);
+            senders = await resolveRecipients(msgRef.senders, emailProvider);
         }
 
         if (senders && senders.length > 0) {
@@ -605,26 +693,33 @@ async function handleForwardOrReplyAction(
             if (msg_id) {
                 let cc_addrs: string[] | undefined = [];
                 if (action.parameters.cc && action.parameters.cc.length > 0) {
-                    cc_addrs = await emailProvider.resolveUserEmails(
+                    cc_addrs = await resolveRecipients(
                         action.parameters.cc,
+                        emailProvider,
                     );
                 }
 
                 let bcc_addrs: string[] | undefined = [];
                 if (action.parameters.bcc && action.parameters.bcc.length > 0) {
-                    bcc_addrs = await emailProvider.resolveUserEmails(
+                    bcc_addrs = await resolveRecipients(
                         action.parameters.bcc,
+                        emailProvider,
                     );
                 }
 
                 // reply to the email
                 if (action.actionName === "replyEmail") {
-                    let res = await emailProvider.replyToEmail(
-                        msg_id,
-                        action.parameters.body ?? "",
-                        cc_addrs,
-                        bcc_addrs,
-                    );
+                    let res;
+                    try {
+                        res = await emailProvider.replyToEmail(
+                            msg_id,
+                            action.parameters.body ?? "",
+                            cc_addrs,
+                            bcc_addrs,
+                        );
+                    } catch (e: any) {
+                        return `Error replying to email: ${e?.message ?? String(e)}`;
+                    }
 
                     if (res) {
                         return "Email replied ...";
@@ -637,18 +732,24 @@ async function handleForwardOrReplyAction(
                         action.parameters.to &&
                         action.parameters.to.length > 0
                     ) {
-                        to_addrs = await emailProvider.resolveUserEmails(
+                        to_addrs = await resolveRecipients(
                             action.parameters.to,
+                            emailProvider,
                         );
                     }
 
-                    let res = await emailProvider.forwardEmail(
-                        msg_id,
-                        action.parameters.additionalMessage ?? "",
-                        to_addrs,
-                        cc_addrs,
-                        bcc_addrs,
-                    );
+                    let res;
+                    try {
+                        res = await emailProvider.forwardEmail(
+                            msg_id,
+                            action.parameters.additionalMessage ?? "",
+                            to_addrs,
+                            cc_addrs,
+                            bcc_addrs,
+                        );
+                    } catch (e: any) {
+                        return `Error forwarding email: ${e?.message ?? String(e)}`;
+                    }
 
                     if (res) {
                         return "Email forwarded ...";
@@ -862,7 +963,7 @@ async function handleFindEmailAction(
             msgRef.senders,
             emailProvider,
         );
-        const resolved = await emailProvider.resolveUserEmails(expandedSenders);
+        const resolved = await resolveRecipients(expandedSenders, emailProvider);
         if (resolved.length > 0) {
             searchQuery.sender = resolved[0];
         }

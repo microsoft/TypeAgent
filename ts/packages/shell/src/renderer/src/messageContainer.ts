@@ -268,6 +268,19 @@ export class MessageContainer {
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = `${classNameSuffix}-icon`;
         this.iconDiv = agentIconDiv;
+        if (classNameSuffix === "user") {
+            // Click the user-letter avatar to start a Microsoft sign-in
+            // flow. ChatView owns the signed-in state — applyUserIconState
+            // sets cursor/title/initial based on it, and the click handler
+            // reads it at click time so the avatar becomes inert once the
+            // user is signed in. Calendar+email share an MS Graph identity
+            // (single tenant), so one login covers both.
+            this.chatView.applyUserIconState(agentIconDiv);
+            agentIconDiv.addEventListener("click", () => {
+                if (this.chatView.isUserSignedIn()) return;
+                void this.chatView.addUserMessage("@calendar login");
+            });
+        }
         div.append(agentIconDiv);
 
         const messageBodyDiv = document.createElement("div");
@@ -346,6 +359,13 @@ export class MessageContainer {
         );
 
         this.speak(speakText, appendMode);
+
+        // After the agent's HTML lands in the DOM, lift any embedded
+        // user-signed-in marker into ChatView state. The marker is emitted
+        // by the calendar/email login handlers on success.
+        if (this.classNameSuffix === "agent") {
+            this.chatView.extractUserMarker(this.messageDiv);
+        }
 
         this.lastAppendMode = appendMode;
 

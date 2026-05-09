@@ -25,6 +25,7 @@ export {
     TimeSlot,
     CalendarUser,
     DeviceCodeCallback,
+    SignInPrompt,
     CalendarProviderType,
     CalendarProviderConfig,
 } from "./calendarProvider.js";
