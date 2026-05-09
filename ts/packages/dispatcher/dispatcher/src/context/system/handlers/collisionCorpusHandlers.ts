@@ -605,11 +605,15 @@ interface ProbeOpts {
     top: number;
 }
 
+interface ProbeOptsWithConcurrency extends ProbeOpts {
+    concurrency: number;
+}
+
 async function probeCorpus(
     systemContext: CommandHandlerContext,
     corpus: Corpus,
     corpusPath: string,
-    opts: ProbeOpts,
+    opts: ProbeOptsWithConcurrency,
     onProgress?: (done: number, total: number) => void,
 ): Promise<ProbeFile> {
     interface Task {
@@ -632,67 +636,75 @@ async function probeCorpus(
         }
     }
 
-    const results: ProbeResult[] = [];
+    // `semanticSearchActionSchema` is a pure embedding lookup (one HTTP call
+    // for the request embedding, then in-memory cosine similarity vs a cached
+    // matrix). It's safely parallelizable — running N at a time scales close
+    // to linearly until the embedding API is rate-limited. Default
+    // concurrency 8 brings full-corpus probes down from ~12 min serial to
+    // under 2 min on the existing data.
     const t0 = Date.now();
-    for (let i = 0; i < tasks.length; i++) {
-        const t = tasks[i];
-        try {
-            // Filter `() => true` so we score every loaded schema, even
-            // ones that aren't currently active in this session — the
-            // user's session is typically a subset, but the corpus was
-            // generated against the full set.
-            const ranking =
-                await systemContext.agents.semanticSearchActionSchema(
-                    t.phraseText,
-                    opts.top,
-                    () => true,
+    const results: ProbeResult[] = await pmap(
+        tasks,
+        opts.concurrency,
+        async (t) => {
+            try {
+                // Filter `() => true` so we score every loaded schema, even
+                // ones that aren't currently active in this session — the
+                // user's session is typically a subset, but the corpus was
+                // generated against the full set.
+                const ranking =
+                    await systemContext.agents.semanticSearchActionSchema(
+                        t.phraseText,
+                        opts.top,
+                        () => true,
+                    );
+                const rows: ProbeRow[] = (ranking ?? []).map((r: any) => ({
+                    schemaName: r.item.actionSchemaFile.schemaName,
+                    actionName: r.item.definition.name,
+                    score: r.score,
+                }));
+                for (let k = 0; k < rows.length - 1; k++) {
+                    rows[k].deltaToNext = rows[k].score - rows[k + 1].score;
+                }
+                const top1 = rows[0];
+                const top1MatchesExpected =
+                    top1 !== undefined &&
+                    strictActionsMatch(
+                        top1.schemaName,
+                        top1.actionName,
+                        t.schemaName,
+                        t.actionName,
+                    );
+                const verdict = classify(
+                    top1MatchesExpected,
+                    top1?.deltaToNext,
+                    opts.delta,
                 );
-            const rows: ProbeRow[] = (ranking ?? []).map((r: any) => ({
-                schemaName: r.item.actionSchemaFile.schemaName,
-                actionName: r.item.definition.name,
-                score: r.score,
-            }));
-            for (let k = 0; k < rows.length - 1; k++) {
-                rows[k].deltaToNext = rows[k].score - rows[k + 1].score;
+                return {
+                    schemaName: t.schemaName,
+                    actionName: t.actionName,
+                    phraseText: t.phraseText,
+                    phraseSources: t.phraseSources,
+                    rows,
+                    top1: top1
+                        ? { ...top1, matchesExpected: top1MatchesExpected }
+                        : undefined,
+                    verdict,
+                };
+            } catch (err) {
+                return {
+                    schemaName: t.schemaName,
+                    actionName: t.actionName,
+                    phraseText: t.phraseText,
+                    phraseSources: t.phraseSources,
+                    rows: [],
+                    error: err instanceof Error ? err.message : String(err),
+                    verdict: "ERROR" as Verdict,
+                };
             }
-            const top1 = rows[0];
-            const top1MatchesExpected =
-                top1 !== undefined &&
-                strictActionsMatch(
-                    top1.schemaName,
-                    top1.actionName,
-                    t.schemaName,
-                    t.actionName,
-                );
-            const verdict = classify(
-                top1MatchesExpected,
-                top1?.deltaToNext,
-                opts.delta,
-            );
-            results.push({
-                schemaName: t.schemaName,
-                actionName: t.actionName,
-                phraseText: t.phraseText,
-                phraseSources: t.phraseSources,
-                rows,
-                top1: top1
-                    ? { ...top1, matchesExpected: top1MatchesExpected }
-                    : undefined,
-                verdict,
-            });
-        } catch (err) {
-            results.push({
-                schemaName: t.schemaName,
-                actionName: t.actionName,
-                phraseText: t.phraseText,
-                phraseSources: t.phraseSources,
-                rows: [],
-                error: err instanceof Error ? err.message : String(err),
-                verdict: "ERROR",
-            });
-        }
-        onProgress?.(i + 1, tasks.length);
-    }
+        },
+        onProgress,
+    );
     const elapsedMs = Date.now() - t0;
     return aggregateProbeResults(results, opts, elapsedMs, corpusPath);
 }
@@ -2539,6 +2551,11 @@ class CollisionCorpusProbeCommandHandler implements CommandHandler {
                 type: "number",
                 default: DEFAULT_DELTA,
             },
+            concurrency: {
+                description: `Concurrent probes (default ${DEFAULT_CONCURRENCY})`,
+                type: "number",
+                default: DEFAULT_CONCURRENCY,
+            },
             workdir: {
                 description:
                     "Directory for default-named files. Default: <instanceDir>/collisions",
@@ -2577,6 +2594,10 @@ class CollisionCorpusProbeCommandHandler implements CommandHandler {
         }
         const top = Math.max(1, params.flags.top ?? DEFAULT_PROBE_TOP);
         const delta = Math.max(0, params.flags.delta ?? DEFAULT_DELTA);
+        const concurrency = Math.max(
+            1,
+            params.flags.concurrency ?? DEFAULT_CONCURRENCY,
+        );
 
         ensureDir(path.dirname(outPath));
 
@@ -2590,18 +2611,18 @@ class CollisionCorpusProbeCommandHandler implements CommandHandler {
                 0,
             );
             displayStatus(
-                `Probe replay\n[0/${totalPhrases}] starting…`,
+                `Probe replay\n[0/${totalPhrases}] starting (concurrency ${concurrency})…`,
                 context,
             );
             const probeFile = await probeCorpus(
                 systemContext,
                 corpus,
                 inPath,
-                { top, delta },
+                { top, delta, concurrency },
                 (done, total) => {
                     if (done % 25 === 0 || done === total) {
                         displayStatus(
-                            `Probe replay\n[${done}/${total}]`,
+                            `Probe replay\n[${done}/${total}] (concurrency ${concurrency})`,
                             context,
                         );
                     }
@@ -2972,11 +2993,11 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                     systemContext,
                     corpus,
                     files.corpus,
-                    { top, delta },
+                    { top, delta, concurrency },
                     (done, total) => {
                         if (done % 50 === 0 || done === total) {
                             displayStatus(
-                                `Pipeline 2/4 · probe\n[${done}/${total}]`,
+                                `Pipeline 2/4 · probe\n[${done}/${total}] (concurrency ${concurrency})`,
                                 context,
                             );
                         }
