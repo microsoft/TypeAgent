@@ -3674,6 +3674,9 @@ importers:
 
   packages/completionUI:
     devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4458,8 +4461,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/memory/conversation:
     dependencies:
@@ -4803,8 +4806,8 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/security/validation:
     dependencies:
@@ -4819,8 +4822,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/shell:
     dependencies:
@@ -14849,11 +14852,6 @@ packages:
 
   typescript@5.4.5:
     resolution: {integrity: sha512-vcI4UpRgg81oIRUFwR0WSIHKt11nJ7SAVlYNIu+QpqeyXP+gpQJy/Z4+F0aGxSE4MqwjyXvW/TzgkLAx2AGHwQ==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -28344,8 +28342,6 @@ snapshots:
       underscore: 1.13.8
 
   typescript@5.4.5: {}
-
-  typescript@5.9.3: {}
 
   typical@4.0.0: {}
 

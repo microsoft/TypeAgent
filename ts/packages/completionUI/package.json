@@ -21,13 +21,14 @@
   "scripts": {
     "build": "npm run tsc && npm run copy:css",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "copy:css": "node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').copyFileSync('src/styles.css','dist/styles.css')\"",
+    "copy:css": "copyfiles -u 1 \"src/styles.css\" dist",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "tsc": "tsc -b"
   },
   "dependencies": {},
   "devDependencies": {
+    "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
