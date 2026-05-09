@@ -15,6 +15,7 @@ import {
     traceMatch,
     formatTrace,
     computeCoverage,
+    diffGrammars,
 } from "grammar-tools-core";
 import { DebugPanelManager } from "./debugPanel.js";
 import {
@@ -178,6 +179,105 @@ export function activate(context: ExtensionContext): void {
         commands.registerCommand("agr.clearCoverage", () => {
             const editor = window.activeTextEditor;
             if (editor) clearCoverageDecorations(editor);
+        }),
+    );
+
+    // Diff command (C.8)
+    context.subscriptions.push(
+        commands.registerCommand("agr.diffGrammars", async () => {
+            const editor = window.activeTextEditor;
+            if (!editor || editor.document.languageId !== "agr") {
+                window.showErrorMessage("Open an .agr file first.");
+                return;
+            }
+
+            const otherUri = await window.showOpenDialog({
+                canSelectMany: false,
+                filters: { "Grammar files": ["agr"] },
+                openLabel: "Select grammar to compare",
+                title: "Select the other .agr file to diff against",
+            });
+            if (!otherUri || otherUri.length === 0) return;
+
+            const beforeText = editor.document.getText();
+            const beforeId = path.basename(editor.document.fileName);
+            const beforeResult = loadGrammarFromBuffer(beforeId, beforeText);
+            if (!beforeResult.ok) {
+                window.showErrorMessage(
+                    "Current grammar has errors. Fix diagnostics first.",
+                );
+                return;
+            }
+
+            const afterText = await fs.promises.readFile(
+                otherUri[0].fsPath,
+                "utf-8",
+            );
+            const afterId = path.basename(otherUri[0].fsPath);
+            const afterResult = loadGrammarFromBuffer(afterId, afterText);
+            if (!afterResult.ok) {
+                window.showErrorMessage(
+                    `Selected grammar (${afterId}) has errors.`,
+                );
+                return;
+            }
+
+            try {
+                const diff = diffGrammars(
+                    beforeResult.grammar,
+                    afterResult.grammar,
+                );
+
+                const diffChannel = window.createOutputChannel(
+                    "Action Grammar Diff",
+                );
+                diffChannel.clear();
+                diffChannel.appendLine(`Diff: ${beforeId} -> ${afterId}`);
+                diffChannel.appendLine("");
+
+                if (
+                    diff.added.length === 0 &&
+                    diff.removed.length === 0 &&
+                    diff.changed.length === 0
+                ) {
+                    diffChannel.appendLine("No differences found.");
+                } else {
+                    if (diff.added.length > 0) {
+                        diffChannel.appendLine(`Added (${diff.added.length}):`);
+                        for (const r of diff.added) {
+                            diffChannel.appendLine(`  + ${r}`);
+                        }
+                        diffChannel.appendLine("");
+                    }
+                    if (diff.removed.length > 0) {
+                        diffChannel.appendLine(
+                            `Removed (${diff.removed.length}):`,
+                        );
+                        for (const r of diff.removed) {
+                            diffChannel.appendLine(`  - ${r}`);
+                        }
+                        diffChannel.appendLine("");
+                    }
+                    if (diff.changed.length > 0) {
+                        diffChannel.appendLine(
+                            `Changed (${diff.changed.length}):`,
+                        );
+                        for (const c of diff.changed) {
+                            diffChannel.appendLine(
+                                `  ~ ${c.rule} (${c.reason})`,
+                            );
+                            diffChannel.appendLine(`    before: ${c.before}`);
+                            diffChannel.appendLine(`    after:  ${c.after}`);
+                            diffChannel.appendLine("");
+                        }
+                    }
+                }
+                diffChannel.show(true);
+            } catch (e: unknown) {
+                window.showErrorMessage(
+                    e instanceof Error ? e.message : String(e),
+                );
+            }
         }),
     );
 }

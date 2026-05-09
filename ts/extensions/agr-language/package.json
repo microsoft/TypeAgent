@@ -44,6 +44,11 @@
         "command": "agr.clearCoverage",
         "title": "Clear Coverage",
         "category": "Action Grammar"
+      },
+      {
+        "command": "agr.diffGrammars",
+        "title": "Diff Grammars",
+        "category": "Action Grammar"
       }
     ],
     "grammars": [

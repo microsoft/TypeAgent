@@ -42,17 +42,17 @@ _Last updated: 2026-05-08_
 
 ### Track C - VS Code extension
 
-| Item | Description                                  | Status      |
-| ---- | -------------------------------------------- | ----------- |
-| C.0  | Multi-package layout, reuse TextMate grammar | done        |
-| C.1  | LSP diagnostics                              | done        |
-| C.2  | LSP go-to-definition                         | done        |
-| C.3  | LSP find-references                          | done        |
-| C.4  | LSP hover                                    | done        |
-| C.5  | LSP document formatting                      | done        |
-| C.6  | Webview debug panel                          | done        |
-| C.7  | Coverage decorations                         | done        |
-| C.8  | Diff command                                 | not started |
+| Item | Description                                  | Status |
+| ---- | -------------------------------------------- | ------ |
+| C.0  | Multi-package layout, reuse TextMate grammar | done   |
+| C.1  | LSP diagnostics                              | done   |
+| C.2  | LSP go-to-definition                         | done   |
+| C.3  | LSP find-references                          | done   |
+| C.4  | LSP hover                                    | done   |
+| C.5  | LSP document formatting                      | done   |
+| C.6  | Webview debug panel                          | done   |
+| C.7  | Coverage decorations                         | done   |
+| C.8  | Diff command                                 | done   |
 
 ### Track D - Shared UI
 
