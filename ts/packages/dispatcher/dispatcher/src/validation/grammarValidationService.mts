@@ -17,9 +17,9 @@ const debug = registerDebug("typeagent:dispatcher:validation");
 
 /**
  * Validate grammar patterns using the AgentGrammarRegistry.
- * 
+ *
  * NO STORE ADAPTERS NEEDED - registry already has dynamic grammars via getDynamicGrammar().
- * 
+ *
  * @param agentName Current agent name
  * @param request Validation request with patterns to test
  * @param registry AgentGrammarRegistry with ALL static + dynamic rules
@@ -111,11 +111,10 @@ export async function validateGrammarPatternsImpl(
             request.description,
         );
 
-        const revalidatedCollisions =
-            await collisionDetector.detectCollisions(
-                refinedPatterns,
-                request.actionName,
-            );
+        const revalidatedCollisions = await collisionDetector.detectCollisions(
+            refinedPatterns,
+            request.actionName,
+        );
 
         const stillLowQuality = revalidatedQuality.some(
             (r) => r.commonnessScore < 3,
@@ -138,13 +137,15 @@ export async function validateGrammarPatternsImpl(
                 suggestions: ["Try more common phrasings"],
             };
             if (stillHasCollisions) {
-                result.collisions = revalidatedCollisions.collisions.map((c) => ({
-                    pattern: c.pattern,
-                    collidingAgent: c.collidingAgent,
-                    collidingAction: c.collidingAction,
-                    testUtterance: c.testUtterance,
-                    severity: "critical" as const,
-                }));
+                result.collisions = revalidatedCollisions.collisions.map(
+                    (c) => ({
+                        pattern: c.pattern,
+                        collidingAgent: c.collidingAgent,
+                        collidingAction: c.collidingAction,
+                        testUtterance: c.testUtterance,
+                        severity: "critical" as const,
+                    }),
+                );
             }
             return result;
         }
@@ -203,9 +204,7 @@ export async function validateGrammarPatternsImpl(
     return result;
 }
 
-function formatCollisionErrors(
-    result: CollisionDetectionResult,
-): string[] {
+function formatCollisionErrors(result: CollisionDetectionResult): string[] {
     return result.collisions.map(
         (c) =>
             `Pattern "${c.pattern}" collides with ${c.collidingAgent}.${c.collidingAction} (test: "${c.testUtterance}")`,

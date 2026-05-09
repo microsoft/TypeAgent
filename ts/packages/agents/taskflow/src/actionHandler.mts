@@ -213,7 +213,10 @@ async function handleTaskFlowAction(
             }
 
             // Validate grammar patterns before saving
-            if (grammarPatterns.length > 0 && context.sessionContext.validateGrammarPatterns) {
+            if (
+                grammarPatterns.length > 0 &&
+                context.sessionContext.validateGrammarPatterns
+            ) {
                 const validationResult =
                     await context.sessionContext.validateGrammarPatterns({
                         actionName: flowName,
@@ -241,7 +244,10 @@ async function handleTaskFlowAction(
                     );
                 }
 
-                if (validationResult.warnings && validationResult.warnings.length > 0) {
+                if (
+                    validationResult.warnings &&
+                    validationResult.warnings.length > 0
+                ) {
                     context.sessionContext.notify(
                         AppAgentEvent.Warning,
                         `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,

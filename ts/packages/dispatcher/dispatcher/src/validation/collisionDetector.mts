@@ -24,7 +24,10 @@ export class CollisionDetector {
     ): Promise<CollisionDetectionResult> {
         const collisions: CollisionInfo[] = [];
 
-        const testUtterances = this.generateTestUtterances(patterns, actionName);
+        const testUtterances = this.generateTestUtterances(
+            patterns,
+            actionName,
+        );
         debug(`Generated ${testUtterances.length} test utterances`);
 
         const registeredAgents =

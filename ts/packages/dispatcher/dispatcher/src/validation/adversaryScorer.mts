@@ -175,9 +175,7 @@ export class AdversaryScorer {
         }
     }
 
-    private mapRecommendation(
-        rec: string,
-    ): "accept" | "revise" | "reject" {
+    private mapRecommendation(rec: string): "accept" | "revise" | "reject" {
         const lower = rec.toLowerCase();
         if (lower.includes("accept")) return "accept";
         if (lower.includes("reject")) return "reject";

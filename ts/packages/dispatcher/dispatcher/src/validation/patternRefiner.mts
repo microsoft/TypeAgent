@@ -60,10 +60,7 @@ export class PatternRefiner {
         qualityIssues: PatternValidationResult[],
         collisionIssues: CollisionDetectionResult,
     ): Promise<string[]> {
-        if (
-            qualityIssues.length === 0 &&
-            !collisionIssues.hasCollisions
-        ) {
+        if (qualityIssues.length === 0 && !collisionIssues.hasCollisions) {
             return originalPatterns;
         }
 
@@ -121,10 +118,7 @@ export class PatternRefiner {
         actionDescription: string,
         problemsDesc: string,
     ): Promise<RefinementResult[]> {
-        const prompt = REFINEMENT_PROMPT.replace(
-            "{{actionName}}",
-            actionName,
-        )
+        const prompt = REFINEMENT_PROMPT.replace("{{actionName}}", actionName)
             .replace("{{description}}", actionDescription)
             .replace("{{problems}}", problemsDesc)
             .replace(

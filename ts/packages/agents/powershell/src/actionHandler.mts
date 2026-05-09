@@ -300,14 +300,18 @@ async function handlePowerShellFlowAction(
             const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
 
             // Validate grammar patterns before saving
-            if (grammarPats.length > 0 && context.sessionContext.validateGrammarPatterns) {
+            if (
+                grammarPats.length > 0 &&
+                context.sessionContext.validateGrammarPatterns
+            ) {
                 const patterns = grammarPats.map((g: any) => g.pattern);
-                
-                const validationResult = await context.sessionContext.validateGrammarPatterns({
-                    actionName: newActionName,
-                    description: (params.description as string) ?? "",
-                    patterns,
-                });
+
+                const validationResult =
+                    await context.sessionContext.validateGrammarPatterns({
+                        actionName: newActionName,
+                        description: (params.description as string) ?? "",
+                        patterns,
+                    });
 
                 if (!validationResult.approved) {
                     const errorMsg = [
@@ -329,7 +333,10 @@ async function handlePowerShellFlowAction(
                     );
                 }
 
-                if (validationResult.warnings && validationResult.warnings.length > 0) {
+                if (
+                    validationResult.warnings &&
+                    validationResult.warnings.length > 0
+                ) {
                     context.sessionContext.notify(
                         AppAgentEvent.Warning,
                         `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,

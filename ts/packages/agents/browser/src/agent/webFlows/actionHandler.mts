@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    SessionContext,
-    AppAgentEvent,
-} from "@typeagent/agent-sdk";
+import { SessionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { WebFlowStore } from "./store/webFlowStore.mjs";
 import { WebFlowDefinition } from "./types.js";
@@ -501,12 +498,11 @@ async function handleGenerateWebFlow(
 
     // Validate grammar patterns before saving
     if (flow.grammarPatterns.length > 0 && context.validateGrammarPatterns) {
-        const validationResult =
-            await context.validateGrammarPatterns({
-                actionName: flow.name,
-                description: flow.description,
-                patterns: flow.grammarPatterns,
-            });
+        const validationResult = await context.validateGrammarPatterns({
+            actionName: flow.name,
+            description: flow.description,
+            patterns: flow.grammarPatterns,
+        });
 
         if (!validationResult.approved) {
             const errorMsg = [
@@ -527,10 +523,7 @@ async function handleGenerateWebFlow(
             };
         }
 
-        if (
-            validationResult.warnings &&
-            validationResult.warnings.length > 0
-        ) {
+        if (validationResult.warnings && validationResult.warnings.length > 0) {
             context.notify(
                 AppAgentEvent.Warning,
                 `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
@@ -538,10 +531,7 @@ async function handleGenerateWebFlow(
         }
 
         // Use refined patterns if provided
-        if (
-            validationResult.patterns &&
-            validationResult.patterns.length > 0
-        ) {
+        if (validationResult.patterns && validationResult.patterns.length > 0) {
             flow.grammarPatterns = validationResult.patterns;
         }
     }
@@ -675,12 +665,11 @@ async function handleGenerateWebFlowFromRecording(
 
     // Validate grammar patterns before saving
     if (flow.grammarPatterns.length > 0 && context.validateGrammarPatterns) {
-        const validationResult =
-            await context.validateGrammarPatterns({
-                actionName: flow.name,
-                description: flow.description,
-                patterns: flow.grammarPatterns,
-            });
+        const validationResult = await context.validateGrammarPatterns({
+            actionName: flow.name,
+            description: flow.description,
+            patterns: flow.grammarPatterns,
+        });
 
         if (!validationResult.approved) {
             const errorMsg = [
@@ -701,10 +690,7 @@ async function handleGenerateWebFlowFromRecording(
             };
         }
 
-        if (
-            validationResult.warnings &&
-            validationResult.warnings.length > 0
-        ) {
+        if (validationResult.warnings && validationResult.warnings.length > 0) {
             context.notify(
                 AppAgentEvent.Warning,
                 `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
@@ -712,10 +698,7 @@ async function handleGenerateWebFlowFromRecording(
         }
 
         // Use refined patterns if provided
-        if (
-            validationResult.patterns &&
-            validationResult.patterns.length > 0
-        ) {
+        if (validationResult.patterns && validationResult.patterns.length > 0) {
             flow.grammarPatterns = validationResult.patterns;
         }
     }
