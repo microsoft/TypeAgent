@@ -154,7 +154,7 @@ function loadMSGraphSettings(): AppSettings {
             "user.read",
             "mail.read",
             "mail.send",
-            "user.read.all",
+            "user.readbasic.all",
             "calendars.readwrite",
         ],
         authMode,

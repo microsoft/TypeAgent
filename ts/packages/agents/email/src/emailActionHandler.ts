@@ -70,9 +70,10 @@ const debug = registerDebug("typeagent:email");
  * Permissive RFC-5321-ish check: a single `@`, at least one char on each
  * side, and a `.` in the domain. Intentionally not a full RFC validator —
  * we just want to identify inputs that are *already* email addresses so
- * we can skip the directory lookup (which needs `User.Read.All` admin
- * consent on MS Graph). Display-name lookups still go through the
- * provider for inputs that don't look like addresses.
+ * we can skip the directory lookup (which needs the `User.ReadBasic.All`
+ * Graph scope — user-consentable, no admin consent required). Display-name
+ * lookups still go through the provider for inputs that don't look like
+ * addresses.
  */
 const EMAIL_ADDRESS_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
@@ -619,7 +620,7 @@ async function handleEmailAction(
                     ...(action.parameters.cc ?? []),
                     ...(action.parameters.bcc ?? []),
                 ];
-                return `Could not resolve any recipients for: ${requested.map((s) => `"${s}"`).join(", ")}. Pass a full email address (e.g. user@domain.com), or grant admin consent on User.Read.All so name lookups work.`;
+                return `Could not resolve any recipients for: ${requested.map((s) => `"${s}"`).join(", ")}. Pass a full email address (e.g. user@domain.com), or consent to User.ReadBasic.All so name lookups work.`;
             }
             try {
                 res = await emailProvider.sendEmail(
