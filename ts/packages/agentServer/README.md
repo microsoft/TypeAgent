@@ -41,6 +41,8 @@ Each conversation has its own `SharedDispatcher` instance with isolated chat his
 
 The agent-server picks an **ephemeral TCP port** at startup (the OS assigns a free port via `{ port: 0 }`) and publishes its `{port, pid, startedAt}` to a discovery file at `~/.typeagent/agent-server.json`. Clients on the same machine read this file to find the server — there is **no well-known port**.
 
+The discovery file path is rooted at the dispatcher's user data dir (defaults to `~/.typeagent`, override with `TYPEAGENT_USER_DATA_DIR`), so isolated workflows — parallel benchmark workers, integration tests, side-by-side dev profiles — can each run their own agent-server with its own discovery file by setting a per-worker `TYPEAGENT_USER_DATA_DIR`. The `lockInstanceDir` lock is scoped the same way, so the isolation is end-to-end.
+
 There is at most one agent-server per machine: the server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so a second `agent-server` invocation exits with `ERR_INSTANCE_LOCKED`. Concurrent client spawns therefore land on the same agent-server rather than racing to start two.
 
 Cross-machine discovery is explicitly out of scope: connect from another host with an explicit URL via `connectAgentServer(url)`.

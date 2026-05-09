@@ -29,12 +29,14 @@ const profileDir = path.join(
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.resolve(here, "../../server/dist/server.js");
 
+// Point the parent (this script) at the isolated profile dir too, so
+// getDiscoveryFilePath()/readDiscoveryFile()/etc. resolve to the same
+// path the child writes. Without this, the parent would read the
+// developer's real ~/.typeagent/agent-server.json and never see the
+// child's discovery file.
+process.env.TYPEAGENT_USER_DATA_DIR = profileDir;
+
 const discoveryFile = getDiscoveryFilePath();
-let initialDiscovery = undefined;
-if (fs.existsSync(discoveryFile)) {
-    initialDiscovery = fs.readFileSync(discoveryFile, "utf-8");
-    fs.unlinkSync(discoveryFile);
-}
 
 let pass = 0;
 let fail = 0;
@@ -132,11 +134,6 @@ try {
     try {
         fs.rmSync(profileDir, { recursive: true, force: true });
     } catch {}
-    if (initialDiscovery !== undefined && !fs.existsSync(discoveryFile)) {
-        try {
-            fs.writeFileSync(discoveryFile, initialDiscovery);
-        } catch {}
-    }
 }
 
 log(`\n${pass} passed, ${fail} failed`);

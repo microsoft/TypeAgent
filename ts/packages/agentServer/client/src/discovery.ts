@@ -5,15 +5,23 @@
 // agent-server without a well-known port.
 //
 // The agent-server picks an ephemeral port at startup and writes its
-// {port, pid, startedAt} to ~/.typeagent/agent-server.json. Clients
+// {port, pid, startedAt} to <userDataDir>/agent-server.json. Clients
 // read the file, validate the pid is alive, and connect to the port.
 // On graceful shutdown the AS removes the file. A stale file (process
 // dead, or port not answering) is treated as "no server" and the
 // caller spawns a fresh one.
 //
-// There is at most one agent-server per machine — the AS uses
-// `lockInstanceDir` for an exclusive OS-level lock on its instance
-// directory, so concurrent spawn attempts collide with
+// The user data dir defaults to ~/.typeagent and can be overridden
+// via the TYPEAGENT_USER_DATA_DIR env var (matching the dispatcher's
+// `getUserDataDir()`). This lets isolated workflows — e.g. parallel
+// orkneyBench workers, integration tests, side-by-side dev profiles —
+// each run their own agent-server with its own discovery file by
+// setting a per-worker TYPEAGENT_USER_DATA_DIR. The same env var also
+// scopes the `lockInstanceDir` lock, so isolation is end-to-end.
+//
+// Within a single user-data-dir there is at most one agent-server —
+// the AS uses `lockInstanceDir` for an exclusive OS-level lock on its
+// instance directory, so concurrent spawn attempts collide with
 // `ERR_INSTANCE_LOCKED` instead of producing two ASs racing on the
 // discovery file.
 
@@ -29,8 +37,17 @@ export interface DiscoveryRecord {
 
 export const DISCOVERY_FILE_NAME = "agent-server.json";
 
+// Mirrors agent-dispatcher's `getUserDataDir()`. Inlined here so the
+// agent-server client stays free of the heavy dispatcher dependency.
+function getUserDataDir(): string {
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
+}
+
 export function getDiscoveryFilePath(): string {
-    return path.join(os.homedir(), ".typeagent", DISCOVERY_FILE_NAME);
+    return path.join(getUserDataDir(), DISCOVERY_FILE_NAME);
 }
 
 export function writeDiscoveryFile(port: number, pid: number): void {
