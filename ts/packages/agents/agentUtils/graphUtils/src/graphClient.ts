@@ -123,15 +123,16 @@ const DEFAULT_REDIRECT_PORT = 6893;
 
 /**
  * Parses a port string and validates it is an integer in the 1–65535 range.
+ * Uses `Number()` for strict conversion (rejects partial parses like "123abc").
  * Logs a warning and falls back to `defaultPort` when the value is absent or invalid.
  */
 function parseValidPort(raw: string | undefined, defaultPort: number): number {
     if (raw === undefined) {
         return defaultPort;
     }
-    const parsed = parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 65535) {
-        return parsed;
+    const num = Number(raw.trim());
+    if (Number.isInteger(num) && num >= 1 && num <= 65535) {
+        return num;
     }
     debugGraphError(
         `Invalid port value "${raw}" for MSGRAPH_APP_REDIRECT_PORT; using default port ${defaultPort}.`,
