@@ -22,11 +22,16 @@
  * dispatcher; JSON dump in the CLI) work directly off this result.
  */
 
-import { Grammar, GrammarPart, GrammarRule } from "./grammarTypes.js";
-import type { DispatchModeBucket, RulesPart } from "./grammarTypes.js";
-import { compileGrammarToNFA } from "./nfaCompiler.js";
+import {
+    type Grammar,
+    type GrammarPart,
+    type GrammarRule,
+    type DispatchModeBucket,
+    type RulesPart,
+    compileGrammarToNFA,
+    matchGrammar,
+} from "action-grammar";
 import { findGrammarOverlap } from "./nfaIntersection.js";
-import { matchGrammar } from "./grammarMatcher.js";
 
 // ---------------------------------------------------------------------------
 // Public API surface

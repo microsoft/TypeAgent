@@ -29,10 +29,14 @@
  *   the same exact phrase (same tokens, same length).
  */
 
-import { NFA, NFAState, NFATransition } from "./nfa.js";
-import { globalEntityRegistry } from "./entityRegistry.js";
-import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
-import { normalizeToken } from "./nfaMatcher.js";
+import {
+    NFA,
+    NFAState,
+    NFATransition,
+    globalEntityRegistry,
+    globalPhraseSetRegistry,
+    normalizeToken,
+} from "action-grammar";
 
 export interface GrammarOverlap {
     /** Token sequence accepted by both NFAs. */

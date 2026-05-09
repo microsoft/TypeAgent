@@ -17,15 +17,17 @@ import {
     GrammarPart,
     GrammarRule,
     grammarFromJson,
+} from "action-grammar";
+import {
     scanGrammarCollisions,
     collectTopLevelRules,
-} from "action-grammar";
+} from "grammar-tools-core";
 import type {
     CollisionScanResult,
     CollisionRecord,
     SchemaInput,
     SchemaSkip,
-} from "action-grammar";
+} from "grammar-tools-core";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getGrammarContent } from "../../../translation/actionConfig.js";

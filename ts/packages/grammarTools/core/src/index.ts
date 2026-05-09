@@ -77,3 +77,24 @@ export { formatTrace } from "./formatTrace.js";
 export type { FormatTraceOptions } from "./formatTrace.js";
 export { computeCoverage } from "./coverage.js";
 export { diffGrammars } from "./diff.js";
+
+// Cross-agent grammar collision detection (NFA product construction).
+export { findGrammarOverlap } from "./nfaIntersection.js";
+export type {
+    GrammarOverlap,
+    FindOverlapOptions,
+} from "./nfaIntersection.js";
+export {
+    scanGrammarCollisions,
+    formatRulePartsText,
+    collectTopLevelRules,
+    stripTailCalls,
+} from "./collisionScanner.js";
+export type {
+    SchemaInput,
+    SchemaScanInfo,
+    SchemaSkip,
+    CollisionRecord,
+    CollisionScanResult,
+    ScanOptions,
+} from "./collisionScanner.js";

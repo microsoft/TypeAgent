@@ -24,6 +24,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "action-grammar": "workspace:*",
     "grammar-tools-core": "workspace:*"
   },
   "devDependencies": {

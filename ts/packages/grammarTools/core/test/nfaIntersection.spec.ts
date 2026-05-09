@@ -5,11 +5,11 @@ import {
     Grammar,
     createStringPart,
     createWildcardPart,
-} from "../src/grammarTypes.js";
-import { compileGrammarToNFA } from "../src/nfaCompiler.js";
+    compileGrammarToNFA,
+    registerBuiltInEntities,
+    matchGrammarWithNFA,
+} from "action-grammar";
 import { findGrammarOverlap } from "../src/nfaIntersection.js";
-import { registerBuiltInEntities } from "../src/builtInEntities.js";
-import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
 
 /**
  * Tests for the NFA intersection / overlap detector used by

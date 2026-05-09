@@ -20,8 +20,7 @@
   },
   "bin": {
     "generate-grammar": "./dist/generation/generate-grammar-cli.js",
-    "test-grammar": "./dist/generation/test-grammar-cli.js",
-    "analyze-grammar-collisions": "./dist/generation/analyze-grammar-collisions-cli.js"
+    "test-grammar": "./dist/generation/test-grammar-cli.js"
   },
   "files": [
     "dist",

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -29,13 +28,12 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { grammarFromJson } from "../grammarDeserializer.js";
+import { grammarFromJson, registerBuiltInEntities } from "action-grammar";
 import {
     scanGrammarCollisions,
     type SchemaInput,
     type SchemaSkip,
-} from "../grammarCollisionScanner.js";
-import { registerBuiltInEntities } from "../builtInEntities.js";
+} from "grammar-tools-core";
 
 interface CliOptions {
     dir: string;
@@ -44,8 +42,7 @@ interface CliOptions {
     help: boolean;
 }
 
-function parseArgs(): CliOptions {
-    const args = process.argv.slice(2);
+function parseArgs(args: string[]): CliOptions {
     const opts: CliOptions = {
         dir: process.cwd(),
         quiet: false,
@@ -142,8 +139,8 @@ type PreloadSkip = SchemaSkip | {
     error?: string;
 };
 
-async function main(): Promise<number> {
-    const opts = parseArgs();
+export async function runAnalyzeCollisions(args: string[]): Promise<number> {
+    const opts = parseArgs(args);
     if (opts.help) {
         printHelp();
         return 0;
@@ -253,11 +250,6 @@ async function main(): Promise<number> {
     return 0;
 }
 
-main()
-    .then((code) => process.exit(code))
-    .catch((err) => {
-        process.stderr.write(
-            `analyze-grammar-collisions failed: ${err instanceof Error ? err.stack : String(err)}\n`,
-        );
-        process.exit(1);
-    });
+// Invoked from the unified `grammar-tools collisions ...` CLI entry. See
+// `cli.ts`. Kept as a separate file so the collision-scanner workflow has
+// its own self-contained module that's easy to reuse from other hosts.
