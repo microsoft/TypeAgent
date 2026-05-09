@@ -102,7 +102,7 @@ async function resolveRecipients(
         if (isLikelyEmailAddress(trimmed)) {
             direct.push(trimmed);
         } else {
-            needsLookup.push(input);
+            needsLookup.push(trimmed);
         }
     }
     const resolved =
