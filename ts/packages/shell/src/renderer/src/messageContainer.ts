@@ -276,9 +276,23 @@ export class MessageContainer {
             // user is signed in. Calendar+email share an MS Graph identity
             // (single tenant), so one login covers both.
             this.chatView.applyUserIconState(agentIconDiv);
-            agentIconDiv.addEventListener("click", () => {
+            agentIconDiv.setAttribute("role", "button");
+            agentIconDiv.tabIndex = 0;
+            agentIconDiv.setAttribute("aria-label", "Sign in with Microsoft");
+
+            const activateUserIcon = () => {
                 if (this.chatView.isUserSignedIn()) return;
                 void this.chatView.addUserMessage("@calendar login");
+            };
+
+            agentIconDiv.addEventListener("click", () => {
+                activateUserIcon();
+            });
+            agentIconDiv.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    activateUserIcon();
+                }
             });
         }
         div.append(agentIconDiv);
