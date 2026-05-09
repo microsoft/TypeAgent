@@ -287,6 +287,7 @@ export function instantiate(): AppAgent {
                 return await state.choiceManager.handleChoice(
                     choiceId,
                     response,
+                    context,
                 );
             } finally {
                 state.pendingChoiceContext = null;

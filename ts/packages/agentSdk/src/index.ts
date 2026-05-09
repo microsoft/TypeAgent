@@ -11,6 +11,8 @@ export {
     SchemaManifest,
     AppAgent,
     AppAgentEvent,
+    AgentMessageKind,
+    AgentThreadHandle,
     SessionContext,
     StorageListOptions,
     Storage,
@@ -22,6 +24,8 @@ export {
     AppAgentInitSettings,
     ResolveEntityResult,
     ActivityCacheSpec,
+    ReadinessReport,
+    ReadinessState,
 } from "./agentInterface.js";
 
 export {

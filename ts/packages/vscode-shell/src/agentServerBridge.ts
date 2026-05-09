@@ -31,7 +31,6 @@ export type {
     BridgeFromWebviewMessage,
 } from "./bridge/messages.js";
 
-
 /**
  * Manages the RPC connection to the agent server from the extension host
  * and bridges messages to/from webview panels.
@@ -1042,9 +1041,7 @@ export class AgentServerBridge {
      */
     public cancelAllInFlight(): void {
         if (!this.session) return;
-        const ids = Array.from(
-            new Set(this.clientToServerRequestId.values()),
-        );
+        const ids = Array.from(new Set(this.clientToServerRequestId.values()));
         for (const serverId of ids) {
             try {
                 this.session.dispatcher.cancelCommand(serverId);
@@ -1324,10 +1321,7 @@ export class AgentServerBridge {
      * to the originating client by the agent server's takeAction routing,
      * so only this bridge (the originator's bridge) receives it.
      */
-    private async handleShellAction(
-        requestId: any,
-        data: any,
-    ): Promise<void> {
+    private async handleShellAction(requestId: any, data: any): Promise<void> {
         if (!data || typeof data !== "object") return;
         const actionName = data.actionName as string | undefined;
         const params = (data.parameters ?? {}) as {

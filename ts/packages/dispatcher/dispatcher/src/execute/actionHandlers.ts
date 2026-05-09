@@ -70,6 +70,63 @@ export function getSchemaNamePrefix(
     return `[${config.emojiChar} ${schemaName}] `;
 }
 
+// Pre-flight readiness gate. Looks up the agent's cached ReadinessReport
+// (populated when the agent's session context was initialized; refreshed
+// after setup).
+//
+// Behavior:
+//   - state "ready": returns undefined; the caller proceeds with the action
+//     or command.
+//   - state "setup-required" with `execution.setupOnFirstUse` enabled and
+//     the agent implements `setup`: invokes setup and returns its
+//     ActionResult so the caller can surface it (yes/no card included) in
+//     place of the user's original request. The original action/command is
+//     NOT auto-retried — the user re-runs it after setup completes.
+//   - state "setup-required" otherwise: throws a friendly Error with a
+//     `@config agent setup <name>` hint.
+//   - state "unsupported": always throws.
+//
+// Agents that don't implement checkReadiness default to `ready` and never
+// trip this check — see appAgentManager.getReadiness().
+// Exported for unit tests.
+export async function checkAgentReady(
+    appAgentName: string,
+    systemContext: CommandHandlerContext,
+    actionContext: ActionContext<unknown>,
+): Promise<ActionResult | undefined> {
+    const report = systemContext.agents.getReadiness(appAgentName);
+    if (report.state === "ready") {
+        return undefined;
+    }
+    const reason = report.message ?? "Agent is not ready.";
+    if (report.state === "unsupported") {
+        throw new Error(
+            `Agent '${appAgentName}' is not supported in this environment: ${reason}`,
+        );
+    }
+    // setup-required
+    if (systemContext.session.getConfig().execution.setupOnFirstUse) {
+        const setupResult = await systemContext.agents.runSetup(
+            appAgentName,
+            actionContext,
+            systemContext,
+        );
+        if (setupResult !== undefined) {
+            return setupResult;
+        }
+        // No setup hook — fall through to the friendly throw below.
+    }
+    // Different hint depending on whether the agent can be configured
+    // from chat. Without a hook (manual config case), `@config agent
+    // setup` would just bounce the user; point at `refresh` instead.
+    const hint = systemContext.agents.hasSetup(appAgentName)
+        ? `Run \`@config agent setup ${appAgentName}\` to configure it.`
+        : `After fixing the underlying issue, run \`@config agent refresh ${appAgentName}\` to re-check.`;
+    throw new Error(
+        `Agent '${appAgentName}' needs configuration before it can be used: ${reason} ${hint}`,
+    );
+}
+
 function getStreamingActionContext(
     appAgentName: string,
     actionIndex: number,
@@ -178,11 +235,26 @@ export async function executeAction(
                     `Agent '${appAgentName}' does not support executeAction.`,
                 );
             }
-            result =
-                (await appAgent.executeAction(action, actionContext)) ??
-                createActionResult(
-                    `Action ${getFullActionName(executableAction)} completed.`,
-                );
+            // Pre-flight readiness check — runs as late as possible, right
+            // before we invoke the agent. Agents that don't implement
+            // checkReadiness are reported as `ready` and never block here.
+            // When `setupOnFirstUse` is enabled and setup runs, its
+            // ActionResult replaces the user's original action — the
+            // caller is expected to re-run after setup completes.
+            const setupResult = await checkAgentReady(
+                appAgentName,
+                systemContext,
+                actionContext,
+            );
+            if (setupResult !== undefined) {
+                result = setupResult;
+            } else {
+                result =
+                    (await appAgent.executeAction(action, actionContext)) ??
+                    createActionResult(
+                        `Action ${getFullActionName(executableAction)} completed.`,
+                    );
+            }
         }
     } catch (e: any) {
         if (
@@ -204,46 +276,79 @@ export async function executeAction(
     }
 
     // Display the action result.
+    emitActionResult(
+        result,
+        actionContext,
+        systemContext,
+        requestId,
+        appAgentName,
+        actionIndex,
+        schemaName,
+    );
+
+    closeActionContext();
+    return result;
+}
+
+// Post-execution processing for an ActionResult: error / displayContent /
+// dynamicDisplayId / pendingChoice. Shared between the action and command
+// pipelines so commands that opt in to returning ActionResult get the same
+// rendering — including the in-chat yes/no card via createYesNoChoiceResult.
+//
+// `actionIndex` and `schemaName` are action-shaped concepts. For commands
+// invoking this helper, callers pass `actionIndex: 0` and
+// `schemaName: appAgentName` as placeholders. Choice routing keys on
+// `choiceId`, not actionIndex; schemaName is only used as the source label
+// on the choice card.
+//
+// Exported for @config agent setup, which needs to route a target agent's
+// setup result (display + pendingChoice) under the TARGET agent's name —
+// not the system agent that owns the @config command. Without this, the
+// yes/no choice card's response is routed to the wrong agent's
+// handleChoice, and the registered callback never fires.
+export function emitActionResult(
+    result: ActionResult,
+    actionContext: ActionContext<unknown>,
+    systemContext: CommandHandlerContext,
+    requestId: ReturnType<typeof getRequestId>,
+    appAgentName: string,
+    actionIndex: number,
+    schemaName: string,
+): void {
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
             displayError(result.error, actionContext);
         }
-    } else {
-        if (result.displayContent !== undefined) {
-            actionContext.actionIO.appendDisplay(
-                result.displayContent,
-                "block",
-            );
-        }
-        if (result.dynamicDisplayId !== undefined) {
-            systemContext.clientIO.setDynamicDisplay(
-                requestId,
-                schemaName,
-                actionIndex,
-                result.dynamicDisplayId,
-                result.dynamicDisplayNextRefreshMs!,
-            );
-        }
-        if (result.pendingChoice !== undefined) {
-            const pc = result.pendingChoice;
-            systemContext.pendingChoiceRoutes.set(pc.choiceId, {
-                agentName: appAgentName,
-                requestId,
-                actionIndex,
-            });
-            systemContext.clientIO.requestChoice(
-                requestId,
-                pc.choiceId,
-                pc.type,
-                pc.message,
-                pc.type === "multiChoice" ? pc.choices : [],
-                schemaName,
-            );
-        }
+        return;
     }
-
-    closeActionContext();
-    return result;
+    if (result.displayContent !== undefined) {
+        actionContext.actionIO.appendDisplay(result.displayContent, "block");
+    }
+    if (result.dynamicDisplayId !== undefined) {
+        systemContext.clientIO.setDynamicDisplay(
+            requestId,
+            schemaName,
+            actionIndex,
+            result.dynamicDisplayId,
+            result.dynamicDisplayNextRefreshMs!,
+        );
+    }
+    if (result.pendingChoice !== undefined) {
+        const pc = result.pendingChoice;
+        systemContext.pendingChoiceRoutes.set(pc.choiceId, {
+            agentName: appAgentName,
+            requestId,
+            actionIndex,
+        });
+        systemContext.clientIO.requestChoice(
+            requestId,
+            pc.choiceId,
+            pc.type,
+            pc.message,
+            pc.type === "multiChoice" ? pc.choices : [],
+            schemaName,
+        );
+    }
 }
 
 async function canExecute(
@@ -634,12 +739,54 @@ export async function executeCommand(
         );
 
         try {
-            return await appAgent.executeCommand(
+            // Pre-flight readiness check — runs as late as possible, right
+            // before invoking the command handler. The system agent (where
+            // @config agent setup/refresh live) doesn't implement
+            // checkReadiness, so it's always `ready` — no chicken-and-egg.
+            // When `setupOnFirstUse` is on and setup runs, its ActionResult
+            // is surfaced in place of the user's original command — the
+            // caller is expected to re-run after setup completes.
+            const setupResult = await checkAgentReady(
+                appAgentName,
+                context,
+                actionContext,
+            );
+            if (setupResult !== undefined) {
+                emitActionResult(
+                    setupResult,
+                    actionContext,
+                    context,
+                    getRequestId(context),
+                    appAgentName,
+                    0,
+                    appAgentName,
+                );
+                return;
+            }
+            // Command handlers MAY return an ActionResult — when they do,
+            // we run the same post-processing the action pipeline uses
+            // (display content / pendingChoice / dynamicDisplayId). Returning
+            // void / undefined keeps the legacy "use actionIO directly"
+            // pattern. For commands actionIndex=0 and schemaName=appAgentName
+            // are placeholders — see emitActionResult().
+            const result = await appAgent.executeCommand(
                 commands,
                 params,
                 actionContext,
                 attachments,
             );
+            if (result !== undefined) {
+                emitActionResult(
+                    result,
+                    actionContext,
+                    context,
+                    getRequestId(context),
+                    appAgentName,
+                    0,
+                    appAgentName,
+                );
+            }
+            return;
         } catch (e: any) {
             if (
                 e.name === "AbortError" ||

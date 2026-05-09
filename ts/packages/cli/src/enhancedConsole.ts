@@ -578,6 +578,47 @@ export function createEnhancedClientIO(
         lastAppendMode = appendMode;
     }
 
+    // Route a setDisplay/appendDisplay message based on its render kind.
+    //   - kind: "toast"  → toast banner (ephemeral, source-prefixed)
+    //   - kind: "inline" → compact one-line entry (source-prefixed)
+    //   - kind: "bubble" / absent → existing displayContent path; agent-initiated
+    //     bubbles (clientRequestId starts with "agent-") get a "[<source>]" prefix
+    //     so they're visually distinct from request-bound output.
+    function renderAgentMessage(
+        message: IAgentMessage,
+        mode?: DisplayAppendMode,
+    ): void {
+        const kind = message.kind;
+        if (kind === "toast") {
+            displayToastNotification(
+                message.message,
+                message.source,
+                Date.now(),
+            );
+            return;
+        }
+        if (kind === "inline") {
+            displayInlineNotification(
+                message.message,
+                message.source,
+                Date.now(),
+            );
+            return;
+        }
+        const clientId = message.requestId.clientRequestId as
+            | string
+            | undefined;
+        if (clientId?.startsWith("agent-")) {
+            const header = chalk.dim(`[${message.source}]`);
+            if (currentSpinner?.isActive()) {
+                currentSpinner.writeAbove(header);
+            } else {
+                displayContent(header);
+            }
+        }
+        displayContent(message.message, mode);
+    }
+
     function displayInlineNotification(
         data: string | DisplayContent,
         source: string,
@@ -677,10 +718,10 @@ export function createEnhancedClientIO(
             // Ignored
         },
         setDisplay(message: IAgentMessage): void {
-            displayContent(message.message);
+            renderAgentMessage(message);
         },
         appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
-            displayContent(message.message, mode);
+            renderAgentMessage(message, mode);
         },
         appendDiagnosticData(_requestId: RequestId, _data: any) {
             // Ignored
@@ -2108,7 +2149,9 @@ export function getEnhancedConsolePrompt(_text: string): string {
  *
  * User requests are printed as styled prompt lines; agent display entries are
  * forwarded through setDisplay / appendDisplay exactly as live messages would
- * be. Notifications and display-info entries are skipped — they are ephemeral.
+ * be. Display-info entries are ephemeral and skipped. Notifications are
+ * ephemeral by default and not in the log; persist:true notifications are
+ * present and get re-emitted through clientIO.notify on replay.
  */
 export async function replayDisplayHistory(
     dispatcher: Dispatcher,
@@ -2185,7 +2228,17 @@ export async function replayDisplayHistory(
                 pendingInteractions.delete(entry.interactionId);
                 break;
             }
-            // notify and set-display-info are ephemeral — skip them
+            case "notify":
+                // Only persist:true notifications are in the log; replay them
+                // through the same channel they were emitted on.
+                clientIO.notify(
+                    entry.notificationId,
+                    entry.event,
+                    entry.data,
+                    entry.source,
+                );
+                break;
+            // set-display-info entries are ephemeral — skip them
         }
     }
 

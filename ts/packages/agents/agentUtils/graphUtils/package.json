@@ -33,6 +33,7 @@
     "@azure/identity-cache-persistence": "^1.1.1",
     "@azure/logger": "^1.1.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
