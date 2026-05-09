@@ -2,4 +2,7 @@
 .gitignore
 *.vsix
 src/**
+webview/**
 tsconfig.json
+tsconfig.webview.json
+vite.config.webview.ts

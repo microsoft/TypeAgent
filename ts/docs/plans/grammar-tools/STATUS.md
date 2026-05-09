@@ -50,7 +50,7 @@ _Last updated: 2026-05-08_
 | C.3  | LSP find-references                          | done        |
 | C.4  | LSP hover                                    | done        |
 | C.5  | LSP document formatting                      | done        |
-| C.6  | Webview debug panel                          | not started |
+| C.6  | Webview debug panel                          | done        |
 | C.7  | Coverage decorations                         | not started |
 | C.8  | Diff command                                 | not started |
 

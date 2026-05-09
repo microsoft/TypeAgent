@@ -14,6 +14,7 @@ import {
     traceMatch,
     formatTrace,
 } from "grammar-tools-core";
+import { DebugPanelManager } from "./debugPanel.js";
 
 let client: LanguageClient | undefined;
 
@@ -82,6 +83,15 @@ export function activate(context: ExtensionContext): void {
             traceChannel.clear();
             traceChannel.appendLine(output);
             traceChannel.show(true);
+        }),
+    );
+
+    // Debug panel (C.6)
+    const debugPanelManager = new DebugPanelManager(context);
+    context.subscriptions.push(debugPanelManager);
+    context.subscriptions.push(
+        commands.registerCommand("agr.openDebugPanel", () => {
+            debugPanelManager.show();
         }),
     );
 }

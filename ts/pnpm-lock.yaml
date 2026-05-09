@@ -1025,12 +1025,21 @@ importers:
       '@types/vscode':
         specifier: ^1.90.0
         version: 1.100.0
+      grammar-tools-ui:
+        specifier: workspace:*
+        version: link:../../packages/grammarTools/ui
+      lit:
+        specifier: ^3.1.0
+        version: 3.3.2
       rimraf:
         specifier: ^5.0.0
         version: 5.0.10
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.2)(less@4.3.0)(terser@5.39.2)
 
   packages/actionGrammar:
     dependencies:
