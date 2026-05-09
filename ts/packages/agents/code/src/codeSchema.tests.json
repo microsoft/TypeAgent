@@ -3,7 +3,7 @@
     "request": "Can you create a new Python file called main.py with a basic hello world function?",
     "schemaName": "codeSchema",
     "action": {
-      "actionName": "newFile",
+      "actionName": "newCodeFile",
       "parameters": {}
     }
   },
@@ -11,7 +11,7 @@
     "request": "Make a new JavaScript file utils.js and add some helper functions for string manipulation",
     "schemaName": "codeSchema",
     "action": {
-      "actionName": "newFile",
+      "actionName": "newCodeFile",
       "parameters": {}
     }
   },
@@ -19,7 +19,7 @@
     "request": "I need a new CSS file styles.css - just put some basic reset styles in there",
     "schemaName": "codeSchema",
     "action": {
-      "actionName": "newFile",
+      "actionName": "newCodeFile",
       "parameters": {}
     }
   },
@@ -27,7 +27,7 @@
     "request": "Create config.json with some sample configuration settings",
     "schemaName": "codeSchema",
     "action": {
-      "actionName": "newFile",
+      "actionName": "newCodeFile",
       "parameters": {}
     }
   },

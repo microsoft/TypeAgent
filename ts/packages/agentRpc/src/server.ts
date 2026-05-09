@@ -3,6 +3,8 @@
 
 import {
     ActionContext,
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgent,
     SessionContext,
     Storage,
@@ -132,10 +134,14 @@ export function createAgentRpcServer(
             if (agent.executeAction === undefined) {
                 throw new Error("Invalid invocation of executeAction");
             }
-            return agent.executeAction(
-                param.action,
-                getActionContextShim(param),
-            );
+            const shim = getActionContextShim(param);
+            try {
+                return await agent.executeAction(param.action, shim);
+            } finally {
+                if (param.actionContextId !== undefined) {
+                    actionAbortControllers.delete(param.actionContextId);
+                }
+            }
         },
         async validateWildcardMatch(param): Promise<any> {
             if (agent.validateWildcardMatch === undefined) {
@@ -162,6 +168,18 @@ export function createAgentRpcServer(
             );
             unregisterAgentContext(param.agentContextId!);
             return result;
+        },
+        async startBackgroundTasks(param): Promise<void> {
+            if (agent.startBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of startBackgroundTasks");
+            }
+            await agent.startBackgroundTasks(getSessionContextShim(param));
+        },
+        async stopBackgroundTasks(param): Promise<void> {
+            if (agent.stopBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of stopBackgroundTasks");
+            }
+            await agent.stopBackgroundTasks(getSessionContextShim(param));
         },
 
         async getCommands(param): Promise<any> {
@@ -262,7 +280,21 @@ export function createAgentRpcServer(
                 param.schemaName,
             );
         },
+        async checkReadiness(param) {
+            if (agent.checkReadiness === undefined) {
+                throw new Error("Invalid invocation of checkReadiness");
+            }
+            return agent.checkReadiness(getSessionContextShim(param));
+        },
+        async setup(param) {
+            if (agent.setup === undefined) {
+                throw new Error("Invalid invocation of setup");
+            }
+            return agent.setup(getActionContextShim(param));
+        },
     };
+
+    const actionAbortControllers = new Map<number, AbortController>();
 
     const agentCallHandlers: AgentCallFunctions = {
         async streamPartialAction(
@@ -283,6 +315,9 @@ export function createAgentRpcServer(
                 param.delta,
                 getActionContextShim(param),
             );
+        },
+        cancelAction(param: { actionContextId: number }): void {
+            actionAbortControllers.get(param.actionContextId)?.abort();
         },
     };
 
@@ -421,6 +456,45 @@ export function createAgentRpcServer(
                 notificationId?: string,
             ): void => {
                 rpc.send("notify", contextId, event, message, notificationId);
+            },
+            beginAgentThread: (kind: AgentMessageKind): AgentThreadHandle => {
+                const threadId = globalThis.crypto.randomUUID();
+                let completed = false;
+                const completedError = () =>
+                    new Error(
+                        `Agent thread ${threadId} is completed; call beginAgentThread() to start a new thread.`,
+                    );
+                rpc.send("agentThreadBegin", contextId, threadId, kind);
+                return {
+                    kind,
+                    setDisplay(content: DisplayContent) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadSetDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                        );
+                    },
+                    appendDisplay(
+                        content: DisplayContent,
+                        mode: DisplayAppendMode = "block",
+                    ) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadAppendDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                            mode,
+                        );
+                    },
+                    complete() {
+                        if (completed) return;
+                        completed = true;
+                        rpc.send("agentThreadComplete", contextId, threadId);
+                    },
+                };
             },
             popupQuestion: async (
                 message: string,
@@ -600,6 +674,18 @@ export function createAgentRpcServer(
                 "Invalid action context param: missing actionContextId",
             );
         }
+        // Reuse the controller already registered for this actionContextId if
+        // one exists. Multiple RPC entry points (executeAction,
+        // streamPartialAction, executeCommand, handleChoice) can build a shim
+        // for the same id, and overwriting the controller would orphan the
+        // signal handed to the in-flight executeAction — cancelAction would
+        // then abort the wrong one. The owning call (executeAction) is
+        // responsible for deleting the entry when it completes.
+        let abortController = actionAbortControllers.get(actionContextId);
+        if (abortController === undefined) {
+            abortController = new AbortController();
+            actionAbortControllers.set(actionContextId, abortController);
+        }
         const sessionContext = getSessionContextShim(param);
         const actionIO: ActionIO = {
             setDisplay(content: DisplayContent): void {
@@ -634,6 +720,9 @@ export function createAgentRpcServer(
             streamingContext: undefined,
             activityContext: param.activityContext,
             isFromReasoningLoop: param.isFromReasoningLoop ?? false,
+            get abortSignal() {
+                return abortController.signal;
+            },
             get sessionContext() {
                 return sessionContext;
             },
@@ -672,6 +761,6 @@ export function createAgentRpcServer(
 
 export type AgentInterfaceFunctionName =
     | keyof AgentInvokeFunctions
-    | keyof AgentCallFunctions;
+    | Exclude<keyof AgentCallFunctions, "cancelAction">;
 
 export type AgentControlMessage = "exit";

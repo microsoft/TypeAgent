@@ -870,9 +870,15 @@ The dispatcher uses structured error handling at several levels:
 
 - **Command lock** — A `Limiter` ensures only one command executes at a
   time. Concurrent requests queue behind the lock.
-- **Cancellation** — Each request gets an `AbortController`. Calling
-  `cancelCommand(requestId)` signals the abort, which propagates through
-  the translation and execution pipeline.
+- **Cancellation** — Each request gets an `AbortController` whose signal
+  propagates through the translation and execution pipeline (LLM fetch,
+  streaming chunks, cache validation). Two cancellation paths exist:
+  - `cancelCommand(requestId)` — cancel by the server-assigned UUID, available
+    after `setUserRequest()` fires. Used by Escape/Ctrl+C once a request is running.
+  - `cancelCommandByClientId(clientRequestId)` — cancel by the client-assigned
+    id passed as the second argument to `processCommand()`. This AbortController
+    is created before the command lock is acquired, so it can abort a command
+    that is queued behind another in-flight command before `setUserRequest()` fires.
 - **Unknown actions** — When no agent matches, the dispatcher displays
   an error and uses semantic search to suggest the closest matching
   agents/schemas.

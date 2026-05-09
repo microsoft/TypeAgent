@@ -3,7 +3,11 @@
 
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
-import { Grammar } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createStringPart,
+    createWildcardPart,
+} from "../src/grammarTypes.js";
 
 describe("Wildcard Loop Behavior", () => {
     it("should match single-token wildcard", () => {
@@ -13,13 +17,9 @@ describe("Wildcard Loop Behavior", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -50,13 +50,9 @@ describe("Wildcard Loop Behavior", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["weather"] },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
+                        createStringPart(["weather"]),
                     ],
                     value: {
                         type: "object",
@@ -87,18 +83,10 @@ describe("Wildcard Loop Behavior", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["play"] },
-                        {
-                            type: "wildcard",
-                            variable: "track",
-                            typeName: "string",
-                        },
-                        { type: "string", value: ["by"] },
-                        {
-                            type: "wildcard",
-                            variable: "artist",
-                            typeName: "string",
-                        },
+                        createStringPart(["play"]),
+                        createWildcardPart("track", "string"),
+                        createStringPart(["by"]),
+                        createWildcardPart("artist", "string"),
                     ],
                     value: {
                         type: "object",
@@ -135,12 +123,8 @@ describe("Wildcard Loop Behavior", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["show"] },
-                        {
-                            type: "wildcard",
-                            variable: "location",
-                            typeName: "string",
-                        },
+                        createStringPart(["show"]),
+                        createWildcardPart("location", "string"),
                     ],
                     value: {
                         type: "object",

@@ -19,6 +19,7 @@ import type {
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import type { ClientIO, Dispatcher } from "agent-dispatcher";
 import { debugShell } from "./debug.js";
+import { saveUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 /**
  * Replay display history entries from a dispatcher through clientIO.
@@ -91,10 +92,20 @@ export async function replayDisplayHistory(
                     entry.action,
                 );
                 break;
+            case "notify":
+                // Only persist:true notifications are written to the log, so
+                // any notify entry we see here was opted in to replay. Re-emit
+                // through the same channel; downstream renderers handle it.
+                clientIO.notify(
+                    entry.notificationId,
+                    entry.event,
+                    entry.data,
+                    entry.source,
+                );
+                break;
             // pending-interaction, interaction-resolved, interaction-cancelled
             // are not replayed — the Shell does not yet support deferred
             // interactions so there is no UI to display them.
-            // notify entries are ephemeral — skip them.
         }
     }
 
@@ -342,6 +353,22 @@ export function createRemoteConversationBackend(
             // so tracked state must be updated regardless of what happens next.
             currentConversationId = newConversation.conversationId;
             currentName = newConversation.name;
+
+            // Persist the new current conversation so the next launch
+            // restores it. Best-effort: a failure here doesn't undo the
+            // switch.
+            try {
+                saveUserSettings({
+                    conversation: {
+                        lastConversationId: newConversation.conversationId,
+                    },
+                });
+            } catch (e: any) {
+                debugShell(
+                    "Failed to persist lastConversationId on switch (ignoring): %s",
+                    e.message,
+                );
+            }
 
             // Best-effort leave of the old conversation — a failure here does not
             // undo the switch; the client is already on the new conversation.

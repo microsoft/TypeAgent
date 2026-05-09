@@ -170,6 +170,7 @@ export type CommandHandlerContext = {
     currentRequestId: RequestId | undefined;
     currentAbortSignal: AbortSignal | undefined;
     activeRequests: Map<string, AbortController>;
+    activeRequestsByClientId: Map<unknown, AbortController>;
     noReasoning: boolean;
     isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
     commandResult?: CommandResult | undefined;
@@ -629,6 +630,7 @@ export async function initializeCommandHandlerContext(
             currentRequestId: undefined,
             currentAbortSignal: undefined,
             activeRequests: new Map<string, AbortController>(),
+            activeRequestsByClientId: new Map<unknown, AbortController>(),
             noReasoning: false,
             isInsideReasoningLoop: false,
             pendingToggleTransientAgents: [],

@@ -36,6 +36,26 @@
     }
 };
 
+<IssueDelete> = delete issue $(number:number) -> {
+    actionName: "issueDelete",
+    parameters: {
+        number
+    }
+}
+  | delete issue $(number:number) in $(repo:wildcard) -> {
+    actionName: "issueDelete",
+    parameters: {
+        number,
+        repo
+    }
+}
+  | remove issue $(number:number) -> {
+    actionName: "issueDelete",
+    parameters: {
+        number
+    }
+};
+
 <IssueReopen> = reopen issue $(number:number) -> {
     actionName: "issueReopen",
     parameters: {
@@ -155,6 +175,32 @@
     }
 };
 
+<PrChecks> = show check runs for PR $(number:number) -> {
+    actionName: "prChecks",
+    parameters: {
+        number
+    }
+}
+  | show checks for PR $(number:number) -> {
+    actionName: "prChecks",
+    parameters: {
+        number
+    }
+}
+  | show check runs for PR $(number:number) in $(repo:wildcard) -> {
+    actionName: "prChecks",
+    parameters: {
+        number,
+        repo
+    }
+}
+  | show CI status for PR $(number:number) -> {
+    actionName: "prChecks",
+    parameters: {
+        number
+    }
+};
+
 <RepoCreate> = create a new repository named $(name:wildcard) -> {
     actionName: "repoCreate",
     parameters: {
@@ -242,6 +288,49 @@
     parameters: {}
 };
 
+<MyAssignedIssues> = show my assigned issues (on github)? -> {
+    actionName: "myAssignedIssues",
+    parameters: {}
+}
+  | (show | list) issues assigned to me -> {
+    actionName: "myAssignedIssues",
+    parameters: {}
+}
+  | what issues are assigned to me -> {
+    actionName: "myAssignedIssues",
+    parameters: {}
+};
+
+<IssueAddLabel> = add label $(label:wildcard) to issue $(number:number) -> {
+    actionName: "issueAddLabel",
+    parameters: {
+        number,
+        label
+    }
+}
+  | add label $(label:wildcard) to issue $(number:number) in $(repo:wildcard) -> {
+    actionName: "issueAddLabel",
+    parameters: {
+        number,
+        label,
+        repo
+    }
+}
+  | label issue $(number:number) as $(label:wildcard) -> {
+    actionName: "issueAddLabel",
+    parameters: {
+        number,
+        label
+    }
+}
+  | tag issue $(number:number) with $(label:wildcard) -> {
+    actionName: "issueAddLabel",
+    parameters: {
+        number,
+        label
+    }
+};
+
 <RunView> = view workflow run $(id:word) -> {
     actionName: "runView",
     parameters: {
@@ -309,6 +398,7 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <AuthStatus>
   | <IssueCreate>
   | <IssueClose>
+  | <IssueDelete>
   | <IssueReopen>
   | <IssueList>
   | <IssueView>
@@ -318,6 +408,7 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <PrList>
   | <PrView>
   | <PrCheckout>
+  | <PrChecks>
   | <RepoCreate>
   | <RepoClone>
   | <RepoView>
@@ -325,6 +416,8 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <StarRepo>
   | <SearchRepos>
   | <StatusPrint>
+  | <MyAssignedIssues>
+  | <IssueAddLabel>
   | <RunView>
   | <WorkflowView>
   | <ConfigSet>

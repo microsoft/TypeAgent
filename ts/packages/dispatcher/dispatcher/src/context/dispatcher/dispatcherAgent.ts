@@ -41,10 +41,13 @@ import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
 import {
-    executeReasoningAction as executeClaudeReasoning,
-    executeReasoning,
+    executeReasoningAction as executeClaudeReasoningAction,
+    executeReasoning as executeClaudeReasoning,
 } from "../../reasoning/claude.js";
-import { executeReasoningAction as executeCopilotReasoning } from "../../reasoning/copilot.js";
+import {
+    executeReasoningAction as executeCopilotReasoningAction,
+    executeReasoning as executeCopilotReasoning,
+} from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
@@ -94,7 +97,14 @@ async function executeDispatcherAction(
                         const systemContext =
                             context.sessionContext.agentContext;
                         if (!systemContext.noReasoning) {
-                            return executeReasoning(
+                            const engine =
+                                systemContext.session.getConfig().execution
+                                    .reasoning;
+                            const reason =
+                                engine === "copilot"
+                                    ? executeCopilotReasoning
+                                    : executeClaudeReasoning;
+                            return reason(
                                 action.parameters.originalRequest,
                                 context,
                             );
@@ -151,9 +161,9 @@ async function executeDispatcherAction(
 
                 switch (engine) {
                     case "claude":
-                        return executeClaudeReasoning(action, context);
+                        return executeClaudeReasoningAction(action, context);
                     case "copilot":
-                        return executeCopilotReasoning(action, context);
+                        return executeCopilotReasoningAction(action, context);
                     default:
                         throw new Error(
                             `Unsupported reasoning engine: ${engine}`,
@@ -371,7 +381,6 @@ export const dispatcherManifest: AppAgentManifest = {
                 injected: true,
                 cached: false,
             },
-            defaultEnabled: false,
         },
     },
 };

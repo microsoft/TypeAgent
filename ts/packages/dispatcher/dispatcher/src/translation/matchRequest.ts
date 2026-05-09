@@ -30,9 +30,12 @@ const debugConstValidation = registerDebug("typeagent:const:validation");
 async function validateWildcardMatch(
     match: MatchResult,
     context: CommandHandlerContext,
+    signal?: AbortSignal,
 ) {
     const actions = match.match.actions;
     for (const { action } of actions) {
+        // Check abort signal before processing each action
+        signal?.throwIfAborted();
         const schemaName = action.schemaName;
         if (schemaName === undefined) {
             continue;
@@ -61,11 +64,16 @@ async function validateWildcardMatch(
 async function validateEntityWildcardMatch(
     match: MatchResult,
     context: CommandHandlerContext,
+    signal?: AbortSignal,
 ): Promise<boolean> {
     if (match.entityWildcardPropertyNames.length === 0) {
         // No entity wildcard, nothing to validate.
         return true;
     }
+
+    // Check abort signal before starting validation loop
+    signal?.throwIfAborted();
+
     debugConstValidation(
         `Validating entity wildcards: [${match.entityWildcardPropertyNames.join(", ")}] ` +
             `for actions: [${match.match.actions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}]`,
@@ -83,6 +91,9 @@ async function validateEntityWildcardMatch(
     const agents = context.agents;
 
     for (const propertyName of match.entityWildcardPropertyNames) {
+        // Check abort signal before each property validation
+        signal?.throwIfAborted();
+
         const canResolve = await canResolvePropertyEntity(
             conversationMemory,
             propertyName,
@@ -106,14 +117,23 @@ async function validateEntityWildcardMatch(
  * Today's caller takes [0] (matching prior `getValidatedMatch` behavior); the
  * collision resolver looks at the full list when collision detection is
  * enabled in session config.
+ *
+ * @param matches
+ * @param context
+ * @param signal Optional AbortSignal to allow cancellation during validation
+ * @returns the validated matches.
  */
 async function getValidatedMatches(
     matches: MatchResult[],
     context: CommandHandlerContext,
+    signal?: AbortSignal,
 ): Promise<MatchResult[]> {
     const accepted: MatchResult[] = [];
     for (const match of matches) {
-        if (!(await validateEntityWildcardMatch(match, context))) {
+        // Check abort signal before processing each match
+        signal?.throwIfAborted();
+
+        if (!(await validateEntityWildcardMatch(match, context, signal))) {
             continue;
         }
 
@@ -121,7 +141,7 @@ async function getValidatedMatches(
             accepted.push(match);
             continue;
         }
-        if (await validateWildcardMatch(match, context)) {
+        if (await validateWildcardMatch(match, context, signal)) {
             debugConstValidation(
                 `Wildcard match accepted: ${match.match.actions}`,
             );
@@ -202,12 +222,16 @@ export async function matchRequest(
     request: string,
     history?: HistoryContext,
     activeSchemas?: string[],
+    signal?: AbortSignal,
 ): Promise<TranslationResult | undefined> {
     // Bypass grammar cache for recording/reasoning-directed requests.
     const lower = request.trimStart().toLowerCase();
     if (REASONING_PREFIXES.some((p) => lower.startsWith(p))) {
         return undefined;
     }
+
+    // Check abort signal before expensive grammar matching
+    signal?.throwIfAborted();
 
     const systemContext = context.sessionContext.agentContext;
     const agentCache = systemContext.agentCache;
@@ -244,7 +268,7 @@ export async function matchRequest(
 
     const elapsedMs = performance.now() - startTime;
 
-    const validated = await getValidatedMatches(matches, systemContext);
+    const validated = await getValidatedMatches(matches, systemContext, signal);
     if (validated.length === 0) {
         if (matches.length > 0) {
             console.log(

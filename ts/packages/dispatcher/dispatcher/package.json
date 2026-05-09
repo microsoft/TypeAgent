@@ -53,6 +53,7 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/completion-ui": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",

@@ -1,0 +1,277 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+
+/* VS Code theme overlay for the chat-ui ChatPanel.
+   chat-ui ships with a light-theme default palette; here we map those
+   surfaces to VS Code's --vscode-* CSS variables so the panel honors
+   the user's selected theme (light, dark, high-contrast). */
+
+/* The host page provides #chat-container as a column flex with
+   #status-bar above and #chat-root taking the rest. The ChatPanel
+   builds .chat-panel-wrapper into #chat-root. Make it fill. */
+#chat-root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.chat-panel-wrapper {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+/* Scrollable message area */
+.chat {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+}
+
+/* ── Input row ────────────────────────────────────────────────── */
+
+.chat-input {
+  background-color: var(--vscode-input-background) !important;
+  border-color: var(
+    --vscode-input-border,
+    var(--vscode-panel-border)
+  ) !important;
+  color: var(--vscode-input-foreground);
+}
+.chat-input.listening {
+  background-color: var(--vscode-inputValidation-infoBackground) !important;
+}
+.user-textarea {
+  color: var(--vscode-input-foreground);
+  caret-color: var(--vscode-editorCursor-foreground, currentColor);
+}
+.user-textarea:empty::before {
+  color: var(--vscode-input-placeholderForeground, #888) !important;
+}
+.chat-input-button {
+  color: var(--vscode-button-foreground, var(--vscode-foreground));
+}
+.chat-input-button:hover:not(:disabled) {
+  color: var(--vscode-button-background, var(--vscode-textLink-foreground));
+}
+.chat-input-button:disabled svg {
+  color: var(--vscode-disabledForeground, #888);
+}
+.chat-input-ghost {
+  color: var(
+    --vscode-editorGhostText-foreground,
+    var(--vscode-disabledForeground, #888)
+  );
+}
+
+/* ── Bubbles / messages ───────────────────────────────────────────
+   chat-ui ships hard-coded light pastel surfaces (lavender / #d6f3ff /
+   #c2edff / plum / white). Override every one with VS Code theme
+   variables so the panel honors light, dark and high-contrast themes. */
+
+/* Both bubbles need a visible surface on light themes (where
+   --vscode-input-background and --vscode-editor-background are both
+   white). Use a translucent gray fallback layered over the theme
+   variable so they remain distinguishable from the editor background
+   on every theme. */
+.chat-message-user {
+  background-color: var(
+    --vscode-input-background,
+    var(--vscode-editorWidget-background)
+  ) !important;
+  color: var(--vscode-foreground) !important;
+  border: 1px solid
+    var(
+      --vscode-input-border,
+      var(--vscode-panel-border, rgba(127, 127, 127, 0.3))
+    ) !important;
+}
+.chat-message-agent {
+  background-color: var(
+    --vscode-editorWidget-background,
+    rgba(127, 127, 127, 0.1)
+  ) !important;
+  color: var(--vscode-foreground) !important;
+  border: 1px solid
+    var(
+      --vscode-editorWidget-border,
+      var(--vscode-panel-border, rgba(127, 127, 127, 0.3))
+    ) !important;
+}
+
+/* Inner content shadow is invisible on dark backgrounds and adds noise. */
+.chat-message-content {
+  box-shadow: none !important;
+  color: inherit;
+}
+
+/* Status / warning / error / success kinds — keep semantic colors but
+   pull from VS Code where possible. */
+.chat-message-kind-status {
+  color: var(--vscode-descriptionForeground, gray) !important;
+}
+.chat-message-kind-warning {
+  color: var(
+    --vscode-editorWarning-foreground,
+    var(--vscode-list-warningForeground, #d7ba7d)
+  ) !important;
+}
+.chat-message-kind-error {
+  color: var(
+    --vscode-editorError-foreground,
+    var(--vscode-errorForeground, #f48771)
+  ) !important;
+}
+.chat-message-kind-success {
+  color: var(
+    --vscode-testing-iconPassed,
+    var(--vscode-debugIcon-startForeground, #89d185)
+  ) !important;
+}
+
+/* Hover-revealed metrics tooltip strip below the bubble. */
+.chat-message-metrics,
+.chat-message-metrics-agent,
+.chat-message-metrics-user {
+  background-color: var(
+    --vscode-editorHoverWidget-background,
+    var(--vscode-editorWidget-background)
+  ) !important;
+  color: var(
+    --vscode-editorHoverWidget-foreground,
+    var(--vscode-foreground)
+  ) !important;
+  border: 1px solid
+    var(
+      --vscode-editorHoverWidget-border,
+      var(--vscode-widget-border, transparent)
+    ) !important;
+}
+
+/* Avatar circles. */
+.user-icon {
+  background: var(
+    --vscode-button-background,
+    var(--vscode-badge-background, #4a4a6a)
+  ) !important;
+  color: var(
+    --vscode-button-foreground,
+    var(--vscode-badge-foreground, #fff)
+  ) !important;
+}
+.agent-icon {
+  background-color: var(--vscode-badge-background, #2a2a40) !important;
+  color: var(--vscode-badge-foreground, var(--vscode-foreground)) !important;
+}
+
+/* Timestamps */
+.chat-timestamp,
+.chat-timestamp-user,
+.chat-timestamp-agent {
+  color: var(--vscode-descriptionForeground, darkgray) !important;
+}
+.agent-name {
+  color: var(--vscode-foreground);
+}
+
+/* Roadrunner explained-icon SVG inherits currentColor from this span. */
+.chat-message-explained-icon {
+  color: var(--vscode-charts-green, #00c000);
+}
+
+/* Scrollbar — match VS Code's panel scrollbars */
+.chat::-webkit-scrollbar {
+  width: var(--vscode-scrollbar-width, 10px);
+}
+.chat::-webkit-scrollbar-thumb {
+  background-color: var(--vscode-scrollbarSlider-background) !important;
+}
+.chat::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vscode-scrollbarSlider-hoverBackground) !important;
+}
+.chat::-webkit-scrollbar-thumb:active {
+  background-color: var(--vscode-scrollbarSlider-activeBackground) !important;
+}
+.chat::-webkit-scrollbar-track {
+  background-color: transparent !important;
+}
+
+/* ── Completion dropdown (autocomplete-container from completion-ui) ── */
+/* Override the package's hard-coded light palette with VS Code theme tokens
+   so the @-command menu blends with the editor's theme. */
+.autocomplete-container {
+  background-color: var(
+    --vscode-editorSuggestWidget-background,
+    var(--vscode-menu-background, #fffffff0)
+  ) !important;
+  color: var(
+    --vscode-editorSuggestWidget-foreground,
+    var(--vscode-menu-foreground, var(--vscode-foreground))
+  ) !important;
+  border: 1px solid
+    var(
+      --vscode-editorSuggestWidget-border,
+      var(--vscode-menu-border, var(--vscode-panel-border, rgba(0, 0, 0, 0.08)))
+    ) !important;
+  border-radius: 4px !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.32),
+    0 1px 4px rgba(0, 0, 0, 0.18) !important;
+  backdrop-filter: none !important;
+  font-size: var(--vscode-font-size);
+  font-family: var(--vscode-font-family);
+}
+.autocomplete-container .completions li {
+  color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+  padding: 4px 10px;
+}
+.autocomplete-container .completions li:hover {
+  background-color: var(
+    --vscode-list-hoverBackground,
+    rgba(127, 127, 127, 0.12)
+  ) !important;
+}
+.autocomplete-container .completions .completion-selected,
+.autocomplete-container .completions .completion-selected:hover {
+  background: var(
+    --vscode-editorSuggestWidget-selectedBackground,
+    var(--vscode-list-activeSelectionBackground, var(--vscode-focusBorder))
+  ) !important;
+  color: var(
+    --vscode-editorSuggestWidget-selectedForeground,
+    var(--vscode-list-activeSelectionForeground, var(--vscode-foreground))
+  ) !important;
+}
+.autocomplete-container .completions li .search-prefix {
+  color: var(
+    --vscode-editorSuggestWidget-highlightForeground,
+    var(--vscode-list-highlightForeground, inherit)
+  );
+  font-weight: bold;
+}
+.autocomplete-container .completions .completion-selected .search-prefix {
+  color: var(
+    --vscode-editorSuggestWidget-focusHighlightForeground,
+    var(--vscode-list-focusHighlightForeground, inherit)
+  );
+}
+.autocomplete-scrollbar {
+  background-color: var(
+    --vscode-scrollbarSlider-background,
+    rgba(127, 127, 127, 0.12)
+  ) !important;
+}
+.autocomplete-scrollbar-indicator {
+  background-color: var(
+    --vscode-scrollbarSlider-hoverBackground,
+    rgba(127, 127, 127, 0.4)
+  ) !important;
+}
+.completion-toggle {
+  color: var(--vscode-textLink-foreground, var(--vscode-foreground)) !important;
+}

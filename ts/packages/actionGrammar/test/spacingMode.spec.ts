@@ -18,7 +18,11 @@
  *                      no over-splitting of contractions in required rules.
  */
 
-import { Grammar } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createStringPart,
+    createWildcardPart,
+} from "../src/grammarTypes.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
 
@@ -38,10 +42,7 @@ describe("flex-space — two-segment compound (hip hop)", () => {
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    { type: "string", value: ["hip"] },
-                    { type: "string", value: ["hop"] },
-                ],
+                parts: [createStringPart(["hip"]), createStringPart(["hop"])],
                 value: { type: "literal", value: "hiphop" },
             },
         ],
@@ -86,10 +87,7 @@ describe("flex-space — case-insensitive normalisation", () => {
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    { type: "string", value: ["Hip"] },
-                    { type: "string", value: ["Hop"] },
-                ],
+                parts: [createStringPart(["Hip"]), createStringPart(["Hop"])],
                 value: { type: "literal", value: "matched" },
             },
         ],
@@ -115,12 +113,8 @@ describe("auto split candidates — apostrophe morpheme splitting", () => {
         alternatives: [
             {
                 parts: [
-                    {
-                        type: "wildcard",
-                        variable: "artist",
-                        typeName: "wildcard",
-                    },
-                    { type: "string", value: ["'s"] },
+                    createWildcardPart("artist", "wildcard"),
+                    createStringPart(["'s"]),
                 ],
                 value: { type: "variable", name: "artist" },
             },
@@ -162,8 +156,8 @@ describe("auto split candidates — contraction splitting", () => {
         alternatives: [
             {
                 parts: [
-                    { type: "wildcard", variable: "v", typeName: "wildcard" },
-                    { type: "string", value: ["'t"] },
+                    createWildcardPart("v", "wildcard"),
+                    createStringPart(["'t"]),
                 ],
                 value: { type: "variable", name: "v" },
             },
@@ -200,14 +194,14 @@ describe("two-pass matching — literal contraction wins over wildcard + suffix"
         alternatives: [
             // Literal rule — expects "don't" as one token
             {
-                parts: [{ type: "string", value: ["don't"] }],
+                parts: [createStringPart(["don't"])],
                 value: { type: "literal", value: "matched-literal" },
             },
             // Wildcard + suffix rule — "'t" registered as split candidate
             {
                 parts: [
-                    { type: "wildcard", variable: "v", typeName: "wildcard" },
-                    { type: "string", value: ["'t"] },
+                    createWildcardPart("v", "wildcard"),
+                    createStringPart(["'t"]),
                 ],
                 value: { type: "variable", name: "v" },
             },
@@ -250,17 +244,17 @@ describe("spacing=auto (undefined) — CJK token pre-splitting", () => {
 
     // The <color> alternatives as inline rules
     const yellowRule = {
-        parts: [{ type: "string" as const, value: ["黃色"] }],
+        parts: [createStringPart(["黃色"])],
         value: { type: "literal" as const, value: "yellow" },
         spacingMode: undefined as undefined, // auto
     };
     const blueRule = {
-        parts: [{ type: "string" as const, value: ["藍色"] }],
+        parts: [createStringPart(["藍色"])],
         value: { type: "literal" as const, value: "blue" },
         spacingMode: undefined as undefined,
     };
     const greenRule = {
-        parts: [{ type: "string" as const, value: ["綠色"] }],
+        parts: [createStringPart(["綠色"])],
         value: { type: "literal" as const, value: "green" },
         spacingMode: undefined as undefined,
     };
@@ -271,10 +265,11 @@ describe("spacing=auto (undefined) — CJK token pre-splitting", () => {
                 parts: [
                     {
                         type: "rules",
-                        alternatives: [yellowRule, blueRule, greenRule],
+                        optional: undefined,
                         variable: "color",
+                        alternatives: [yellowRule, blueRule, greenRule],
                     },
-                    { type: "string", value: ["汽車"] },
+                    createStringPart(["汽車"]),
                 ],
                 spacingMode: undefined, // auto
                 value: { type: "variable", name: "color" },
@@ -329,10 +324,7 @@ describe("spacing=auto — Latin token NOT registered as split candidate", () =>
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    { type: "string", value: ["play"] },
-                    { type: "string", value: ["'s"] },
-                ],
+                parts: [createStringPart(["play"]), createStringPart(["'s"])],
                 spacingMode: undefined, // auto
                 value: { type: "literal", value: "matched" },
             },
@@ -357,9 +349,9 @@ describe("flex-space — three-segment English compound (rock and roll)", () => 
         alternatives: [
             {
                 parts: [
-                    { type: "string", value: ["rock"] },
-                    { type: "string", value: ["and"] },
-                    { type: "string", value: ["roll"] },
+                    createStringPart(["rock"]),
+                    createStringPart(["and"]),
+                    createStringPart(["roll"]),
                 ],
                 value: { type: "literal", value: "genre" },
             },
@@ -394,10 +386,7 @@ describe("flex-space — German two-morpheme compound (Fahrrad = bicycle)", () =
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    { type: "string", value: ["Fahr"] },
-                    { type: "string", value: ["rad"] },
-                ],
+                parts: [createStringPart(["Fahr"]), createStringPart(["rad"])],
                 value: { type: "literal", value: "bicycle" },
             },
         ],
@@ -426,9 +415,9 @@ describe("flex-space — German three-morpheme compound (Kraftfahrzeug = motor v
         alternatives: [
             {
                 parts: [
-                    { type: "string", value: ["Kraft"] },
-                    { type: "string", value: ["Fahr"] },
-                    { type: "string", value: ["Zeug"] },
+                    createStringPart(["Kraft"]),
+                    createStringPart(["Fahr"]),
+                    createStringPart(["Zeug"]),
                 ],
                 value: { type: "literal", value: "motor vehicle" },
             },
@@ -472,10 +461,10 @@ describe("flex-space — German four-morpheme compound (Donaudampfschifffahrt)",
         alternatives: [
             {
                 parts: [
-                    { type: "string", value: ["Donau"] },
-                    { type: "string", value: ["Dampf"] },
-                    { type: "string", value: ["Schiff"] },
-                    { type: "string", value: ["Fahrt"] },
+                    createStringPart(["Donau"]),
+                    createStringPart(["Dampf"]),
+                    createStringPart(["Schiff"]),
+                    createStringPart(["Fahrt"]),
                 ],
                 value: { type: "literal", value: "danube-steamship-voyage" },
             },
@@ -538,17 +527,11 @@ describe("flex-space — Swahili noun-class prefix (kitabu / vitabu = book / boo
     const grammar: Grammar = {
         alternatives: [
             {
-                parts: [
-                    { type: "string", value: ["ki"] },
-                    { type: "string", value: ["tabu"] },
-                ],
+                parts: [createStringPart(["ki"]), createStringPart(["tabu"])],
                 value: { type: "literal", value: "book" },
             },
             {
-                parts: [
-                    { type: "string", value: ["vi"] },
-                    { type: "string", value: ["tabu"] },
-                ],
+                parts: [createStringPart(["vi"]), createStringPart(["tabu"])],
                 value: { type: "literal", value: "books" },
             },
         ],
@@ -612,23 +595,25 @@ describe("flex-space — Swahili <Tense> rule reference: fused and spaced forms 
         alternatives: [
             {
                 parts: [
-                    { type: "string", value: ["ni"] },
+                    createStringPart(["ni"]),
                     {
                         type: "rules",
+                        optional: undefined,
+                        variable: undefined,
                         name: "Tense",
                         alternatives: [
                             {
-                                parts: [{ type: "string", value: ["li"] }],
+                                parts: [createStringPart(["li"])],
                             },
                             {
-                                parts: [{ type: "string", value: ["na"] }],
+                                parts: [createStringPart(["na"])],
                             },
                             {
-                                parts: [{ type: "string", value: ["ta"] }],
+                                parts: [createStringPart(["ta"])],
                             },
                         ],
                     },
-                    { type: "string", value: ["soma"] },
+                    createStringPart(["soma"]),
                 ],
                 // No spacingMode="none" — NFA has separate "ni"/"na"/"soma"
                 // token transitions, so both spaced and fused input works.
@@ -713,25 +698,25 @@ describe("flex-space — Swahili subject-agreement: person variation (ninasoma /
         alternatives: [
             {
                 parts: [
-                    { type: "string", value: ["ni"] },
-                    { type: "string", value: ["na"] },
-                    { type: "string", value: ["soma"] },
+                    createStringPart(["ni"]),
+                    createStringPart(["na"]),
+                    createStringPart(["soma"]),
                 ],
                 value: { type: "literal", value: "I am reading" },
             },
             {
                 parts: [
-                    { type: "string", value: ["u"] },
-                    { type: "string", value: ["na"] },
-                    { type: "string", value: ["soma"] },
+                    createStringPart(["u"]),
+                    createStringPart(["na"]),
+                    createStringPart(["soma"]),
                 ],
                 value: { type: "literal", value: "you are reading" },
             },
             {
                 parts: [
-                    { type: "string", value: ["a"] },
-                    { type: "string", value: ["na"] },
-                    { type: "string", value: ["soma"] },
+                    createStringPart(["a"]),
+                    createStringPart(["na"]),
+                    createStringPart(["soma"]),
                 ],
                 value: { type: "literal", value: "he/she is reading" },
             },

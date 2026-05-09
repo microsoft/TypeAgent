@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>TypeAgent.OsNotificationListener</RootNamespace>
+    <AssemblyName>OsNotificationListener</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- Embed our side-by-side manifest into the exe. The <msix> element
+         in app.manifest links this binary to the identity package
+         registered against the exe's install dir, granting it package
+         identity at runtime (and access to the userNotificationListener
+         restricted capability via UserNotificationListener.NotificationChanged). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+</Project>

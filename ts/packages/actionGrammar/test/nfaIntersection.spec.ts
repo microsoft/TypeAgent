@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Grammar } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createStringPart,
+    createWildcardPart,
+} from "../src/grammarTypes.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { findGrammarOverlap } from "../src/nfaIntersection.js";
 import { registerBuiltInEntities } from "../src/builtInEntities.js";
@@ -39,12 +43,12 @@ describe("findGrammarOverlap", () => {
     it("detects literal-prefix overlap with a concrete witness", () => {
         const a: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["play"] }] },
+                { parts: [createStringPart(["play"])] },
             ],
         };
         const b: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["play"] }] },
+                { parts: [createStringPart(["play"])] },
             ],
         };
         const overlap = findGrammarOverlap(nfa(a, "A"), nfa(b, "B"));
@@ -63,9 +67,9 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["stop"] },
-                        { type: "string", value: ["the"] },
-                        { type: "string", value: ["music"] },
+                        createStringPart(["stop"]),
+                        createStringPart(["the"]),
+                        createStringPart(["music"]),
                     ],
                     value: literalValue,
                 },
@@ -75,12 +79,8 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["stop"] },
-                        {
-                            type: "wildcard",
-                            variable: "thing",
-                            typeName: "string",
-                        },
+                        createStringPart(["stop"]),
+                        createWildcardPart("thing", "string"),
                     ],
                     value: literalValue,
                 },
@@ -97,12 +97,12 @@ describe("findGrammarOverlap", () => {
     it("returns undefined for grammars with disjoint literal prefixes", () => {
         const a: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["pause"] }] },
+                { parts: [createStringPart(["pause"])] },
             ],
         };
         const b: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["resume"] }] },
+                { parts: [createStringPart(["resume"])] },
             ],
         };
         const overlap = findGrammarOverlap(nfa(a, "A"), nfa(b, "B"));
@@ -117,13 +117,9 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["set"] },
-                        { type: "string", value: ["volume"] },
-                        {
-                            type: "wildcard",
-                            variable: "n",
-                            typeName: "number",
-                        },
+                        createStringPart(["set"]),
+                        createStringPart(["volume"]),
+                        createWildcardPart("n", "number"),
                     ],
                     value: literalValue,
                 },
@@ -133,9 +129,9 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["set"] },
-                        { type: "string", value: ["volume"] },
-                        { type: "string", value: ["loud"] },
+                        createStringPart(["set"]),
+                        createStringPart(["volume"]),
+                        createStringPart(["loud"]),
                     ],
                     value: literalValue,
                 },
@@ -150,12 +146,8 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["set"] },
-                        {
-                            type: "wildcard",
-                            variable: "n",
-                            typeName: "number",
-                        },
+                        createStringPart(["set"]),
+                        createWildcardPart("n", "number"),
                     ],
                     value: literalValue,
                 },
@@ -165,8 +157,8 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["set"] },
-                        { type: "string", value: ["42"] },
+                        createStringPart(["set"]),
+                        createStringPart(["42"]),
                     ],
                     value: literalValue,
                 },
@@ -185,12 +177,12 @@ describe("findGrammarOverlap", () => {
         // The shortest joint accept is just ["go"].
         const a: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["go"] }] },
+                { parts: [createStringPart(["go"])] },
                 {
                     parts: [
-                        { type: "string", value: ["go"] },
-                        { type: "string", value: ["home"] },
-                        { type: "string", value: ["now"] },
+                        createStringPart(["go"]),
+                        createStringPart(["home"]),
+                        createStringPart(["now"]),
                     ],
                     value: literalValue,
                 },
@@ -198,8 +190,8 @@ describe("findGrammarOverlap", () => {
         };
         const b: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["go"] }] },
-                { parts: [{ type: "string", value: ["stop"] }] },
+                { parts: [createStringPart(["go"])] },
+                { parts: [createStringPart(["stop"])] },
             ],
         };
         const overlap = findGrammarOverlap(nfa(a, "A"), nfa(b, "B"));
@@ -215,12 +207,8 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["call"] },
-                        {
-                            type: "wildcard",
-                            variable: "x",
-                            typeName: "UnregisteredType",
-                        },
+                        createStringPart(["call"]),
+                        createWildcardPart("x", "UnregisteredType"),
                     ],
                     value: literalValue,
                 },
@@ -230,12 +218,8 @@ describe("findGrammarOverlap", () => {
             alternatives: [
                 {
                     parts: [
-                        { type: "string", value: ["call"] },
-                        {
-                            type: "wildcard",
-                            variable: "y",
-                            typeName: "UnregisteredType",
-                        },
+                        createStringPart(["call"]),
+                        createWildcardPart("y", "UnregisteredType"),
                     ],
                     value: literalValue,
                 },
@@ -251,13 +235,13 @@ describe("findGrammarOverlap", () => {
         // A has two top-level alternatives; only the second collides with B.
         const a: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["delete"] }] }, // rule 0
-                { parts: [{ type: "string", value: ["search"] }] }, // rule 1
+                { parts: [createStringPart(["delete"])] }, // rule 0
+                { parts: [createStringPart(["search"])] }, // rule 1
             ],
         };
         const b: Grammar = {
             alternatives: [
-                { parts: [{ type: "string", value: ["search"] }] }, // rule 0
+                { parts: [createStringPart(["search"])] }, // rule 0
             ],
         };
         const overlap = findGrammarOverlap(nfa(a, "A"), nfa(b, "B"));

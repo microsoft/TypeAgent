@@ -10,8 +10,11 @@ import {
     GrammarPartJson,
     GrammarRule,
     GrammarRuleJson,
-    PhraseSetPart,
-    RulesPart,
+    createStringPart,
+    createWildcardPart,
+    createNumberPart,
+    createRulesPart,
+    createPhraseSetPart,
 } from "./grammarTypes.js";
 import { validateTailRulesParts } from "./grammarOptimizer.js";
 import registerDebug from "debug";
@@ -221,9 +224,16 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     function grammarPartFromJson(p: GrammarPartJson): GrammarPart {
         switch (p.type) {
             case "string":
+                return createStringPart(p.value, p.variable, p.partId);
             case "wildcard":
+                return createWildcardPart(
+                    p.variable,
+                    p.typeName,
+                    p.optional,
+                    p.partId,
+                );
             case "number":
-                return p;
+                return createNumberPart(p.variable, p.optional, p.partId);
             case "rules": {
                 // A `tailCall` part with no `index` AND no
                 // `dispatch` has zero effective members - it can
@@ -246,34 +256,29 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                 }
                 const rules =
                     p.index === undefined ? emptyRules : rulesFor(p.index);
-                const part: RulesPart = {
-                    type: "rules",
-                    name: p.name,
-                    alternatives: rules,
-                    variable: p.variable,
-                    optional: p.optional,
-                };
-                if (p.repeat) part.repeat = true;
-                if (p.tailCall) part.tailCall = true;
+                let dispatch: DispatchModeBucket[] | undefined;
                 if (p.dispatch !== undefined) {
                     const tag = `dispatched RulesPart (name='${p.name ?? "<unnamed>"}')`;
-                    part.dispatch = dispatchFor(
+                    dispatch = dispatchFor(
                         p.dispatch,
                         rules.length,
                         `RulesPart name='${p.name ?? "<unnamed>"}'`,
                         tag,
                     );
                 }
-                return part;
+                return createRulesPart(rules, {
+                    optional: p.optional,
+                    variable: p.variable,
+                    name: p.name,
+                    repeat: p.repeat,
+                    tailCall: p.tailCall,
+                    skipMemo: p.skipMemo,
+                    dispatch,
+                    partId: p.partId,
+                });
             }
-            case "phraseSet": {
-                const part: PhraseSetPart = {
-                    type: "phraseSet",
-                    matcherName: p.matcherName,
-                };
-                if (p.variable !== undefined) part.variable = p.variable;
-                return part;
-            }
+            case "phraseSet":
+                return createPhraseSetPart(p.matcherName, p.variable, p.partId);
         }
     }
 

@@ -65,11 +65,21 @@
     "powershell": {
       "name": "powershell-typeagent"
     },
+    "screencapture": {
+      "name": "screencapture-agent",
+      "execMode": "separate"
+    },
     "utility": {
       "name": "utility-typeagent"
     },
     "onboarding": {
       "name": "onboarding-agent"
+    },
+    "osNotifications": {
+      "name": "os-notifications-agent"
+    },
+    "timer": {
+      "name": "timer-agent"
     },
     "github-cli": {
       "name": "github-cli-agent"
@@ -77,6 +87,9 @@
     "vampire": {
       "name": "vampire-agent",
       "execMode": "dispatcher"
+    },
+    "windowsClock": {
+      "name": "windowsclock-agent"
     },
     "visualStudio": {
       "name": "visualstudio-agent"
@@ -100,7 +113,9 @@
   "explainers": {
     "v5": {
       "constructions": {
-        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "data": [
+          "./data/explainer/v5/data/player/basic.json"
+        ],
         "file": "./data/explainer/v5/constructions.json"
       }
     }

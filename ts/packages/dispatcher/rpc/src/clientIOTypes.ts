@@ -4,6 +4,7 @@
 import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import type {
     IAgentMessage,
+    NotifyOptions,
     RequestId,
     TemplateEditConfig,
     PendingInteractionRequest,
@@ -60,6 +61,7 @@ export type ClientIOCallFunctions = {
         data: any,
         source: string,
         seq?: number,
+        options?: NotifyOptions,
     ): void;
 
     requestChoice(

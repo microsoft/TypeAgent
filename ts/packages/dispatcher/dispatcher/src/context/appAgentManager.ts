@@ -2,11 +2,15 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
+    ActionResult,
     AppAgent,
     SessionContext,
     AppAgentManifest,
     AppAgentInitSettings,
+    ReadinessReport,
 } from "@typeagent/agent-sdk";
+import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     convertToActionConfig,
@@ -145,6 +149,36 @@ export class AppAgentManager implements ActionConfigProvider {
     // every addProvider / onSchemaReady; readable for `@dispatcher debug collisions`-style commands.
     public lastStaticCollisions: StaticCollision[] = [];
     public lastFuzzyCollisions: FuzzyCollision[] = [];
+    // Cached per-agent readiness state. Populated by checkReadiness() right
+    // after the agent's session context is created. Agents that don't
+    // implement checkReadiness have no entry, and getReadiness() returns
+    // {state: "ready"} for them. Cleared on agent disable; re-populated by
+    // setup() and explicit refresh().
+    private readonly readiness = new Map<string, ReadinessReport>();
+    // Persistent per-app-agent load failure cache. Populated in the failure
+    // branches of setState (action/command init paths — provider load,
+    // initializeAgentContext, etc.) and cleared on successful (re-)enable.
+    // Surfaced as a red icon in `@config agent` so users can see at a
+    // glance which agents failed to load and why (tooltip carries the
+    // error message). Without this, a failure like an MCP server failing
+    // to connect would only flash a one-time error and leave the agent
+    // looking like a normally-disabled one in the table.
+    private readonly loadErrors = new Map<string, Error>();
+    // Re-entrancy guards. With multiple clients (CLI, shell, web) hitting
+    // the same agent server, two callers can race into runSetup or
+    // refreshReadiness for the same agent. We collapse concurrent setups
+    // (the second caller gets a friendly "in progress" result — the
+    // first one's yes/no card stays bound to its originating client) and
+    // dedupe concurrent refreshes (one probe, all callers share the
+    // result).
+    private readonly setupInFlight = new Map<
+        string,
+        Promise<ActionResult | undefined>
+    >();
+    private readonly refreshInFlight = new Map<
+        string,
+        Promise<ReadinessReport>
+    >();
     public constructor(
         cacheDir: string | undefined,
         private readonly allowSharedLocalView?: string[],
@@ -197,6 +231,204 @@ export class AppAgentManager implements ActionConfigProvider {
     public getAppAgentEmoji(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         return record.manifest.emojiChar;
+    }
+
+    // ===== Readiness =====
+    // Agents that don't implement checkReadiness, or whose session context
+    // hasn't been initialized yet, are reported as `ready`. This is the
+    // safe default — only agents that explicitly opt in can block
+    // execution.
+    public getReadiness(appAgentName: string): ReadinessReport {
+        return this.readiness.get(appAgentName) ?? { state: "ready" };
+    }
+
+    // Returns the most recent load failure for this agent, or undefined if
+    // it loaded cleanly. See `loadErrors` field comment for lifecycle.
+    public getLoadError(appAgentName: string): Error | undefined {
+        return this.loadErrors.get(appAgentName);
+    }
+
+    // True if the agent implements an in-chat setup hook. The dispatcher's
+    // pre-flight gate uses this to phrase the "needs setup" error
+    // correctly — for agents without a hook (typically manual-config
+    // cases like missing env vars), pointing at @config agent setup
+    // would be a dead end, so we point at refresh instead.
+    public hasSetup(appAgentName: string): boolean {
+        return this.agents.get(appAgentName)?.appAgent?.setup !== undefined;
+    }
+
+    // List enabled agents that aren't ready (state != "ready"). Used by
+    // `@config agent` to surface a warning icon and by
+    // `@config agent setup` (no-name form) to drive bulk setup.
+    public getNotReadyAgents(): { name: string; report: ReadinessReport }[] {
+        const out: { name: string; report: ReadinessReport }[] = [];
+        for (const [name, report] of this.readiness) {
+            if (report.state !== "ready") out.push({ name, report });
+        }
+        return out;
+    }
+
+    // Re-runs the agent's checkReadiness and updates the cache. Returns the
+    // fresh report. No-op (returns {state: "ready"}) for agents that don't
+    // implement checkReadiness or whose session context isn't initialized.
+    // Concurrent callers for the same agent share the in-flight probe.
+    public refreshReadiness(appAgentName: string): Promise<ReadinessReport> {
+        const existing = this.refreshInFlight.get(appAgentName);
+        if (existing !== undefined) {
+            return existing;
+        }
+        const p = this.refreshReadinessImpl(appAgentName).finally(() => {
+            this.refreshInFlight.delete(appAgentName);
+        });
+        this.refreshInFlight.set(appAgentName, p);
+        return p;
+    }
+
+    private async refreshReadinessImpl(
+        appAgentName: string,
+    ): Promise<ReadinessReport> {
+        const record = this.agents.get(appAgentName);
+        if (
+            record === undefined ||
+            record.appAgent === undefined ||
+            record.sessionContext === undefined ||
+            record.appAgent.checkReadiness === undefined
+        ) {
+            // Nothing to refresh — preserve any existing entry (could be
+            // stale, but we have no way to update it).
+            return this.getReadiness(appAgentName);
+        }
+        try {
+            const report = await record.appAgent.checkReadiness(
+                record.sessionContext,
+            );
+            this.readiness.set(appAgentName, report);
+            return report;
+        } catch (e: any) {
+            const report: ReadinessReport = {
+                state: "setup-required",
+                message: `checkReadiness threw: ${e?.message ?? String(e)}`,
+            };
+            this.readiness.set(appAgentName, report);
+            return report;
+        }
+    }
+
+    // Runs the agent's `setup` (if it implements one), then refreshes the
+    // cached readiness so callers see the new state. The agent's setup is
+    // responsible for the in-chat UX (yes/no card, progress, etc.) via the
+    // returned ActionResult.
+    //
+    // Returns:
+    //   - undefined if the agent doesn't implement setup (caller should
+    //     surface the agent's readiness message instead).
+    //   - The agent's ActionResult otherwise — the dispatcher's command
+    //     pipeline runs the standard post-execution processing on it.
+    //
+    // Concurrency note — the in-flight guard below covers the synchronous
+    // window of `agent.setup(...)`: if two clients call runSetup at the
+    // same instant, the second gets a friendly "in progress" result and
+    // does NOT re-trigger setup work. The guard does NOT cover the
+    // common pattern where setup returns immediately with a pendingChoice
+    // card and the heavy work runs later via handleChoice — at that point
+    // the dispatcher has no signal that work is still pending. Agents
+    // whose setup defers work to a choice callback are responsible for
+    // making that work itself idempotent / mutex-protected.
+    public async runSetup(
+        appAgentName: string,
+        actionContext: ActionContext<unknown>,
+        context?: CommandHandlerContext,
+    ): Promise<ActionResult | undefined> {
+        const record = this.agents.get(appAgentName);
+        if (record?.appAgent?.setup === undefined) {
+            return undefined;
+        }
+
+        // Re-entrancy guard — only one setup runs at a time per agent.
+        // The second concurrent caller does NOT replay the first setup's
+        // ActionResult; that result (which may include a yes/no choice
+        // card with a choiceId already routed to the originating client)
+        // belongs to whoever started it. The runner-up gets a distinct
+        // "in progress" message and is expected to re-run their original
+        // request once setup completes.
+        if (this.setupInFlight.has(appAgentName)) {
+            return createActionResultFromError(
+                `Setup for '${appAgentName}' is already in progress on another client. Wait for it to finish, then re-run your request.`,
+            );
+        }
+        const p = (async () => {
+            try {
+                return await record.appAgent!.setup!(actionContext);
+            } finally {
+                // Always re-check readiness after setup, success or
+                // failure — setup may have made partial progress (e.g.
+                // cert installed but package register failed) and the
+                // cache should reflect the current truth.
+                await this.refreshReadiness(appAgentName);
+                // If the agent had a stale load failure (likely the
+                // very thing setup just resolved), clear it and retry
+                // the enables that were blocked by it. Without this,
+                // the user sees the load-error marker forever AND
+                // their actions stay disabled even though readiness
+                // now reports `ready` — they'd have to manually toggle
+                // off+on to recover. Skipped when no context was
+                // provided (older callers); they'll keep the legacy
+                // behavior. See recoverFromLoadFailure for details.
+                if (
+                    context !== undefined &&
+                    this.loadErrors.has(appAgentName) &&
+                    this.getReadiness(appAgentName).state === "ready"
+                ) {
+                    await this.recoverFromLoadFailure(appAgentName, context);
+                }
+            }
+        })();
+        this.setupInFlight.set(appAgentName, p);
+        try {
+            return await p;
+        } finally {
+            this.setupInFlight.delete(appAgentName);
+        }
+    }
+
+    // Cleans up after a successful setup that came on the heels of a
+    // failed load:
+    //   1. Resets cached load state. initializeSessionContext caches its
+    //      promise on `record.sessionContextP`; if the original init
+    //      threw (binary missing, etc.), that's a rejected promise that
+    //      ensureSessionContext would happily return on the next call,
+    //      forever. Clear it so the next access reattempts.
+    //   2. Clears the loadErrors entry so the table marker disappears.
+    //   3. Re-applies current session settings via setState — retries
+    //      any enables that were blocked by the original failure.
+    //      setState only mutates agents whose desired state differs
+    //      from current, so other agents are unaffected.
+    //
+    // If the retry fails (still broken for some other reason), setState's
+    // own catch path will repopulate loadErrors with the new error, so
+    // we don't need a try/catch here for state correctness — but we
+    // swallow throw so the original setup result still surfaces to the
+    // user.
+    private async recoverFromLoadFailure(
+        appAgentName: string,
+        context: CommandHandlerContext,
+    ): Promise<void> {
+        const record = this.agents.get(appAgentName);
+        if (record === undefined) return;
+        debug(
+            `Recovering ${appAgentName} after successful setup (clearing stale load error + retrying enables)`,
+        );
+        record.sessionContextP = undefined;
+        record.sessionContext = undefined;
+        record.appAgent = undefined;
+        this.loadErrors.delete(appAgentName);
+        try {
+            await this.setState(context, context.session.getConfig());
+        } catch (e: any) {
+            debugError(
+                `Recovery setState for ${appAgentName} threw: ${e?.message ?? e}`,
+            );
+        }
     }
 
     public getLocalHostPort(appAgentName: string) {
@@ -955,8 +1187,17 @@ export class AppAgentManager implements ActionConfigProvider {
                                     context,
                                 );
                                 changedActions.push([name, enableAction]);
+                                // Successful enable / disable — clear any
+                                // stale load error for this agent. Keyed
+                                // on appAgentName, not schema name.
+                                if (enableAction) {
+                                    this.loadErrors.delete(record.name);
+                                }
                             } catch (e: any) {
                                 failedActions.push([name, enableAction, e]);
+                                if (enableAction) {
+                                    this.loadErrors.set(record.name, e);
+                                }
                             }
                         })(),
                     );
@@ -989,6 +1230,9 @@ export class AppAgentManager implements ActionConfigProvider {
                                     record.name,
                                     enableCommands,
                                 ]);
+                                // Successful enable — clear any stale
+                                // load error for this agent.
+                                this.loadErrors.delete(record.name);
                                 debug(`Command enabled ${record.name}`);
                             } catch (e: any) {
                                 failedCommands.push([
@@ -996,6 +1240,9 @@ export class AppAgentManager implements ActionConfigProvider {
                                     enableCommands,
                                     e,
                                 ]);
+                                // Persist for the table renderer; next
+                                // successful enable will clear it.
+                                this.loadErrors.set(record.name, e);
                             }
                         })(),
                     );
@@ -1278,6 +1525,34 @@ export class AppAgentManager implements ActionConfigProvider {
         );
 
         debug(`Session context created for ${record.name}`);
+
+        if (appAgent.startBackgroundTasks !== undefined) {
+            await callEnsureError(() =>
+                appAgent.startBackgroundTasks!(record.sessionContext!),
+            );
+            debug(`Background tasks started for ${record.name}`);
+        }
+
+        // Initial readiness probe. Cheap if implemented; no-op if not. Errors
+        // become a "setup-required" entry rather than crashing the agent —
+        // a misbehaving checkReadiness shouldn't deny the user the agent.
+        if (appAgent.checkReadiness !== undefined) {
+            try {
+                const report = await appAgent.checkReadiness(
+                    record.sessionContext!,
+                );
+                this.readiness.set(record.name, report);
+                debug(
+                    `Readiness for ${record.name}: ${report.state}` +
+                        (report.message ? ` (${report.message})` : ""),
+                );
+            } catch (e: any) {
+                this.readiness.set(record.name, {
+                    state: "setup-required",
+                    message: `checkReadiness threw: ${e?.message ?? String(e)}`,
+                });
+            }
+        }
         return record.sessionContext;
     }
 
@@ -1288,12 +1563,30 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     private async closeSessionContext(record: AppAgentRecord) {
         if (record.sessionContextP !== undefined) {
+            // Drop cached readiness — the session is going away, the next
+            // enable will repopulate via initializeSessionContext.
+            this.readiness.delete(record.name);
             const sessionContext = await record.sessionContextP;
             record.sessionContext = undefined;
             record.sessionContextP = undefined;
             try {
                 // Since we have a session context, appAgent must be defined as well.
                 const appAgent = record.appAgent!;
+                // Stop background work first so it can't race against teardown
+                // by emitting agent-initiated messages or touching state we're
+                // about to dispose. Errors here are isolated from the rest of
+                // the teardown path so a misbehaving agent can't block close.
+                if (appAgent.stopBackgroundTasks !== undefined) {
+                    try {
+                        await appAgent.stopBackgroundTasks(sessionContext);
+                        debug(`Background tasks stopped for ${record.name}`);
+                    } catch (e) {
+                        debugError(
+                            `stopBackgroundTasks failed for ${record.name}. Error ignored`,
+                            e,
+                        );
+                    }
+                }
                 if (appAgent.updateAgentContext !== undefined) {
                     // Disable all actions first.
                     for (const action of record.actions) {

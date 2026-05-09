@@ -28,6 +28,7 @@ import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
 const debugClientIOError = registerDebug("agent-server:clientIO:error");
 const debugInteraction = registerDebug("agent-server:interaction");
+const debugCommand = registerDebug("agent-server:command");
 
 type ClientRecord = {
     clientIO: ClientIO;
@@ -277,15 +278,69 @@ export async function createSharedDispatcher(
         const origSetDisplay = orig.setDisplay.bind(orig);
         orig.setDisplay = (message) => {
             origSetDisplay(message);
-            log.logSetDisplay(message);
-            log.saveQueued();
+            // Toast and inline kinds are ephemeral (visual notifications, not
+            // chat history). Skip logging so they don't replay on reconnect —
+            // matches notify's default-not-persisted behavior. Bubble (or
+            // absent kind = a normal request response) always logs.
+            if (message.kind !== "toast" && message.kind !== "inline") {
+                log.logSetDisplay(message);
+                log.saveQueued();
+            }
         };
 
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
-            log.logAppendDisplay(message, mode);
+            // Skip ephemeral output:
+            //   - toast/inline kinds (visual-only notifications)
+            //   - mode === "temporary" (transient status indicators like
+            //     "Executing action ...", reasoning's "Thinking..." stream).
+            // Persisting either causes replayed bubbles on reconnect,
+            // DisplayLog growth proportional to streaming tokens, and
+            // apparent "duplicate" bubbles next to the real reply.
+            if (
+                message.kind !== "toast" &&
+                message.kind !== "inline" &&
+                mode !== "temporary"
+            ) {
+                log.logAppendDisplay(message, mode);
+                log.saveQueued();
+            }
+        };
+
+        const origSetDisplayInfo = orig.setDisplayInfo.bind(orig);
+        orig.setDisplayInfo = (
+            requestId,
+            source,
+            actionIndex,
+            action,
+            ...rest
+        ) => {
+            origSetDisplayInfo(requestId, source, actionIndex, action, ...rest);
+            log.logSetDisplayInfo(requestId, source, actionIndex, action);
             log.saveQueued();
+        };
+
+        // Notifications are ephemeral by default — only log when the producer
+        // explicitly opts in via options.persist. Agents (e.g. OS-notification
+        // forwarding) that should never enter durable history MUST leave the
+        // flag unset.
+        const origNotify = orig.notify.bind(orig) as (
+            ...args: Parameters<ClientIO["notify"]>
+        ) => void;
+        orig.notify = (
+            notificationId: any,
+            event: any,
+            data: any,
+            source: any,
+            seq?: any,
+            options?: any,
+        ) => {
+            origNotify(notificationId, event, data, source, seq, options);
+            if (options?.persist === true) {
+                log.logNotify(notificationId, event, data, source);
+                log.saveQueued();
+            }
         };
     }
 
@@ -350,6 +405,88 @@ export async function createSharedDispatcher(
                 interactionId: string,
             ): void => {
                 shared.cancelInteraction(interactionId);
+            };
+
+            // Wrap processCommand so each completed request logs a
+            // command-result entry into the DisplayLog (carrying its
+            // metrics). This lets history replay re-render timing data
+            // exactly the way live commandComplete does.
+            const origProcessCommand =
+                dispatcher.processCommand.bind(dispatcher);
+            dispatcher.processCommand = async (
+                command: any,
+                clientRequestId?: any,
+                attachments?: any,
+                processOptions?: any,
+            ) => {
+                const result = await origProcessCommand(
+                    command,
+                    clientRequestId,
+                    attachments,
+                    processOptions,
+                );
+                try {
+                    context.displayLog.logCommandResult(
+                        {
+                            connectionId,
+                            // The actual server-side requestId UUID is
+                            // generated inside processCommand and not
+                            // exposed to the wrapper, so leave it empty;
+                            // consumers correlate via clientRequestId.
+                            requestId: "",
+                            clientRequestId,
+                        },
+                        result?.metrics,
+                        result?.tokenUsage,
+                    );
+                    context.displayLog.saveQueued();
+                } catch {
+                    // best effort
+                }
+                try {
+                    // Notify peer panels (other clients sharing this
+                    // session) that the command finished so they can
+                    // clear lingering temporary status messages and
+                    // apply timing metrics. We deliberately skip the
+                    // originator: it already gets the result back via
+                    // the resolved processCommand RPC promise, and a
+                    // duplicate notify would run completion twice (in
+                    // the VS Code webview that produces a stray
+                    // "⚠ Cancelled" bubble after the first pass cleared
+                    // the request mapping).
+                    let sent = 0;
+                    for (const [peerId, peerRecord] of clients) {
+                        if (peerId === connectionId) continue;
+                        if (peerRecord.filter && peerId !== connectionId) {
+                            // Filtered clients only receive their own
+                            // events; don't leak peer completions.
+                            continue;
+                        }
+                        try {
+                            peerRecord.clientIO.notify(
+                                {
+                                    connectionId,
+                                    requestId: "",
+                                    clientRequestId,
+                                },
+                                "commandComplete",
+                                { result: result ?? null },
+                                "system",
+                            );
+                            sent++;
+                        } catch (e) {
+                            debugClientIOError(
+                                `commandComplete notify failed for ${peerId}: ${e}`,
+                            );
+                        }
+                    }
+                    debugCommand(
+                        `commandComplete broadcast: connectionId=${connectionId} clientRequestId=${clientRequestId} sent=${sent} clients=${clients.size}`,
+                    );
+                } catch (e) {
+                    debugCommand(`commandComplete broadcast failed: ${e}`);
+                }
+                return result;
             };
 
             return dispatcher;

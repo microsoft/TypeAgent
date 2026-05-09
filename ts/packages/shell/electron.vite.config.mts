@@ -44,6 +44,7 @@ export default defineConfig({
         build: {
             sourcemap: true,
             rollupOptions: {
+                external: ["@anthropic-ai/claude-agent-sdk"],
                 input: {
                     chatView: resolve(__dirname, "src/renderer/chatView.html"),
                     viewHost: resolve(__dirname, "src/renderer/viewHost.html"),

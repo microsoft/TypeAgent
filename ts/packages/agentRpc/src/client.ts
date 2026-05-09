@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import {
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgent,
     ActionContext,
     SessionContext,
@@ -31,6 +33,41 @@ import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
+
+/**
+ * Race a promise against an AbortSignal. If the signal fires before the
+ * promise settles, throw an AbortError immediately (the underlying work
+ * continues in the background — the caller does not wait for it).
+ */
+function raceWithSignal<T>(
+    promise: Promise<T>,
+    signal: AbortSignal | undefined,
+): Promise<T> {
+    if (!signal) {
+        return promise;
+    }
+    return new Promise<T>((resolve, reject) => {
+        const onAbort = () =>
+            reject(
+                signal.reason ??
+                    new DOMException(
+                        "The operation was aborted.",
+                        "AbortError",
+                    ),
+            );
+        signal.addEventListener("abort", onAbort, { once: true });
+        promise.then(
+            (v) => {
+                signal.removeEventListener("abort", onAbort);
+                resolve(v);
+            },
+            (e) => {
+                signal.removeEventListener("abort", onAbort);
+                reject(e);
+            },
+        );
+    });
+}
 
 type ShimContext =
     | {
@@ -401,9 +438,41 @@ export async function createAgentRpcClient(
         },
     };
 
+    const agentThreadHandles = new Map<string, AgentThreadHandle>();
     const agentContextCallHandlers: AgentContextCallFunctions = {
         notify: (contextId: number, ...args) => {
             contextMap.get(contextId).notify(...args);
+        },
+        agentThreadBegin: (
+            contextId: number,
+            threadId: string,
+            kind: AgentMessageKind,
+        ) => {
+            agentThreadHandles.set(
+                threadId,
+                contextMap.get(contextId).beginAgentThread(kind),
+            );
+        },
+        agentThreadSetDisplay: (
+            _contextId: number,
+            threadId: string,
+            content: DisplayContent,
+        ) => {
+            agentThreadHandles.get(threadId)?.setDisplay(content);
+        },
+        agentThreadAppendDisplay: (
+            _contextId: number,
+            threadId: string,
+            content: DisplayContent,
+            mode: DisplayAppendMode,
+        ) => {
+            agentThreadHandles.get(threadId)?.appendDisplay(content, mode);
+        },
+        agentThreadComplete: (_contextId: number, threadId: string) => {
+            const handle = agentThreadHandles.get(threadId);
+            if (handle === undefined) return;
+            handle.complete();
+            agentThreadHandles.delete(threadId);
         },
         setDisplay: (param: {
             actionContextId: number;
@@ -472,12 +541,32 @@ export async function createAgentRpcClient(
             action: TypeAgentAction,
             context: ActionContext<ShimContext>,
         ) {
-            return withActionContextAsync(context, (contextParams) =>
-                rpc.invoke("executeAction", {
-                    ...contextParams,
-                    action,
-                }),
-            );
+            return withActionContextAsync(context, (contextParams) => {
+                const signal = context.abortSignal;
+                if (signal) {
+                    const onAbort = () =>
+                        rpc.send("cancelAction", {
+                            actionContextId: contextParams.actionContextId,
+                        });
+                    signal.addEventListener("abort", onAbort, { once: true });
+                    return raceWithSignal(
+                        rpc.invoke("executeAction", {
+                            ...contextParams,
+                            action,
+                        }),
+                        signal,
+                    ).finally(() => {
+                        signal.removeEventListener("abort", onAbort);
+                    });
+                }
+                return raceWithSignal(
+                    rpc.invoke("executeAction", {
+                        ...contextParams,
+                        action,
+                    }),
+                    signal,
+                );
+            });
         },
         validateWildcardMatch(
             action: AppAction,
@@ -518,6 +607,12 @@ export async function createAgentRpcClient(
         },
         closeAgentContext(context: SessionContext<ShimContext>) {
             return rpc.invoke("closeAgentContext", getContextParam(context));
+        },
+        startBackgroundTasks(context: SessionContext<ShimContext>) {
+            return rpc.invoke("startBackgroundTasks", getContextParam(context));
+        },
+        stopBackgroundTasks(context: SessionContext<ShimContext>) {
+            return rpc.invoke("stopBackgroundTasks", getContextParam(context));
         },
 
         getCommands(
@@ -632,6 +727,14 @@ export async function createAgentRpcClient(
                 ...getContextParam(context),
                 schemaName,
             });
+        },
+        checkReadiness(context: SessionContext<ShimContext>) {
+            return rpc.invoke("checkReadiness", getContextParam(context));
+        },
+        setup(context: ActionContext<ShimContext>) {
+            return withActionContextAsync(context, (contextParams) =>
+                rpc.invoke("setup", { ...contextParams }),
+            );
         },
     };
 

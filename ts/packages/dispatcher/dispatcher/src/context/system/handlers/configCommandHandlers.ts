@@ -8,8 +8,11 @@ import {
 import {
     CommandHandlerContext,
     changeContextConfig,
+    getRequestId,
 } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
+import { getActionContext } from "../../../execute/actionContext.js";
+import { emitActionResult } from "../../../execute/actionHandlers.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
@@ -22,6 +25,7 @@ import {
     ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
+    ReadinessReport,
     SessionContext,
 } from "@typeagent/agent-sdk";
 import {
@@ -195,9 +199,22 @@ function setStatus(
     status[name][kind] = `${statusChar}${defaultStr}`;
 }
 
+// HTML-escape a readiness message for safe inclusion in a `title` attribute.
+function escapeAttr(s: string): string {
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
 function buildAgentStatusHtml(
     entries: [string, StatusRecords[string]][],
-    agents: { getAppAgentEmoji(name: string): string },
+    agents: {
+        getAppAgentEmoji(name: string): string;
+        getReadiness(name: string): ReadinessReport;
+        getLoadError(name: string): Error | undefined;
+    },
     showSchema: boolean,
     showAction: boolean,
     showCommand: boolean,
@@ -221,8 +238,27 @@ function buildAgentStatusHtml(
         const bb = isAppAgent ? "1px solid #f1f5f9" : "none";
         const tdStyle = `text-align:center;padding:3px 8px;border-bottom:${bb}`;
 
+        // Per-agent badges (app-agent rows only): load failure first, then
+        // readiness warning. Distinct icons + colors so they don't get
+        // conflated with the disabled-state ❌ in the status columns.
+        let warning = "";
+        if (isAppAgent) {
+            const loadError = agents.getLoadError(name);
+            if (loadError !== undefined) {
+                const tip = `Failed to load: ${loadError.message ?? String(loadError)}`;
+                warning += ` <span title="${escapeAttr(tip)}" style="color:#dc2626;cursor:help" aria-label="${escapeAttr(tip)}">⛔</span>`;
+            }
+            const report = agents.getReadiness(name);
+            if (report.state !== "ready") {
+                const tip = report.message
+                    ? `${report.state}: ${report.message}`
+                    : report.state;
+                warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+            }
+        }
+
         const cols = [
-            `<td style="padding:3px 12px 3px 8px;padding-left:${indent};font-weight:${fontWeight};color:${color};border-bottom:${bb};white-space:nowrap">${emoji ? emoji + " " : ""}${displayName}</td>`,
+            `<td style="padding:3px 12px 3px 8px;padding-left:${indent};font-weight:${fontWeight};color:${color};border-bottom:${bb};white-space:nowrap">${emoji ? emoji + " " : ""}${displayName}${warning}</td>`,
         ];
         if (showSchema)
             cols.push(`<td style="${tdStyle}">${schemas ?? ""}</td>`);
@@ -321,7 +357,20 @@ function showAgentStatus(
 
     for (const [name, { schemas, actions, commands }] of entries) {
         const isAppAgentName = getAppAgentName(name) === name;
-        const displayName = isAppAgentName ? name : `  ${name}`;
+        let displayName = isAppAgentName ? name : `  ${name}`;
+        if (isAppAgentName) {
+            // Plain marker glyphs so they render in CLI/console without
+            // needing emoji/glyph fonts. Hover detail lives in the HTML.
+            // "(err)" — load failure (provider load / context init / etc.).
+            // "(!)"   — agent loaded but reports setup-required / unsupported.
+            if (agents.getLoadError(name) !== undefined) {
+                displayName = `${displayName} ${chalk.red("(err)")}`;
+            }
+            const report = agents.getReadiness(name);
+            if (report.state !== "ready") {
+                displayName = `${displayName} ${chalk.yellow("(!)")}`;
+            }
+        }
         table.push(
             getTextRow(
                 displayName,
@@ -510,6 +559,220 @@ class AgentToggleCommandHandler implements CommandHandler {
             }
         }
 
+        return { groups: completions };
+    }
+}
+
+// Validates that `name` is a known agent name and returns its readiness
+// report. Throws (caught by executeCommand → displayError) on unknown name.
+function getAgentReadinessOrThrow(
+    name: string,
+    systemContext: CommandHandlerContext,
+) {
+    const allNames = systemContext.agents.getAppAgentNames();
+    if (!allNames.includes(name)) {
+        throw new Error(
+            `Unknown agent '${name}'. Known agents: ${allNames.join(", ")}`,
+        );
+    }
+    return systemContext.agents.getReadiness(name);
+}
+
+class AgentSetupCommandHandler implements CommandHandler {
+    public readonly description =
+        "Run setup for an agent that needs configuration before use";
+    public readonly parameters = {
+        args: {
+            agentName: {
+                description:
+                    "agent to set up (omit to list agents that need setup)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const agents = systemContext.agents;
+        const name = params.args.agentName;
+
+        if (name === undefined) {
+            const notReady = agents.getNotReadyAgents();
+            if (notReady.length === 0) {
+                displayResult("All agents are ready.", context);
+                return;
+            }
+            const lines = [
+                "Agents that need setup:",
+                ...notReady.map(
+                    ({ name, report }) =>
+                        `  ${name} — ${report.state}${report.message ? `: ${report.message}` : ""}`,
+                ),
+                "",
+                "Run `@config agent setup <name>` to configure one.",
+            ];
+            displayResult(lines.join("\n"), context);
+            return;
+        }
+
+        const report = getAgentReadinessOrThrow(name, systemContext);
+        if (report.state === "ready") {
+            displayResult(`Agent '${name}' is already ready.`, context);
+            return;
+        }
+        if (report.state === "unsupported") {
+            displayWarn(
+                `Agent '${name}' is not supported in this environment${report.message ? `: ${report.message}` : ""}`,
+                context,
+            );
+            return;
+        }
+        // setup-required — invoke the agent's setup hook (if any).
+        // The setup hook expects an actionContext bound to the target
+        // agent's sessionContext (so `actionContext.sessionContext.agentContext`
+        // resolves to the agent's own state, not this @config command's
+        // CommandHandlerContext). The action-execution path already does
+        // this via getActionContext when running NL/action invocations;
+        // we mirror it here so `@config agent setup <name>` and the
+        // setupOnFirstUse pre-flight path are wired identically.
+        //
+        // We then emit the result manually via emitActionResult under the
+        // TARGET agent's name. If we returned the result for executeCommand
+        // to auto-emit, the pendingChoice route would key on the system
+        // agent (the one that owns @config), and the user's Yes/No click
+        // would be routed to the wrong agent's handleChoice — the
+        // registered callback in the target agent's ChoiceManager would
+        // never fire, leaving the card silently unactionable.
+        const requestId = getRequestId(systemContext);
+        const { actionContext: agentActionContext, closeActionContext } =
+            getActionContext(name, systemContext, requestId);
+        let result;
+        try {
+            result = await agents.runSetup(
+                name,
+                agentActionContext,
+                systemContext,
+            );
+            if (result !== undefined) {
+                emitActionResult(
+                    result,
+                    agentActionContext,
+                    systemContext,
+                    requestId,
+                    name,
+                    0,
+                    name,
+                );
+            }
+        } finally {
+            closeActionContext();
+        }
+        if (result === undefined) {
+            // Agent reports setup-required but doesn't implement a setup
+            // hook — typically a manual-config case (env vars, files
+            // outside the agent's reach). Show the readiness message as
+            // the primary content and point at @config agent refresh so
+            // the user can re-check after fixing the underlying issue.
+            const lines = [
+                `Agent '${name}' needs configuration before it can be used.`,
+            ];
+            if (report.message) lines.push("", report.message);
+            if (report.details) lines.push("", report.details);
+            lines.push(
+                "",
+                `This agent does not have an in-chat setup flow. After fixing the underlying issue, run \`@config agent refresh ${name}\` to re-check.`,
+            );
+            displayWarn(lines.join("\n"), context);
+            return;
+        }
+        // emitActionResult above already rendered the display content and
+        // wired pendingChoice to the target agent. Returning undefined
+        // here keeps executeCommand from re-emitting under the system
+        // agent's name (which would mis-route the choice click).
+        return;
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "agentName") {
+                completions.push({
+                    name,
+                    completions: context.agentContext.agents
+                        .getNotReadyAgents()
+                        .map((e) => e.name),
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+class AgentRefreshCommandHandler implements CommandHandler {
+    public readonly description =
+        "Re-check an agent's readiness state (or all agents)";
+    public readonly parameters = {
+        args: {
+            agentName: {
+                description: "agent to refresh (omit for all enabled agents)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const agents = systemContext.agents;
+        const name = params.args.agentName;
+
+        if (name !== undefined) {
+            getAgentReadinessOrThrow(name, systemContext); // validate name
+            const report = await agents.refreshReadiness(name);
+            displayResult(
+                `${name}: ${report.state}${report.message ? ` — ${report.message}` : ""}`,
+                context,
+            );
+            return;
+        }
+        const lines: string[] = [];
+        for (const agentName of agents.getAppAgentNames()) {
+            const report = await agents.refreshReadiness(agentName);
+            if (report.state !== "ready") {
+                lines.push(
+                    `${agentName}: ${report.state}${report.message ? ` — ${report.message}` : ""}`,
+                );
+            }
+        }
+        displayResult(
+            lines.length === 0 ? "All agents are ready." : lines.join("\n"),
+            context,
+        );
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "agentName") {
+                completions.push({
+                    name,
+                    completions: context.agentContext.agents.getAppAgentNames(),
+                });
+            }
+        }
         return { groups: completions };
     }
 }
@@ -1542,6 +1805,15 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
         scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
         entityPromptShape: new ConfigExecutionEntityPromptShapeCommandHandler(),
+        setupOnFirstUse: getToggleHandlerTable(
+            "auto-run agent setup on first use (otherwise emit a hint to run @config agent setup)",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { setupOnFirstUse: enable } },
+                    context,
+                );
+            },
+        ),
     },
 };
 
@@ -2052,7 +2324,16 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             schema: new AgentToggleCommandHandler(AgentToggle.Schema),
             action: new AgentToggleCommandHandler(AgentToggle.Action),
             command: new AgentToggleCommandHandler(AgentToggle.Command),
-            agent: new AgentToggleCommandHandler(AgentToggle.Agent),
+            agent: {
+                description: "Manage agents (enable/disable, setup, refresh)",
+                defaultSubCommand: new AgentToggleCommandHandler(
+                    AgentToggle.Agent,
+                ),
+                commands: {
+                    setup: new AgentSetupCommandHandler(),
+                    refresh: new AgentRefreshCommandHandler(),
+                },
+            },
             request: new ConfigRequestCommandHandler(),
             match: {
                 description: "Configure match behavior",

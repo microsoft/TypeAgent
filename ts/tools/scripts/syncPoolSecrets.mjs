@@ -579,7 +579,7 @@ async function main() {
     );
     info(
         options.commit
-            ? `Next: run 'node tools/scripts/getKeys.mjs --commit' to pull these into your .env.`
+            ? `Next: run 'node tools/scripts/getKeys.mjs' to pull these into your .env.`
             : `Re-run with ${chalk.yellowBright("--commit")} to write for real.`,
     );
 }

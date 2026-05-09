@@ -36,19 +36,42 @@ export async function createWebSocketChannelServer(
             (message, cb) => {
                 const data = JSON.stringify(message);
                 debug(`sending message: ${data}`);
-                ws.send(
-                    data,
-                    cb
-                        ? (err) => {
-                              if (err) {
-                                  debugError(`send error callback: ${err}`);
-                                  cb(err);
-                              } else {
-                                  cb(null);
-                              }
-                          }
-                        : undefined,
-                );
+                // Skip sends to a socket that is closing/closed. ws.send()
+                // would otherwise queue the failure on process.nextTick,
+                // bypassing any synchronous try/catch around the caller and
+                // becoming an uncaughtException. Best-effort: just drop the
+                // message and report via the callback (if any).
+                if (ws.readyState !== WebSocket.OPEN) {
+                    debugError(
+                        `dropping send: ws not open (readyState=${ws.readyState})`,
+                    );
+                    if (cb) {
+                        cb(
+                            new Error(
+                                `WebSocket is not open: readyState ${ws.readyState}`,
+                            ),
+                        );
+                    }
+                    return;
+                }
+                try {
+                    ws.send(data, (err) => {
+                        if (err) {
+                            debugError(`send error callback: ${err}`);
+                        }
+                        if (cb) {
+                            cb(err ?? null);
+                        }
+                    });
+                } catch (err) {
+                    // Synchronous failures from ws.send (e.g. socket closed
+                    // mid-write) — surface to the caller if it asked, but
+                    // don't escalate to an uncaughtException.
+                    debugError(`send threw: ${err}`);
+                    if (cb) {
+                        cb(err as Error);
+                    }
+                }
             },
         );
         ws.on("message", (data: Buffer) => {

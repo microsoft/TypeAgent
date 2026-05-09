@@ -479,6 +479,7 @@ describe("Value Expression Parser", () => {
                 loadGrammarRules(
                     "test.grammar",
                     `<Start> = $(x:number) -> x + 1;`,
+                    { enableValueExpressions: false },
                 ),
             ).toThrow();
         });
@@ -487,6 +488,7 @@ describe("Value Expression Parser", () => {
             const grammar = loadGrammarRules(
                 "test.grammar",
                 `<Start> = hello -> "world";`,
+                { enableValueExpressions: false },
             );
             expect(grammar).toBeDefined();
         });

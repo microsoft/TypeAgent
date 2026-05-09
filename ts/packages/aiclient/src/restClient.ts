@@ -46,6 +46,7 @@ export function callApi(
     retryPauseMs?: number,
     timeout?: number,
     throttler?: FetchThrottler,
+    signal?: AbortSignal,
 ): Promise<Result<Response>> {
     const options: RequestInit = {
         method: "POST",
@@ -56,6 +57,7 @@ export function callApi(
             "content-type": "application/json",
             ...headers,
         },
+        signal: signal ?? null,
     };
     return fetchWithRetry(
         url,
@@ -86,6 +88,7 @@ export async function callJsonApi(
     retryPauseMs?: number,
     timeout?: number,
     throttler?: FetchThrottler,
+    signal?: AbortSignal,
 ): Promise<Result<unknown>> {
     const result = await callApi(
         headers,
@@ -95,6 +98,7 @@ export async function callJsonApi(
         retryPauseMs,
         timeout,
         throttler,
+        signal,
     );
     if (result.success) {
         try {
@@ -199,19 +203,31 @@ export async function getBlob(
  */
 export async function* readResponseStream(
     response: Response,
+    signal?: AbortSignal,
 ): AsyncIterableIterator<string> {
     const reader = response.body?.getReader();
     if (reader) {
-        const utf8Decoder = new TextDecoder("utf-8");
-        const options = { stream: true };
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
+        const onAbort = () => reader.cancel();
+        signal?.addEventListener("abort", onAbort, { once: true });
+        try {
+            const utf8Decoder = new TextDecoder("utf-8");
+            const options = { stream: true };
+            while (true) {
+                if (signal?.aborted) throw toAbortError(signal.reason);
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+                const text = utf8Decoder.decode(value, options);
+                if (text.length > 0) {
+                    yield text;
+                }
             }
-            const text = utf8Decoder.decode(value, options);
-            if (text.length > 0) {
-                yield text;
+        } finally {
+            signal?.removeEventListener("abort", onAbort);
+            // Only cancel if the abort handler hasn't already done so.
+            if (!signal?.aborted) {
+                reader.cancel();
             }
         }
     }
@@ -336,12 +352,26 @@ export async function fetchWithRetry(
             // wait before retrying
             // wait at least as long as the Retry-After header, plus a back-off factor that increases with each retry
             // plus a random delay to avoid thundering herd
-            await sleep(totalWait);
+            const signal = options?.signal;
+            if (signal?.aborted) {
+                throw toAbortError(signal.reason);
+            }
+            await new Promise<void>((resolve, reject) => {
+                const onAbort = () => {
+                    clearTimeout(id);
+                    reject(toAbortError(signal!.reason));
+                };
+                const id = setTimeout(() => {
+                    signal?.removeEventListener("abort", onAbort);
+                    resolve();
+                }, totalWait);
+                signal?.addEventListener("abort", onAbort, { once: true });
+            });
 
             retryCount++;
         }
     } catch (e: any) {
-        if (e.name === "AbortError") {
+        if (isAbortError(e)) {
             throw e;
         }
         return error(`fetch error: ${e.cause?.message ?? e.message}`);
@@ -416,10 +446,7 @@ async function fetchWithTimeout(
     if (externalSignal) {
         if (externalSignal.aborted) {
             clearTimeout(id);
-            throw (
-                externalSignal.reason ??
-                new DOMException("The operation was aborted.", "AbortError")
-            );
+            throw toAbortError(externalSignal.reason);
         }
         onExternalAbort = () => controller.abort(externalSignal.reason);
         externalSignal.addEventListener("abort", onExternalAbort);
@@ -441,10 +468,10 @@ async function fetchWithTimeout(
     } catch (e) {
         const ex = e as Error;
         // If the external signal caused the abort, re-throw as AbortError
-        if (ex.name === "AbortError" && externalSignal?.aborted) {
+        if (isAbortError(ex) && externalSignal?.aborted) {
             throw e;
         }
-        if (ex.name === "AbortError") {
+        if (isAbortError(ex)) {
             throw new Error(`fetch timeout ${timeoutMs}ms`);
         }
         throw e;
@@ -483,6 +510,23 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isAbortError(e: unknown): e is Error {
+    return e instanceof Error && e.name === "AbortError";
+}
+
+/**
+ * Normalize an arbitrary abort reason into a real AbortError. `AbortSignal.reason`
+ * is whatever was passed to `controller.abort(reason)` — it may be a string,
+ * a plain object, or any non-Error value. Upstream code keys off `name === "AbortError"`,
+ * so coerce anything that isn't already an AbortError into a DOMException.
+ */
+function toAbortError(reason: unknown): Error {
+    if (isAbortError(reason)) {
+        return reason;
+    }
+    return new DOMException("The operation was aborted.", "AbortError");
+}
+
 // ---------------------------------------------------------------------------
 // Endpoint-pool aware variants
 //
@@ -510,6 +554,7 @@ export type BuildPoolRequest = (
 export type PoolCallOptions = {
     overallBudgetMs?: number | undefined;
     retryPauseMs?: number | undefined;
+    signal?: AbortSignal | undefined;
 };
 
 async function fetchWithPool(
@@ -531,6 +576,7 @@ async function fetchWithPool(
                 "content-type": "application/json",
                 ...req.data.headers,
             },
+            signal: options?.signal ?? null,
         };
         if (method === "POST" && req.data.body !== undefined) {
             init.body = JSON.stringify(req.data.body);
@@ -569,6 +615,12 @@ async function fetchWithPool(
                 )
             );
         }
+
+        // Respect caller-provided abort signal
+        if (options?.signal?.aborted) {
+            throw toAbortError(options.signal.reason);
+        }
+
         const budgetLeft = overallBudgetMs - elapsed;
 
         const pick = pickEndpoint(pool);
@@ -594,6 +646,7 @@ async function fetchWithPool(
                 "content-type": "application/json",
                 ...req.data.headers,
             },
+            signal: options?.signal ?? null,
         };
         if (method === "POST" && req.data.body !== undefined) {
             init.body = JSON.stringify(req.data.body);
@@ -618,6 +671,11 @@ async function fetchWithPool(
                 member.settings.throttler,
             );
         } catch (e: any) {
+            // If the caller's abort signal fired, propagate immediately
+            // instead of rotating to another pool member.
+            if (isAbortError(e)) {
+                throw e;
+            }
             // Network error, timeout (AbortError re-thrown as "fetch timeout"),
             // or connection reset. Treat as transient and rotate.
             debugPool(

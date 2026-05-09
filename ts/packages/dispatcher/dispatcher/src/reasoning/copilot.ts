@@ -55,7 +55,7 @@ function withAbortSignal<T>(
     });
 }
 
-const FALLBACK_MODEL = "gpt-4o";
+const FALLBACK_MODEL = "claude-sonnet-4.5";
 
 function resolveModel(): string {
     return process.env.COPILOT_REASONING_MODEL?.trim() || FALLBACK_MODEL;

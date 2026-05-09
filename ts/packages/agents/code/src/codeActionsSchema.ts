@@ -5,7 +5,9 @@ export type CodeActions =
     | ChangeColorThemeAction
     | SplitEditorAction
     | ChangeEditorLayoutAction
-    | NewFileAction;
+    | NewCodeFileAction
+    | NewMarkdownFileAction
+    | NewTextFileAction;
 
 export type CodeActivity = LaunchVSCodeAction;
 
@@ -31,11 +33,15 @@ export type ColorTheme =
     | "Abyss"
     | "Default High Contrast Light";
 
-// Change the color scheme of the editor
+// Change the VS Code editor's color theme.
+//
+// Example:
+// User: change my vscode color theme to Monokai
+// Agent: { actionName: "changeColorScheme", parameters: { theme: "Monokai" } }
 export type ChangeColorThemeAction = {
     actionName: "changeColorScheme";
     parameters: {
-        // e.g., "Light+", "Dark+", "Monokai", "Solarized Dark", "Solarized Light"
+        // The VS Code color theme name, e.g. "Monokai", "Solarized Dark", "Dark+".
         theme: ColorTheme;
     };
 };
@@ -43,26 +49,24 @@ export type ChangeColorThemeAction = {
 export type SplitDirection = "right" | "left" | "up" | "down";
 export type EditorPosition = "first" | "last" | "active";
 
-// ACTION: Split an editor window into multiple panes showing the same file or different files side-by-side.
-// This creates a new editor pane (split view) for working with multiple files simultaneously.
-// USE THIS for: "split editor", "split the editor with X", "duplicate this editor to the right", "split X"
+// Split an editor window into multiple panes showing the same file or different files side-by-side.
 //
-// Examples:
-// - "split editor to the right" → splits active editor
-// - "split the first editor" → splits leftmost editor
-// - "split app.tsx to the left" → finds editor showing app.tsx and splits it
-// - "split the last editor down" → splits rightmost editor downward
-// - "split the editor with utils.ts" → finds editor showing utils.ts and splits it
+// Example:
+// User: split editor to the right
+// Agent: { actionName: "splitEditor", parameters: { direction: "right" } }
+//
+// Example:
+// User: split the editor with utils.ts
+// Agent: { actionName: "splitEditor", parameters: { fileName: "utils.ts" } }
 export type SplitEditorAction = {
     actionName: "splitEditor";
     parameters: {
         // Direction to split: "right", "left", "up", "down". Only include if user specifies direction.
         direction?: SplitDirection;
-        // Which editor to split by position. Use "first" for leftmost editor, "last" for rightmost, "active" for current editor, or a number (0-based index).
+        // Which editor to split by position: "first" (leftmost), "last" (rightmost), "active" (current),
+        // or a 0-based index.
         editorPosition?: EditorPosition | number;
         // Which editor to split by file name. Extract the file name or pattern from user request.
-        // Examples: "app.tsx", "main.py", "utils", "codeActionHandler"
-        // Use this when user says "split X" or "split the editor with X" where X is a file name.
         fileName?: string;
     };
 };
@@ -78,25 +82,59 @@ export type ChangeEditorLayoutAction = {
     };
 };
 
-export type CodeLanguage =
-    | "plaintext"
+export type CodeFileLanguage =
     | "html"
+    | "css"
+    | "json"
     | "python"
     | "javaScript"
-    | "typeScript"
-    | "markdown";
+    | "typeScript";
 
-// Create a new file, this is not same as opening a file or finding a file in the workspace
-export type NewFileAction = {
-    actionName: "newFile";
+// Create a new code file (Python, JavaScript, TypeScript, HTML, CSS, JSON, etc.) in the editor.
+//
+// Example:
+// User: create a new typescript file called scratch.ts with a hello world function
+// Agent: { actionName: "newCodeFile", parameters: { fileName: "scratch.ts",
+//          language: "typeScript", content: "function helloWorld() { console.log('Hello, World!'); }\n" } }
+export type NewCodeFileAction = {
+    actionName: "newCodeFile";
     parameters: {
-        fileName: string; // If not filename is provided, "Untitled" is used
-        language: CodeLanguage; // plaintext, html, python, javaScript, typeScript, markdown etc.
-        // Content of the new file is based on language and user input, default is "Hello, World!",
-        // for ex: Create a markdown file with a list of top ten AI papers and links should fill
-        // the content field with a list of papers and their links from
-        // arxiv. If the user asks to create a python file with code to merge two arrays of strings
-        // the content field should be filled with the python function to merge the arrays
+        // The file name; if omitted or empty, "untitled" is used.
+        fileName: string | "untitled";
+        // The programming language of the file.
+        language: CodeFileLanguage;
+        // Initial file content; empty string for an empty scratch file.
+        content: string;
+    };
+};
+
+// Create a new Markdown (.md) file in the editor.
+//
+// Example:
+// User: create a markdown file with a list of top ten AI papers
+// Agent: { actionName: "newMarkdownFile", parameters: { fileName: "papers.md",
+//          content: "# Top 10 AI Papers\n..." } }
+export type NewMarkdownFileAction = {
+    actionName: "newMarkdownFile";
+    parameters: {
+        // The file name; if omitted or empty, "untitled" is used.
+        fileName: string | "untitled";
+        // Initial Markdown content; empty string for an empty scratch file.
+        content: string;
+    };
+};
+
+// Create a new plain text (.txt) file in the editor.
+//
+// Example:
+// User: make a new text file called notes
+// Agent: { actionName: "newTextFile", parameters: { fileName: "notes.txt", content: "" } }
+export type NewTextFileAction = {
+    actionName: "newTextFile";
+    parameters: {
+        // The file name; if omitted or empty, "untitled" is used.
+        fileName: string | "untitled";
+        // Initial text content; empty string for an empty scratch file.
         content: string;
     };
 };

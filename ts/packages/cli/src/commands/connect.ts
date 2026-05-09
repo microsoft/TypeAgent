@@ -401,8 +401,15 @@ export default class Connect extends Command {
                                 { showPrimaryName: false },
                             ),
                         ),
-                    async (command: string, _dispatcher: Dispatcher) => {
-                        return activeDispatcher.processCommand(command);
+                    async (
+                        command: string,
+                        _dispatcher: Dispatcher,
+                        clientRequestId: string,
+                    ) => {
+                        return activeDispatcher.processCommand(
+                            command,
+                            clientRequestId,
+                        );
                     },
                     activeDispatcher,
                     undefined,

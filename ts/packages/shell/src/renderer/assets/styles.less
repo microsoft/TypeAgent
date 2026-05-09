@@ -100,6 +100,12 @@ body {
     color: #999;
   }
 
+  .chat-message-agent.notification .chat-message-content {
+    background-color: rgba(167, 139, 250, 0.07);
+    border-left-color: #7c3aed;
+    color: #c4b5fd;
+  }
+
   details.reasoning-thinking {
     border-color: #3a3a50;
   }
@@ -755,6 +761,22 @@ body {
   padding: 2px 0;
 }
 
+/* Notification messages — agent-initiated toast/inline (via
+ * SessionContext.beginAgentThread) and OS-forwarded notifications (via the
+ * osNotifications agent). Rendered with a muted background and a left accent
+ * stripe so they read as system/ephemeral rather than as a normal agent reply.
+ * The class is applied to the message-container div by ChatView's
+ * addNotificationMessage path. */
+.chat-message-agent.notification {
+  .chat-message-content {
+    background-color: rgba(120, 144, 156, 0.08);
+    border-left: 3px solid #78909c;
+    box-shadow: none;
+    font-size: 0.92em;
+    padding: 6px 12px 6px 13px;
+  }
+}
+
 /* Collapsible thinking block for reasoning engine */
 details.reasoning-thinking {
   margin: 4px 0;
@@ -970,6 +992,25 @@ table.table-message td {
 .chat-message-action-data {
   white-space: nowrap;
   font-size: 80%;
+}
+
+// Panel below an agent message that shows the action JSON when the
+// user clicks the agent name. Mirrors the chat-ui details-row pattern
+// so the JSON expands beneath the response instead of overlaying it.
+.chat-action-data-panel {
+  margin: 6px 0 0 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #333;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 .chat-message-explained[data-expl]:hover:after {
@@ -1314,6 +1355,17 @@ input[type="file"] {
 .voice-mode-banner.claude-focus {
   border-color: #c87137;
   color: #c87137;
+}
+
+.chat-reconnect-banner {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background-color: #fff4ce;
+  color: #5c3c00;
+  border-bottom: 1px solid #ffc83d;
+  text-align: center;
+  flex: 0 0 auto;
 }
 
 .user-textarea:empty[data-placeholder]::before {

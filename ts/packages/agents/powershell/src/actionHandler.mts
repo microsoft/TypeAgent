@@ -8,6 +8,7 @@ import {
     type ActionResult,
     type SchemaContent,
     type GrammarContent,
+    AppAgentEvent,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
@@ -297,6 +298,62 @@ async function handlePowerShellFlowAction(
             const scriptParams = (params.scriptParameters as any[]) ?? [];
             const grammarPats = (params.grammarPatterns as any[]) ?? [];
             const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
+
+            // Validate grammar patterns before saving
+            if (
+                grammarPats.length > 0 &&
+                context.sessionContext.validateGrammarPatterns
+            ) {
+                const patterns = grammarPats.map((g: any) => g.pattern);
+
+                const validationResult =
+                    await context.sessionContext.validateGrammarPatterns({
+                        actionName: newActionName,
+                        description: (params.description as string) ?? "",
+                        patterns,
+                    });
+
+                if (!validationResult.approved) {
+                    const errorMsg = [
+                        "❌ Grammar pattern validation failed:",
+                        "",
+                        ...(validationResult.errors ?? []),
+                    ].join("\n");
+
+                    const suggestionMsg = validationResult.suggestions
+                        ? [
+                              "",
+                              "Suggestions:",
+                              ...validationResult.suggestions,
+                          ].join("\n")
+                        : "";
+
+                    return createActionResultFromError(
+                        errorMsg + suggestionMsg,
+                    );
+                }
+
+                if (
+                    validationResult.warnings &&
+                    validationResult.warnings.length > 0
+                ) {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Warning,
+                        `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+                    );
+                }
+
+                // Use refined patterns if provided
+                if (
+                    validationResult.patterns &&
+                    validationResult.patterns.length > 0
+                ) {
+                    grammarPats.length = 0;
+                    for (const pattern of validationResult.patterns) {
+                        grammarPats.push({ pattern, isAlias: false });
+                    }
+                }
+            }
 
             const recipe: ScriptRecipe = {
                 version: 1,

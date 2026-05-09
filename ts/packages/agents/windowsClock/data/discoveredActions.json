@@ -1,0 +1,430 @@
+{
+  "version": 1,
+  "integrationName": "windowsClock",
+  "discoveredAt": "2026-05-05T05:43:59.827Z",
+  "source": "uiCapture",
+  "actions": [
+    {
+      "actionName": "addWorldClock",
+      "description": "Add a new world clock by searching for a city and selecting it from suggestions.",
+      "parameters": [
+        {
+          "name": "cityQuery",
+          "type": "string",
+          "description": "Text to search for a matching city in the Add Clock box.",
+          "examples": ["Tokyo"]
+        },
+        {
+          "name": "suggestionItem",
+          "type": "string",
+          "description": "The specific suggestion to select from the list (city, country).",
+          "examples": ["Tokyo, Japan"]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"AddClockButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Add location flyout opens."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"AddFlyout\"]/Pane[AutomationId=\"ContentScrollViewer\"]/Group[AutomationId=\"AddClockAutoSuggestBox\"]/Edit[AutomationId=\"TextBox\"]",
+          "verb": "setValue",
+          "valueRef": "cityQuery",
+          "expectedDeltaSummary": "Suggestions appear based on the query."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"PopupHost\"][ClassName=\"Xaml_WindowedPopupClass\"]/Window[AutomationId=\"SuggestionsPopup\"]/List[AutomationId=\"SuggestionsList\"]/ListItem[Name=\"Tokyo, Japan\"][ClassName=\"ListViewItem\"]",
+          "verb": "select",
+          "valueRef": "suggestionItem",
+          "expectedDeltaSummary": "Selected city is committed."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "worldClockTab.list",
+        "description": "World Clock tab is open with the list of clocks visible; Add flyout is not open."
+      },
+      "postconditions": {
+        "description": "The selected city is added to the World Clock list."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "createAlarm",
+      "description": "Create a new alarm with a specified name and time.",
+      "parameters": [
+        {
+          "name": "alarmName",
+          "type": "string",
+          "description": "Displayed name of the alarm.",
+          "examples": ["Wake Up Demo"]
+        },
+        {
+          "name": "hour",
+          "type": "number",
+          "description": "Hour component of the alarm time.",
+          "examples": [7]
+        },
+        {
+          "name": "minute",
+          "type": "number",
+          "description": "Minute component of the alarm time.",
+          "examples": [30]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"AddAlarmButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Add alarm flyout opens"
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Pane[AutomationId=\"ContentScrollViewer\"]/Edit[Name=\"Alarm name\"][ClassName=\"TextBox\"]",
+          "verb": "setValue",
+          "valueRef": "alarmName",
+          "expectedDeltaSummary": "Alarm name field is populated"
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Pane[AutomationId=\"ContentScrollViewer\"]/Custom[AutomationId=\"DurationPicker\"]/Custom[AutomationId=\"HourPicker\"]",
+          "verb": "setValue",
+          "valueRef": "hour",
+          "expectedDeltaSummary": "Hour picker shows selected hour"
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Pane[AutomationId=\"ContentScrollViewer\"]/Custom[AutomationId=\"DurationPicker\"]/Custom[AutomationId=\"MinutePicker\"]",
+          "verb": "setValue",
+          "valueRef": "minute",
+          "expectedDeltaSummary": "Minute picker shows selected minute"
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Button[AutomationId=\"PrimaryButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Alarm is created and flyout closes"
+        }
+      ],
+      "preconditions": {
+        "neutralState": "alarmTab.list",
+        "description": "Alarm tab list is visible with no modal open."
+      },
+      "postconditions": {
+        "description": "Alarm list shows a new alarm with the provided name and time."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "navigateToAlarmTab",
+      "description": "Switch to the Alarms tab in the app.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"AlarmButton\"]",
+          "verb": "select",
+          "waitForIdle": true,
+          "expectedDeltaSummary": "Alarms tab becomes active"
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.list",
+        "description": "App is settled on the Timer tab list view."
+      },
+      "postconditions": {
+        "description": "App shows the Alarms tab list."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "navigateToFocusTab",
+      "description": "Switch to the Focus tab from the app's navigation.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"FocusButton\"]",
+          "verb": "select",
+          "expectedDeltaSummary": "Focus tab becomes active."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.list",
+        "description": "Clock app is open and showing the Timer tab list view."
+      },
+      "postconditions": {
+        "description": "Focus tab is displayed (paused)."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "navigateToStopwatchTab",
+      "description": "Switch to the Stopwatch tab.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"StopwatchButton\"]",
+          "verb": "select",
+          "waitForIdle": true,
+          "expectedDeltaSummary": "Stopwatch tab becomes active and the stopwatch view appears."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.list",
+        "description": "Clock app is open with the Timer tab list view visible."
+      },
+      "postconditions": {
+        "description": "The Stopwatch tab is active and the stopwatch view is shown (running)."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "navigateToTimerTab",
+      "description": "Switch to the Timer tab from another section.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"TimerButton\"]",
+          "verb": "select",
+          "expectedDeltaSummary": "Timer tab becomes active and content switches to the timer list."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "alarmTab.list",
+        "description": "Clock app is open and focused, currently on another tab (e.g., Alarm)."
+      },
+      "postconditions": {
+        "description": "The Timer tab is selected and its list is displayed."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "navigateToWorldClockTab",
+      "description": "Switch to the World Clock tab from another tab.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"ClockButton\"]",
+          "verb": "select",
+          "expectedDeltaSummary": "World Clock tab becomes active."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.list",
+        "description": "Clock app is open and settled on the Timer tab list."
+      },
+      "postconditions": {
+        "description": "World Clock tab is active and its list is visible."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "recordLap",
+      "description": "Record a lap while the stopwatch continues running.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Group[Name=\"Stopwatch, Running, 23 hours 47 minutes 24 seconds 98 centiseconds\"][ClassName=\"NamedContainerAutomationPeer\"]/Button[AutomationId=\"StopWatchLapButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "A lap is recorded; stopwatch remains running."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "stopwatchTab.running",
+        "description": "Stopwatch tab is active and the stopwatch is currently running."
+      },
+      "postconditions": {
+        "description": "A new lap entry is added while the stopwatch continues running."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "renameTimer",
+      "description": "Rename an existing timer and save the changes.",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "The new name to assign to the timer.",
+          "examples": ["Workout Timer"]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"EditTimersButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Enter edit mode for timers."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]",
+          "verb": "expand",
+          "expectedDeltaSummary": "ApplicationBar expanded in edit mode."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"TimerScrollViewer\"]/DataItem[AutomationId=\"TimerViewGrid\"]",
+          "verb": "toggle",
+          "expectedDeltaSummary": "Select the timer to edit."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Pane[AutomationId=\"ContentScrollViewer\"]/Edit[Name=\"Timer name\"][ClassName=\"TextBox\"]",
+          "verb": "setValue",
+          "valueRef": "name",
+          "expectedDeltaSummary": "Update the timer name in the edit flyout."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Button[AutomationId=\"PrimaryButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Save the timer name change."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"DoneButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Exit edit mode and return to the timers list."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.paused",
+        "description": "The Clock app is open on the Timer tab with a timer visible and paused; no modal dialogs are active."
+      },
+      "postconditions": {
+        "description": "The selected timer shows the new name in the timers list and editing is complete."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "setAlarmEnabled",
+      "description": "Turn on an existing alarm.  [merged from: enableAlarm, disableAlarm]",
+      "parameters": [
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "description": "Distinguishes enableAlarm / disableAlarm variants.",
+          "examples": ["alarm", "alarm"]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Button[AutomationId=\"AlarmToggleSwitch\"]",
+          "verb": "toggle",
+          "valueLiteral": true,
+          "expectedDeltaSummary": "Alarm shows as enabled."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "alarmTab.list",
+        "description": "Alarms tab list is visible and the target alarm item with a toggle is present."
+      },
+      "postconditions": {
+        "description": "The alarm is enabled (toggle set to On) in the Alarms list."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "setFocusSessionRunning",
+      "description": "Start the focus session when it is paused.  [merged from: startFocusSession, pauseFocusSession]",
+      "parameters": [
+        {
+          "name": "running",
+          "type": "boolean",
+          "description": "Distinguishes startFocusSession / pauseFocusSession variants.",
+          "examples": ["session", "session"]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[ClassName=\"ScrollViewer\"]/Group[Name=\"Focus timer view\"][ClassName=\"NamedContainerAutomationPeer\"]/Button[AutomationId=\"FocusSessionPlayPauseButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Focus session starts running."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "focusTab.paused",
+        "description": "Focus timer view is open and the session is currently paused."
+      },
+      "postconditions": {
+        "description": "Focus session is running."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "setStopwatchRunning",
+      "description": "Pause the running stopwatch.  [merged from: pauseStopwatch, resumeStopwatch]",
+      "parameters": [
+        {
+          "name": "running",
+          "type": "boolean",
+          "description": "Distinguishes pauseStopwatch / resumeStopwatch variants.",
+          "examples": ["stopwatch", "stopwatch"]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Group[Name=\"Stopwatch, Running, 23 hours 47 minutes 55 seconds 4 centiseconds\"][ClassName=\"NamedContainerAutomationPeer\"]/Button[AutomationId=\"StopwatchPlayPauseButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Stopwatch transitions to paused state."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "stopwatchTab.running",
+        "description": "Stopwatch tab is active and the stopwatch is currently running."
+      },
+      "postconditions": {
+        "description": "Stopwatch is paused."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "setTimerViewMode",
+      "description": "Expand the timer into its alternate/compact view.  [merged from: expandTimerView, restoreTimerView]",
+      "parameters": [
+        {
+          "name": "mode",
+          "type": "enum",
+          "description": "Distinguishes expandTimerView / restoreTimerView variants.",
+          "examples": ["view", "view"],
+          "enumValues": ["compact", "full"]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"TimerScrollViewer\"]/DataItem[AutomationId=\"TimerViewGrid\"]/Button[AutomationId=\"TimerExpandButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Timer view toggled (expanded/compact)."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.running",
+        "description": "Timer tab is open with the running timer view visible."
+      },
+      "postconditions": {
+        "description": "Timer view displays its expanded/compact alternate layout."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "startTimer",
+      "description": "Start or resume the timer from list or paused states.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"TimerScrollViewer\"]/DataItem[AutomationId=\"TimerViewGrid\"]/Button[AutomationId=\"AotButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Opens the Always on top mini view."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Button[AutomationId=\"TimerPlayPauseButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Timer starts running."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Button[Name=\"Back to full view\"][ClassName=\"Button\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Returns to the full app view."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.list",
+        "description": "Timer tab is in list view and idle (no modal dialogs; Always on top view closed)."
+      },
+      "postconditions": {
+        "description": "The timer is running and the full app view is visible."
+      },
+      "destructive": false
+    }
+  ]
+}

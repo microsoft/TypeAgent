@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionResult } from "../action.js";
 import { ActionContext, SessionContext } from "../agentInterface.js";
 import {
     AppAgentCommandInterface,
@@ -23,13 +24,18 @@ export {
     getFlagType,
 } from "./parameterHelpers.js";
 
+// Command handlers MAY return an ActionResult — when they do, the
+// dispatcher's command pipeline runs the same post-execution processing it
+// uses for actions (display content, pendingChoice / yes-no card,
+// dynamicDisplayId). Returning void / undefined keeps the legacy "use
+// actionIO directly" pattern. Both are supported.
 export type CommandHandlerNoParams = CommandDescriptor & {
     parameters?: undefined | false;
     run(
         context: ActionContext<unknown>,
         params: undefined,
         attachments?: string[],
-    ): Promise<void>;
+    ): Promise<ActionResult | undefined | void>;
     getCompletion?: undefined;
 };
 
@@ -39,7 +45,7 @@ export type CommandHandler = CommandDescriptor & {
         context: ActionContext<unknown>,
         params: ParsedCommandParams<ParameterDefinitions>,
         attachments?: string[],
-    ): Promise<void>;
+    ): Promise<ActionResult | undefined | void>;
     getCompletion?(
         context: SessionContext<unknown>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
@@ -144,24 +150,32 @@ export function getCommandInterface(
             params: ParsedCommandParams<ParameterDefinitions> | undefined,
             context: ActionContext<unknown>,
             attachments?: string[],
-        ) => {
+        ): Promise<ActionResult | undefined> => {
             const handler = getCommandHandler(handlers, commands);
 
+            // Pass through the handler's return value so the dispatcher's
+            // command pipeline can post-process ActionResult fields. void is
+            // coerced to undefined.
             if (isCommandHandlerNoParams(handler)) {
                 if (params !== undefined) {
                     throw new Error(
                         `Command '@${commands.join(" ")}' does not accept parameters`,
                     );
                 }
-                await handler.run(context, undefined, attachments);
-                return;
+                const result = await handler.run(
+                    context,
+                    undefined,
+                    attachments,
+                );
+                return result ?? undefined;
             } else {
                 if (params === undefined) {
                     throw new Error(
                         `Command '@${commands.join(" ")}' expects parameters`,
                     );
                 }
-                await handler.run(context, params, attachments);
+                const result = await handler.run(context, params, attachments);
+                return result ?? undefined;
             }
         },
     };

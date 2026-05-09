@@ -1,6 +1,7 @@
 forceLegacyDeploy: true
 packages:
   - packages/*
+  - packages/grammarTools/*
   - packages/memory/*
   - packages/agents/*
   - packages/agents/agentUtils/*
@@ -12,6 +13,7 @@ packages:
   - packages/security/*
   - examples/*
   - examples/agentExamples/*
+  - extensions/*
   - tools
 
 onlyBuiltDependencies:

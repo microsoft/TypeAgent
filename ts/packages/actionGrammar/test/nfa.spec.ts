@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Grammar } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createNumberPart,
+    createStringPart,
+    createWildcardPart,
+} from "../src/grammarTypes.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA, printNFA, printMatchResult } from "../src/nfaInterpreter.js";
 import { NFABuilder, combineNFAs } from "../src/nfa.js";
@@ -56,12 +61,7 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            {
-                                type: "string",
-                                value: ["hello"],
-                            },
-                        ],
+                        parts: [createStringPart(["hello"])],
                     },
                 ],
             };
@@ -77,20 +77,10 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            {
-                                type: "string",
-                                value: ["hello"],
-                            },
-                        ],
+                        parts: [createStringPart(["hello"])],
                     },
                     {
-                        parts: [
-                            {
-                                type: "string",
-                                value: ["hi"],
-                            },
-                        ],
+                        parts: [createStringPart(["hi"])],
                     },
                 ],
             };
@@ -110,14 +100,8 @@ describe("NFA Infrastructure", () => {
                 alternatives: [
                     {
                         parts: [
-                            {
-                                type: "string",
-                                value: ["hello"],
-                            },
-                            {
-                                type: "string",
-                                value: ["world"],
-                            },
+                            createStringPart(["hello"]),
+                            createStringPart(["world"]),
                         ],
                         value: { type: "literal", value: "hello-world" },
                     },
@@ -139,15 +123,8 @@ describe("NFA Infrastructure", () => {
                 alternatives: [
                     {
                         parts: [
-                            {
-                                type: "string",
-                                value: ["hello"],
-                            },
-                            {
-                                type: "wildcard",
-                                variable: "name",
-                                typeName: "string",
-                            },
+                            createStringPart(["hello"]),
+                            createWildcardPart("name", "string"),
                         ],
                         value: {
                             type: "object",
@@ -176,16 +153,8 @@ describe("NFA Infrastructure", () => {
                 alternatives: [
                     {
                         parts: [
-                            {
-                                type: "string",
-                                value: ["hello"],
-                            },
-                            {
-                                type: "wildcard",
-                                variable: "name",
-                                typeName: "string",
-                                optional: true,
-                            },
+                            createStringPart(["hello"]),
+                            createWildcardPart("name", "string", true),
                         ],
                         value: {
                             type: "object",
@@ -221,28 +190,24 @@ describe("NFA Infrastructure", () => {
                         parts: [
                             {
                                 type: "rules",
+                                optional: true,
+                                variable: undefined,
                                 alternatives: [
                                     {
-                                        parts: [
-                                            { type: "string", value: ["um"] },
-                                        ],
+                                        parts: [createStringPart(["um"])],
                                     },
                                     {
-                                        parts: [
-                                            { type: "string", value: ["uh"] },
-                                        ],
+                                        parts: [createStringPart(["uh"])],
                                     },
                                 ],
-                                optional: true,
                                 repeat: true,
                             },
-                            { type: "string", value: ["help"] },
+                            createStringPart(["help"]),
                         ],
                         value: { type: "literal", value: true },
                     },
                 ],
             };
-
             const nfa = compileGrammarToNFA(grammar, "kleene-star");
             // zero repetitions
             expect(matchNFA(nfa, ["help"]).matched).toBe(true);
@@ -262,17 +227,17 @@ describe("NFA Infrastructure", () => {
                         parts: [
                             {
                                 type: "rules",
+                                optional: undefined,
+                                variable: undefined,
                                 alternatives: [
                                     {
-                                        parts: [
-                                            { type: "string", value: ["word"] },
-                                        ],
+                                        parts: [createStringPart(["word"])],
                                     },
                                 ],
                                 repeat: true,
                                 // optional is intentionally absent → must match at least once
                             },
-                            { type: "string", value: ["end"] },
+                            createStringPart(["end"]),
                         ],
                         value: { type: "literal", value: true },
                     },
@@ -355,12 +320,7 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            {
-                                type: "number",
-                                variable: "count",
-                            },
-                        ],
+                        parts: [createNumberPart("count")],
                         value: {
                             type: "object",
                             value: [
@@ -432,12 +392,7 @@ describe("NFA Infrastructure", () => {
             const grammar: Grammar = {
                 alternatives: [
                     {
-                        parts: [
-                            {
-                                type: "string",
-                                value: ["hello"],
-                            },
-                        ],
+                        parts: [createStringPart(["hello"])],
                     },
                 ],
             };
