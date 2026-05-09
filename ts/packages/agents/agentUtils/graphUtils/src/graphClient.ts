@@ -121,6 +121,24 @@ async function withLockFile<T>(file: string, fn: () => Promise<T>): Promise<T> {
 
 const DEFAULT_REDIRECT_PORT = 6893;
 
+/**
+ * Parses a port string and validates it is an integer in the 1–65535 range.
+ * Logs a warning and falls back to `defaultPort` when the value is absent or invalid.
+ */
+function parseValidPort(raw: string | undefined, defaultPort: number): number {
+    if (raw === undefined) {
+        return defaultPort;
+    }
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 65535) {
+        return parsed;
+    }
+    debugGraphError(
+        `Invalid port value "${raw}" for MSGRAPH_APP_REDIRECT_PORT; using default port ${defaultPort}.`,
+    );
+    return defaultPort;
+}
+
 const invalidSettings: AppSettings = {
     clientId: "",
     clientSecret: "",
@@ -138,11 +156,10 @@ function loadMSGraphSettings(): AppSettings {
         authModeRaw === "device-code" || authModeRaw === "devicecode"
             ? "device-code"
             : "browser";
-    const redirectPortRaw = process.env["MSGRAPH_APP_REDIRECT_PORT"];
-    const parsedPort = redirectPortRaw ? parseInt(redirectPortRaw, 10) : NaN;
-    const redirectPort = Number.isFinite(parsedPort)
-        ? parsedPort
-        : DEFAULT_REDIRECT_PORT;
+    const redirectPort = parseValidPort(
+        process.env["MSGRAPH_APP_REDIRECT_PORT"],
+        DEFAULT_REDIRECT_PORT,
+    );
 
     const settings: AppSettings = {
         clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
