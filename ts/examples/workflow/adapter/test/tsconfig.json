@@ -7,8 +7,5 @@
     "types": ["node", "jest"]
   },
   "include": ["./**/*"],
-  "ts-node": {
-    "esm": true
-  },
   "references": [{ "path": "../src" }]
 }
