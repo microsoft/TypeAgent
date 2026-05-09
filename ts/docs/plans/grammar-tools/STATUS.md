@@ -51,7 +51,7 @@ _Last updated: 2026-05-08_
 | C.4  | LSP hover                                    | done        |
 | C.5  | LSP document formatting                      | done        |
 | C.6  | Webview debug panel                          | done        |
-| C.7  | Coverage decorations                         | not started |
+| C.7  | Coverage decorations                         | done        |
 | C.8  | Diff command                                 | not started |
 
 ### Track D - Shared UI

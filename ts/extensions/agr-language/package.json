@@ -34,6 +34,16 @@
         "command": "agr.openDebugPanel",
         "title": "Open Debug Panel",
         "category": "Action Grammar"
+      },
+      {
+        "command": "agr.showCoverage",
+        "title": "Show Coverage",
+        "category": "Action Grammar"
+      },
+      {
+        "command": "agr.clearCoverage",
+        "title": "Clear Coverage",
+        "category": "Action Grammar"
       }
     ],
     "grammars": [
