@@ -1058,9 +1058,6 @@ importers:
 
   packages/agentSdk:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.101
-        version: 0.2.105(zod@4.3.6)
       debug:
         specifier: ^4.4.0
         version: 4.4.1
