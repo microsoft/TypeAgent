@@ -2731,7 +2731,15 @@ async function executeResolutions(analyses) {
         addOverrides(new Map([[a.pkg, newSpec]]));
         let check;
         try {
-            await runCmdAsync("pnpm", ["install"], { timeout: 180000 });
+            // Use --no-frozen-lockfile because we just mutated
+            // pnpm.overrides; in CI (CI=true) pnpm install defaults to
+            // --frozen-lockfile and will refuse to proceed with
+            // ERR_PNPM_LOCKFILE_CONFIG_MISMATCH because the new override
+            // doesn't match what's recorded in pnpm-lock.yaml. Updating
+            // the lockfile is exactly the intent of the raise.
+            await runCmdAsync("pnpm", ["install", "--no-frozen-lockfile"], {
+                timeout: 180000,
+            });
             check = await verifyAllVersionsFixed(a.pkg, a.patched);
         } catch (e) {
             await restoreRoot(snap);
