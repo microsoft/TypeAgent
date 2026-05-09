@@ -349,19 +349,13 @@ function registerClient(
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
-                    // OS-forwarded notifications are ephemeral by design —
-                    // do not record them in the @notify show buffer (they
-                    // would otherwise persist longer than the underlying
-                    // OS notification).
-                    if (source !== "osNotifications") {
-                        notifications.push({
-                            event,
-                            source,
-                            data,
-                            read: false,
-                            requestId,
-                        });
-                    }
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
                     break;
 
                 // Display-focused events - for now show toast notification inline
