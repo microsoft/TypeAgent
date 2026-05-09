@@ -28,6 +28,7 @@ import {
 } from "../../../translation/actionSimilarity.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { getCollisionCorpusCommandHandlers } from "./collisionCorpusHandlers.js";
+import { getCollisionNeighborhoodCommandHandlers } from "./collisionNeighborhoodHandlers.js";
 
 // ---------------------------------------------------------------------------
 // `@collision events` — show recent events captured in the in-memory ring
@@ -1276,6 +1277,7 @@ export function getCollisionCommandHandlers(): CommandHandlerTable {
             similar: new CollisionSimilarCommandHandler(),
             probe: new CollisionProbeCommandHandler(),
             corpus: getCollisionCorpusCommandHandlers(),
+            neighborhoods: getCollisionNeighborhoodCommandHandlers(),
             "list-strategies":
                 new CollisionSimilarListStrategiesCommandHandler(),
         },

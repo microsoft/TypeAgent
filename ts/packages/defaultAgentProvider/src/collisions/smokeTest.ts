@@ -160,10 +160,37 @@ async function main() {
             `✓ visualize-recovery produced ${recoveryHtml} (${rsizeKB} KB)\n`,
         );
         const rhtml = fs.readFileSync(recoveryHtml, "utf8");
-        if (!rhtml.includes("rank2Tight") || !rhtml.includes("perAction")) {
+        if (!rhtml.includes("sameSchema") || !rhtml.includes("perAction")) {
             throw new Error("Recovery HTML missing expected payload fields");
         }
         process.stderr.write("✓ recovery HTML payload looks well-formed\n");
+
+        process.stderr.write("\n--- @collision neighborhoods preview ---\n");
+        const previewHtml = path.join(workdir, "neighborhoods-preview.html");
+        if (fs.existsSync(previewHtml)) fs.unlinkSync(previewHtml);
+        // The corpus probe-results-reclassified.json was already copied above
+        // as `inFile`; the preview command picks it up automatically from the
+        // workdir.
+        await dispatcher.processCommand(
+            `@collision neighborhoods preview --workdir "${workdir}" --threshold 0.78`,
+        );
+        if (!fs.existsSync(previewHtml)) {
+            throw new Error(
+                `Neighborhood preview HTML not created: ${previewHtml}`,
+            );
+        }
+        const psizeKB = (fs.statSync(previewHtml).size / 1024).toFixed(0);
+        process.stderr.write(
+            `✓ neighborhoods preview produced ${previewHtml} (${psizeKB} KB)\n`,
+        );
+        const phtml = fs.readFileSync(previewHtml, "utf8");
+        if (!phtml.includes("Ambiguity neighborhood preview")) {
+            throw new Error("Preview HTML missing expected title");
+        }
+        if (!phtml.includes('"neighborhoods":')) {
+            throw new Error("Preview HTML missing payload");
+        }
+        process.stderr.write("✓ preview HTML payload looks well-formed\n");
 
         process.stderr.write("\nAll smoke tests passed.\n");
     } finally {

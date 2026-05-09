@@ -496,6 +496,11 @@ Embeddings are cached to disk and loaded at startup.
 > record of which detection points / strategies are being tested, how
 > testers opt in, what telemetry shape we capture, and the Cosmos query
 > reference. Update it as experiments run.
+>
+> **Analysis tooling:** [`collision-analysis.md`](./collision-analysis.md)
+> is the user guide to the data + analysis surface — corpus pipeline,
+> action similarity, neighborhood preview, and the three interactive
+> HTML visualizations.
 
 When two or more agents can plausibly handle the same input, the
 dispatcher needs a policy for picking a winner. Before this subsystem,

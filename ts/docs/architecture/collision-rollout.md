@@ -1,5 +1,11 @@
 # Soft Rollout: TypeAgent Collision Detection
 
+> Companion docs: [`collision-analysis.md`](./collision-analysis.md) is
+> the user guide to the data + analysis tooling (`@collision corpus *`,
+> `@collision neighborhoods preview`, the interactive HTML reports). The
+> [Action Collision Detection section of the dispatcher package README](../../packages/dispatcher/dispatcher/README.md#action-collision-detection)
+> is the runtime detection-point reference.
+
 ## Context
 
 The `dev/robgruen/action_collision` branch ships the full collision-detection
