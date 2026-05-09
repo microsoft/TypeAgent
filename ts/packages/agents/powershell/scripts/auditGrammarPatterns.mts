@@ -138,9 +138,7 @@ function extractPatternsFromAGR(
     return patterns;
 }
 
-function analyzePattern(
-    pattern: PatternInfo,
-): {
+function analyzePattern(pattern: PatternInfo): {
     severity: "high" | "medium" | "low";
     issue: string;
     suggestion?: string;
