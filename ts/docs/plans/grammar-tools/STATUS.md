@@ -178,6 +178,14 @@ Promote into "Queued actions" when scheduling.
   coverage analysis for the NFA/DFA compile paths as well. Lower
   priority since the rule-level matcher is the primary matching backend
   for authoring/debugging; NFA/DFA are production-optimized paths.
+- **Optimizer partId lineage map.** When the grammar optimizer
+  (dispatchify) merges or splits parts, only the first token of an
+  exploded string keeps its original partId. This makes coverage
+  attribution approximate for optimized grammars. Explore emitting an
+  `optimizedPartId -> originalPartId[]` map from the optimizer so
+  coverage and trace can attribute merged tokens back to all source
+  parts. Touches `grammarOptimizer.ts` (emit the map alongside the
+  optimized grammar) and `GrammarDebugInfo` (carry the map).
 - **B.3 coverage / B.4 diff implementation.** ~~Stubs removed during
   self-review (2026-05-07).~~ Implemented 2026-05-07: `computeCoverage`
   in `coverage.ts`, `diffGrammars` in `diff.ts`. CLI commands E.4 and

@@ -26,6 +26,10 @@ import {
 
 let client: LanguageClient | undefined;
 
+function showError(e: unknown): void {
+    window.showErrorMessage(e instanceof Error ? e.message : String(e));
+}
+
 export function activate(context: ExtensionContext): void {
     const serverModule = context.asAbsolutePath(path.join("dist", "server.js"));
 
@@ -173,9 +177,7 @@ export function activate(context: ExtensionContext): void {
                         `from ${inputs.length} input${inputs.length !== 1 ? "s" : ""}`,
                 );
             } catch (e: unknown) {
-                window.showErrorMessage(
-                    e instanceof Error ? e.message : String(e),
-                );
+                showError(e);
             }
         }),
     );
@@ -279,9 +281,7 @@ export function activate(context: ExtensionContext): void {
                 }
                 diffChannel.show(true);
             } catch (e: unknown) {
-                window.showErrorMessage(
-                    e instanceof Error ? e.message : String(e),
-                );
+                showError(e);
             }
         }),
     );

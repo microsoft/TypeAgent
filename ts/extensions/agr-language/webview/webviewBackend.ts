@@ -71,8 +71,10 @@ const pending = new Map<
 >();
 
 window.addEventListener("message", (event: MessageEvent) => {
+    // In VS Code webviews, the only legitimate sender is the extension
+    // host. Ignore messages without the expected shape.
     const msg = event.data as WebviewResponse;
-    if (msg.id == null) return;
+    if (typeof msg !== "object" || msg === null || msg.id == null) return;
     const entry = pending.get(msg.id);
     if (!entry) return;
     pending.delete(msg.id);

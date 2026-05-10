@@ -132,9 +132,11 @@ class DebugPanelInstance implements Disposable {
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
                    script-src 'nonce-${nonce}';
-                   style-src 'unsafe-inline';
+                   style-src ${webview.cspSource} 'unsafe-inline';
                    font-src ${webview.cspSource};">
     <title>Grammar Debug</title>
+    <!-- 'unsafe-inline' is required for Lit component styles
+         (adoptedStyleSheets / shadow DOM <style> tags lack nonces) -->
     <style>
         body {
             margin: 0;

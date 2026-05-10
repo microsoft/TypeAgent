@@ -21,7 +21,9 @@ export default defineConfig({
     },
     resolve: {
         alias: {
-            // Resolve workspace packages to their source for bundling
+            // Resolve workspace packages to their TypeScript source so Vite
+            // bundles them directly. These paths mirror the workspace layout
+            // defined in pnpm-workspace.yaml; update if packages move.
             "grammar-tools-ui": resolve(
                 __dirname,
                 "../../packages/grammarTools/ui/src/index.ts",

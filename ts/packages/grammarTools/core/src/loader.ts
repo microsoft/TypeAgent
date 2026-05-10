@@ -348,12 +348,13 @@ function buildDebugInfo(collector: DebugInfoCollector): GrammarDebugInfo {
         });
     }
 
-    // Simple hash: length + first/last chars + part count
+    // Hash incorporating file names, total length, and part/rule counts
+    const fileKeys = Array.from(collector.fileContents.keys()).sort().join("|");
     const totalLen = [...collector.fileContents.values()].reduce(
         (sum, t) => sum + t.length,
         0,
     );
-    const grammarHash = `${totalLen}:${collector.partPositions.size}:${collector.rulePositions.size}`;
+    const grammarHash = `${totalLen}:${fileKeys}:${collector.partPositions.size}:${collector.rulePositions.size}`;
 
     return { grammarHash, rules, parts, partRules: collector.partRules };
 }

@@ -58,7 +58,6 @@ function toRange(loc: {
 
 function hitsMessage(hits: number, kind: string, id: string): MarkdownString {
     const md = new MarkdownString();
-    md.isTrusted = true;
     if (hits === 0) {
         md.appendMarkdown(`**${kind} \`${id}\`**: no hits`);
     } else {
