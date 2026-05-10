@@ -21,6 +21,9 @@ import {
     Position,
 } from "vscode-languageserver/node.js";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import * as path from "node:path";
+import * as fs from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
     loadGrammarFromBuffer,
     getSymbolIndex,
@@ -29,6 +32,7 @@ import {
     type LoadResult,
     type SymbolIndex,
     type Diagnostic,
+    type FileLoader,
 } from "grammar-tools-core";
 
 // ---------------------------------------------------------------------------
@@ -67,8 +71,31 @@ function validateDocument(doc: TextDocument): void {
     const text = doc.getText();
     const uri = doc.uri;
 
+    // Build a FileLoader if the document is on disk, so imports resolve.
+    // The loader intercepts reads for the current file to use the
+    // in-memory buffer (which may differ from disk).
+    let fileLoader: FileLoader | undefined;
+    let id: string;
+    if (uri.startsWith("file://")) {
+        const filePath = fileURLToPath(uri);
+        id = filePath;
+        fileLoader = {
+            resolvePath: (name: string, ref?: string) =>
+                ref
+                    ? path.resolve(path.dirname(ref), name)
+                    : path.resolve(path.dirname(filePath), name),
+            readContent: (fullPath: string) => {
+                if (fullPath === filePath) return text;
+                return fs.readFileSync(fullPath, "utf-8");
+            },
+            displayPath: (fullPath: string) => fullPath,
+        };
+    } else {
+        id = uriToId(uri);
+    }
+
     // Parse and cache
-    const result = loadGrammarFromBuffer(uriToId(uri), text);
+    const result = loadGrammarFromBuffer(id, text, fileLoader);
     grammarCache.set(uri, result);
     symbolCache.delete(uri); // invalidate
 
@@ -116,7 +143,7 @@ connection.onDefinition((params: DefinitionParams) => {
 
     const word = symbolAtPosition(
         index,
-        uriToId(params.textDocument.uri),
+        getFileId(params.textDocument.uri),
         params.position.line,
         params.position.character,
     );
@@ -146,7 +173,7 @@ connection.onReferences((params: ReferenceParams) => {
 
     const word = symbolAtPosition(
         index,
-        uriToId(params.textDocument.uri),
+        getFileId(params.textDocument.uri),
         params.position.line,
         params.position.character,
     );
@@ -194,7 +221,7 @@ connection.onHover((params: HoverParams) => {
 
     const word = symbolAtPosition(
         index,
-        uriToId(params.textDocument.uri),
+        getFileId(params.textDocument.uri),
         params.position.line,
         params.position.character,
     );
@@ -285,6 +312,18 @@ function getIndex(uri: string): SymbolIndex | null {
     return index;
 }
 
+/**
+ * Return the file ID used for symbol lookups in the current document.
+ * For file:// URIs with a FileLoader, this is the absolute path (matching
+ * the root SourceFile.id). Otherwise, just the filename.
+ */
+function getFileId(uri: string): string {
+    if (uri.startsWith("file://")) {
+        return fileURLToPath(uri);
+    }
+    return uriToId(uri);
+}
+
 function uriToId(uri: string): string {
     // Extract filename from URI for use as grammar ID
     const lastSlash = uri.lastIndexOf("/");
@@ -292,7 +331,15 @@ function uriToId(uri: string): string {
 }
 
 function fileIdToUri(fileId: string, contextUri: string): string {
-    // If fileId matches the filename part of contextUri, return contextUri
+    // Try to resolve via debugInfo.filePaths first
+    const result = grammarCache.get(contextUri);
+    if (result?.ok && result.grammar.debugInfo?.filePaths) {
+        const resolvedPath = result.grammar.debugInfo.filePaths.get(fileId);
+        if (resolvedPath) {
+            return pathToFileURL(resolvedPath).toString();
+        }
+    }
+    // Fallback: if fileId matches the filename part of contextUri, return contextUri
     const contextFile = uriToId(contextUri);
     if (fileId === contextFile) return contextUri;
     // Resolve relative to the context URI, encoding the fileId for URI safety

@@ -54,8 +54,21 @@ export async function loadGrammarFromFile(
 
 /**
  * Load a grammar from an in-memory text buffer.
+ * If a `fileLoader` is provided, `import ... from "./other.agr"` statements
+ * in the buffer will be resolved via the loader.  The `id` is used as the
+ * file identity for import path resolution.
  */
-export function loadGrammarFromBuffer(id: string, text: string): LoadResult {
+export function loadGrammarFromBuffer(
+    id: string,
+    text: string,
+    fileLoader?: FileLoader,
+): LoadResult {
+    if (fileLoader) {
+        return loadFromFileLoader(id, text, id, fileLoader, {
+            kind: "buffer",
+            id,
+        });
+    }
     return loadFromText(text, { kind: "buffer", id });
 }
 
@@ -90,6 +103,7 @@ function makeCollector(fileId: string, text: string): DebugInfoCollector {
         rulePositions: new Map(),
         partRules: new Map(),
         fileContents: new Map([[fileId, text]]),
+        filePaths: new Map(),
     };
 }
 
@@ -105,11 +119,21 @@ function buildLoadResult(
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
         const debugInfo = buildDebugInfo(collector);
+
+        // Build file list: root file + any imported files from the collector
+        const rootId = file.id;
+        const files: SourceFile[] = [file];
+        for (const [fileId, fileText] of collector.fileContents) {
+            if (fileId !== rootId) {
+                files.push({ id: fileId, text: fileText, imported: true });
+            }
+        }
+
         const loaded: LoadedGrammar = {
             source,
             grammar,
             debugInfo,
-            files: [file],
+            files,
             identifiers,
         };
         const diagnostics: Diagnostic[] | undefined =
@@ -344,5 +368,11 @@ function buildDebugInfo(collector: DebugInfoCollector): GrammarDebugInfo {
     );
     const grammarHash = `${totalLen}:${fileKeys}:${collector.partPositions.size}:${collector.rulePositions.size}`;
 
-    return { grammarHash, rules, parts, partRules: collector.partRules };
+    return {
+        grammarHash,
+        rules,
+        parts,
+        partRules: collector.partRules,
+        filePaths: collector.filePaths,
+    };
 }

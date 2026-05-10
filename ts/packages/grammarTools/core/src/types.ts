@@ -56,6 +56,7 @@ export interface SourceFile {
     readonly id: string;
     readonly text: string;
     readonly synthetic?: boolean;
+    readonly imported?: boolean;
 }
 
 export interface GrammarDebugInfo {
@@ -64,6 +65,8 @@ export interface GrammarDebugInfo {
     readonly parts: ReadonlyMap<PartId, SourceLocation>;
     /** Maps partId -> owning ruleId (recorded at compile time). */
     readonly partRules: ReadonlyMap<PartId, RuleId>;
+    /** Maps fileId (displayPath) -> resolved absolute path on disk. */
+    readonly filePaths: ReadonlyMap<string, string>;
 }
 
 export interface GrammarIdentifierIndex {
