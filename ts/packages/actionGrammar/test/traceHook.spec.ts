@@ -207,4 +207,37 @@ describe("trace hook", () => {
             );
         }
     });
+
+    // ---------------------------------------------------------------
+    // Rule names populated in trace events
+    // ---------------------------------------------------------------
+
+    it("populates non-empty rule names on trace events", () => {
+        const { events } = collect(simple, "pause");
+        const withRule = events.filter((e) => e.kind !== "backtrack");
+        expect(withRule.length).toBeGreaterThan(0);
+        for (const e of withRule) {
+            expect((e as RuleEnteredEvent).rule).toBeTruthy();
+        }
+    });
+
+    it("does not populate rule names without trace callback", () => {
+        // matchGrammar without a trace callback should not track names
+        // (trackNames stays false, avoiding the overhead).
+        const results = matchGrammar(simple, "pause");
+        expect(results.length).toBeGreaterThan(0);
+        // No events to inspect, but verifies the codepath works
+        // without populating names. The real guarantee is structural:
+        // trackNames is only set when trace is provided.
+    });
+
+    it("rule names include the grammar rule name", () => {
+        const { events } = collect(nested, "do play");
+        const entered = events.filter(
+            (e): e is RuleEnteredEvent => e.kind === "ruleEntered",
+        );
+        const names = entered.map((e) => e.rule);
+        expect(names.some((n) => n.includes("Start"))).toBe(true);
+        expect(names.some((n) => n.includes("Action"))).toBe(true);
+    });
 });

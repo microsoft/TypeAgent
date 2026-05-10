@@ -62,6 +62,8 @@ export interface GrammarDebugInfo {
     readonly grammarHash: string;
     readonly rules: ReadonlyMap<RuleId, SourceLocation>;
     readonly parts: ReadonlyMap<PartId, SourceLocation>;
+    /** Maps partId -> owning ruleId (recorded at compile time). */
+    readonly partRules: ReadonlyMap<PartId, RuleId>;
 }
 
 export interface GrammarIdentifierIndex {
@@ -128,6 +130,19 @@ export type SeparatorMode =
     | "autoSpacePunctuation";
 
 export type AfterWildcard = "none" | "some" | "all";
+
+export type CompletionDirection = "forward" | "backward";
+
+export type WildcardPolicy = "exhaustive" | "shortest";
+export type OptionalPolicy = "exhaustive" | "preferTake" | "preferSkip";
+export type RepeatPolicy = "exhaustive" | "greedy" | "nonGreedy";
+
+export interface CompletionOptions {
+    direction?: CompletionDirection;
+    wildcardPolicy?: WildcardPolicy;
+    optionalPolicy?: OptionalPolicy;
+    repeatPolicy?: RepeatPolicy;
+}
 
 export interface CompletionGroup {
     completions: string[];

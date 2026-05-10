@@ -12,7 +12,8 @@ function makeCollector(): DebugInfoCollector {
     return {
         partPositions: new Map(),
         rulePositions: new Map(),
-        fileId: "test.agr",
+        partRules: new Map(),
+        fileContents: new Map(),
     };
 }
 
@@ -51,9 +52,9 @@ describe("partId assignment", () => {
 
         expect(collector.rulePositions.size).toBeGreaterThan(0);
         // Rule positions should be valid offsets into the source
-        for (const offset of collector.rulePositions.values()) {
-            expect(offset).toBeGreaterThanOrEqual(0);
-            expect(offset).toBeLessThan(source.length);
+        for (const pos of collector.rulePositions.values()) {
+            expect(pos.offset).toBeGreaterThanOrEqual(0);
+            expect(pos.offset).toBeLessThan(source.length);
         }
     });
 
@@ -62,9 +63,9 @@ describe("partId assignment", () => {
         const collector = makeCollector();
         loadGrammarRules("test", source, { debugCollector: collector });
 
-        for (const offset of collector.partPositions.values()) {
-            expect(offset).toBeGreaterThanOrEqual(0);
-            expect(offset).toBeLessThan(source.length);
+        for (const pos of collector.partPositions.values()) {
+            expect(pos.offset).toBeGreaterThanOrEqual(0);
+            expect(pos.offset).toBeLessThan(source.length);
         }
     });
 });

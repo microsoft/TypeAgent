@@ -12,6 +12,7 @@ import type {
     CompletionGroup,
     CompletionProperty,
     AfterWildcard,
+    CompletionOptions,
 } from "./types.js";
 
 /**
@@ -21,8 +22,17 @@ import type {
 export function previewCompletion(
     g: LoadedGrammar,
     input: string,
+    options?: CompletionOptions,
 ): CompletionPreview {
-    const result = matchGrammarCompletion(g.grammar, input);
+    const { direction, ...matchOpts } = options ?? {};
+    const hasMatchOpts = Object.keys(matchOpts).length > 0;
+    const result = matchGrammarCompletion(
+        g.grammar,
+        input,
+        undefined,
+        direction,
+        hasMatchOpts ? matchOpts : undefined,
+    );
 
     const groups: CompletionGroup[] = result.groups.map(
         (group: GrammarCompletionGroup) => ({
