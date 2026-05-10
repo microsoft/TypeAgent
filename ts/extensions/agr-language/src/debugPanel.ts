@@ -257,6 +257,9 @@ class DebugPanelInstance implements Disposable {
                       grammarHash: result.grammar.debugInfo.grammarHash,
                       rules: [...result.grammar.debugInfo.rules.entries()],
                       parts: [...result.grammar.debugInfo.parts.entries()],
+                      partRules: [
+                          ...result.grammar.debugInfo.partRules.entries(),
+                      ],
                   }
                 : undefined,
             files: result.grammar.files,

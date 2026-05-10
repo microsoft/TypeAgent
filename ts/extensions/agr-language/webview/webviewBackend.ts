@@ -56,6 +56,7 @@ export interface SerializedLoadResult {
         grammarHash: string;
         rules: Array<[RuleId, SourceLocation]>;
         parts: Array<[PartId, SourceLocation]>;
+        partRules: Array<[PartId, RuleId]>;
     };
     files?: readonly SourceFile[];
     source: GrammarSource;
@@ -102,6 +103,7 @@ export function hydrateLoadResult(raw: SerializedLoadResult): LoadResult {
               grammarHash: raw.debugInfo.grammarHash,
               rules: new Map(raw.debugInfo.rules),
               parts: new Map(raw.debugInfo.parts),
+              partRules: new Map(raw.debugInfo.partRules),
           }
         : undefined;
 

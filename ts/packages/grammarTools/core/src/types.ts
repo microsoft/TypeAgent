@@ -62,6 +62,8 @@ export interface GrammarDebugInfo {
     readonly grammarHash: string;
     readonly rules: ReadonlyMap<RuleId, SourceLocation>;
     readonly parts: ReadonlyMap<PartId, SourceLocation>;
+    /** Maps partId -> owning ruleId (recorded at compile time). */
+    readonly partRules: ReadonlyMap<PartId, RuleId>;
 }
 
 export interface GrammarIdentifierIndex {

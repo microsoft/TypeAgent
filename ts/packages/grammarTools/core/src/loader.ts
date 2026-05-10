@@ -91,7 +91,8 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
     const collector: DebugInfoCollector = {
         partPositions: new Map(),
         rulePositions: new Map(),
-        fileId: sourceId(source),
+        partRules: new Map(),
+        fileContents: new Map([[sourceId(source), text]]),
     };
     const grammar = loadGrammarRulesNoThrow(
         sourceId(source),
@@ -103,7 +104,7 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
 
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
-        const debugInfo = buildDebugInfo(collector, text, sourceId(source));
+        const debugInfo = buildDebugInfo(collector);
         const loaded: LoadedGrammar = {
             source,
             grammar,
@@ -160,7 +161,8 @@ function loadFromFileLoader(
     const collector: DebugInfoCollector = {
         partPositions: new Map(),
         rulePositions: new Map(),
-        fileId: displayPath,
+        partRules: new Map(),
+        fileContents: new Map([[displayPath, text]]),
     };
     const grammar = loadGrammarRulesNoThrow(
         fullPath,
@@ -172,7 +174,7 @@ function loadFromFileLoader(
 
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
-        const debugInfo = buildDebugInfo(collector, text, displayPath);
+        const debugInfo = buildDebugInfo(collector);
         const loaded: LoadedGrammar = {
             source,
             grammar,
@@ -314,41 +316,44 @@ function offsetToPosition(
 }
 
 /**
- * Build a `GrammarDebugInfo` from the raw offsets collected during compilation.
+ * Build a `GrammarDebugInfo` from the raw positions collected during compilation.
+ * Each position entry carries its own fileId, so multi-file grammars resolve correctly.
  */
-function buildDebugInfo(
-    collector: DebugInfoCollector,
-    text: string,
-    fileId: string,
-): GrammarDebugInfo {
+function buildDebugInfo(collector: DebugInfoCollector): GrammarDebugInfo {
     const rules = new Map<string, SourceLocation>();
-    for (const [ruleId, offset] of collector.rulePositions) {
-        const start = offsetToPosition(text, offset);
+    for (const [ruleId, pos] of collector.rulePositions) {
+        const text = collector.fileContents.get(pos.fileId) ?? "";
+        const start = offsetToPosition(text, pos.offset);
         rules.set(ruleId, {
-            fileId,
-            displayPath: fileId,
+            fileId: pos.fileId,
+            displayPath: pos.fileId,
             range: {
-                start: { ...start, offset },
-                end: { ...start, offset },
+                start: { ...start, offset: pos.offset },
+                end: { ...start, offset: pos.offset },
             },
         });
     }
 
     const parts = new Map<number, SourceLocation>();
-    for (const [partId, offset] of collector.partPositions) {
-        const start = offsetToPosition(text, offset);
+    for (const [partId, pos] of collector.partPositions) {
+        const text = collector.fileContents.get(pos.fileId) ?? "";
+        const start = offsetToPosition(text, pos.offset);
         parts.set(partId, {
-            fileId,
-            displayPath: fileId,
+            fileId: pos.fileId,
+            displayPath: pos.fileId,
             range: {
-                start: { ...start, offset },
-                end: { ...start, offset },
+                start: { ...start, offset: pos.offset },
+                end: { ...start, offset: pos.offset },
             },
         });
     }
 
     // Simple hash: length + first/last chars + part count
-    const grammarHash = `${text.length}:${collector.partPositions.size}:${collector.rulePositions.size}`;
+    const totalLen = [...collector.fileContents.values()].reduce(
+        (sum, t) => sum + t.length,
+        0,
+    );
+    const grammarHash = `${totalLen}:${collector.partPositions.size}:${collector.rulePositions.size}`;
 
-    return { grammarHash, rules, parts };
+    return { grammarHash, rules, parts, partRules: collector.partRules };
 }

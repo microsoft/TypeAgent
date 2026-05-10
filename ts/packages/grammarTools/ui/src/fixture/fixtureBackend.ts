@@ -135,6 +135,7 @@ const fixtureGrammar: LoadedGrammar = {
             ],
         ]),
         parts: new Map(),
+        partRules: new Map(),
     },
     files: [
         {
