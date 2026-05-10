@@ -50,9 +50,7 @@ export class GtRuleList extends LitElement {
     grammar: LoadedGrammar | undefined;
 
     @property({ attribute: false })
-    onRuleClick:
-        | ((ruleId: string, loc?: SourceLocation) => void)
-        | undefined;
+    onRuleClick: ((ruleId: string, loc?: SourceLocation) => void) | undefined;
 
     @state()
     private _selectedRule: string = "";

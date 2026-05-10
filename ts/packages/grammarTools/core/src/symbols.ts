@@ -187,6 +187,52 @@ function addRef(
 }
 
 // ---------------------------------------------------------------------------
+// Position-based lookup
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the rule ID at a given (line, character) position in a file,
+ * or `null` if the position does not fall on a definition or reference.
+ */
+export function symbolAtPosition(
+    index: SymbolIndex,
+    fileId: string,
+    line: number,
+    character: number,
+): RuleId | null {
+    // Check definitions
+    for (const sym of index.symbols) {
+        if (
+            sym.location.fileId === fileId &&
+            inRange(sym.location, line, character)
+        ) {
+            return sym.id;
+        }
+    }
+    // Check references
+    for (const sym of index.symbols) {
+        for (const ref of index.references(sym.id)) {
+            if (ref.fileId === fileId && inRange(ref, line, character)) {
+                return sym.id;
+            }
+        }
+    }
+    return null;
+}
+
+function inRange(
+    loc: SourceLocation,
+    line: number,
+    character: number,
+): boolean {
+    const { start, end } = loc.range;
+    if (line < start.line || line > end.line) return false;
+    if (line === start.line && character < start.character) return false;
+    if (line === end.line && character >= end.character) return false;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Position utilities
 // ---------------------------------------------------------------------------
 

@@ -74,7 +74,11 @@ export {
 
 // Services
 export { loadGrammarFromFile, loadGrammarFromBuffer } from "./loader.js";
-export { getSymbolIndex, offsetToPosition } from "./symbols.js";
+export {
+    getSymbolIndex,
+    offsetToPosition,
+    symbolAtPosition,
+} from "./symbols.js";
 export { format } from "./format.js";
 export { previewCompletion } from "./completion.js";
 export { traceMatch } from "./trace.js";
