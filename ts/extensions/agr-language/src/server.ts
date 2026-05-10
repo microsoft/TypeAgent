@@ -306,6 +306,8 @@ function getWordAtPosition(uri: string, pos: Position): string | null {
         ) {
             end++;
         }
+        // Must end at > to be a valid rule reference
+        if (end >= text.length || text[end] !== ">") return null;
     } else {
         // Plain identifier: expand backward and forward
         start = offset;
@@ -336,10 +338,12 @@ function fileIdToUri(fileId: string, contextUri: string): string {
     // If fileId matches the filename part of contextUri, return contextUri
     const contextFile = uriToId(contextUri);
     if (fileId === contextFile) return contextUri;
-    // Otherwise, try to resolve relative to the context
+    // Resolve relative to the context URI, encoding the fileId for URI safety
     const lastSlash = contextUri.lastIndexOf("/");
     if (lastSlash >= 0) {
-        return contextUri.substring(0, lastSlash + 1) + fileId;
+        return (
+            contextUri.substring(0, lastSlash + 1) + encodeURIComponent(fileId)
+        );
     }
     return fileId;
 }

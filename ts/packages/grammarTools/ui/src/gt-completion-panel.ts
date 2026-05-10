@@ -231,6 +231,14 @@ export class GtCompletionPanel extends LitElement {
         }
     }
 
+    override disconnectedCallback(): void {
+        super.disconnectedCallback();
+        if (this._debounceTimer !== undefined) {
+            clearTimeout(this._debounceTimer);
+            this._debounceTimer = undefined;
+        }
+    }
+
     private _onInput(e: Event): void {
         const target = e.target as HTMLInputElement;
         this._input = target.value;

@@ -171,7 +171,7 @@ export class GtDebugPanel extends LitElement {
     private async _runCoverage(): Promise<void> {
         if (!this.backend || !this._grammar || !this._corpusText) return;
         const inputs = this._corpusText
-            .split("\n")
+            .split(/\r?\n/)
             .map((l) => l.trim())
             .filter((l) => l.length > 0);
         if (inputs.length === 0) return;

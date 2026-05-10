@@ -84,24 +84,24 @@ export function loadGrammarFromSnapshot(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function loadFromText(text: string, source: GrammarSource): LoadResult {
-    const file: SourceFile = { id: sourceId(source), text };
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const collector: DebugInfoCollector = {
+function makeCollector(fileId: string, text: string): DebugInfoCollector {
+    return {
         partPositions: new Map(),
         rulePositions: new Map(),
         partRules: new Map(),
-        fileContents: new Map([[sourceId(source), text]]),
+        fileContents: new Map([[fileId, text]]),
     };
-    const grammar = loadGrammarRulesNoThrow(
-        sourceId(source),
-        text,
-        errors,
-        warnings,
-        { debugCollector: collector },
-    );
+}
 
+function buildLoadResult(
+    grammar: Grammar | undefined,
+    errors: string[],
+    warnings: string[],
+    collector: DebugInfoCollector,
+    source: GrammarSource,
+    file: SourceFile,
+    text: string,
+): LoadResult {
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
         const debugInfo = buildDebugInfo(collector);
@@ -144,6 +144,30 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
     return { ok: false, diagnostics, files: [file] };
 }
 
+function loadFromText(text: string, source: GrammarSource): LoadResult {
+    const file: SourceFile = { id: sourceId(source), text };
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const collector = makeCollector(sourceId(source), text);
+    const grammar = loadGrammarRulesNoThrow(
+        sourceId(source),
+        text,
+        errors,
+        warnings,
+        { debugCollector: collector },
+    );
+
+    return buildLoadResult(
+        grammar,
+        errors,
+        warnings,
+        collector,
+        source,
+        file,
+        text,
+    );
+}
+
 /**
  * Load a grammar using a FileLoader so the compiler can resolve
  * `import ... from "./other.agr"` statements.
@@ -158,12 +182,7 @@ function loadFromFileLoader(
     const file: SourceFile = { id: sourceId(source), text };
     const errors: string[] = [];
     const warnings: string[] = [];
-    const collector: DebugInfoCollector = {
-        partPositions: new Map(),
-        rulePositions: new Map(),
-        partRules: new Map(),
-        fileContents: new Map([[displayPath, text]]),
-    };
+    const collector = makeCollector(displayPath, text);
     const grammar = loadGrammarRulesNoThrow(
         fullPath,
         fileLoader,
@@ -172,46 +191,15 @@ function loadFromFileLoader(
         { debugCollector: collector },
     );
 
-    if (grammar && errors.length === 0) {
-        const identifiers = buildIdentifierIndex(grammar);
-        const debugInfo = buildDebugInfo(collector);
-        const loaded: LoadedGrammar = {
-            source,
-            grammar,
-            debugInfo,
-            files: [file],
-            identifiers,
-        };
-        const diagnostics: Diagnostic[] | undefined =
-            warnings.length > 0
-                ? warnings.map((message) => ({
-                      range: extractRange(message, text),
-                      severity: "warning" as const,
-                      message,
-                      source: "grammar-tools-core" as const,
-                  }))
-                : undefined;
-        if (diagnostics) {
-            return { ok: true, grammar: loaded, diagnostics };
-        }
-        return { ok: true, grammar: loaded };
-    }
-
-    const diagnostics: Diagnostic[] = [
-        ...errors.map((message) => ({
-            range: extractRange(message, text),
-            severity: "error" as const,
-            message,
-            source: "grammar-tools-core" as const,
-        })),
-        ...warnings.map((message) => ({
-            range: extractRange(message, text),
-            severity: "warning" as const,
-            message,
-            source: "grammar-tools-core" as const,
-        })),
-    ];
-    return { ok: false, diagnostics, files: [file] };
+    return buildLoadResult(
+        grammar,
+        errors,
+        warnings,
+        collector,
+        source,
+        file,
+        text,
+    );
 }
 
 function sourceId(source: GrammarSource): string {
