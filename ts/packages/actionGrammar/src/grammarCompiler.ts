@@ -71,6 +71,8 @@ export type DebugInfoCollector = {
     partRules: Map<number, string>;
     /** Source texts keyed by fileId (displayPath), for offset-to-line conversion. */
     fileContents: Map<string, string>;
+    /** Maps fileId (displayPath) -> resolved absolute path on disk. */
+    filePaths: Map<string, string>;
 };
 
 /**
@@ -490,8 +492,9 @@ export function compileGrammar(
 
     // Register all file contents so buildDebugInfo can resolve per-file offsets.
     if (debugCollector !== undefined) {
-        for (const [, ctx] of grammarFileMap) {
+        for (const [fullPath, ctx] of grammarFileMap) {
             debugCollector.fileContents.set(ctx.displayPath, ctx.content);
+            debugCollector.filePaths.set(ctx.displayPath, fullPath);
         }
     }
 
