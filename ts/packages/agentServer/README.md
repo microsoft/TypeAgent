@@ -13,9 +13,9 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 ## Architecture
 
 ```
-Shell (Electron)              CLI (Node.js)              vscode-shell
+Shell (Electron)              CLI (Node.js)              IDE / editor extensions
    │  in-process (default)       │  always remote            │  always remote
-   │  OR --connect               │                           │
+   │  OR --connect               │                           │  (vscode-shell, etc.)
    └──────────────┬──────────────┴──────────────┬────────────┘
                   │                             │
                   │   ws://localhost:8999  (configurable)
