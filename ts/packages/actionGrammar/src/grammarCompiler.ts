@@ -49,17 +49,30 @@ export type FileLoader = {
 };
 
 /**
+ * A source position recorded during compilation, tagged with the file
+ * it originated from so multi-file grammars resolve correctly.
+ */
+export type DebugSourcePosition = {
+    offset: number;
+    fileId: string;
+};
+
+/**
  * Mutable collector for debug info gathered during compilation.
  * Passed into the compile pipeline; the compiler populates it
- * with partId-to-source-offset and ruleId-to-source-offset mappings.
+ * with partId-to-source-position and ruleId-to-source-position mappings.
  */
 export type DebugInfoCollector = {
-    /** Maps partId -> source character offset. */
-    partPositions: Map<number, number>;
-    /** Maps ruleId (e.g. "Start") -> source character offset of the definition. */
-    rulePositions: Map<string, number>;
-    /** The file path or id the grammar was loaded from. */
-    fileId: string;
+    /** Maps partId -> source position (offset + file). */
+    partPositions: Map<number, DebugSourcePosition>;
+    /** Maps ruleId (e.g. "Start") -> source position of the definition. */
+    rulePositions: Map<string, DebugSourcePosition>;
+    /** Maps partId -> owning ruleId (from currentDefinition at compile time). */
+    partRules: Map<number, string>;
+    /** Source texts keyed by fileId (displayPath), for offset-to-line conversion. */
+    fileContents: Map<string, string>;
+    /** Maps fileId (displayPath) -> resolved absolute path on disk. */
+    filePaths: Map<string, string>;
 };
 
 /**
@@ -467,9 +480,21 @@ export function compileGrammar(
     // Propagate debugCollector and share the partId counter with all
     // import contexts so imported rules get unique partIds and their
     // source positions are recorded in the same collector.
+    // Also unify partIdCounters: built-in entity contexts created via
+    // getBuiltInGrammarContext may have their own counter, which would
+    // cause partId collisions if not unified before compilation.
     for (const [, importCtx] of grammarFileMap) {
         if (importCtx !== context) {
             importCtx.debugCollector = debugCollector;
+            importCtx.partIdCounter = context.partIdCounter;
+        }
+    }
+
+    // Register all file contents so buildDebugInfo can resolve per-file offsets.
+    if (debugCollector !== undefined) {
+        for (const [fullPath, ctx] of grammarFileMap) {
+            debugCollector.fileContents.set(ctx.displayPath, ctx.content);
+            debugCollector.filePaths.set(ctx.displayPath, fullPath);
         }
     }
 
@@ -810,7 +835,13 @@ function allocPartId(
 ): number {
     const id = context.partIdCounter.value++;
     if (context.debugCollector !== undefined && sourcePos !== undefined) {
-        context.debugCollector.partPositions.set(id, sourcePos);
+        context.debugCollector.partPositions.set(id, {
+            offset: sourcePos,
+            fileId: context.displayPath,
+        });
+        if (context.currentDefinition !== undefined) {
+            context.debugCollector.partRules.set(id, context.currentDefinition);
+        }
     }
     return id;
 }
@@ -894,7 +925,10 @@ function createNamedGrammarRules(
         if (context.debugCollector !== undefined) {
             const firstDef = record.definitions[0];
             if (firstDef.pos !== undefined) {
-                context.debugCollector.rulePositions.set(name, firstDef.pos);
+                context.debugCollector.rulePositions.set(name, {
+                    offset: firstDef.pos,
+                    fileId: context.displayPath,
+                });
             }
         }
 

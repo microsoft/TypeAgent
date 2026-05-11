@@ -298,7 +298,7 @@ export class GoogleCalendarClient
                     "Google Calendar not configured. Set GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET.";
                 debugError(msg);
                 if (callback) {
-                    callback("ERROR", "", msg);
+                    callback({ kind: "error", message: msg });
                 }
                 return false;
             }
@@ -425,11 +425,11 @@ export class GoogleCalendarClient
                 });
 
                 if (callback) {
-                    callback(
-                        "BROWSER_AUTH",
-                        authUrl,
-                        "Opening browser for Google authorization...",
-                    );
+                    callback({
+                        kind: "browser",
+                        url: authUrl,
+                        message: "Opening browser for Google authorization...",
+                    });
                 }
 
                 try {

@@ -50,18 +50,8 @@ export class MSGraphEmailProvider
     // =========================================================================
 
     async login(callback?: EmailDeviceCodeCallback): Promise<boolean> {
-        const graphCallback: DevicePromptCallback | undefined = callback
-            ? (prompt: string) => {
-                  const codeMatch = prompt.match(/enter the code (\S+)/);
-                  const urlMatch = prompt.match(/open the page (\S+)/);
-                  callback(
-                      codeMatch?.[1] || "",
-                      urlMatch?.[1] || "https://microsoft.com/devicelogin",
-                      prompt,
-                  );
-              }
-            : undefined;
-
+        // Pass-through: provider and graph client share the SignInPrompt shape.
+        const graphCallback: DevicePromptCallback | undefined = callback;
         return this.client.login(graphCallback);
     }
 

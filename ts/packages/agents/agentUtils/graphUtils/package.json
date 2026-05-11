@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@azure/identity": "^4.9.1",
+    "@azure/identity-broker": "^1.4.0",
     "@azure/identity-cache-persistence": "^1.1.1",
     "@azure/logger": "^1.1.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",

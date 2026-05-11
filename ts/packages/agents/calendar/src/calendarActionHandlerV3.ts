@@ -85,18 +85,34 @@ export class CalendarClientLoginCommandHandler
             context,
         );
 
-        const success = await provider.login(
-            (userCode, verificationUri, message) => {
-                displayStatus(message, context);
-            },
-        );
+        const success = await provider.login((prompt) => {
+            if (prompt.kind === "error") {
+                displayWarn(prompt.message, context);
+            } else {
+                // Both deviceCode and browser surface the message as-is; the
+                // device-code message contains the URL+code, the browser
+                // message says "opening your browser..." (the SDK auto-opens
+                // the system browser via the open package).
+                displayStatus(prompt.message, context);
+            }
+        });
 
         if (success) {
             const user = await provider.getUser();
+            const name = user.displayName || "Unknown";
+            const email = user.email || "Unknown";
             displaySuccess(
-                `Successfully logged in as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
+                `Successfully logged in as ${name} <${email}>`,
                 context,
             );
+            // Hidden marker the chat-ui / shell scan for after each agent
+            // message. Lifts the signed-in identity into UI state so the
+            // user-letter avatar shows the real initial and stops triggering
+            // login on click.
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}" hidden></span>`,
+            });
         } else {
             displayWarn(
                 "Login failed. If using Google Calendar, you can also try '@calendar google-auth <code>' with a manual authorization code.",
@@ -116,11 +132,20 @@ export class CalendarClientLogoutCommandHandler
         if (provider === undefined) {
             throw new Error("Calendar provider not initialized");
         }
-        if (provider.logout()) {
+        const wasLoggedIn = provider.logout();
+        if (wasLoggedIn) {
             displaySuccess("Successfully logged out", context);
         } else {
             displayWarn("Already logged out", context);
         }
+        // Emit the signed-out marker regardless of whether logout() found a
+        // live in-memory client — the user clicked logout, so the UI should
+        // reflect signed-out state even if the client was already cleared
+        // by an earlier action (e.g. logout from the email agent first).
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: `<span class="typeagent-user-signed-out" hidden></span>`,
+        });
     }
 }
 
@@ -1214,18 +1239,16 @@ export async function runCalendarLogin(
         "block",
     );
     try {
-        const success = await provider.login(
-            (_userCode, _verificationUri, message) => {
-                actionContext.actionIO.appendDisplay(
-                    {
-                        type: "text",
-                        content: `[${ts()}] ${message}`,
-                        kind: "status",
-                    },
-                    "block",
-                );
-            },
-        );
+        const success = await provider.login((prompt) => {
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${ts()}] ${prompt.message}`,
+                    kind: "status",
+                },
+                "block",
+            );
+        });
         if (!success) {
             const tip =
                 ctx.providerType === "google"

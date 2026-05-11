@@ -17,6 +17,7 @@ export { recommendedOptimizations } from "./grammarOptimizer.js";
 export type {
     SchemaLoader,
     DebugInfoCollector,
+    DebugSourcePosition,
     FileLoader,
 } from "./grammarCompiler.js";
 export { defaultFileLoader } from "./defaultFileLoader.js";

@@ -46,5 +46,35 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/osNotificationsSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/osNotificationsSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/osNotificationsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/osNotificationsSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

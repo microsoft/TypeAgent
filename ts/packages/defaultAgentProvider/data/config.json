@@ -69,6 +69,9 @@
       "name": "screencapture-agent",
       "execMode": "separate"
     },
+    "workflow": {
+      "name": "workflow-agent"
+    },
     "utility": {
       "name": "utility-typeagent"
     },
