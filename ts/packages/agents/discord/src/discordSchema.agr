@@ -17,6 +17,13 @@
         content
     }
 }
+  | send a message to (the)? (channel)? $(channel_id:wildcard) saying $(content:wildcard) -> {
+    actionName: "createMessage",
+    parameters: {
+        channel_id,
+        content
+    }
+}
   | post $(content:wildcard) in channel $(channel_id:wildcard) -> {
     actionName: "createMessage",
     parameters: {
@@ -46,7 +53,19 @@
         channel_id
     }
 }
+  | (can you)? show me (the)? last ($(limit:word))? messages (in|from|in the|from the)? (channel)? $(channel_id:wildcard) -> {
+    actionName: "getChannelMessages",
+    parameters: {
+        channel_id
+    }
+}
   | fetch (the)? (last)? messages from (the)? channel $(channel_id:wildcard) -> {
+    actionName: "getChannelMessages",
+    parameters: {
+        channel_id
+    }
+}
+  | fetch (the)? last ($(limit:word))? messages from (the)? (channel)? $(channel_id:wildcard) -> {
     actionName: "getChannelMessages",
     parameters: {
         channel_id

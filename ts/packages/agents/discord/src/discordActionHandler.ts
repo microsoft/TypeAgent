@@ -25,6 +25,7 @@ const MESSAGEABLE_TYPES = new Set([0, 5, 10, 11, 12, 15]); // types you can send
 interface DiscordAgentContext {
     guildId: string | undefined;
     channels: Map<string, string>; // channel name (lowercase) → channel ID
+    channelList: DiscordChannel[]; // raw channel data for display
     channelsLastFetched: number;
     pollHandle: ReturnType<typeof setInterval> | undefined;
 }
@@ -33,6 +34,8 @@ interface DiscordChannel {
     id: string;
     name?: string;
     type: number;
+    parent_id?: string;
+    position?: number;
 }
 
 const GUILD_NOT_SET_MESSAGE = `To get started, I need your Discord server ID.
@@ -57,6 +60,7 @@ async function initializeAgentContext(): Promise<DiscordAgentContext> {
     return {
         guildId: undefined,
         channels: new Map(),
+        channelList: [],
         channelsLastFetched: 0,
         pollHandle: undefined,
     };
@@ -82,6 +86,17 @@ async function loadFromStorage(
         if (channelsRaw) {
             const parsed = JSON.parse(channelsRaw) as [string, string][];
             agentContext.channels = new Map(parsed);
+        }
+    } catch {
+        /* ignore corrupt cache */
+    }
+
+    try {
+        const channelListRaw = await storage.read("channelList", ENCODING);
+        if (channelListRaw) {
+            agentContext.channelList = JSON.parse(
+                channelListRaw,
+            ) as DiscordChannel[];
         }
     } catch {
         /* ignore corrupt cache */
@@ -188,6 +203,7 @@ async function fetchAndCacheChannels(
         }
     }
     agentContext.channels = channelMap;
+    agentContext.channelList = channelsData;
     agentContext.channelsLastFetched = Date.now();
     const storage = context.sessionStorage;
     if (storage) {
@@ -195,6 +211,7 @@ async function fetchAndCacheChannels(
             "channels",
             JSON.stringify(Array.from(channelMap.entries())),
         );
+        await storage.write("channelList", JSON.stringify(channelsData));
         await storage.write(
             "channelsLastFetched",
             String(agentContext.channelsLastFetched),
@@ -239,7 +256,8 @@ async function resolveChannelId(
 
     const known = Array.from(agentContext.channels.keys())
         .filter((k) => !k.includes(":")) // only show plain name keys
-        .sort();
+        .sort()
+        .map((k) => `#${k}`);
     const knownList =
         known.length > 0
             ? `Known channels: ${known.join(", ")}`
@@ -339,19 +357,69 @@ async function executeAction(
                 const response = await discordFetch(
                     `/channels/${resolvedId}/messages?${params}`,
                 );
+                // Discord system message types and their human-readable descriptions
+                const SYSTEM_MESSAGE_TYPES: Record<number, string> = {
+                    1: "pinned a message",
+                    2: "added a member",
+                    3: "removed a member",
+                    4: "renamed the channel",
+                    5: "pinned a message",
+                    6: "added a member",
+                    7: "joined the server",
+                    8: "boosted the server",
+                    9: "boosted the server to level 1",
+                    10: "boosted the server to level 2",
+                    11: "boosted the server to level 3",
+                    12: "added a channel to this channel",
+                    14: "is waving",
+                    19: "replied to a message",
+                    20: "used an application command",
+                    23: "started a thread",
+                    24: "started an activity",
+                };
                 interface DiscordMessage {
                     id: string;
                     timestamp: string;
                     content: string;
+                    type: number;
                     author?: { username: string };
                 }
                 const messages = (await response.json()) as DiscordMessage[];
+                const allEmpty =
+                    messages.length > 0 &&
+                    messages.every(
+                        (m) =>
+                            !m.content?.trim() &&
+                            !(m.type in SYSTEM_MESSAGE_TYPES),
+                    );
+                if (allEmpty) {
+                    return createActionResultFromTextDisplay(
+                        `Retrieved ${messages.length} message(s) but all have empty content.\n\n` +
+                            `This usually means the bot is missing the MESSAGE_CONTENT privileged intent.\n\n` +
+                            `To fix:\n` +
+                            `1. Go to https://discord.com/developers/applications\n` +
+                            `2. Select your bot → Bot → Privileged Gateway Intents\n` +
+                            `3. Enable "Message Content Intent"\n` +
+                            `4. Save and restart the bot`,
+                    );
+                }
                 const display = messages.slice(0, 10).map((m) => {
-                    const content =
-                        m.content.length > 100
-                            ? m.content.slice(0, 100) + "…"
-                            : m.content;
-                    return `[${m.timestamp}] ${m.author?.username ?? "unknown"}: ${content}`;
+                    let content = m.content?.trim() ?? "";
+                    if (!content) {
+                        content = SYSTEM_MESSAGE_TYPES[m.type]
+                            ? `[${SYSTEM_MESSAGE_TYPES[m.type]}]`
+                            : "[no content]";
+                    } else if (content.length > 100) {
+                        content = content.slice(0, 100) + "…";
+                    }
+                    const ts = new Date(m.timestamp).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                    });
+                    return `[${ts}] ${m.author?.username ?? "unknown"}: ${content}`;
                 });
                 return createActionResultFromTextDisplay(
                     display.length > 0
@@ -371,7 +439,10 @@ async function executeAction(
                 );
             }
             case "listChannels": {
-                if (agentContext.channels.size === 0 && agentContext.guildId) {
+                if (
+                    agentContext.channelList.length === 0 &&
+                    agentContext.guildId
+                ) {
                     await fetchAndCacheChannels(
                         agentContext.guildId,
                         agentContext,
@@ -379,40 +450,60 @@ async function executeAction(
                     );
                 }
 
-                // Build display list — if a name also has a voice counterpart, label it (text)
-                const allKeys = Array.from(agentContext.channels.keys());
-                const plainKeys = allKeys
-                    .filter((k) => !k.includes(":"))
-                    .sort();
-                const hasVoice = new Set(
-                    allKeys
-                        .filter((k) => k.endsWith(":2"))
-                        .map((k) => k.replace(/:2$/, "")),
-                );
-                const hasText = new Set(
-                    allKeys
-                        .filter((k) => k.endsWith(":0") || k.endsWith(":5"))
-                        .map((k) => k.replace(/:\d+$/, "")),
-                );
+                const TYPE_LABELS: Record<number, string> = {
+                    0: "text",
+                    2: "voice",
+                    5: "announcement",
+                    10: "thread",
+                    11: "thread",
+                    12: "thread",
+                    13: "stage",
+                    15: "forum",
+                    16: "media",
+                };
 
-                const lines = plainKeys.map((name) => {
-                    const ambiguous = hasVoice.has(name) && hasText.has(name);
-                    return ambiguous ? `  • ${name} (text)` : `  • ${name}`;
-                });
+                const all = agentContext.channelList;
+                // Categories (type 4), sorted by position
+                const categories = all
+                    .filter((ch) => ch.type === 4)
+                    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+                // Non-category channels grouped by parent_id
+                const byParent = new Map<
+                    string | undefined,
+                    DiscordChannel[]
+                >();
+                for (const ch of all) {
+                    if (ch.type === 4) continue;
+                    const key = ch.parent_id;
+                    if (!byParent.has(key)) byParent.set(key, []);
+                    byParent.get(key)!.push(ch);
+                }
+                // Sort each group by position
+                for (const group of byParent.values()) {
+                    group.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+                }
 
-                // Also list voice channels that share a name with a text channel
-                for (const name of hasVoice) {
-                    if (hasText.has(name)) {
-                        lines.push(`  • ${name} (voice)`);
+                const lines: string[] = [];
+                // Uncategorized channels first
+                for (const ch of byParent.get(undefined) ?? []) {
+                    const label = TYPE_LABELS[ch.type] ?? `type-${ch.type}`;
+                    lines.push(`  • ${ch.name} (${label})`);
+                }
+                // Each category and its children
+                for (const cat of categories) {
+                    lines.push(`\n  ${cat.name?.toUpperCase() ?? cat.id}`);
+                    for (const ch of byParent.get(cat.id) ?? []) {
+                        const label = TYPE_LABELS[ch.type] ?? `type-${ch.type}`;
+                        lines.push(`    • ${ch.name} (${label})`);
                     }
                 }
-                // Sort after merging text and voice entries so ambiguous pairs
-                // like "general (text)" and "general (voice)" appear adjacent.
-                lines.sort();
 
+                const totalNonCategory = all.filter(
+                    (ch) => ch.type !== 4,
+                ).length;
                 return createActionResultFromTextDisplay(
                     lines.length > 0
-                        ? `Channels (${lines.length}):\n${lines.join("\n")}`
+                        ? `Channels (${totalNonCategory}):\n${lines.join("\n")}`
                         : "No channels found.",
                 );
             }
