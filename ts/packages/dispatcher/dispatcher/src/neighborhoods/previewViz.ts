@@ -128,10 +128,19 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
   section h2 { margin: 0 0 6px 0; font-size: 16px; font-weight: 600; }
   section .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
   .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
-  /* Per-phrase-style chips. Click-to-toggle which styles count toward the
-     displayed totals + sample lists. Default state: every detected style
-     enabled. The whole row hides when the corpus carries no per-style
-     breakdown (countsByStyle undefined on every edge — older artifacts). */
+  /* Per-phrase-style chips — global filter, lives in the page header.
+     Click-to-toggle which styles count toward EVERY chart on the page
+     (table, force graph, bundling chart). Default state: every detected
+     style enabled. The whole row hides when the corpus carries no
+     per-style breakdown (countsByStyle undefined on every edge — older
+     artifacts). */
+  header .style-chips {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: rgba(122, 162, 247, 0.05);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
   .style-chips { display:flex; gap:6px; align-items:center; margin: 4px 0 12px 0; flex-wrap:wrap; }
   .style-chips .label { color: var(--muted); font-size: 12px; margin-right: 4px; }
   .style-chips .chip {
@@ -176,7 +185,10 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
   .nbhd-list-header,
   .nbhd-row {
     display: grid;
-    grid-template-columns: 32ch 13ch 12ch 11ch 24ch 1fr;
+    /* Widened SOURCE column from 12ch -> 20ch so translator badges
+       (🛑N CONFIRMED, ↻N RESCUED, !N NEW_FAILURE) sit alongside the source
+       badge without overflowing into SIZE. */
+    grid-template-columns: 32ch 13ch 20ch 11ch 24ch 1fr;
     align-items: center; gap: 12px;
     padding: 6px 10px;
   }
@@ -503,6 +515,12 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
   <h1>Ambiguity neighborhood preview</h1>
   <div class="stats" id="stats"></div>
   <div class="tx-summary" id="tx-summary" style="display:none;"></div>
+  <div class="style-chips" id="styleChips" style="display:none;">
+    <span class="label">Phrase styles (applies to every chart on this page):</span>
+    <span id="styleChipsList"></span>
+    <span class="quick" data-style-all>all</span>
+    <span class="quick" data-style-none>none</span>
+  </div>
 </header>
 <main>
   <details class="help" open>
@@ -557,12 +575,6 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
       <span class="val" id="confirmValue">0.50</span>
       <span class="hint">Drag to retag corpus pairs as "both" when their cross-schema embedding similarity meets this score. Same-schema pairs (engine doesn't compute them) stay corpus-only at any threshold.</span>
     </div>
-    <div class="style-chips" id="styleChips" style="display:none;">
-      <span class="label">Styles:</span>
-      <span id="styleChipsList"></span>
-      <span class="quick" data-style-all>all</span>
-      <span class="quick" data-style-none>none</span>
-    </div>
     <div class="controls">
       <input type="text" id="filter" placeholder="filter by id / member / agent…" style="width:340px">
       <label>Kind
@@ -594,12 +606,12 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
       <span id="count" style="color:var(--muted);font-size:12px;"></span>
     </div>
     <div class="nbhd-list-header">
-      <div>id</div>
-      <div>kind</div>
-      <div>source</div>
-      <div>size</div>
-      <div>top offender</div>
-      <div>meta</div>
+      <div class="sortable" data-sort="id">id<span class="arrow"></span></div>
+      <div class="sortable" data-sort="kind">kind<span class="arrow"></span></div>
+      <div class="sortable" data-sort="source">source<span class="arrow"></span></div>
+      <div class="sortable" data-sort="size">size<span class="arrow"></span></div>
+      <div class="sortable" data-sort="topOffender">top offender<span class="arrow"></span></div>
+      <div class="sortable" data-sort="misroutes">meta<span class="arrow"></span></div>
     </div>
     <div class="nbhd-list" id="list"></div>
   </section>
@@ -870,28 +882,31 @@ function renderStyleChips() {
         const on = enabledStyles.has(s);
         return \`<span class="chip\${on ? "" : " off"}" data-style="\${escapeHtml(s)}">\${escapeHtml(s)}<span class="count">\${totals[s] || 0}</span></span>\`;
     }).join("");
+    // Single re-render driver — keeps every chart in sync on chip toggle.
+    function refreshAll() {
+        renderStyleChips();
+        render();
+        if (typeof renderBundling === "function") renderBundling();
+        if (typeof renderForceGraph === "function") renderForceGraph();
+    }
     list.querySelectorAll("[data-style]").forEach(el => {
         el.addEventListener("click", () => {
             const s = el.getAttribute("data-style");
             if (enabledStyles.has(s)) enabledStyles.delete(s);
             else enabledStyles.add(s);
-            renderStyleChips();
-            render();
-            if (typeof renderBundling === "function") renderBundling();
+            refreshAll();
         });
     });
     row.querySelectorAll("[data-style-all]").forEach(el => {
         el.onclick = () => {
             for (const s of ALL_STYLES) enabledStyles.add(s);
-            renderStyleChips(); render();
-            if (typeof renderBundling === "function") renderBundling();
+            refreshAll();
         };
     });
     row.querySelectorAll("[data-style-none]").forEach(el => {
         el.onclick = () => {
             enabledStyles.clear();
-            renderStyleChips(); render();
-            if (typeof renderBundling === "function") renderBundling();
+            refreshAll();
         };
     });
 }
@@ -1031,6 +1046,55 @@ const sources = PAYLOAD.sources;
 const expanded = new Set();
 let confirmThreshold = PAYLOAD.initialConfirmThreshold ?? 0.5;
 let activeBundleAgent = null; // set by clicking an outer-ring arc or label in the bundling chart
+
+// Column-header sort state for the neighborhoods table. null = use the
+// dropdown's sort. Set by clicking a header; click the same header again to
+// reverse direction; click a different header to switch. The dropdown sort
+// kicks back in only when the user picks something other than "default" AND
+// no column sort is active.
+let colSortKey = null;
+let colSortDir = -1;
+function setColSort(key) {
+    if (colSortKey === key) {
+        colSortDir = -colSortDir;
+    } else {
+        colSortKey = key;
+        colSortDir = key === "id" || key === "kind" || key === "source" ? 1 : -1;
+    }
+    updateColHeaderArrows();
+    render();
+}
+function updateColHeaderArrows() {
+    document.querySelectorAll(".nbhd-list-header .sortable").forEach(el => {
+        const key = el.getAttribute("data-sort");
+        el.classList.toggle("active", key === colSortKey);
+        const arrow = el.querySelector(".arrow");
+        if (arrow) arrow.textContent =
+            key === colSortKey ? (colSortDir > 0 ? "▲" : "▼") : "";
+    });
+}
+function compareForCol({ n: a, eff: ea }, { n: b, eff: eb }) {
+    function val(n, eff) {
+        switch (colSortKey) {
+            case "id":          return n.id;
+            case "kind":        return n.kind;
+            case "source":      return (eff.hasSim && eff.hasCor) ? 3 : eff.hasCor ? 2 : eff.hasSim ? 1 : 0;
+            case "size":        return n.members.length;
+            case "topOffender": {
+                const t = topOffenderOf(n);
+                if (!t) return -1;
+                return HAS_TRANSLATOR && t.endUserOwedTraffic !== undefined
+                    ? t.endUserOwedTraffic
+                    : t.owedTraffic || 0;
+            }
+            case "misroutes":   return n.evidence.misrouteCount ?? 0;
+        }
+        return 0;
+    }
+    const av = val(a, ea), bv = val(b, eb);
+    if (typeof av === "string") return colSortDir * av.localeCompare(bv);
+    return colSortDir * (av - bv);
+}
 document.getElementById("confirmSlider").value = String(confirmThreshold);
 document.getElementById("confirmSlider").min = String(PAYLOAD.minConfirmThreshold ?? 0.5);
 
@@ -1127,7 +1191,11 @@ function render() {
         return true;
     });
 
-    if (sortBy === "topOffender" || sortBy === "endUser") {
+    // Column-header sort wins over the dropdown when active. Falls through
+    // to the dropdown otherwise.
+    if (colSortKey !== null) {
+        filtered.sort(compareForCol);
+    } else if (sortBy === "topOffender" || sortBy === "endUser") {
         const useTx = sortBy === "endUser";
         filtered.sort(({ n: a }, { n: b }) => {
             const ta = topOffenderOf(a);
@@ -1330,6 +1398,18 @@ function buildBundlingData() {
         if (sourceMode === "similarity" && !(eff.hasSim && !eff.hasCor)) return false;
         if (sourceMode === "corpus" && !(eff.hasCor && !eff.hasSim)) return false;
         if (sourceMode === "tx-confirmed" && !(((filteredCrossVerdicts(n) || {}).CONFIRMED ?? 0) > 0)) return false;
+        // Style filter: when the user toggles styles off, drop corpus-evidence
+        // neighborhoods whose entire phrase signal disappears. Similarity-only
+        // neighborhoods don't have phrase-derived edges, so they're exempt
+        // (their inclusion isn't gated by the filter).
+        if (HAS_STYLE_DATA && (n.evidence.misrouteEdges?.length ?? 0) > 0) {
+            const hasAnyCount = (n.evidence.misrouteEdges || []).some(
+                e => edgeCount(e) > 0,
+            ) || (n.evidence.translatorMisrouteEdges || []).some(
+                e => edgeCount(e) > 0,
+            );
+            if (!hasAnyCount) return false;
+        }
         return true;
     });
 
@@ -2008,6 +2088,16 @@ function buildForceData(sortBy) {
         if (sourceMode === "similarity" && !(eff.hasSim && !eff.hasCor)) return false;
         if (sourceMode === "corpus" && !(eff.hasCor && !eff.hasSim)) return false;
         if (sourceMode === "tx-confirmed" && !(((filteredCrossVerdicts(n) || {}).CONFIRMED ?? 0) > 0)) return false;
+        // Style filter: drop corpus neighborhoods whose phrase signal is
+        // entirely toggled off. Similarity-only neighborhoods are exempt.
+        if (HAS_STYLE_DATA && (n.evidence.misrouteEdges?.length ?? 0) > 0) {
+            const hasAnyCount = (n.evidence.misrouteEdges || []).some(
+                e => edgeCount(e) > 0,
+            ) || (n.evidence.translatorMisrouteEdges || []).some(
+                e => edgeCount(e) > 0,
+            );
+            if (!hasAnyCount) return false;
+        }
         return true;
     });
 
@@ -2462,7 +2552,17 @@ window.addEventListener("resize", () => {
     }, 150);
 });
 
+// Wire column-header clicks for sorting. Handlers persist (the header DOM
+// is static), so we only need to attach once at boot.
+document.querySelectorAll(".nbhd-list-header .sortable").forEach(el => {
+    el.addEventListener("click", () => {
+        const k = el.getAttribute("data-sort");
+        if (k) setColSort(k);
+    });
+});
+
 renderStyleChips();
+updateColHeaderArrows();
 render();
 renderBundling();
 renderForceGraph();

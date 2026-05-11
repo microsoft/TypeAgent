@@ -1339,6 +1339,32 @@ const RECOVERY_HTML_PREFIX = `<!doctype html>
   }
   .controls label { color: var(--muted); font-size: 12px; }
 
+  /* Per-phrase-style chips — global filter in the page header. Click to
+     toggle which styles count toward EVERY chart on the page (headline
+     buckets, per-agent / per-action breakdowns, rank histogram). Hidden
+     when the corpus carries no per-style data. */
+  header .style-chips {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: rgba(122, 162, 247, 0.05);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
+  .style-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .style-chips .label { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .style-chips .chip {
+    font-size: 11px; padding: 2px 9px; border-radius: 11px;
+    border: 1px solid var(--line); background: #0a0d12;
+    color: var(--ink); cursor: pointer; user-select: none;
+    transition: background 0.08s, border-color 0.08s, opacity 0.08s;
+    font-family: ui-monospace, monospace;
+  }
+  .style-chips .chip:hover { border-color: var(--accent); }
+  .style-chips .chip.off { opacity: 0.35; background: transparent; }
+  .style-chips .chip .count { color: var(--muted); margin-left: 4px; font-size: 10px; }
+  .style-chips .quick { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; margin-left: 8px; }
+  .style-chips .quick:hover { color: var(--accent); }
+
   /* Headline stacked bar */
   .headline-bar {
     display: flex; height: 36px; border-radius: 4px; overflow: hidden;
@@ -1503,6 +1529,12 @@ const RECOVERY_HTML_PREFIX = `<!doctype html>
 <header>
   <h1>Collision recovery analysis</h1>
   <div class="stats" id="stats"></div>
+  <div class="style-chips" id="styleChips" style="display:none;">
+    <span class="label">Phrase styles (applies to every chart on this page):</span>
+    <span id="styleChipsList"></span>
+    <span class="quick" data-style-all>all</span>
+    <span class="quick" data-style-none>none</span>
+  </div>
 </header>
 <main>
   <details class="help" open>
@@ -1586,6 +1618,139 @@ const RECOVERY_HTML_PREFIX = `<!doctype html>
 const RECOVERY_HTML_SUFFIX = `</script>
 <script>
 const PAYLOAD = JSON.parse(document.getElementById("payload").textContent);
+
+// =========================================================================
+// Per-phrase-style filter — discovers all styles from PAYLOAD.phrases and
+// re-aggregates the summary/perAction/perAgent/rankHist views client-side
+// whenever the user toggles a chip. Aggregates are exposed via VIEW so
+// renderers can stay simple.
+// =========================================================================
+const ALL_STYLES = (() => {
+    const s = new Set();
+    for (const p of (PAYLOAD.phrases || [])) if (p.style) s.add(p.style);
+    const order = ["imperative","conversational","casual","polite","curt","slang","typos"];
+    return [...s].sort((a, b) => {
+        const ai = order.indexOf(a), bi = order.indexOf(b);
+        if (ai !== bi) {
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+        }
+        return a.localeCompare(b);
+    });
+})();
+const HAS_STYLE_DATA = ALL_STYLES.length > 0;
+const enabledStyles = new Set(ALL_STYLES);
+let VIEW = recomputeView();
+
+function phraseEnabled(p) {
+    if (!HAS_STYLE_DATA) return true;
+    if (!p.style) return true;
+    return enabledStyles.has(p.style);
+}
+function recomputeView() {
+    const filtered = PAYLOAD.phrases.filter(phraseEnabled);
+    const buckets = { sameSchema: 0, crossInCluster: 0, crossOutOfCluster: 0, crossOffList: 0 };
+    const perActionMap = new Map();
+    const perAgentMap = new Map();
+    const rankCounts = {};
+    for (const p of filtered) {
+        buckets[p.bucket] = (buckets[p.bucket] ?? 0) + 1;
+        // per-action
+        let ra = perActionMap.get(p.expected);
+        if (!ra) {
+            ra = {
+                action: p.expected,
+                sameSchema: 0, crossInCluster: 0,
+                crossOutOfCluster: 0, crossOffList: 0,
+                total: 0,
+            };
+            perActionMap.set(p.expected, ra);
+        }
+        ra[p.bucket] = (ra[p.bucket] ?? 0) + 1;
+        ra.total++;
+        // per-agent
+        const agent = p.expected.split(".")[0];
+        let rg = perAgentMap.get(agent);
+        if (!rg) {
+            rg = {
+                agent,
+                misrouteCount: 0,
+                sameSchema: 0, crossInCluster: 0,
+                crossOutOfCluster: 0, crossOffList: 0,
+            };
+            perAgentMap.set(agent, rg);
+        }
+        rg[p.bucket] = (rg[p.bucket] ?? 0) + 1;
+        rg.misrouteCount++;
+        // rank histogram
+        const rk = p.actionRank > 0 ? String(p.actionRank) : "off-list";
+        rankCounts[rk] = (rankCounts[rk] ?? 0) + 1;
+    }
+    // Derive composite columns + sort.
+    for (const row of perActionMap.values()) {
+        row.crossRescuable = row.crossInCluster + row.crossOutOfCluster;
+        row.benignPct = row.total > 0 ? (row.sameSchema / row.total) * 100 : 0;
+    }
+    for (const row of perAgentMap.values()) {
+        row.crossRescuable = row.crossInCluster + row.crossOutOfCluster;
+        row.benignPct = row.misrouteCount > 0 ? (row.sameSchema / row.misrouteCount) * 100 : 0;
+    }
+    // Match the server's bin order: 1..topK then "off-list".
+    const topK = PAYLOAD.summary.topK;
+    const actionRankHistogram = [];
+    for (let r = 1; r <= topK; r++) {
+        actionRankHistogram.push({ rank: String(r), count: rankCounts[String(r)] ?? 0 });
+    }
+    actionRankHistogram.push({ rank: "off-list", count: rankCounts["off-list"] ?? 0 });
+    return {
+        summary: {
+            totalMisroutes: filtered.length,
+            topK: PAYLOAD.summary.topK,
+            delta: PAYLOAD.summary.delta,
+            buckets,
+        },
+        perAction: [...perActionMap.values()].sort((a, b) => b.total - a.total),
+        perAgent: [...perAgentMap.values()].sort((a, b) => b.misrouteCount - a.misrouteCount),
+        actionRankHistogram,
+        phrases: filtered,
+    };
+}
+function renderStyleChips() {
+    if (!HAS_STYLE_DATA) return;
+    const row = document.getElementById("styleChips");
+    const list = document.getElementById("styleChipsList");
+    row.style.display = "flex";
+    const totals = {};
+    for (const s of ALL_STYLES) totals[s] = 0;
+    for (const p of PAYLOAD.phrases) {
+        if (p.style) totals[p.style] = (totals[p.style] ?? 0) + 1;
+    }
+    list.innerHTML = ALL_STYLES.map(s => {
+        const on = enabledStyles.has(s);
+        return \`<span class="chip\${on ? "" : " off"}" data-style="\${escapeHtml(s)}">\${escapeHtml(s)}<span class="count">\${totals[s] || 0}</span></span>\`;
+    }).join("");
+    function refreshAll() {
+        VIEW = recomputeView();
+        renderStyleChips();
+        renderAll();
+    }
+    list.querySelectorAll("[data-style]").forEach(el => {
+        el.onclick = () => {
+            const s = el.getAttribute("data-style");
+            if (enabledStyles.has(s)) enabledStyles.delete(s);
+            else enabledStyles.add(s);
+            refreshAll();
+        };
+    });
+    row.querySelectorAll("[data-style-all]").forEach(el => {
+        el.onclick = () => { for (const s of ALL_STYLES) enabledStyles.add(s); refreshAll(); };
+    });
+    row.querySelectorAll("[data-style-none]").forEach(el => {
+        el.onclick = () => { enabledStyles.clear(); refreshAll(); };
+    });
+}
+
 const tt = document.getElementById("tt");
 function showTip(html, evt) { tt.innerHTML = html; tt.style.opacity = "1"; moveTip(evt); }
 function moveTip(evt) {
@@ -1610,12 +1775,16 @@ const BUCKET_BY_KEY = Object.fromEntries(BUCKETS.map(b => [b.key, b]));
 let activeBucket = null; // null = all
 
 // Header
-const summary = PAYLOAD.summary;
-document.getElementById("stats").innerHTML =
-    \`<b>\${summary.totalMisroutes}</b> MISROUTE phrase(s) · top-K=\${summary.topK} · llmSelect threshold=\${summary.delta}\`;
+function renderStats() {
+    const summary = VIEW.summary;
+    document.getElementById("stats").innerHTML =
+        \`<b>\${summary.totalMisroutes}</b> MISROUTE phrase(s) · top-K=\${summary.topK} · llmSelect threshold=\${summary.delta}\`;
+}
+renderStats();
 
 // Headline stacked bar
 function renderHeadline() {
+    const summary = VIEW.summary;
     const total = summary.totalMisroutes || 1;
     const bar = document.getElementById("headline");
     bar.innerHTML = "";
@@ -1645,6 +1814,7 @@ function renderHeadline() {
 
 // Legend chips (also work as filters)
 function renderLegend() {
+    const summary = VIEW.summary;
     const total = summary.totalMisroutes || 1;
     const wrap = document.getElementById("legend");
     wrap.innerHTML = "";
@@ -1674,6 +1844,7 @@ function renderLegend() {
 //   tunable-dominated — crossInCluster + crossOutOfCluster largest.
 //   structural-dominated — crossOffList largest. Embedding loses the agent.
 function renderVerdict() {
+    const summary = VIEW.summary;
     const total = summary.totalMisroutes || 1;
     const same = summary.buckets.sameSchema;
     const inCluster = summary.buckets.crossInCluster;
@@ -1911,6 +2082,13 @@ interface VizCell {
     total: number;
     sameAgent: boolean;
     topActionEdges: VizCellEdge[];
+    /** Per-phrase-style breakdown of misroute/tight/clean counts. Keys are
+     *  style names (e.g. "imperative", "typos"). Sum across keys reproduces
+     *  the top-level fields. Powers the per-style chip filter in the viz. */
+    countsByStyle?: Record<
+        string,
+        { misroute: number; tight: number; clean: number }
+    >;
 }
 interface VizSankeyEdge {
     expected: string;
@@ -1923,6 +2101,8 @@ interface VizSankeyEdge {
      *  same canonical pair is also in the similarity scan. */
     similarityScore?: number | undefined;
     sources: ("corpus" | "similarity")[];
+    /** Per-style breakdown of `count`. Sums across keys reproduces `count`. */
+    countsByStyle?: Record<string, number>;
 }
 interface VizPayload {
     summary: {
@@ -1966,12 +2146,15 @@ function buildVisualizationPayload(
         MISROUTE: number;
         total: number;
         edges: Map<string, number>;
+        /** Per-style breakdown so the viz chip filter can re-aggregate. */
+        byStyle: Map<string, { CLEAN: number; TIGHT: number; MISROUTE: number }>;
     }
     const schemaMatrix = new Map<string, Map<string, Cell>>();
     function bumpMatrix(
         rowSchema: string,
         colSchema: string,
         verdict: Verdict,
+        style: string | undefined,
     ): Cell {
         let row = schemaMatrix.get(rowSchema);
         if (!row) {
@@ -1986,15 +2169,25 @@ function buildVisualizationPayload(
                 MISROUTE: 0,
                 total: 0,
                 edges: new Map(),
+                byStyle: new Map(),
             };
             row.set(colSchema, cell);
         }
         cell[verdict as "CLEAN" | "TIGHT" | "MISROUTE"]++;
         cell.total++;
+        if (style && verdict !== "ERROR") {
+            let s = cell.byStyle.get(style);
+            if (!s) {
+                s = { CLEAN: 0, TIGHT: 0, MISROUTE: 0 };
+                cell.byStyle.set(style, s);
+            }
+            s[verdict as "CLEAN" | "TIGHT" | "MISROUTE"]++;
+        }
         return cell;
     }
 
     const edgeCounts = new Map<string, number>();
+    const edgeCountsByStyle = new Map<string, Map<string, number>>();
     const edgeSamples = new Map<
         string,
         { phrase: string; model?: string; style?: string }[]
@@ -2016,11 +2209,23 @@ function buildVisualizationPayload(
         const expAction = r.actionName;
         const actSchema = r.top1.schemaName;
         const actAction = r.top1.actionName;
-        const cell = bumpMatrix(expSchema, actSchema, r.verdict);
+        const phraseStyle = r.phraseSources?.[0]?.style;
+        const cell = bumpMatrix(expSchema, actSchema, r.verdict, phraseStyle);
 
         if (r.verdict === "MISROUTE") {
             const edgeK = `${expSchema}.${expAction}${SEP}${actSchema}.${actAction}`;
             edgeCounts.set(edgeK, (edgeCounts.get(edgeK) ?? 0) + 1);
+            if (phraseStyle) {
+                let byStyle = edgeCountsByStyle.get(edgeK);
+                if (!byStyle) {
+                    byStyle = new Map();
+                    edgeCountsByStyle.set(edgeK, byStyle);
+                }
+                byStyle.set(
+                    phraseStyle,
+                    (byStyle.get(phraseStyle) ?? 0) + 1,
+                );
+            }
             let samples = edgeSamples.get(edgeK);
             if (!samples) {
                 samples = [];
@@ -2030,7 +2235,7 @@ function buildVisualizationPayload(
                 samples.push({
                     phrase: r.phraseText,
                     model: r.phraseSources?.[0]?.model,
-                    style: r.phraseSources?.[0]?.style,
+                    style: phraseStyle,
                 });
             }
             const inCellKey = `${expAction}${SEP}${actAction}`;
@@ -2161,6 +2366,14 @@ function buildVisualizationPayload(
                       .sort((a, b) => b.count - a.count)
                       .slice(0, 5)
                 : [];
+            const countsByStyle = cell && cell.byStyle.size > 0
+                ? Object.fromEntries(
+                      [...cell.byStyle.entries()].map(([style, v]) => [
+                          style,
+                          { misroute: v.MISROUTE, tight: v.TIGHT, clean: v.CLEAN },
+                      ]),
+                  )
+                : undefined;
             matrixCells.push({
                 row: r.schema,
                 col: c.schema,
@@ -2172,6 +2385,7 @@ function buildVisualizationPayload(
                 total: cell?.total ?? 0,
                 sameAgent: r.schema === c.schema,
                 topActionEdges,
+                ...(countsByStyle && { countsByStyle }),
             });
         }
     }
@@ -2184,6 +2398,10 @@ function buildVisualizationPayload(
         .map(([k, v]) => {
             const [exp, act] = k.split(SEP);
             const score = simByPair.get(pairKey(exp, act));
+            const styleMap = edgeCountsByStyle.get(k);
+            const countsByStyle = styleMap && styleMap.size > 0
+                ? Object.fromEntries(styleMap.entries())
+                : undefined;
             return {
                 expected: exp,
                 actual: act,
@@ -2193,6 +2411,7 @@ function buildVisualizationPayload(
                 sources: (score !== undefined
                     ? ["corpus", "similarity"]
                     : ["corpus"]) as ("corpus" | "similarity")[],
+                ...(countsByStyle && { countsByStyle }),
             };
         })
         .sort((a, b) => b.count - a.count);
@@ -2291,6 +2510,31 @@ const VIZ_HTML_PREFIX = `<!doctype html>
   .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .controls input, .controls select { background: #0a0d12; border: 1px solid var(--line); color: var(--ink); border-radius: 5px; padding: 5px 8px; font: inherit; }
   .controls label { color: var(--muted); font-size: 12px; }
+  /* Per-phrase-style chips — global filter, lives in the page header.
+     Click-to-toggle which styles count toward EVERY chart on the page
+     (heatmap, sankey, edge table). Default state: every detected style
+     enabled. Row hides when the corpus carries no per-style breakdown. */
+  header .style-chips {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: rgba(122, 162, 247, 0.05);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
+  .style-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .style-chips .label { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .style-chips .chip {
+    font-size: 11px; padding: 2px 9px; border-radius: 11px;
+    border: 1px solid var(--line); background: #0a0d12;
+    color: var(--ink); cursor: pointer; user-select: none;
+    transition: background 0.08s, border-color 0.08s, opacity 0.08s;
+    font-family: ui-monospace, monospace;
+  }
+  .style-chips .chip:hover { border-color: var(--accent); }
+  .style-chips .chip.off { opacity: 0.35; background: transparent; }
+  .style-chips .chip .count { color: var(--muted); margin-left: 4px; font-size: 10px; }
+  .style-chips .quick { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; margin-left: 8px; }
+  .style-chips .quick:hover { color: var(--accent); }
   svg { display: block; }
   .heatmap text { fill: var(--ink); font-size: 11px; }
   .heatmap .axis-label-row { text-anchor: end; }
@@ -2387,6 +2631,12 @@ const VIZ_HTML_PREFIX = `<!doctype html>
     </label>
     <span id="simMeta" class="muted" style="color:var(--muted);font-size:12px;"></span>
   </div>
+  <div class="style-chips" id="styleChips" style="display:none;">
+    <span class="label">Phrase styles (applies to every chart on this page):</span>
+    <span id="styleChipsList"></span>
+    <span class="quick" data-style-all>all</span>
+    <span class="quick" data-style-none>none</span>
+  </div>
 </header>
 <main>
   <details class="help" open>
@@ -2478,6 +2728,108 @@ const VIZ_HTML_PREFIX = `<!doctype html>
 const VIZ_HTML_SUFFIX = `</script>
 <script>
 const PAYLOAD = JSON.parse(document.getElementById("payload").textContent);
+
+// =========================================================================
+// Per-phrase-style filter (chip UI in header). Defines ALL_STYLES,
+// HAS_STYLE_DATA, enabledStyles, and helpers that the renderers consult
+// to re-aggregate cell/edge counts under the current chip selection.
+// =========================================================================
+const ALL_STYLES = (() => {
+    const s = new Set();
+    for (const cell of (PAYLOAD.matrix?.cells || [])) {
+        for (const k of Object.keys(cell.countsByStyle || {})) s.add(k);
+    }
+    for (const e of (PAYLOAD.edges || [])) {
+        for (const k of Object.keys(e.countsByStyle || {})) s.add(k);
+    }
+    const order = ["imperative","conversational","casual","polite","curt","slang","typos"];
+    return [...s].sort((a, b) => {
+        const ai = order.indexOf(a), bi = order.indexOf(b);
+        if (ai !== bi) {
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+        }
+        return a.localeCompare(b);
+    });
+})();
+const HAS_STYLE_DATA = ALL_STYLES.length > 0;
+const enabledStyles = new Set(ALL_STYLES);
+
+function sumCellStyle(cbs, field) {
+    if (!cbs) return 0;
+    let total = 0;
+    for (const k of enabledStyles) {
+        const v = cbs[k];
+        if (v && typeof v[field] === "number") total += v[field];
+    }
+    return total;
+}
+function cellMisroute(cell) {
+    if (cell.countsByStyle && HAS_STYLE_DATA) return sumCellStyle(cell.countsByStyle, "misroute");
+    return cell.misroute || 0;
+}
+function cellTight(cell) {
+    if (cell.countsByStyle && HAS_STYLE_DATA) return sumCellStyle(cell.countsByStyle, "tight");
+    return cell.tight || 0;
+}
+function cellClean(cell) {
+    if (cell.countsByStyle && HAS_STYLE_DATA) return sumCellStyle(cell.countsByStyle, "clean");
+    return cell.clean || 0;
+}
+function edgeCount(e) {
+    if (e.countsByStyle && HAS_STYLE_DATA) {
+        let total = 0;
+        for (const k of enabledStyles) {
+            if (typeof e.countsByStyle[k] === "number") total += e.countsByStyle[k];
+        }
+        return total;
+    }
+    return e.count || 0;
+}
+function sampleEnabled(s) {
+    if (!HAS_STYLE_DATA) return true;
+    if (!s.style) return true;
+    return enabledStyles.has(s.style);
+}
+function renderStyleChips() {
+    if (!HAS_STYLE_DATA) return;
+    const row = document.getElementById("styleChips");
+    const list = document.getElementById("styleChipsList");
+    row.style.display = "flex";
+    const totals = {};
+    for (const s of ALL_STYLES) totals[s] = 0;
+    for (const e of PAYLOAD.edges || []) {
+        for (const [s, v] of Object.entries(e.countsByStyle || {})) {
+            totals[s] = (totals[s] ?? 0) + (v || 0);
+        }
+    }
+    list.innerHTML = ALL_STYLES.map(s => {
+        const on = enabledStyles.has(s);
+        return \`<span class="chip\${on ? "" : " off"}" data-style="\${escapeHtml(s)}">\${escapeHtml(s)}<span class="count">\${totals[s] || 0}</span></span>\`;
+    }).join("");
+    function refreshAll() {
+        renderStyleChips();
+        renderHeatmap();
+        renderSankey();
+        renderTable();
+    }
+    list.querySelectorAll("[data-style]").forEach(el => {
+        el.onclick = () => {
+            const s = el.getAttribute("data-style");
+            if (enabledStyles.has(s)) enabledStyles.delete(s);
+            else enabledStyles.add(s);
+            refreshAll();
+        };
+    });
+    row.querySelectorAll("[data-style-all]").forEach(el => {
+        el.onclick = () => { for (const s of ALL_STYLES) enabledStyles.add(s); refreshAll(); };
+    });
+    row.querySelectorAll("[data-style-none]").forEach(el => {
+        el.onclick = () => { enabledStyles.clear(); refreshAll(); };
+    });
+}
+
 const tt = document.getElementById("tt");
 function showTip(html, evt) { tt.innerHTML = html; tt.style.opacity = "1"; moveTip(evt); }
 function moveTip(evt) {
@@ -2534,12 +2886,16 @@ document.getElementById("sourceFilter").addEventListener("change", (evt) => {
 // have similarityPairs = 0; in similarity / both views the diagonal
 // naturally drops out.
 function cellMetric(c) {
+    // Misroute count is style-filterable; similarity/both pair counts come
+    // from the embedding scan and have no per-style breakdown, so they
+    // pass through unchanged.
+    const mis = cellMisroute(c);
     switch (currentSource) {
         case "similarity": return c.similarityPairs;
         case "both":       return c.bothPairs;
-        case "all":        return c.misroute + c.similarityPairs - c.bothPairs;
+        case "all":        return mis + c.similarityPairs - c.bothPairs;
         case "corpus":
-        default:           return c.misroute;
+        default:           return mis;
     }
 }
 
@@ -2590,7 +2946,7 @@ function renderHeatmap() {
         .on("mouseenter",(evt,c)=>{
             const top = c.topActionEdges.map(e =>
                 \`<li><b>\${c.row}.\${e.exp}</b> → <b>\${c.col}.\${e.act}</b> · <span class="muted">\${e.count}</span></li>\`).join("");
-            const counts = \`misroutes: \${c.misroute} · similarity: \${c.similarityPairs} · both: \${c.bothPairs}\`;
+            const counts = \`misroutes: \${cellMisroute(c)} · similarity: \${c.similarityPairs} · both: \${c.bothPairs}\`;
             showTip(\`<b>\${c.row}</b> → <b>\${c.col}</b><br><span class="muted">\${counts}</span>\` + (top?\`<ul>\${top}</ul>\`:""), evt);
         })
         .on("mousemove", moveTip).on("mouseleave", hideTip)
@@ -2638,6 +2994,8 @@ function renderSankey() {
         // "corpus" or "all" — show all corpus-tagged sankey edges.
         baseEdges = all.filter(e => e.sources.includes("corpus"));
     }
+    // Drop sankey edges whose count is zero under the current style filter.
+    if (HAS_STYLE_DATA) baseEdges = baseEdges.filter(e => edgeCount(e) > 0);
     const edges = selectedAgent ? baseEdges.filter(e => agentOf(e.expected) === selectedAgent) : baseEdges;
     document.getElementById("topN").textContent = selectedAgent ? \`\${edges.length} of \${baseEdges.length}\` : edges.length;
     const color = SANKEY_COLOR, agents = SANKEY_AGENTS, agentTotals = SANKEY_AGENT_TOTALS;
@@ -2663,7 +3021,12 @@ function renderSankey() {
     }
     const links = edges.map(e => {
         const s = getNode(e.expected, "L"), t = getNode(e.actual, "R");
-        return { source: s, target: t, value: e.count, samples: e.samples, agent: agentOf(e.expected) };
+        return {
+            source: s, target: t,
+            value: edgeCount(e),
+            samples: (e.samples || []).filter(sampleEnabled),
+            agent: agentOf(e.expected),
+        };
     });
     const nodes = [...nodeMap.values()];
     const sankey = d3.sankey().nodeId(n => n.key).nodeWidth(8).nodePadding(4).extent([[180,8],[W-180,H-8]]);
@@ -2707,19 +3070,25 @@ function renderTable() {
     const tokens = q.split(/\\s+/).filter(Boolean);
     const filtered = PAYLOAD.edges.filter(e => {
         if (!edgeMatchesSource(e)) return false;
+        // Drop edges whose style count is zero under the current chip filter
+        // (only applies to edges with a per-style breakdown — i.e. corpus
+        // edges; similarity-only edges have count 0 and pass through).
+        if (HAS_STYLE_DATA && e.countsByStyle && edgeCount(e) === 0) return false;
         if (tokens.length === 0) return true;
         const blob = [e.expected, e.actual, ...(e.samples || []).map(s => s.phrase)].join(" ").toLowerCase();
         return tokens.every(t => blob.includes(t));
     });
     filtered.sort((a, b) => {
-        let av = a[sortKey], bv = b[sortKey];
+        // Sort by filtered count when the user is sorting by count.
+        const get = (e, k) => k === "count" ? edgeCount(e) : e[k];
+        let av = get(a, sortKey), bv = get(b, sortKey);
         if (typeof av === "string") return sortDir * av.localeCompare(bv);
         if (av === undefined) av = -Infinity;
         if (bv === undefined) bv = -Infinity;
         return sortDir * (av - bv);
     });
     document.getElementById("filterCount").textContent =
-        \`\${filtered.length} edges · \${d3.sum(filtered, e => e.count)} phrases\`;
+        \`\${filtered.length} edges · \${d3.sum(filtered, e => edgeCount(e))} phrases\`;
     const tbody = document.querySelector("#edges tbody");
     tbody.innerHTML = "";
     for (const e of filtered.slice(0, 500)) {
@@ -2732,7 +3101,8 @@ function renderTable() {
             : (hasSim
                 ? \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#c084fc;font-weight:600;">sim</span>\`
                 : \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#fb923c;font-weight:600;">corpus</span>\`);
-        const countCell = e.count > 0 ? e.count : "·";
+        const liveCount = edgeCount(e);
+        const countCell = liveCount > 0 ? liveCount : "·";
         const scoreCell = e.similarityScore !== undefined
             ? \`<span style="color:var(--accent);font-family:monospace;">\${e.similarityScore.toFixed(2)}</span>\`
             : \`<span class="muted">·</span>\`;
@@ -2747,7 +3117,7 @@ function renderTable() {
         const sampleTr = document.createElement("tr");
         sampleTr.className = "samples";
         sampleTr.style.display = "none";
-        const samplesHtml = (e.samples || []).map(s =>
+        const samplesHtml = (e.samples || []).filter(sampleEnabled).map(s =>
             \`<li><span class="style">[\${s.model ?? ""} · \${s.style ?? ""}]</span> \${escapeHtml(s.phrase)}</li>\`
         ).join("");
         const detailHtml = samplesHtml
@@ -2767,6 +3137,7 @@ document.querySelectorAll("#edges th[data-key]").forEach(th => {
         renderTable();
     });
 });
+renderStyleChips();
 renderHeatmap(); renderSankey(); renderTable();
 </script>
 </body>
