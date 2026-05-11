@@ -63,7 +63,7 @@ pnpm --filter agent-shell start -- --connect
 - Set `typeagent.serverUrl = ws://localhost:1` → reload extension → send request. ✅ Fails (proves override is honored).
 - Clear the setting → reload → ✅ Works again.
 
-### 7. markdown / montage view-server regression (the `getBoundPort` refactor)
+### 7. markdown / montage view-server regression
 
 In the running shell from step 5:
 ```

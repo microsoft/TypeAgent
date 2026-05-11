@@ -196,10 +196,9 @@ async function initializeDispatcher(
                     : userSettings.server.idleTimeout;
 
             // The shell looks up (or spawns) the AS at the configured
-            // well-known port (AGENT_SERVER_PORT, default 8999). The
-            // `--connect <port>` flag is retained as a compatibility
-            // alias — present meaning "auto-discover", absent meaning
-            // "no remote dispatcher".
+            // well-known port (AGENT_SERVER_PORT, default 8999).
+            // `--connect` opts into the remote dispatcher; absent means
+            // run the dispatcher in-process.
             const handle = await ensureAgentServer({
                 hidden: effectiveHidden,
                 idleTimeout: effectiveIdleTimeout,

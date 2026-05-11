@@ -94,11 +94,11 @@ await connection.close();
 
 ### `stopAgentServer()`
 
-Connects to the server at the configured URL and sends `shutdown()`. If graceful shutdown fails (e.g. the server hung), kill it via your OS tools (`Stop-Process -Id <pid>` on Windows, `kill -9 <pid>` on POSIX) — this client no longer maintains a pid file.
+Connects to the server at the configured URL and sends `shutdown()`. If graceful shutdown fails (e.g. the server hung), kill it via your OS tools (`Stop-Process -Id <pid>` on Windows, `kill -9 <pid>` on POSIX).
 
 ## Smoke test
 
-`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile on a fresh free port (so it never collides with a developer's running AS on `8999`), opens a WebSocket connection, validates `lookupAgentServer` finds it, asserts that a second AS in the same data-dir refuses with `ERR_INSTANCE_LOCKED`, sends `shutdown()`, and confirms no legacy discovery file is written.
+`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile on a fresh free port (so it never collides with a developer's running AS on `8999`), opens a WebSocket connection, validates `lookupAgentServer` finds it, asserts that a second AS in the same data-dir refuses with `ERR_INSTANCE_LOCKED`, and sends `shutdown()`.
 
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_

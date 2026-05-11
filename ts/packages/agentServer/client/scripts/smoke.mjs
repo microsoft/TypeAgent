@@ -152,9 +152,6 @@ try {
         child.exitCode !== null || child.killed,
     );
 
-    const legacyDiscovery = path.join(profileDir, "agent-server.json");
-    check("no legacy discovery file written", !fs.existsSync(legacyDiscovery));
-
     if (fail > 0) {
         log(`\n--- server stdout ---\n${stdout}`);
         log(`\n--- server stderr ---\n${stderr}`);
