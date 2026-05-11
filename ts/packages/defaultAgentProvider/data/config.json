@@ -92,6 +92,9 @@
     },
     "visualStudio": {
       "name": "visualstudio-agent"
+    },
+    "discord": {
+      "name": "discord-agent"
     }
   },
   "mcpServers": {

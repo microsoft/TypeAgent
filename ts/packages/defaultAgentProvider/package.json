@@ -53,6 +53,7 @@
     "code-agent": "workspace:*",
     "debug": "^4.4.0",
     "desktop-automation": "workspace:*",
+    "discord-agent": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "email": "workspace:*",
     "exifreader": "^4.30.1",
