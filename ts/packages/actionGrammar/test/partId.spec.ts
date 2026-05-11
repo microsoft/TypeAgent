@@ -14,6 +14,7 @@ function makeCollector(): DebugInfoCollector {
         partPositions: new Map(),
         rulePositions: new Map(),
         partRules: new Map(),
+        partLabels: new Map(),
         fileContents: new Map(),
         filePaths: new Map(),
     };

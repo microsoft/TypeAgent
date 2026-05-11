@@ -3050,6 +3050,14 @@ export function matchState(state: MatchState, request: string) {
             }
         }
         if (trace !== undefined) {
+            const varName = (part as { variable?: string }).variable;
+            const captured =
+                varName !== undefined && state.values !== undefined
+                    ? {
+                          variable: varName,
+                          value: state.values.value,
+                      }
+                    : undefined;
             trace({
                 seq: state.traceSeq++,
                 inputPos: state.index,
@@ -3057,6 +3065,7 @@ export function matchState(state: MatchState, request: string) {
                 rule: state.name,
                 part: part.partId ?? partIndex,
                 endPos: state.index,
+                capturedValue: captured,
             });
         }
         state.partIndex++;

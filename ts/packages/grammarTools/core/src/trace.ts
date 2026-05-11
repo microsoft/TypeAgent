@@ -19,5 +19,6 @@ export function traceMatch(g: LoadedGrammar, input: string): MatchTrace {
         input,
         events,
         result: results.length > 0 ? "matched" : "noMatch",
+        matchValue: results.length > 0 ? results[0].match : undefined,
     };
 }

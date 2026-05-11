@@ -57,6 +57,7 @@ export interface SerializedLoadResult {
         rules: Array<[RuleId, SourceLocation]>;
         parts: Array<[PartId, SourceLocation]>;
         partRules: Array<[PartId, RuleId]>;
+        partLabels?: Array<[PartId, string]>;
         filePaths?: Array<[string, string]>;
     };
     files?: readonly SourceFile[];
@@ -107,6 +108,7 @@ export function hydrateLoadResult(raw: SerializedLoadResult): LoadResult {
               rules: new Map(raw.debugInfo.rules),
               parts: new Map(raw.debugInfo.parts),
               partRules: new Map(raw.debugInfo.partRules),
+              partLabels: new Map(raw.debugInfo.partLabels ?? []),
               filePaths: new Map(raw.debugInfo.filePaths ?? []),
           }
         : undefined;

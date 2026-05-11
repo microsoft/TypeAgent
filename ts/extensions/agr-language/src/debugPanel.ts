@@ -262,6 +262,9 @@ class DebugPanelInstance implements Disposable {
                       partRules: [
                           ...result.grammar.debugInfo.partRules.entries(),
                       ],
+                      partLabels: [
+                          ...result.grammar.debugInfo.partLabels.entries(),
+                      ],
                       filePaths: [
                           ...result.grammar.debugInfo.filePaths.entries(),
                       ],

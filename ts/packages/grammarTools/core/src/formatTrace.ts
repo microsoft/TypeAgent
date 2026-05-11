@@ -114,8 +114,10 @@ function formatEvent(
             return `${seq}${indent}${icon} ${event.rule} ${event.result}${pos}`;
         }
         case "partAttempted": {
+            const label = dbg?.partLabels.get(event.part);
+            const partName = label ?? `${event.partKind}[${event.part}]`;
             const src = dbg ? locStr(dbg.parts.get(event.part)) : "";
-            return `${seq}${indent}  \u251c try ${event.partKind}[${event.part}]${pos}${src}`;
+            return `${seq}${indent}  \u251c try ${partName}${pos}${src}`;
         }
         case "partMatched": {
             const span = excerpt(
@@ -125,10 +127,17 @@ function formatEvent(
                 opts.excerptWidth,
             );
             const spanStr = span ? ` ${JSON.stringify(span)}` : "";
-            return `${seq}${indent}  \u2502 matched[${event.part}] @${lastAttemptPos}..${event.endPos}${spanStr}`;
+            const label = opts.debugInfo?.partLabels.get(event.part);
+            const partName = label ?? `[${event.part}]`;
+            const capStr = event.capturedValue
+                ? ` $${event.capturedValue.variable}=${JSON.stringify(event.capturedValue.value)}`
+                : "";
+            return `${seq}${indent}  \u2502 matched ${partName} @${lastAttemptPos}..${event.endPos}${spanStr}${capStr}`;
         }
         case "partFailed": {
-            return `${seq}${indent}  \u2502 failed[${event.part}]${pos}`;
+            const label = opts.debugInfo?.partLabels.get(event.part);
+            const partName = label ?? `[${event.part}]`;
+            return `${seq}${indent}  \u2502 failed ${partName}${pos}`;
         }
         case "backtrack":
             return `${seq}${indent}\u21b6 backtrack (${event.origin})${pos}`;

@@ -61,6 +61,13 @@ export interface PartMatchedEvent extends BaseEvent {
     readonly part: PartId;
     /** End offset of the matched span in the input. */
     readonly endPos: number;
+    /** Variable name and captured value, if this part captures a variable. */
+    readonly capturedValue?:
+        | {
+              readonly variable: string;
+              readonly value: unknown;
+          }
+        | undefined;
 }
 
 export interface PartFailedEvent extends BaseEvent {
