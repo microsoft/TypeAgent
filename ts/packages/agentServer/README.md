@@ -16,8 +16,8 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 Shell (Electron)              CLI (Node.js)              IDE / editor extensions
    │  in-process (default)       │  always remote            │  always remote
    │  OR --connect               │                           │  (vscode-shell, etc.)
-   └──────────────┬──────────────┴──────────────┬────────────┘
-                  │                             │
+   └──────────────┬──────────────┴───────────────────────────┘
+                  │
                   │   ws://localhost:8999  (configurable)
                   │
          ┌────────▼────────┐
@@ -131,7 +131,9 @@ Client calls ensureAgentServer({ hidden?, idleTimeout? })
   │   ├─ Answers → return { port, url } — no spawn
   │   └─ No answer
   │       ├─ Acquire per-port spawn lockfile (OS temp dir)
-  │       │   ├─ Won race  → spawnAgentServer(port) — detached child
+  │       │   ├─ Won race  → spawnAgentServer(port) — detached child process,
+  │       │   │              survives parent exit. hidden=true suppresses
+  │       │   │              the terminal/window.
   │       │   └─ Lost race → wait via TCP probe
   │       ├─ Wait for the port to start answering (30 s timeout)
   │       └─ Return { port, url }
