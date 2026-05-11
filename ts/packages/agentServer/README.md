@@ -146,7 +146,7 @@ Client calls connectAgentServer(url)
   └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
 
-Read-only lookups (e.g. for the vscode-shell extension, which never spawns its own AS) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live AS answers.
+Read-only lookups (e.g. for IDE/editor extensions like `vscode-shell`, which never spawn their own AS) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live AS answers.
 
 On disconnect, the server removes all of that connection's conversations from its routing table.
 
