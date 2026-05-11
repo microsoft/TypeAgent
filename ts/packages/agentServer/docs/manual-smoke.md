@@ -6,17 +6,17 @@ Total run time: ~10 min. Run from `cwd = ts/` after `pnpm install && pnpm run bu
 
 The `agent-cli` command requires the CLI to be linked globally — from `ts/packages/cli`, run `pnpm link --global` once (see `packages/cli/README.md`). Otherwise substitute `pnpm -F agent-cli start --` for `agent-cli` in the steps below.
 
-> AS port = `AGENT_SERVER_PORT` env var, default `8999`. URL is `ws://localhost:8999`.
+> agentServer port = `AGENT_SERVER_PORT` env var, default `8999`. URL is `ws://localhost:8999`.
 
 ---
 
-Pre-flight: stop any AS left over from earlier dev work so step 1 starts from a clean slate.
+Pre-flight: stop any agentServer left over from earlier dev work so step 1 starts from a clean slate.
 
 ```pwsh
 agent-cli server stop 2>$null
 ```
 
-### 1. AS binds the well-known port
+### 1. agentServer binds the well-known port
 
 ```pwsh
 pnpm --filter agent-server start
@@ -24,7 +24,7 @@ pnpm --filter agent-server start
 ✅ Console: `Agent server started at ws://localhost:8999`.
 ✅ `Test-NetConnection -ComputerName localhost -Port 8999` → `TcpTestSucceeded : True`.
 
-### 2. Single-instance lock rejects a second AS at the same data dir
+### 2. Single-instance lock rejects a second agentServer at the same data dir
 
 In a **second** terminal:
 ```pwsh
@@ -39,7 +39,7 @@ In a third terminal:
 ```pwsh
 agent-cli run request "what time is it"
 ```
-✅ Prints a response (no spawn — reused the running AS).
+✅ Prints a response (no spawn — reused the running agentServer).
 
 ### 4. Multi-client to the same conversation
 
@@ -70,16 +70,16 @@ In the running shell from step 5:
 @markdown create a new file called test.md
 @montage start slideshow
 ```
-✅ Both views open as iframes; URLs contain OS-assigned ports; AS console shows no `EADDRINUSE`.
+✅ Both views open as iframes; URLs contain OS-assigned ports; agentServer console shows no `EADDRINUSE`.
 
-### 8. AS auto-spawn after a crash
+### 8. agentServer auto-spawn after a crash
 
 ```pwsh
 $conn = Test-NetConnection -ComputerName localhost -Port 8999 -InformationLevel Quiet
-# Find the AS process and kill it forcibly
+# Find the agentServer process and kill it forcibly
 Get-Process node | Where-Object { $_.CommandLine -like "*agentServer*" } | Stop-Process -Force
 agent-cli server status                          # ✅ "no agent-server is running"
-agent-cli run request "ping"                     # ✅ auto-spawns a fresh AS at port 8999
+agent-cli run request "ping"                     # ✅ auto-spawns a fresh agentServer at port 8999
 ```
 
 ### 9. `AGENT_SERVER_PORT` override
@@ -111,8 +111,8 @@ Test-NetConnection -ComputerName localhost -Port 8999 -InformationLevel Quiet  #
 pnpm --filter agent-server start &
 agent-cli server stop                             # no port arg — uses the configured URL
 ```
-✅ AS exits cleanly; the port stops answering.
+✅ agentServer exits cleanly; the port stops answering.
 
 ---
 
-If any step fails, capture the AS console output, the result of `Test-NetConnection -ComputerName localhost -Port 8999`, and any client-side error before reporting.
+If any step fails, capture the agentServer console output, the result of `Test-NetConnection -ComputerName localhost -Port 8999`, and any client-side error before reporting.

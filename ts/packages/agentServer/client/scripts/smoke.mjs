@@ -3,11 +3,11 @@
 
 // End-to-end smoke driver for the well-known port architecture.
 // Spawns a real agent-server in an isolated profile on a non-default
-// port (so it never collides with a developer's running AS), then
+// port (so it never collides with a developer's running agentServer), then
 // verifies:
 //   - connectAgentServer succeeds at the configured URL
 //   - lookupAgentServer returns a handle pointing at the same port
-//   - a second AS in the same data dir refuses with ERR_INSTANCE_LOCKED
+//   - a second agentServer in the same data dir refuses with ERR_INSTANCE_LOCKED
 //   - graceful shutdown via RPC stops the process
 //
 // Run from the package dir (after building both client + server):
@@ -124,12 +124,12 @@ try {
         });
     });
     check(
-        "second AS in same data dir exits non-zero",
+        "second agentServer in same data dir exits non-zero",
         conflictExit !== 0 && conflictExit !== undefined,
     );
     const conflictAll = conflictStderr + conflictStdout;
     check(
-        "second AS reports instance lock conflict",
+        "second agentServer reports instance lock conflict",
         conflictAll.includes("ERR_INSTANCE_LOCKED") ||
             conflictAll.includes("already using the instance directory"),
     );

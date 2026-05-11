@@ -437,7 +437,7 @@ export interface AgentServerHandle {
  *  - Client side: an exclusive per-port lock file in tmpdir ensures
  *    only one client spawns; losers wait and probe.
  *  - Server side: `lockInstanceDir` exits with `ERR_INSTANCE_LOCKED`
- *    if a second AS tries to bind the same data dir.
+ *    if a second agentServer tries to bind the same data dir.
  */
 export async function ensureAgentServer(
     options: EnsureAgentServerOptions = {},

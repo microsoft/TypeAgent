@@ -40,7 +40,7 @@ Each conversation has its own `SharedDispatcher` instance with isolated chat his
 
 The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable or `--port` flag). Clients on the same machine connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
 
-This mirrors how a future cloud-hosted AS would look: a stable, configured URL is the contract. Local AS uses the same model so client code does not have to special-case "local" vs "remote".
+This mirrors how a future cloud-hosted agentServer would look: a stable, configured URL is the contract. The local agentServer uses the same model so client code does not have to special-case "local" vs "remote".
 
 There is at most one agent-server per data-dir profile: the server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so a second `agent-server` invocation against the same `TYPEAGENT_USER_DATA_DIR` exits with `ERR_INSTANCE_LOCKED`. Workflows that need parallel agent-servers (benchmark workers, integration tests, side-by-side dev profiles) set both a per-worker `TYPEAGENT_USER_DATA_DIR` *and* a per-worker `AGENT_SERVER_PORT`.
 
@@ -141,7 +141,7 @@ Client calls connectAgentServer(url)
   └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
 
-Read-only lookups (e.g. for IDE/editor extensions like `vscode-shell`, which never spawn their own AS) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live AS answers.
+Read-only lookups (e.g. for IDE/editor extensions like `vscode-shell`, which never spawn their own agentServer) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live agentServer answers.
 
 On disconnect, the server removes all of that connection's conversations from its routing table.
 
@@ -177,7 +177,7 @@ Terminal ↔ ConsoleClientIO ↔ WebSocket ↔ agentServer
 
 ### `agent-cli connect` (interactive)
 
-`connect` calls `ensureAgentServer({ hidden, idleTimeout })` to auto-spawn the server if no live AS answers at the configured URL, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
+`connect` calls `ensureAgentServer({ hidden, idleTimeout })` to auto-spawn the server if no live agentServer answers at the configured URL, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
 
 ### `agent-cli run` (non-interactive)
 

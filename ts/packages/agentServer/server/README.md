@@ -29,7 +29,7 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --conf
 
 By default the agent-server binds the **well-known port** `8999` (override via the `AGENT_SERVER_PORT` environment variable or the `--port` flag). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly. The server also starts automatically when clients call `ensureAgentServer()`.
 
-This mirrors how a future cloud-hosted AS would be addressed: a stable, configured URL is the contract.
+This mirrors how a future cloud-hosted agentServer would be addressed: a stable, configured URL is the contract.
 
 There is at most one agent-server per data-dir profile: the server takes an exclusive OS-level lock on its instance directory at startup, so a second `agent-server` invocation against the same `TYPEAGENT_USER_DATA_DIR` exits with `ERR_INSTANCE_LOCKED`. Workflows that need parallel servers (benchmark workers, integration tests) must use both a per-worker `TYPEAGENT_USER_DATA_DIR` and a per-worker `AGENT_SERVER_PORT`.
 

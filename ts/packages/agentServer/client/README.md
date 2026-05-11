@@ -6,7 +6,7 @@ Client library for connecting to a running agentServer, used by the Shell, the C
 
 The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
 
-This mirrors how a future cloud-hosted AS would be addressed: a stable, configured URL is the contract. Local AS uses the same model so client code does not have to special-case "local" vs "remote".
+This mirrors how a future cloud-hosted agentServer would be addressed: a stable, configured URL is the contract. The local agentServer uses the same model so client code does not have to special-case "local" vs "remote".
 
 The server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so at most one agent-server is ever running per data-dir profile. Concurrent client spawns targeting the same port are coordinated by a per-port lockfile in the OS temp dir; only one client wins the spawn race, the others fall through to a TCP probe + connect.
 
@@ -98,7 +98,7 @@ Connects to the server at the configured URL and sends `shutdown()`. If graceful
 
 ## Smoke test
 
-`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile on a fresh free port (so it never collides with a developer's running AS on `8999`), opens a WebSocket connection, validates `lookupAgentServer` finds it, asserts that a second AS in the same data-dir refuses with `ERR_INSTANCE_LOCKED`, and sends `shutdown()`.
+`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile on a fresh free port (so it never collides with a developer's running agentServer on `8999`), opens a WebSocket connection, validates `lookupAgentServer` finds it, asserts that a second agentServer in the same data-dir refuses with `ERR_INSTANCE_LOCKED`, and sends `shutdown()`.
 
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
