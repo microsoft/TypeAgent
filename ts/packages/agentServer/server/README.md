@@ -27,7 +27,7 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js
 node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --config test
 ```
 
-By default the agent-server binds the **well-known port** `8999` (override via the `AGENT_SERVER_PORT` environment variable or the `--port` flag). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly — there is no discovery file. The server also starts automatically when clients call `ensureAgentServer()`.
+By default the agent-server binds the **well-known port** `8999` (override via the `AGENT_SERVER_PORT` environment variable or the `--port` flag). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly. The server also starts automatically when clients call `ensureAgentServer()`.
 
 This mirrors how a future cloud-hosted AS would be addressed: a stable, configured URL is the contract.
 

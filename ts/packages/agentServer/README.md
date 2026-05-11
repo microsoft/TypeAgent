@@ -38,7 +38,7 @@ Each conversation has its own `SharedDispatcher` instance with isolated chat his
 
 ### Single-instance, well-known port
 
-The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable or `--port` flag). Clients on the same machine connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly — there is no discovery file.
+The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable or `--port` flag). Clients on the same machine connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
 
 This mirrors how a future cloud-hosted AS would look: a stable, configured URL is the contract. Local AS uses the same model so client code does not have to special-case "local" vs "remote".
 

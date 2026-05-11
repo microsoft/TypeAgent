@@ -4,7 +4,7 @@ Client library for connecting to a running agentServer, used by the Shell, the C
 
 ## Connection model
 
-The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly — there is no discovery file.
+The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
 
 This mirrors how a future cloud-hosted AS would be addressed: a stable, configured URL is the contract. Local AS uses the same model so client code does not have to special-case "local" vs "remote".
 

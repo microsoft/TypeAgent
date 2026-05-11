@@ -190,8 +190,7 @@ async function main() {
 
     const portIdx = process.argv.indexOf("--port");
     // Default to the well-known agent-server port (configurable via
-    // AGENT_SERVER_PORT). Clients connect to ws://localhost:<port>
-    // without any discovery file — the URL is the contract.
+    // AGENT_SERVER_PORT). The URL is the contract.
     const requestedPort =
         portIdx !== -1
             ? parseInt(process.argv[portIdx + 1], 10)
@@ -422,13 +421,13 @@ async function main() {
     boundPort = wss.port;
     console.log(`Agent server started at ws://localhost:${boundPort}`);
 
-    // Single-machine discovery: clients connect to the well-known
-    // port (default 8999, configurable via AGENT_SERVER_PORT). The
-    // OS-level instance lock (lockInstanceDir) guarantees there is at
-    // most one agent-server per data dir, so concurrent client spawns
-    // either land on the same agent-server or surface
-    // ERR_INSTANCE_LOCKED. Cross-machine connections work the same
-    // way — point the client at ws://<host>:<port>.
+    // Clients connect to the well-known port (default 8999,
+    // configurable via AGENT_SERVER_PORT). The OS-level instance lock
+    // (lockInstanceDir) guarantees there is at most one agent-server
+    // per data dir, so concurrent client spawns either land on the
+    // same agent-server or surface ERR_INSTANCE_LOCKED. Cross-machine
+    // connections work the same way — point the client at
+    // ws://<host>:<port>.
 
     scheduleIdleShutdown();
 }

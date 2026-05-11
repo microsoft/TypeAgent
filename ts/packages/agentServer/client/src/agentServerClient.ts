@@ -30,9 +30,9 @@ const debugErr = registerDebug("typeagent:agent-server-client:error");
 
 /**
  * Default agent-server port. Clients connect to
- * `ws://localhost:<port>` directly — there is no discovery file. A
- * future cloud-hosted agent-server will expose the same contract: a
- * stable URL configurable per environment.
+ * `ws://localhost:<port>` directly. A future cloud-hosted
+ * agent-server will expose the same contract: a stable URL
+ * configurable per environment.
  */
 export const DEFAULT_AGENT_SERVER_PORT = 8999;
 
