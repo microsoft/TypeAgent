@@ -25,7 +25,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "mcp-plan-validation": "dist/cli.js"
+    "mcp-plan-validation": "./bin/mcp-plan-validation.js"
   },
   "files": [
     "dist",

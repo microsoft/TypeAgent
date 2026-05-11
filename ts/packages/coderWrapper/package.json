@@ -17,7 +17,7 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "coder-wrapper": "./dist/cli.js"
+    "coder-wrapper": "./bin/coder-wrapper.js"
   },
   "scripts": {
     "build": "npm run tsc",
