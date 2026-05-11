@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import type { ConfigTree, FlatEnv } from "./types.js";
+import {
+    isTypedSectionKey,
+    typedSectionToFlat,
+} from "./runtime/tree.js";
 
 /**
  * Top-level keys whose contents are passed through verbatim into the
@@ -79,6 +83,13 @@ function walk(
         )) {
             if (path.length === 0 && VALUE_GROUP_KEYS.has(rawKey)) {
                 expandValueGroup(rawKey, value, out);
+                continue;
+            }
+            if (path.length === 0 && isTypedSectionKey(rawKey)) {
+                const sub = typedSectionToFlat(rawKey, value);
+                for (const [k, v] of Object.entries(sub)) {
+                    out[k] = v;
+                }
                 continue;
             }
             const isPassthroughBoundary =

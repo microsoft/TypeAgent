@@ -12,3 +12,17 @@ export {
     getChatModelNames,
     getChatModelMaxConcurrency,
 } from "./modelResource.js";
+export {
+    apiSettingsFromConfig,
+    azureApiSettingsFromConfig,
+    openAIApiSettingsFromConfig,
+    configFromEnvRecord,
+    getDeployment,
+    getDeploymentEndpoint,
+} from "./apiSettingsFromConfig.js";
+export { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
+export {
+    getRuntimeConfig,
+    setRuntimeConfig,
+    initRuntimeConfigFromProcessEnv,
+} from "./runtimeConfig.js";

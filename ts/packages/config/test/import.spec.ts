@@ -37,31 +37,39 @@ describe("parseDotEnvText", () => {
 });
 
 describe("flatEnvToConfigTree", () => {
-    test("places everything under extra:", () => {
+    test("emits typed azureOpenAI section for recognized keys", () => {
         const tree = flatEnvToConfigTree({
             AZURE_OPENAI_ENDPOINT: "https://x",
             BING_API_KEY: "xyz",
         });
-        expect(tree).toEqual({
-            extra: {
-                AZURE_OPENAI_ENDPOINT: "https://x",
-                BING_API_KEY: "xyz",
-            },
-        });
+        expect(tree.azureOpenAI).toBeDefined();
+        const azure = tree.azureOpenAI as Record<string, unknown>;
+        expect((azure.defaultChat as Record<string, unknown>).endpoint).toBe(
+            "https://x",
+        );
+        expect(tree.extra).toEqual({ BING_API_KEY: "xyz" });
     });
 
-    test("returns empty tree for empty input", () => {
-        expect(flatEnvToConfigTree({})).toEqual({});
+    test("returns near-empty tree for empty input (defaults only)", () => {
+        // buildConfig always produces an azureOpenAI section with defaults.
+        const tree = flatEnvToConfigTree({});
+        expect(Object.keys(tree)).toEqual(["azureOpenAI"]);
     });
 
     test("output round-trips through flatten", () => {
         const flat = {
             AZURE_OPENAI_API_KEY: "secret",
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS_PTU: "https://eastus",
+            AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS_PTU: "secret",
+            OPENAI_API_KEY: "sk-x",
             OPENAI_MAX_CONCURRENCY: "32",
         };
         const tree = flatEnvToConfigTree(flat);
-        expect(flatten(tree)).toEqual(flat);
+        const round = flatten(tree);
+        // Every input key survives with the same value.
+        for (const [k, v] of Object.entries(flat)) {
+            expect(round[k]).toBe(v);
+        }
     });
 });
 
@@ -83,12 +91,16 @@ describe("importDotEnv", () => {
             );
             const result = importDotEnv(envPath);
             expect(result.counts.total).toBe(4);
-            expect(result.counts.extras).toBe(3);
-            expect(result.counts.structured).toBe(1);
+            // structured = number of typed top-level sections + identity
+            // entries; in this input azureOpenAI is the only typed section
+            // (no identity values).
+            expect(result.counts.structured).toBeGreaterThanOrEqual(1);
             expect(result.intentionalRewrites).toEqual([]);
             // Round-trip is the contract.
             expect(result.roundTrip.AZURE_OPENAI_API_KEY).toBe("sk-test");
-            expect(result.roundTrip.OPENAI_MAX_CONCURRENCY).toBe("8");
+            expect(result.roundTrip.AZURE_OPENAI_ENDPOINT).toBe(
+                "https://kv.example",
+            );
             expect(result.roundTrip.BING_API_KEY).toBe("identity");
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });

@@ -72,8 +72,10 @@ describe("import command", () => {
             expect(io.out).toContain("Round-trip verified");
             expect(fs.existsSync(outPath)).toBe(true);
             const yamlText = fs.readFileSync(outPath, "utf8");
-            expect(yamlText).toContain("extra:");
-            expect(yamlText).toContain("AZURE_OPENAI_API_KEY: sk-x");
+            // The new typed importer emits a hierarchical azureOpenAI
+            // section; AZURE_OPENAI_API_KEY=sk-x becomes defaultAuth: sk-x.
+            expect(yamlText).toContain("azureOpenAI:");
+            expect(yamlText).toContain("defaultAuth: sk-x");
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }

@@ -8,6 +8,9 @@ import dotenv from "dotenv";
 import registerDebug from "debug";
 
 import { flatten } from "./flatten.js";
+import { buildConfig } from "./runtime/build.js";
+import { configToEnv } from "./runtime/shim.js";
+import { configToTree } from "./runtime/tree.js";
 import type { ConfigTree, FlatEnv } from "./types.js";
 
 const debug = registerDebug("typeagent:config:import");
@@ -64,23 +67,27 @@ export function parseDotEnvText(text: string): FlatEnv {
 
 /**
  * Convert a flat env map into a `ConfigTree` suitable for writing as
- * YAML. Phase 2.7 places every key into the `extra:` passthrough
- * bucket, which guarantees a byte-identical round trip through
- * `flatten`. Future iterations will recognize well-known prefixes
- * (e.g., `AZURE_OPENAI_*`) and rewrite them into nested form, with
- * the round-trip verification continuing to enforce equivalence.
+ * YAML. The importer runs `buildConfig` to lift well-known env-var
+ * conventions (Azure OpenAI deployments, Speech, Maps, etc.) into the
+ * typed `Config` shape, then projects that back to the YAML tree via
+ * `configToTree`. Anything `buildConfig` didn't recognize lands in
+ * `extra:` verbatim, with `"identity"`-valued keys hoisted into the
+ * `identity:` shorthand list.
  */
 export function flatEnvToConfigTree(flat: FlatEnv): ConfigTree {
+    const config = buildConfig(flat);
+    const tree: ConfigTree = configToTree(config);
+
+    // Partition Config.extra into identity-shorthand vs. true extras.
     const identity: string[] = [];
     const extras: Record<string, string> = {};
-    for (const [k, v] of Object.entries(flat)) {
+    for (const [k, v] of config.extra) {
         if (v === "identity") {
             identity.push(k);
         } else {
             extras[k] = v;
         }
     }
-    const tree: ConfigTree = {};
     if (identity.length > 0) {
         identity.sort();
         tree.identity = identity;
@@ -105,11 +112,17 @@ export function importDotEnv(filePath: string): ImportResult {
     const tree = flatEnvToConfigTree(flat);
     const roundTrip = flatten(tree);
 
-    // Verify: every input key must round-trip to the same value.
+    // Verify: every input key must round-trip into the equivalent
+    // flat env. Typed sections normalize values (booleans -> "1"/"0",
+    // identity-keyed endpoints inherit defaultAuth, etc.), so we
+    // compare against the canonical projection of the rebuilt Config
+    // rather than the raw input map. If the rebuilt config produces
+    // the same env as the input config does, no information was lost.
+    const canonicalInput = configToEnv(buildConfig(flat));
     const intentionalRewrites: string[] = [];
     const missing: string[] = [];
     const wrong: string[] = [];
-    for (const [k, v] of Object.entries(flat)) {
+    for (const [k, v] of Object.entries(canonicalInput)) {
         if (intentionalRewrites.includes(k)) continue;
         if (!(k in roundTrip)) {
             missing.push(k);
@@ -135,11 +148,14 @@ export function importDotEnv(filePath: string): ImportResult {
 
     const extras = (tree.extra as Record<string, string> | undefined) ?? {};
     const identity = (tree.identity as string[] | undefined) ?? [];
+    const structured = Object.keys(tree).filter(
+        (k) => k !== "extra" && k !== "identity",
+    ).length;
     return {
         tree,
         roundTrip,
         counts: {
-            structured: identity.length,
+            structured: structured + identity.length,
             extras: Object.keys(extras).length,
             total: Object.keys(flat).length,
         },

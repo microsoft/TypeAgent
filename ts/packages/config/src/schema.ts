@@ -11,8 +11,8 @@ import { z } from "zod";
  *
  * - The top-level document is a map (not a scalar or array).
  * - Leaf values are strings, numbers, booleans, or null.
- * - No arrays appear anywhere (the flattener also rejects them, but
- *   catching it here gives a better error message).
+ * - Arrays are allowed, but only as arrays of objects (used for
+ *   `azureOpenAI.deployments.<name>[].endpoints`).
  */
 const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
     z.string(),
@@ -22,7 +22,13 @@ const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
 ]);
 
 const treeSchema: z.ZodType<unknown> = z.lazy(() =>
-    z.record(z.union([scalarSchema, treeSchema])),
+    z.record(
+        z.union([
+            scalarSchema,
+            treeSchema,
+            z.array(treeSchema),
+        ]),
+    ),
 );
 
 export const configTreeSchema = treeSchema;

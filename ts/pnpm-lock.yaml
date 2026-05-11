@@ -2786,6 +2786,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       async:
         specifier: ^3.2.5
         version: 3.2.6

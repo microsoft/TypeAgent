@@ -26,6 +26,8 @@ import {
     EndpointPool,
     makeSingleMemberPool,
 } from "./endpointPool.js";
+import { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
+import { getRuntimeConfig } from "./runtimeConfig.js";
 import {
     PromptSection,
     Result,
@@ -270,9 +272,35 @@ function getModelPool(
     const key = `${modelType}:${provider}:${endpointName ?? ""}`;
     const existing = modelPools.get(key);
     if (existing) return existing;
-    const pool = discoverEndpointPool(provider, modelType, endpointName);
+    const pool = buildModelPool(provider, modelType, endpointName);
     modelPools.set(key, pool);
     return pool;
+}
+
+// Try the typed-Config path first; if it fails (typically because the
+// caller's deployment uses a non-canonical region alias that the typed
+// REGIONS set doesn't carry), fall back to the legacy env-scanning
+// discovery. Both paths read the same underlying values via process.env
+// / the singleton built from it, so the pool contents converge.
+function buildModelPool(
+    provider: ModelProviders,
+    modelType: ModelType,
+    endpointName?: string,
+): EndpointPool {
+    if (provider !== "ollama") {
+        try {
+            const typedName = endpointName?.toLowerCase();
+            return discoverEndpointPoolFromConfig(
+                getRuntimeConfig(),
+                provider,
+                modelType,
+                typedName,
+            );
+        } catch {
+            // Fall through to legacy.
+        }
+    }
+    return discoverEndpointPool(provider, modelType, endpointName);
 }
 
 export function getChatModelPool(endpoint?: string): EndpointPool {
@@ -1077,7 +1105,10 @@ function getPromptLength(prompt: string | PromptSection[]) {
  * @param apiSettings: settings to use to create the client
  */
 export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
-    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Video);
+    const pool = apiSettings
+        ? makeSingleMemberPool(apiSettings, `custom:${apiSettings.provider}`)
+        : getModelPool(defaultProvider(), ModelType.Video);
+    const settings = pool.members[0].settings;
     const defaultParams =
         settings.provider === "azure"
             ? {}
@@ -1097,10 +1128,6 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         height: number = 720,
         inpaintItems?: ImageInPaintItem[],
     ): Promise<Result<VideoGenerationJob>> {
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
         if (numVariants < 0 || numVariants > 2) {
             throw Error("n MUST equal 1"); // as of 10.09.2025 API will only accept n<2
         }
@@ -1139,22 +1166,27 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             else formData.append(k, v);
         }
 
-        // send it
+        const response = await callApiWithPool(
+            pool,
+            async (member) => {
+                const headerResult = await createApiHeaders(member.settings);
+                if (!headerResult.success) return headerResult;
+                return success({
+                    headers: headerResult.data,
+                    body: formData,
+                });
+            },
+            { retryPauseMs: settings.retryPauseMs },
+        );
+        if (!response.success) return response;
+
         try {
-            const result = await fetch(settings.endpoint, {
-                method: "POST",
-                headers: headerResult.data,
-                body: formData,
-            });
-
-            if (!result.ok) {
-                return error(`Error ${result.status}: ${await result.text()}`);
-            }
-
+            const jobJson =
+                (await response.data.json()) as VideoGenerationJob;
             return success({
                 endpoint: new URL(settings.endpoint),
-                headers: headerResult.data,
-                ...((await result.json()) as VideoGenerationJob),
+                headers: {},
+                ...jobJson,
             });
         } catch (err) {
             return error(`Error: ${err}`);

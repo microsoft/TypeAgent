@@ -12,6 +12,7 @@ import {
     flatten as flattenYamlConfig,
     type ConfigTree,
 } from "@typeagent/config";
+import { initRuntimeConfigFromProcessEnv } from "aiclient";
 import yaml from "js-yaml";
 
 import { debugShell, debugShellError } from "./debug.js";
@@ -108,6 +109,11 @@ async function saveKeysToPersistence(dir: string | undefined, keys: string) {
 
 function populateKeys(parsed: ParsedKeys) {
     dotenv.populate(process.env as any, parsed, { override: true });
+    // After process.env is populated, build the typed runtime Config
+    // once so all aiclient consumers can read it via getRuntimeConfig().
+    // Legacy callers still see the same values via process.env.
+    initRuntimeConfigFromProcessEnv();
+    debugShell("Runtime Config initialized from process.env");
 }
 
 function parsedKeysEqual(a: ParsedKeys, b: ParsedKeys) {

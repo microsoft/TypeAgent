@@ -36,3 +36,45 @@ export {
     type LoadConfigResult,
     type SourceMap,
 } from "./types.js";
+
+// Typed runtime config (Phase A: schema + builder + shim).
+export {
+    REGIONS,
+    isRegion,
+    regionToEnvSuffix,
+    regionFromEnvSuffix,
+    type Region,
+} from "./runtime/regions.js";
+export {
+    IDENTITY,
+    authModeFromString,
+    type AuthMode,
+    type AzureOpenAIConfig,
+    type AzureStorageConfig,
+    type AwsStorageConfig,
+    type Config,
+    type DatabaseConfig,
+    type Deployment,
+    type DeploymentEndpoint,
+    type DeploymentMode,
+    type GoogleCalendarConfig,
+    type MapsConfig,
+    type MicrosoftGraphConfig,
+    type OpenAIConfig,
+    type SpeechConfig,
+    type SpotifyConfig,
+    type StorageConfig,
+    type VaultConfig,
+    type WikipediaConfig,
+} from "./runtime/types.js";
+export { buildConfig, parseSuffix } from "./runtime/build.js";
+export {
+    configToEnv,
+    applyToProcessEnv,
+    type EnvOutput,
+} from "./runtime/shim.js";
+export {
+    loadRuntimeConfigSync,
+    type LoadRuntimeConfigOptions,
+    type RuntimeConfigResult,
+} from "./runtime/load.js";

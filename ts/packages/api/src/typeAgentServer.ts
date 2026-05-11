@@ -4,6 +4,7 @@
 import dotenv from "dotenv";
 import { getUserDataDir } from "agent-dispatcher/helpers/data";
 import { readFileSync } from "node:fs";
+import { initRuntimeConfigFromProcessEnv } from "aiclient";
 import {
     TypeAgentAPIServerConfig,
     TypeAgentAPIWebServer,
@@ -42,6 +43,11 @@ export class TypeAgentServer {
 
         // typeAgent config
         dotenv.config({ path: this.envPath });
+
+        // Build typed runtime Config from process.env so aiclient
+        // consumers can use the typed accessor; legacy callers still
+        // see the same values through process.env directly.
+        initRuntimeConfigFromProcessEnv();
 
         // web server config
         this.config = JSON.parse(readFileSync("data/config.json").toString());
