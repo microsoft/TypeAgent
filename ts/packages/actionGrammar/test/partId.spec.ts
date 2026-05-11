@@ -195,3 +195,51 @@ describe("filePaths in DebugInfoCollector", () => {
         }
     });
 });
+
+describe("partLabels in DebugInfoCollector", () => {
+    it("records labels for string-literal parts", () => {
+        const source = `<Start> = play -> true;`;
+        const collector = makeCollector();
+        loadGrammarRules("test", source, { debugCollector: collector });
+
+        expect(collector.partLabels.size).toBeGreaterThan(0);
+        const labels = [...collector.partLabels.values()];
+        expect(labels.some((l) => l === "play")).toBe(true);
+    });
+
+    it("records labels for variable parts", () => {
+        const source = `<Start> = play $(song:string) -> { action: "play", song };`;
+        const collector = makeCollector();
+        loadGrammarRules("test", source, { debugCollector: collector });
+
+        const labels = [...collector.partLabels.values()];
+        expect(labels.some((l) => l.includes("$song"))).toBe(true);
+    });
+
+    it("records labels for rule reference parts", () => {
+        const source = `<Start> = <Action> -> true;
+<Action> = play -> "play";`;
+        const collector = makeCollector();
+        loadGrammarRules("test", source, { debugCollector: collector });
+
+        const labels = [...collector.partLabels.values()];
+        expect(labels.some((l) => l.includes("Action"))).toBe(true);
+    });
+
+    it("every partId has a corresponding label", () => {
+        const source = `<Start> = play $(song:string) by $(artist:string) -> { song, artist };`;
+        const collector = makeCollector();
+        const grammar = loadGrammarRules("test", source, {
+            debugCollector: collector,
+        });
+
+        // Collect all partIds from the grammar
+        for (const rule of grammar.alternatives) {
+            for (const part of rule.parts) {
+                if (part.partId !== undefined) {
+                    expect(collector.partLabels.has(part.partId)).toBe(true);
+                }
+            }
+        }
+    });
+});

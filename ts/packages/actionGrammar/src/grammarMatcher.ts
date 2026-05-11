@@ -3050,7 +3050,13 @@ export function matchState(state: MatchState, request: string) {
             }
         }
         if (trace !== undefined) {
-            const varName = (part as { variable?: string }).variable;
+            // Wildcard parts defer value capture (the extent isn't
+            // known until a following part resolves it), so we skip
+            // capturedValue for them.
+            const varName =
+                part.type !== "wildcard"
+                    ? (part as { variable?: string }).variable
+                    : undefined;
             const captured =
                 varName !== undefined && state.values !== undefined
                     ? {

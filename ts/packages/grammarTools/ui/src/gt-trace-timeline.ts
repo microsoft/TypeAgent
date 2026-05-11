@@ -51,6 +51,14 @@ const EVENT_COLORS: Record<string, string> = {
     backtrack: "var(--vscode-editorWarning-foreground, #cca700)",
 };
 
+interface DerivedTraceData {
+    trace: MatchTrace;
+    depths: number[];
+    groupSize: number[];
+    attemptPosForEvent: number[];
+    onSuccessPath: Set<number>;
+}
+
 /**
  * Step-by-step match trace table.
  * @element gt-trace-timeline
@@ -172,11 +180,20 @@ export class GtTraceTimeline extends LitElement {
             tr.row-matched:not(.selected):not(:hover) td {
                 background: rgba(78, 201, 176, 0.06);
             }
+            tr.row-matched:not(.selected):not(:hover) td:first-child {
+                border-left: 3px solid rgba(78, 201, 176, 0.5);
+            }
             tr.row-failed:not(.selected):not(:hover) td {
                 background: rgba(244, 135, 113, 0.06);
             }
+            tr.row-failed:not(.selected):not(:hover) td:first-child {
+                border-left: 3px solid rgba(244, 135, 113, 0.5);
+            }
             tr.row-backtrack:not(.selected):not(:hover) td {
                 background: rgba(204, 167, 0, 0.04);
+            }
+            tr.row-backtrack:not(.selected):not(:hover) td:first-child {
+                border-left: 3px solid rgba(204, 167, 0, 0.5);
             }
             .matched-text {
                 font-family: var(
@@ -359,7 +376,56 @@ export class GtTraceTimeline extends LitElement {
         attemptPos?: number; // inputPos from preceding partAttempted
     }> {
         if (!this._trace) return [];
+        const derived = this._derivedTraceData();
+        const { depths, groupSize, attemptPosForEvent, onSuccessPath } =
+            derived;
         const events = this._trace.events;
+        const n = events.length;
+
+        // Build the hidden set from collapsed groups.
+        const hidden = new Set<number>();
+        for (const gi of this._collapsedGroups) {
+            const d = depths[gi];
+            for (let j = gi + 1; j < n && depths[j] > d; j++) {
+                hidden.add(j);
+            }
+        }
+
+        return events
+            .map((event, index) => ({
+                event,
+                index,
+                depth: depths[index],
+                groupSize: groupSize[index],
+                attemptPos: attemptPosForEvent[index],
+            }))
+            .filter(
+                ({ event, index }) =>
+                    !hidden.has(index) &&
+                    !this._hiddenKinds.has(event.kind as EventKindFilter) &&
+                    (this._pathFilter === "all" ||
+                        (this._pathFilter === "success"
+                            ? onSuccessPath.has(index)
+                            : !onSuccessPath.has(index))),
+            );
+    }
+
+    /**
+     * Cache key and result for _derivedTraceData(). Recomputed only when
+     * the trace object identity changes.
+     */
+    private _derivedCache?: DerivedTraceData;
+
+    /**
+     * Pre-compute per-event depth, group size, attempt positions, and
+     * success path membership. These depend only on the trace events
+     * (not on UI state like collapse/filter), so we memoize them.
+     */
+    private _derivedTraceData(): DerivedTraceData {
+        if (this._derivedCache?.trace === this._trace) {
+            return this._derivedCache!;
+        }
+        const events = this._trace!.events;
         const n = events.length;
 
         // Compute depth for every event.  ruleEntered carries an
@@ -390,15 +456,6 @@ export class GtTraceTimeline extends LitElement {
             }
         }
 
-        // Build the hidden set from collapsed groups.
-        const hidden = new Set<number>();
-        for (const gi of this._collapsedGroups) {
-            const d = depths[gi];
-            for (let j = gi + 1; j < n && depths[j] > d; j++) {
-                hidden.add(j);
-            }
-        }
-
         // Track the inputPos from the most recent partAttempted per part,
         // so partMatched/partFailed rows can show the attempt start position.
         const attemptPositions: Map<number, number> = new Map();
@@ -412,99 +469,74 @@ export class GtTraceTimeline extends LitElement {
             }
         }
 
-        // Compute success/failure path membership.
+        // Compute success path membership.
         // Success path: only events that directly contribute to the final
         // match result. ruleEntered only if its ruleExited is "matched";
         // partAttempted only if followed by partMatched (not partFailed).
         // Backtracks are never on the success path.
         const onSuccessPath = new Set<number>();
-        const onFailurePath = new Set<number>();
-        if (this._pathFilter !== "all") {
-            // Pair ruleEntered <-> ruleExited using a stack.
-            const ruleEntryStack: number[] = [];
-            const ruleEntryFor: number[] = new Array(n).fill(-1);
-            for (let i = 0; i < n; i++) {
-                const e = events[i];
-                if (e.kind === "ruleEntered") {
-                    ruleEntryStack.push(i);
-                } else if (e.kind === "ruleExited") {
-                    const entryIdx = ruleEntryStack.pop();
-                    if (entryIdx !== undefined) {
-                        ruleEntryFor[i] = entryIdx;
-                    }
-                }
-            }
 
-            // Pair partAttempted <-> partMatched/partFailed.
-            // The most recent partAttempted for a given partId is the
-            // one that matches the next partMatched/partFailed for that id.
-            const lastAttemptIdx: Map<number, number> = new Map();
-            const attemptFor: number[] = new Array(n).fill(-1);
-            for (let i = 0; i < n; i++) {
-                const e = events[i];
-                if (e.kind === "partAttempted") {
-                    lastAttemptIdx.set(e.part, i);
-                } else if (
-                    e.kind === "partMatched" ||
-                    e.kind === "partFailed"
-                ) {
-                    const ai = lastAttemptIdx.get(e.part);
-                    if (ai !== undefined) {
-                        attemptFor[i] = ai;
-                    }
-                }
-            }
-
-            // Mark success: matched rules and their entries, matched
-            // parts and their attempts.
-            for (let i = 0; i < n; i++) {
-                const e = events[i];
-                if (e.kind === "ruleExited" && e.result === "matched") {
-                    onSuccessPath.add(i);
-                    const entry = ruleEntryFor[i];
-                    if (entry >= 0) onSuccessPath.add(entry);
-                } else if (e.kind === "partMatched") {
-                    onSuccessPath.add(i);
-                    const attempt = attemptFor[i];
-                    if (attempt >= 0) onSuccessPath.add(attempt);
-                }
-            }
-
-            // Mark failure: everything not on success path. Also
-            // explicitly mark backtracks, failed parts/rules, and
-            // attempts that led to failure.
-            for (let i = 0; i < n; i++) {
-                if (!onSuccessPath.has(i)) {
-                    onFailurePath.add(i);
+        // Pair ruleEntered <-> ruleExited using a stack.
+        const ruleEntryStack: number[] = [];
+        const ruleEntryFor: number[] = new Array(n).fill(-1);
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "ruleEntered") {
+                ruleEntryStack.push(i);
+            } else if (e.kind === "ruleExited") {
+                const entryIdx = ruleEntryStack.pop();
+                if (entryIdx !== undefined) {
+                    ruleEntryFor[i] = entryIdx;
                 }
             }
         }
 
-        return events
-            .map((event, index) => ({
-                event,
-                index,
-                depth: depths[index],
-                groupSize: groupSize[index],
-                attemptPos: attemptPosForEvent[index],
-            }))
-            .filter(
-                ({ event, index }) =>
-                    !hidden.has(index) &&
-                    !this._hiddenKinds.has(event.kind as EventKindFilter) &&
-                    (this._pathFilter === "all" ||
-                        (this._pathFilter === "success"
-                            ? !onFailurePath.has(index)
-                            : onFailurePath.has(index))),
-            );
+        // Pair partAttempted <-> partMatched/partFailed.
+        const lastAttemptIdx: Map<number, number> = new Map();
+        const attemptFor: number[] = new Array(n).fill(-1);
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "partAttempted") {
+                lastAttemptIdx.set(e.part, i);
+            } else if (e.kind === "partMatched" || e.kind === "partFailed") {
+                const ai = lastAttemptIdx.get(e.part);
+                if (ai !== undefined) {
+                    attemptFor[i] = ai;
+                }
+            }
+        }
+
+        // Mark success: matched rules and their entries, matched
+        // parts and their attempts.
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "ruleExited" && e.result === "matched") {
+                onSuccessPath.add(i);
+                const entry = ruleEntryFor[i];
+                if (entry >= 0) onSuccessPath.add(entry);
+            } else if (e.kind === "partMatched") {
+                onSuccessPath.add(i);
+                const attempt = attemptFor[i];
+                if (attempt >= 0) onSuccessPath.add(attempt);
+            }
+        }
+
+        this._derivedCache = {
+            trace: this._trace!,
+            depths,
+            groupSize,
+            attemptPosForEvent,
+            onSuccessPath,
+        };
+        return this._derivedCache;
     }
 
     private _highlightRange(): { start: number; end: number } | undefined {
         if (!this._trace || this._hoveredRow < 0) return undefined;
         const event = this._trace.events[this._hoveredRow];
         if (!event) return undefined;
-        const start = (event as { inputPos?: number }).inputPos ?? 0;
-        const end = (event as { endPos?: number }).endPos ?? start;
+        const start = "inputPos" in event ? event.inputPos : 0;
+        const end = "endPos" in event ? event.endPos : start;
         return { start, end };
     }
 
