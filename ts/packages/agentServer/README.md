@@ -127,17 +127,10 @@ Conversation dispatchers are automatically evicted from memory after 5 minutes w
 ```
 Client calls ensureAgentServer({ hidden?, idleTimeout? })
   │
-  ├─ TCP-probe ws://localhost:${AGENT_SERVER_PORT ?? 8999}
-  │   ├─ Answers → return { port, url } — no spawn
-  │   └─ No answer
-  │       ├─ Acquire per-port spawn lockfile (OS temp dir)
-  │       │   ├─ Won race  → spawnAgentServer(port) — detached child process,
-  │       │   │              survives parent exit. hidden=true suppresses
-  │       │   │              the terminal/window.
-  │       │   └─ Lost race → wait via TCP probe
-  │       ├─ Wait for the port to start answering (30 s timeout)
-  │       └─ Return { port, url }
-  │
+  └─ Is server already listening on ws://localhost:${AGENT_SERVER_PORT ?? 8999}?
+      └─ No → spawnAgentServer() — detached child process, survives parent exit
+               hidden=true suppresses the terminal/window
+
 Client calls connectAgentServer(url)
   │
   ├─ Open WebSocket → create RPC channels
@@ -215,7 +208,7 @@ Shell launches → createDispatcher() in-process → no server involved
 
 ```
 Client → ensureAgentServer({ hidden })
-       → TCP-probe ws://localhost:8999 → answers → return { port, url }
+       → server already running → no-op
 Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 ```
 
@@ -223,10 +216,8 @@ Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 
 ```
 Client → ensureAgentServer({ hidden, idleTimeout })
-       → probe fails → acquire per-port spawn lock
-       → spawnAgentServer(8999) (hidden or visible window)
-       → server binds AGENT_SERVER_PORT (default 8999)
-       → poll TCP probe until the port answers (30 s timeout)
+       → server not found → spawnAgentServer() (hidden or visible window)
+       → poll until ready (60 s timeout)
 Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 ```
 
@@ -234,14 +225,14 @@ Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 
 ```
 pnpm --filter agent-server start
-→ binds AGENT_SERVER_PORT (default 8999)
+→ listens on ws://localhost:${AGENT_SERVER_PORT ?? 8999}
 → any number of Shell/CLI clients can connect and share conversations
 ```
 
 **Stopping the server**
 
 ```bash
-agent-cli server stop              # via CLI (RPC at the configured URL)
+agent-cli server stop              # via CLI (recommended)
 pnpm --filter agent-server stop    # via pnpm script
 ```
 
