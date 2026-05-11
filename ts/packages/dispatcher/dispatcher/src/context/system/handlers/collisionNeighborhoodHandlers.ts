@@ -31,6 +31,10 @@ import {
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { buildNeighborhoodPreview } from "../../../neighborhoods/merge.js";
 import {
+    mergeTranslatorEvidence,
+    type TranslatorProbeRecord,
+} from "../../../neighborhoods/translatorMerge.js";
+import {
     buildNeighborhoodPreviewHTML,
     type ViewPairScore,
 } from "../../../neighborhoods/previewViz.js";
@@ -45,6 +49,8 @@ const DEFAULT_SIMILARITY_THRESHOLD = 0.78;
 const DEFAULT_MIN_MISROUTE_COUNT = 2;
 const DEFAULT_PREVIEW_FILENAME = "neighborhoods-preview.html";
 const DEFAULT_CORPUS_FILENAME = "probe-results-reclassified.json";
+const DEFAULT_TRANSLATOR_CORPUS_FILENAME = "translation-results.json";
+const DEFAULT_SAMPLES_PER_CATEGORY = 5;
 
 // =============================================================================
 // Workdir resolution (mirrors collisionCorpusHandlers.ts pattern)
@@ -133,6 +139,7 @@ function readMisrouteEdges(corpusPath: string): MisrouteEdge[] {
             count: number;
             verdicts: { CLEAN: number; TIGHT: number; MISROUTE: number; ERROR: number };
             samples: { phrase: string; model?: string | undefined; style?: string | undefined }[];
+            countsByStyle: Map<string, number>;
         }
     >();
     for (const r of data.results) {
@@ -155,28 +162,127 @@ function readMisrouteEdges(corpusPath: string): MisrouteEdge[] {
                 count: 0,
                 verdicts: { CLEAN: 0, TIGHT: 0, MISROUTE: 0, ERROR: 0 },
                 samples: [],
+                countsByStyle: new Map(),
             };
             edgeMap.set(key, row);
         }
         row.count++;
         const v = r.verdict as keyof typeof row.verdicts;
         if (v in row.verdicts) row.verdicts[v]++;
+        const src = r.phraseSources?.[0];
+        const style = src?.style;
+        if (style) {
+            row.countsByStyle.set(
+                style,
+                (row.countsByStyle.get(style) ?? 0) + 1,
+            );
+        }
         if (r.phraseText && row.samples.length < MAX_SAMPLES_PER_EDGE) {
-            const src = r.phraseSources?.[0];
             row.samples.push({
                 phrase: r.phraseText,
                 model: src?.model,
-                style: src?.style,
+                style,
             });
         }
     }
-    return [...edgeMap.values()].map((row) => ({
-        expected: row.expected,
-        actual: row.actual,
-        count: row.count,
-        sourceVerdicts: row.verdicts,
-        samples: row.samples.length > 0 ? row.samples : undefined,
-    }));
+    return [...edgeMap.values()].map((row) => {
+        // Convert the style-keyed count map into the shape used downstream
+        // (count + optional translator counts). Translator counts get
+        // populated later by translatorMerge.
+        const countsByStyle: NonNullable<MisrouteEdge["countsByStyle"]> = {};
+        for (const [style, count] of row.countsByStyle) {
+            countsByStyle[style] = { count };
+        }
+        return {
+            expected: row.expected,
+            actual: row.actual,
+            count: row.count,
+            sourceVerdicts: row.verdicts,
+            samples: row.samples.length > 0 ? row.samples : undefined,
+            ...(row.countsByStyle.size > 0 && { countsByStyle }),
+        };
+    });
+}
+
+// =============================================================================
+// Translator-probe join → TranslatorProbeRecord[]
+// =============================================================================
+
+/**
+ * Join the embedding-probe corpus with the translation-probe corpus by
+ * `(expectedSchema, expectedAction, phraseText)`. Returns one record per
+ * phrase that has both a ranker top-1 and a translator chosen action; rows
+ * with translator outcome CLARIFY/INVALID/ERROR are skipped (no clean
+ * cross-tab signal). Both files are loaded lazily and only the fields
+ * needed for the join are extracted.
+ */
+interface ProbeFileLikeForJoin {
+    results: {
+        schemaName: string;
+        actionName: string;
+        phraseText?: string;
+        phraseSources?: { model?: string; style?: string }[];
+        top1?: { schemaName: string; actionName: string };
+    }[];
+}
+interface TranslationFileLike {
+    results: {
+        expectedSchema: string;
+        expectedAction: string;
+        phraseText: string;
+        chosenSchema?: string;
+        chosenAction?: string;
+        outcome: string;
+    }[];
+}
+
+function loadTranslatorProbeRecords(
+    corpusPath: string,
+    translationPath: string,
+): TranslatorProbeRecord[] {
+    const probe = JSON.parse(
+        fs.readFileSync(corpusPath, "utf8"),
+    ) as ProbeFileLikeForJoin;
+    const translation = JSON.parse(
+        fs.readFileSync(translationPath, "utf8"),
+    ) as TranslationFileLike;
+    if (!probe.results || !translation.results) return [];
+
+    // Index translation rows by (expectedSchema, expectedAction, phraseText).
+    // Multiple rows with the same key shouldn't happen but if they do we
+    // keep the first (deterministic given the input ordering).
+    const transIndex = new Map<string, TranslationFileLike["results"][number]>();
+    for (const r of translation.results) {
+        const key = `${r.expectedSchema}\0${r.expectedAction}\0${r.phraseText}`;
+        if (!transIndex.has(key)) transIndex.set(key, r);
+    }
+
+    const out: TranslatorProbeRecord[] = [];
+    for (const r of probe.results) {
+        if (!r.top1 || !r.phraseText) continue;
+        const key = `${r.schemaName}\0${r.actionName}\0${r.phraseText}`;
+        const t = transIndex.get(key);
+        if (!t) continue;
+        if (!t.chosenSchema || !t.chosenAction) continue;
+        // Only CLEAN/MISROUTE outcomes contribute to the cross-tab; others
+        // (CLARIFY, INVALID, ERROR) are excluded so they don't muddy
+        // bookkeeping. See translatorMerge.ts header.
+        if (t.outcome !== "CLEAN" && t.outcome !== "MISROUTE") continue;
+
+        const src = r.phraseSources?.[0];
+        out.push({
+            phrase: r.phraseText,
+            expectedSchema: r.schemaName,
+            expectedAction: r.actionName,
+            rankerTop1Schema: r.top1.schemaName,
+            rankerTop1Action: r.top1.actionName,
+            translatorSchema: t.chosenSchema,
+            translatorAction: t.chosenAction,
+            sourceModel: src?.model,
+            sourceStyle: src?.style,
+        });
+    }
+    return out;
 }
 
 // =============================================================================
@@ -203,6 +309,17 @@ class CollisionNeighborhoodsPreviewCommandHandler implements CommandHandler {
                     "Corpus probe-results JSON to include as misroute evidence. Default: <workdir>/probe-results-reclassified.json (skipped if missing)",
                 type: "string",
                 optional: true,
+            },
+            "translator-corpus": {
+                description:
+                    "Translator-probe corpus JSON for ground-truth user-impact misroutes. Default: <workdir>/probe-results-translated.json (skipped if missing). Currently a forward-compatible no-op until the translator-probe pipeline ships.",
+                type: "string",
+                optional: true,
+            },
+            "samples-per-category": {
+                description: `Per-category cap on edge sample phrases (default ${DEFAULT_SAMPLES_PER_CATEGORY}). With translator data tagged by category, the worst-case grows to ~4× this value per edge.`,
+                type: "number",
+                default: DEFAULT_SAMPLES_PER_CATEGORY,
             },
             "min-misroute": {
                 description: `Drop corpus edges below this count (default ${DEFAULT_MIN_MISROUTE_COUNT})`,
@@ -361,23 +478,77 @@ class CollisionNeighborhoodsPreviewCommandHandler implements CommandHandler {
             }
         }
 
+        // ---- 4b. Optional translator-probe corpus (cross-tab join) ----
+        // Pairs `translation-results.json` with the embedding probe-results
+        // file by (expectedSchema, expectedAction, phraseText) so each
+        // phrase has both a ranker top-1 and a translator chosen action.
+        // The merge below decorates ranker edges with translator counts and
+        // adds NEW_FAILURE edges for translator-only misroutes. Without a
+        // matching corpus probe-results file, no records are emitted.
+        const translatorCorpusPath = defaultPath(
+            systemContext,
+            params.flags["translator-corpus"],
+            workdir,
+            DEFAULT_TRANSLATOR_CORPUS_FILENAME,
+        );
+        let translatorCorpusUsed: string | undefined;
+        let translatorRecords: TranslatorProbeRecord[] | undefined;
+        if (fs.existsSync(translatorCorpusPath)) {
+            translatorCorpusUsed = translatorCorpusPath;
+            if (corpusFileUsed) {
+                try {
+                    translatorRecords = loadTranslatorProbeRecords(
+                        corpusFileUsed,
+                        translatorCorpusPath,
+                    );
+                } catch (err) {
+                    displayWarn(
+                        `Failed to join translator corpus ${translatorCorpusPath}: ${err instanceof Error ? err.message : String(err)} — continuing without translator evidence`,
+                        context,
+                    );
+                }
+            } else {
+                displayWarn(
+                    `Translator corpus found at ${translatorCorpusPath} but no embedding probe-results to join against — skipping translator evidence`,
+                    context,
+                );
+            }
+        }
+
         // ---- 5. Merge → preview ----
         const minMisrouteCount = Math.max(
             1,
             params.flags["min-misroute"] ?? DEFAULT_MIN_MISROUTE_COUNT,
         );
         const includeSameSchema = params.flags["include-same-schema"] ?? true;
+        const samplesPerCategoryCap = Math.max(
+            1,
+            params.flags["samples-per-category"] ?? DEFAULT_SAMPLES_PER_CATEGORY,
+        );
         const preview = buildNeighborhoodPreview({
             similarityClusters: applied.clusters,
             similarityStrategy: strategy.name,
             similarityThreshold: threshold,
             misrouteEdges,
             corpusFile: corpusFileUsed,
+            translatorCorpusFile: translatorCorpusUsed,
             minMisrouteCount,
             includeSameSchema,
+            samplesPerCategoryCap,
             // Server-side: don't pre-tag corpus pairs as similarity. The HTML
             // slider does that dynamically using the embedded pairScores.
         });
+        // Layer translator-probe evidence on top: cross-tabulates ranker ×
+        // translator outcomes per phrase, decorates ranker edges with
+        // translator counts, and adds NEW_FAILURE edges. No-op when no
+        // translator records were loaded.
+        preview.neighborhoods = mergeTranslatorEvidence(
+            preview.neighborhoods,
+            {
+                ...(translatorRecords && { records: translatorRecords }),
+                samplesPerCategoryCap,
+            },
+        );
 
         // ---- 6. Compute scored pair list for the slider ----
         // We only need scores for pairs that the slider could possibly retag —

@@ -165,6 +165,23 @@ async function main() {
         }
         process.stderr.write("✓ recovery HTML payload looks well-formed\n");
 
+        process.stderr.write(
+            "\n--- @collision corpus translate (registration check) ---\n",
+        );
+        // Registration smoke: does NOT call the LLM. The smoke harness boots
+        // with `translation: { enabled: false }`, so an actual translate run
+        // would fail anyway. Pointing at a nonexistent corpus exercises the
+        // command-parser registration + the missing-input warn path; if this
+        // throws, either the subcommand isn't registered or its argument
+        // parsing regressed. Real end-to-end runs happen by hand in a live
+        // shell where translation is enabled.
+        await dispatcher.processCommand(
+            `@collision corpus translate --in "${path.join(workdir, "DOES-NOT-EXIST-corpus.json")}" --workdir "${workdir}"`,
+        );
+        process.stderr.write(
+            "✓ corpus translate command registered (warn-on-missing-input path OK)\n",
+        );
+
         process.stderr.write("\n--- @collision neighborhoods preview ---\n");
         const previewHtml = path.join(workdir, "neighborhoods-preview.html");
         if (fs.existsSync(previewHtml)) fs.unlinkSync(previewHtml);

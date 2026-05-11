@@ -46,6 +46,17 @@ import {
     changeContextConfig,
 } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
+import {
+    ActionSimilarityScanInput,
+    applyStrategy,
+    computeActionSimilarity,
+    getStrategy,
+} from "../../../translation/actionSimilarity.js";
+import {
+    runTranslationProbe,
+    type TranslationCorpus,
+} from "../../../translation/translationProbeRunner.js";
+import type { CollisionStrategy } from "../../session.js";
 
 // =============================================================================
 // Types
@@ -141,8 +152,104 @@ interface ProbeFile {
 // Defaults / constants
 // =============================================================================
 
-const PHRASE_STYLES = ["imperative", "conversational", "casual"] as const;
-type PhraseStyle = (typeof PHRASE_STYLES)[number];
+// Phrase-style registry for corpus generation. The first three are the
+// historical default set ("base"); the remaining four are opt-in via
+// `--styles` and stress-test less-common surface forms (formal politeness,
+// curt commands, slang, typos). Each style produces one phrase per action
+// per model when included in a generation run.
+const PHRASE_STYLE_DEFS: ReadonlyArray<{
+    key: string;
+    label: string;
+    description: string;
+}> = [
+    {
+        key: "imperative",
+        label: "IMPERATIVE",
+        description: "terse, command-like.",
+    },
+    {
+        key: "conversational",
+        label: "CONVERSATIONAL",
+        description: "polite or full-sentence.",
+    },
+    {
+        key: "casual",
+        label: "CASUAL",
+        description:
+            "short, idiomatic, may abbreviate or omit articles.",
+    },
+    {
+        key: "polite",
+        label: "POLITE",
+        description:
+            "formal and effusively polite, with hedges and pleasantries (e.g. 'Could you kindly help me with…').",
+    },
+    {
+        key: "curt",
+        label: "CURT",
+        description:
+            "rude, impatient, or terse to the point of brusqueness (e.g. 'Just do it', 'Stop messing around and…').",
+    },
+    {
+        key: "slang",
+        label: "SLANG",
+        description:
+            "casual slang or colloquial idioms (e.g. 'Yo, hit up the…', 'Fire up the…').",
+    },
+    {
+        key: "typos",
+        label: "TYPOS",
+        description:
+            "natural typing errors — dropped letters, transposed keys, missing spaces, etc. (e.g. 'lst tabs', 'opn the fil'). The intent must still be recoverable.",
+    },
+];
+type PhraseStyle = string;
+const PHRASE_STYLE_KEYS: readonly string[] = PHRASE_STYLE_DEFS.map(
+    (d) => d.key,
+);
+const DEFAULT_PHRASE_STYLES: readonly string[] = [
+    "imperative",
+    "conversational",
+    "casual",
+];
+const PHRASE_STYLES_BY_KEY: Map<string, (typeof PHRASE_STYLE_DEFS)[number]> =
+    new Map(PHRASE_STYLE_DEFS.map((d) => [d.key, d]));
+
+/** Parse the `--styles` flag into a deduped, validated list. Empty / unset
+ *  → DEFAULT_PHRASE_STYLES. Unknown keys are surfaced as user-facing
+ *  warnings; the caller bails out without running generation in that case. */
+function resolveStyles(flag: string | undefined): {
+    styles: string[];
+    errors: string[];
+} {
+    if (!flag || !flag.trim()) {
+        return { styles: [...DEFAULT_PHRASE_STYLES], errors: [] };
+    }
+    const requested = flag
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const errors: string[] = [];
+    const seen = new Set<string>();
+    const styles: string[] = [];
+    for (const r of requested) {
+        if (!PHRASE_STYLES_BY_KEY.has(r)) {
+            errors.push(
+                `Unknown phrase style '${r}'. Available: ${PHRASE_STYLE_KEYS.join(", ")}.`,
+            );
+            continue;
+        }
+        if (!seen.has(r)) {
+            seen.add(r);
+            styles.push(r);
+        }
+    }
+    if (styles.length === 0 && errors.length === 0) {
+        // Whitespace-only flag fell through.
+        return { styles: [...DEFAULT_PHRASE_STYLES], errors: [] };
+    }
+    return { styles, errors };
+}
 
 // Mirror corpus-runner.mjs: only OpenAI-family endpoints currently working
 // in this checkout. Override with --models on the command line.
@@ -332,10 +439,24 @@ function enumerateActions(
 // Corpus generation
 // =============================================================================
 
-function buildCorpusPrompt(action: CorpusActionInfo): string {
+function buildCorpusPrompt(
+    action: CorpusActionInfo,
+    styles: readonly string[],
+): string {
+    const styleDefs = styles
+        .map((k) => PHRASE_STYLES_BY_KEY.get(k))
+        .filter((d): d is (typeof PHRASE_STYLE_DEFS)[number] => d !== undefined);
+    const styleLines = styleDefs.map(
+        (d, i) => `  ${i + 1}. ${d.label} — ${d.description}`,
+    );
+    const jsonShape =
+        "{" +
+        styleDefs.map((d) => `"${d.key}":"…"`).join(",") +
+        "}";
+    const word = styles.length === 3 ? "three" : `${styles.length}`;
     return [
         "You are helping calibrate a natural-language action-routing system.",
-        "Given an action that an AI agent can perform, generate three example",
+        `Given an action that an AI agent can perform, generate ${word} example`,
         "user utterances that a real person might say to trigger this action.",
         "",
         `Agent: ${action.agentName}`,
@@ -345,16 +466,14 @@ function buildCorpusPrompt(action: CorpusActionInfo): string {
         `Action description: ${action.actionDescription || "(none provided)"}`,
         `Parameters: ${action.paramSummary || "(none)"}`,
         "",
-        "Generate three example utterances in distinct phrasing styles:",
-        "  1. IMPERATIVE  — terse, command-like.",
-        "  2. CONVERSATIONAL — polite or full-sentence.",
-        "  3. CASUAL — short, idiomatic, may abbreviate or omit articles.",
+        `Generate ${word} example utterances in distinct phrasing styles:`,
+        ...styleLines,
         "",
         "If the action takes parameters with concrete values (a song name,",
         "a list name, etc.), invent plausible specific values rather than",
         "leaving placeholders.",
         "",
-        'Return ONLY a JSON object: {"imperative":"…","conversational":"…","casual":"…"}.',
+        `Return ONLY a JSON object: ${jsonShape}.`,
         "No commentary, no markdown fences, no preamble.",
     ].join("\n");
 }
@@ -374,6 +493,10 @@ interface GenerateCorpusOpts {
     schemas: string[];
     models: string[];
     concurrency: number;
+    /** Phrase styles to generate. Default: DEFAULT_PHRASE_STYLES (the
+     *  historical "imperative / conversational / casual" set). Pass a
+     *  subset or expanded set via the `--styles` flag. */
+    styles: readonly string[];
 }
 
 async function generateCorpus(
@@ -443,7 +566,7 @@ async function generateCorpus(
         tasks,
         opts.concurrency,
         async (task) => {
-            const prompt = buildCorpusPrompt(task.action);
+            const prompt = buildCorpusPrompt(task.action, opts.styles);
             try {
                 const result = await task.model.complete(prompt);
                 if (!result.success) {
@@ -468,7 +591,7 @@ async function generateCorpus(
                     style: PhraseStyle;
                     model: string;
                 }[] = [];
-                for (const style of PHRASE_STYLES) {
+                for (const style of opts.styles) {
                     const text =
                         typeof parsed[style] === "string"
                             ? parsed[style].trim()
@@ -1775,6 +1898,14 @@ interface VizCell {
     row: string;
     col: string;
     misroute: number;
+    /** Cross-schema action pairs above the similarity threshold whose
+     *  members fall into (row, col). Counted symmetrically — pair (A,B)
+     *  bumps both (rowA, colB) and (rowB, colA). 0 for same-schema cells
+     *  because the similarity engine doesn't compute same-schema pairs. */
+    similarityPairs: number;
+    /** Subset of `similarityPairs` that also have a corpus misroute edge
+     *  in either direction — the high-confidence "both" cells. */
+    bothPairs: number;
     tight: number;
     clean: number;
     total: number;
@@ -1784,8 +1915,14 @@ interface VizCell {
 interface VizSankeyEdge {
     expected: string;
     actual: string;
+    /** Corpus misroute count. Always 0 for similarity-only edges (no
+     *  phrases). */
     count: number;
     samples: { phrase: string; model?: string; style?: string }[];
+    /** Aggregate similarity score (under the chosen strategy) when the
+     *  same canonical pair is also in the similarity scan. */
+    similarityScore?: number | undefined;
+    sources: ("corpus" | "similarity")[];
 }
 interface VizPayload {
     summary: {
@@ -1799,11 +1936,27 @@ interface VizPayload {
     sankey: VizSankeyEdge[];
     edges: VizSankeyEdge[];
     perAction: PerActionRow[];
+    similarity?:
+        | {
+              strategy: string;
+              threshold: number;
+              pairCount: number;
+          }
+        | undefined;
+}
+
+interface SimilarityEdge {
+    /** Sorted alphabetically: `a < b`. */
+    a: string;
+    b: string;
+    score: number;
 }
 
 function buildVisualizationPayload(
     probeFile: ProbeFile,
     sankeyTop: number,
+    similarityEdges: SimilarityEdge[] = [],
+    similarityMeta?: { strategy: string; threshold: number },
 ): VizPayload {
     const results = probeFile.results;
 
@@ -1885,71 +2038,195 @@ function buildVisualizationPayload(
         }
     }
 
-    // Order rows / cols by misroute volume descending for compact heatmap.
-    const rowSchemas: { schema: string; mis: number }[] = [];
+    // ---------------------------------------------------------------
+    // Similarity overlay: per-cell counts + per-edge tagging.
+    // ---------------------------------------------------------------
+    function pairKey(a: string, b: string): string {
+        return a < b ? `${a}|${b}` : `${b}|${a}`;
+    }
+    function schemaOf(memberKey: string): string {
+        const i = memberKey.lastIndexOf(".");
+        return i < 0 ? memberKey : memberKey.slice(0, i);
+    }
+    // canonical-pair → score, for fast edge lookup
+    const simByPair = new Map<string, number>();
+    for (const sp of similarityEdges) {
+        simByPair.set(pairKey(sp.a, sp.b), sp.score);
+    }
+    // Per-cell similarity counters. simCellCount.get("rowSchema|colSchema")
+    // gives {sim, both} where `both` is similarity pairs that ALSO have
+    // a corpus edge in either direction. Counted symmetrically so cells
+    // (A,B) and (B,A) both reflect the pair.
+    const simCellCount = new Map<string, { sim: number; both: number }>();
+    function bumpSimCell(rowSchema: string, colSchema: string, hasCorpus: boolean) {
+        const k = `${rowSchema}|${colSchema}`;
+        let v = simCellCount.get(k);
+        if (!v) {
+            v = { sim: 0, both: 0 };
+            simCellCount.set(k, v);
+        }
+        v.sim++;
+        if (hasCorpus) v.both++;
+    }
+    // The corpus key uses the SEP separator; check both directions.
+    function hasCorpusFor(a: string, b: string): boolean {
+        return edgeCounts.has(`${a}${SEP}${b}`) || edgeCounts.has(`${b}${SEP}${a}`);
+    }
+    for (const sp of similarityEdges) {
+        const aSchema = schemaOf(sp.a);
+        const bSchema = schemaOf(sp.b);
+        const both = hasCorpusFor(sp.a, sp.b);
+        bumpSimCell(aSchema, bSchema, both);
+        if (aSchema !== bSchema) bumpSimCell(bSchema, aSchema, both);
+    }
+
+    // ---------------------------------------------------------------
+    // Build the row/col sets. Take the union of schemas seen in either
+    // corpus misroutes or similarity pairs so the heatmap shows the full
+    // candidate space. Per-source filtering happens client-side via the
+    // source dropdown.
+    // ---------------------------------------------------------------
+    const rowMisCount = new Map<string, number>();
+    const rowSimCount = new Map<string, number>();
     for (const [s, row] of schemaMatrix.entries()) {
         let mis = 0;
         for (const cell of row.values()) mis += cell.MISROUTE;
-        if (mis > 0) rowSchemas.push({ schema: s, mis });
+        rowMisCount.set(s, mis);
     }
-    rowSchemas.sort(
-        (a, b) => b.mis - a.mis || a.schema.localeCompare(b.schema),
-    );
+    for (const [k, v] of simCellCount.entries()) {
+        const rowSchema = k.split("|")[0];
+        rowSimCount.set(rowSchema, (rowSimCount.get(rowSchema) ?? 0) + v.sim);
+    }
+    const allRowSchemas = new Set<string>([
+        ...rowMisCount.keys(),
+        ...rowSimCount.keys(),
+    ]);
+    const rowSchemas = [...allRowSchemas]
+        .filter(s => (rowMisCount.get(s) ?? 0) + (rowSimCount.get(s) ?? 0) > 0)
+        .map(schema => ({
+            schema,
+            mis: rowMisCount.get(schema) ?? 0,
+            sim: rowSimCount.get(schema) ?? 0,
+        }))
+        .sort((a, b) =>
+            (b.mis + b.sim) - (a.mis + a.sim) ||
+            a.schema.localeCompare(b.schema),
+        );
 
-    const colSchemaCounts = new Map<string, number>();
+    const colMisCount = new Map<string, number>();
+    const colSimCount = new Map<string, number>();
     for (const row of schemaMatrix.values()) {
         for (const [colSchema, cell] of row.entries()) {
-            colSchemaCounts.set(
+            colMisCount.set(
                 colSchema,
-                (colSchemaCounts.get(colSchema) ?? 0) + cell.MISROUTE,
+                (colMisCount.get(colSchema) ?? 0) + cell.MISROUTE,
             );
         }
     }
-    const colSchemas: { schema: string; mis: number }[] = [
-        ...colSchemaCounts.entries(),
-    ]
-        .filter(([, m]) => m > 0)
-        .map(([schema, mis]) => ({ schema, mis }))
-        .sort((a, b) => b.mis - a.mis || a.schema.localeCompare(b.schema));
+    for (const [k, v] of simCellCount.entries()) {
+        const colSchema = k.split("|")[1];
+        colSimCount.set(colSchema, (colSimCount.get(colSchema) ?? 0) + v.sim);
+    }
+    const allColSchemas = new Set<string>([
+        ...colMisCount.keys(),
+        ...colSimCount.keys(),
+    ]);
+    const colSchemas = [...allColSchemas]
+        .filter(s => (colMisCount.get(s) ?? 0) + (colSimCount.get(s) ?? 0) > 0)
+        .map(schema => ({
+            schema,
+            mis: colMisCount.get(schema) ?? 0,
+            sim: colSimCount.get(schema) ?? 0,
+        }))
+        .sort((a, b) =>
+            (b.mis + b.sim) - (a.mis + a.sim) ||
+            a.schema.localeCompare(b.schema),
+        );
 
     const matrixCells: VizCell[] = [];
     for (const r of rowSchemas) {
-        const row = schemaMatrix.get(r.schema)!;
+        const row = schemaMatrix.get(r.schema);
         for (const c of colSchemas) {
-            const cell = row.get(c.schema);
-            if (!cell || cell.MISROUTE === 0) continue;
-            const topActionEdges: VizCellEdge[] = [...cell.edges.entries()]
-                .map(([k, v]) => {
-                    const [exp, act] = k.split(SEP);
-                    return { exp, act, count: v };
-                })
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 5);
+            const cell = row?.get(c.schema);
+            const sim = simCellCount.get(`${r.schema}|${c.schema}`);
+            const misroute = cell?.MISROUTE ?? 0;
+            const similarityPairs = sim?.sim ?? 0;
+            if (misroute === 0 && similarityPairs === 0) continue;
+            const topActionEdges: VizCellEdge[] = cell
+                ? [...cell.edges.entries()]
+                      .map(([k, v]) => {
+                          const [exp, act] = k.split(SEP);
+                          return { exp, act, count: v };
+                      })
+                      .sort((a, b) => b.count - a.count)
+                      .slice(0, 5)
+                : [];
             matrixCells.push({
                 row: r.schema,
                 col: c.schema,
-                misroute: cell.MISROUTE,
-                tight: cell.TIGHT,
-                clean: cell.CLEAN,
-                total: cell.total,
+                misroute,
+                similarityPairs,
+                bothPairs: sim?.both ?? 0,
+                tight: cell?.TIGHT ?? 0,
+                clean: cell?.CLEAN ?? 0,
+                total: cell?.total ?? 0,
                 sameAgent: r.schema === c.schema,
                 topActionEdges,
             });
         }
     }
 
-    const allEdgesSorted = [...edgeCounts.entries()]
+    // ---------------------------------------------------------------
+    // Unified edges: corpus edges enriched with similarity score, plus
+    // similarity-only entries for pairs without any corpus signal.
+    // ---------------------------------------------------------------
+    const corpusEdges: VizSankeyEdge[] = [...edgeCounts.entries()]
         .map(([k, v]) => {
             const [exp, act] = k.split(SEP);
+            const score = simByPair.get(pairKey(exp, act));
             return {
                 expected: exp,
                 actual: act,
                 count: v,
                 samples: edgeSamples.get(k) ?? [],
+                similarityScore: score,
+                sources: (score !== undefined
+                    ? ["corpus", "similarity"]
+                    : ["corpus"]) as ("corpus" | "similarity")[],
             };
         })
         .sort((a, b) => b.count - a.count);
-    const sankeyEdges = allEdgesSorted.slice(0, sankeyTop);
+
+    // Similarity-only entries: pairs not seen as a corpus edge in either
+    // direction. Listed once per canonical pair (a < b sorted).
+    const corpusPairKeys = new Set<string>();
+    for (const e of corpusEdges) {
+        corpusPairKeys.add(pairKey(e.expected, e.actual));
+    }
+    const similarityOnlyEdges: VizSankeyEdge[] = [];
+    for (const sp of similarityEdges) {
+        const k = pairKey(sp.a, sp.b);
+        if (corpusPairKeys.has(k)) continue;
+        similarityOnlyEdges.push({
+            expected: sp.a,
+            actual: sp.b,
+            count: 0,
+            samples: [],
+            similarityScore: sp.score,
+            sources: ["similarity"],
+        });
+    }
+    // Sort similarity-only entries by score desc.
+    similarityOnlyEdges.sort(
+        (a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0),
+    );
+
+    const allEdges: VizSankeyEdge[] = [...corpusEdges, ...similarityOnlyEdges];
+
+    // Sankey is corpus-driven (it requires direction). Take the heaviest
+    // corpus edges; client can further filter by source for the "both"
+    // view (corpus edges with similarity confirmation).
+    const sankeyEdges = corpusEdges.slice(0, sankeyTop);
 
     return {
         summary: {
@@ -1965,8 +2242,15 @@ function buildVisualizationPayload(
             cells: matrixCells,
         },
         sankey: sankeyEdges,
-        edges: allEdgesSorted,
+        edges: allEdges,
         perAction: probeFile.summary.perAction.slice(0, 100),
+        similarity: similarityMeta
+            ? {
+                  strategy: similarityMeta.strategy,
+                  threshold: similarityMeta.threshold,
+                  pairCount: similarityEdges.length,
+              }
+            : undefined,
     };
 }
 
@@ -2045,19 +2329,115 @@ const VIZ_HTML_PREFIX = `<!doctype html>
   tr.samples .style { display: inline-block; color: var(--accent); font-size: 11px; margin-right: 6px; }
   .legend-bar { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 8px; }
   .legend-bar .swatch { width: 220px; height: 8px; border-radius: 4px; background: linear-gradient(to right, #1a1f29, #b14f60, #ff5470); }
+  /* Collapsible "how to read" panel */
+  details.help {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 18px;
+  }
+  details.help > summary {
+    cursor: pointer; user-select: none;
+    font-weight: 600; font-size: 14px;
+    list-style: none; outline: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  details.help > summary::-webkit-details-marker { display: none; }
+  details.help > summary::before {
+    content: "\\25B8"; color: var(--muted);
+    font-size: 11px; transition: transform 0.1s;
+    display: inline-block; width: 10px;
+  }
+  details.help[open] > summary::before { transform: rotate(90deg); }
+  details.help[open] > summary {
+    margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  details.help .help-body { font-size: 13px; color: var(--ink); }
+  details.help .help-body h3 {
+    margin: 14px 0 6px; font-size: 13px; font-weight: 600;
+    color: var(--ink);
+  }
+  details.help .help-body h3:first-child { margin-top: 0; }
+  details.help .help-body p { margin: 4px 0 8px; }
+  details.help .help-body ul { margin: 4px 0 8px; padding-left: 20px; }
+  details.help .help-body li { margin: 3px 0; }
+  details.help .help-body code {
+    background: #11141b; padding: 1px 5px; border-radius: 2px;
+    font-size: 12px; font-family: ui-monospace, monospace;
+  }
+  details.help .help-body .muted { color: var(--muted); }
+  details.help .help-body .swatch {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; vertical-align: middle;
+    margin-right: 4px;
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>TypeAgent collision hotspots</h1>
   <div class="stats" id="stats"></div>
+  <div id="sourceBanner" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <label style="font-size:12px;color:var(--muted);">Source
+      <select id="sourceFilter" style="background:#0a0d12;border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:3px 6px;font:inherit;">
+        <option value="all">all (corpus + similarity)</option>
+        <option value="corpus" selected>corpus (misroute phrases)</option>
+        <option value="similarity">similarity (embedding pairs)</option>
+        <option value="both">both (corpus AND similarity)</option>
+      </select>
+    </label>
+    <span id="simMeta" class="muted" style="color:var(--muted);font-size:12px;"></span>
+  </div>
 </header>
 <main>
+  <details class="help" open>
+    <summary>How to read these charts</summary>
+    <div class="help-body">
+      <h3>What's being measured</h3>
+      <p>Each input row is one phrase generated by an LLM for a specific intended action, replayed through the embedding ranker (the <code>semanticSearchActionSchema</code> call <code>llmSelect</code> uses at runtime). A <b>MISROUTE</b> means the ranker's top-1 candidate wasn't the intended action. The three views below slice the same MISROUTE pile three ways.</p>
+
+      <h3>The header pills</h3>
+      <p>Top-line counts of CLEAN / TIGHT / MISROUTE phrases:</p>
+      <ul>
+        <li><b>CLEAN</b> &mdash; top-1 matches expected with delta to #2 above the threshold (no runtime collision).</li>
+        <li><b>TIGHT</b> &mdash; top-1 matches expected but delta to #2 is below the threshold (<code>llmSelect</code> would flag this as a collision at runtime; resolution depends on strategy).</li>
+        <li><b>MISROUTE</b> &mdash; top-1 does <i>not</i> match expected. Everything below this line drills into the MISROUTE slice.</li>
+      </ul>
+
+      <h3>1. Cross-agent hotspot heatmap</h3>
+      <p>Rows are <b>expected</b> schemas (intended target of phrases), columns are <b>actual top-1</b> schemas (where the embedding routed them). Cell color = MISROUTE count for that (expected schema &rarr; actual schema) pair on a sequential scale (dark = few, bright pink = max).</p>
+      <ul>
+        <li><b>Diagonal cells</b> are within-agent: the embedding picked the right schema, just not the right action. Toggle "Hide within-agent" to remove them; they're usually benign at runtime because the LLM disambiguates within the schema.</li>
+        <li><b>Cells outlined in blue</b> are within-agent (same schema row=col).</li>
+        <li><b>Bright off-diagonal cells</b> are the real cross-agent risk &mdash; the embedding routes phrases for one agent to a different agent.</li>
+        <li><b>Hover</b> a cell to see the top action pairs that produced its count.</li>
+        <li><b>Click</b> a cell to filter the misroute-edge table at the bottom of the page to that schema-pair.</li>
+        <li><b>Min misroutes</b> trims out small cells; raise it to focus on heavy hitters.</li>
+      </ul>
+
+      <h3>2. Top action-level misroute flows (sankey)</h3>
+      <p>The top-N misrouted action edges by count, drawn as a flow from <b>expected</b> action (left) to <b>actual top-1</b> action (right). Width = phrase count. Colors are by <b>source agent</b> (the agent whose action was the intended target).</p>
+      <ul>
+        <li><b>Hover</b> an edge for sample phrases that produced it.</li>
+        <li><b>Legend chips</b> above the sankey filter to one source agent (click again to clear). Useful for isolating "all of agent X's misroutes".</li>
+      </ul>
+
+      <h3>3. All misroute edges (table)</h3>
+      <p>Every (expected &rarr; actual) action pair where at least one phrase misrouted, sorted by count. Searchable across schema names, action names, and phrase text.</p>
+      <ul>
+        <li><b>Click a row</b> to expand and see up to 5 sample phrases that produced this misroute, with the LLM model and style that generated each in brackets (e.g. <code>[GPT_4_1 imperative]</code>).</li>
+        <li><b>Filter</b> with free-text terms; multiple terms are AND-ed.</li>
+      </ul>
+
+      <h3>What this page does <em>not</em> show</h3>
+      <p>This is the embedding-ranker view of misroutes &mdash; the <i>schema picker</i>'s view of the world. It doesn't show what the LLM <i>translator</i> actually picks for each phrase at runtime (which often disambiguates within a schema). For the runtime-aware decomposition, see <code>recovery-viz.html</code> (built by <code>@collision corpus visualize-recovery</code> on the same source data).</p>
+    </div>
+  </details>
+
   <section>
     <h2>Cross-agent hotspot heatmap</h2>
     <div class="sub">Each cell is the MISROUTE count for phrases generated for the row schema that the embedding ranker top-1'd to the column schema. Cells outlined in blue are within-agent (row = column). Hover for the top action pairs.</div>
     <div class="controls">
-      <label><input type="checkbox" id="hideSelf" checked> Hide within-agent (diagonal)</label>
+      <label><input type="checkbox" id="hideSelf"> Hide within-agent (diagonal)</label>
       <label>Min misroutes <input type="number" id="minMis" value="1" min="0" max="50" style="width:60px"></label>
     </div>
     <div id="heatmap"></div>
@@ -2079,6 +2459,8 @@ const VIZ_HTML_PREFIX = `<!doctype html>
       <thead>
         <tr>
           <th data-key="count">#</th>
+          <th data-key="similarityScore">sim</th>
+          <th>src</th>
           <th data-key="expected">expected</th>
           <th>→</th>
           <th data-key="actual">actual (top-1)</th>
@@ -2120,28 +2502,76 @@ document.getElementById("stats").innerHTML =
     \`<span class="pill misroute">MISROUTE \${c.MISROUTE ?? 0} (\${pct(c.MISROUTE ?? 0)})</span>\` +
     \` · corpus <span class="muted">\${PAYLOAD.summary.corpus ?? ""}</span>\`;
 
+if (PAYLOAD.similarity) {
+    const s = PAYLOAD.similarity;
+    document.getElementById("simMeta").innerHTML =
+        \`similarity: \${s.pairCount} pair(s) · strategy <code>\${escapeHtml(s.strategy)}</code> @ <code>\${s.threshold}</code>\`;
+} else {
+    // Disable similarity-related options when the overlay isn't present.
+    const sel = document.getElementById("sourceFilter");
+    for (const opt of sel.options) {
+        if (opt.value === "similarity" || opt.value === "both" || opt.value === "all") {
+            opt.disabled = true;
+        }
+    }
+    document.getElementById("simMeta").textContent = "similarity overlay: not available (run with similarity enabled)";
+}
+
+// Source filter — drives what the heatmap colors by, what the sankey
+// shows, and what the table lists. Defaults to "corpus" (preserves the
+// pre-similarity-overlay behavior).
+let currentSource = "corpus";
+document.getElementById("sourceFilter").value = currentSource;
+document.getElementById("sourceFilter").addEventListener("change", (evt) => {
+    currentSource = evt.target.value;
+    renderHeatmap();
+    renderSankey();
+    renderTable();
+});
+
+// Returns the count for a heatmap cell under the active source. The
+// similarity engine is cross-schema only, so same-schema cells always
+// have similarityPairs = 0; in similarity / both views the diagonal
+// naturally drops out.
+function cellMetric(c) {
+    switch (currentSource) {
+        case "similarity": return c.similarityPairs;
+        case "both":       return c.bothPairs;
+        case "all":        return c.misroute + c.similarityPairs - c.bothPairs;
+        case "corpus":
+        default:           return c.misroute;
+    }
+}
+
 // Heatmap
 function renderHeatmap() {
     const hideSelf = document.getElementById("hideSelf").checked;
     const minMis = Number(document.getElementById("minMis").value) || 0;
-    const cells = PAYLOAD.matrix.cells.filter(c => (!hideSelf || !c.sameAgent) && c.misroute >= minMis);
+    const cells = PAYLOAD.matrix.cells.filter(c =>
+        (!hideSelf || !c.sameAgent) && cellMetric(c) >= minMis,
+    );
     const rows = [...new Set(cells.map(c => c.row))].sort((a,b)=>{
-        const ma = d3.sum(cells.filter(x=>x.row===a),x=>x.misroute);
-        const mb = d3.sum(cells.filter(x=>x.row===b),x=>x.misroute);
+        const ma = d3.sum(cells.filter(x=>x.row===a),x=>cellMetric(x));
+        const mb = d3.sum(cells.filter(x=>x.row===b),x=>cellMetric(x));
         return mb - ma || a.localeCompare(b);
     });
     const cols = [...new Set(cells.map(c => c.col))].sort((a,b)=>{
-        const ma = d3.sum(cells.filter(x=>x.col===a),x=>x.misroute);
-        const mb = d3.sum(cells.filter(x=>x.col===b),x=>x.misroute);
+        const ma = d3.sum(cells.filter(x=>x.col===a),x=>cellMetric(x));
+        const mb = d3.sum(cells.filter(x=>x.col===b),x=>cellMetric(x));
         return mb - ma || a.localeCompare(b);
     });
     const cellSize = 18, labelW = 240, labelH = 180;
     const W = labelW + cols.length * cellSize + 40;
     const H = labelH + rows.length * cellSize + 40;
-    const maxMis = d3.max(cells, c => c.misroute) ?? 1;
-    document.getElementById("maxMis").textContent = maxMis;
-    const color = d3.scaleSequential(d3.interpolateRgb("#1a1f29", "#ff5470")).domain([0, maxMis]);
+    const maxVal = d3.max(cells, c => cellMetric(c)) ?? 1;
+    document.getElementById("maxMis").textContent = maxVal;
+    const color = d3.scaleSequential(d3.interpolateRgb("#1a1f29", "#ff5470")).domain([0, maxVal]);
     const wrap = d3.select("#heatmap").html("");
+    if (cells.length === 0) {
+        wrap.append("div").style("color", "var(--muted)").style("padding", "12px 0").style("font-style", "italic")
+            .text("No cells match the current source / filter.");
+        return;
+    }
     const svg = wrap.append("svg").attr("class","heatmap").attr("width",W).attr("height",H);
     const g = svg.append("g").attr("transform", \`translate(\${labelW},\${labelH})\`);
     const x = d3.scaleBand().domain(cols).range([0, cols.length * cellSize]);
@@ -2156,11 +2586,12 @@ function renderHeatmap() {
         .attr("class", c => "cell" + (c.sameAgent ? " same-agent" : ""))
         .attr("x", c => x(c.col)).attr("y", c => y(c.row))
         .attr("width", cellSize - 1).attr("height", cellSize - 1)
-        .attr("fill", c => color(c.misroute))
+        .attr("fill", c => color(cellMetric(c)))
         .on("mouseenter",(evt,c)=>{
             const top = c.topActionEdges.map(e =>
                 \`<li><b>\${c.row}.\${e.exp}</b> → <b>\${c.col}.\${e.act}</b> · <span class="muted">\${e.count}</span></li>\`).join("");
-            showTip(\`<b>\${c.row}</b> → <b>\${c.col}</b><br><span class="muted">misroutes: \${c.misroute} / total \${c.total}</span>\` + (top?\`<ul>\${top}</ul>\`:""), evt);
+            const counts = \`misroutes: \${c.misroute} · similarity: \${c.similarityPairs} · both: \${c.bothPairs}\`;
+            showTip(\`<b>\${c.row}</b> → <b>\${c.col}</b><br><span class="muted">\${counts}</span>\` + (top?\`<ul>\${top}</ul>\`:""), evt);
         })
         .on("mousemove", moveTip).on("mouseleave", hideTip)
         .on("click",(evt,c)=>{
@@ -2191,14 +2622,30 @@ function ensureSankeyColor() {
 function renderSankey() {
     ensureSankeyColor();
     const all = PAYLOAD.sankey;
-    const edges = selectedAgent ? all.filter(e => agentOf(e.expected) === selectedAgent) : all;
-    document.getElementById("topN").textContent = selectedAgent ? \`\${edges.length} of \${all.length}\` : edges.length;
+    // Sankey requires direction. Similarity-only edges aren't directional,
+    // so filter to corpus-tagged edges. For "both" mode, restrict further
+    // to corpus edges that ALSO have similarity confirmation.
+    let baseEdges;
+    if (currentSource === "similarity") {
+        // No directional edges in similarity-only mode.
+        d3.select("#sankey").html("").append("div").attr("class","empty")
+            .text("Sankey shows directional flows; similarity-only pairs aren't directional. Switch source to corpus, both, or all.");
+        document.getElementById("topN").textContent = "0";
+        return;
+    } else if (currentSource === "both") {
+        baseEdges = all.filter(e => e.sources.includes("corpus") && e.sources.includes("similarity"));
+    } else {
+        // "corpus" or "all" — show all corpus-tagged sankey edges.
+        baseEdges = all.filter(e => e.sources.includes("corpus"));
+    }
+    const edges = selectedAgent ? baseEdges.filter(e => agentOf(e.expected) === selectedAgent) : baseEdges;
+    document.getElementById("topN").textContent = selectedAgent ? \`\${edges.length} of \${baseEdges.length}\` : edges.length;
     const color = SANKEY_COLOR, agents = SANKEY_AGENTS, agentTotals = SANKEY_AGENT_TOTALS;
     const W = 1000, H = Math.max(420, edges.length * 14);
     const wrap = d3.select("#sankey").html("");
     const legend = wrap.append("div").attr("class","sankey-legend");
     legend.append("span").attr("class","swatch all" + (selectedAgent === null ? " active" : ""))
-        .html(\`<i style="background:#5a6273"></i>all <span class="muted">\${all.length} edge(s)</span>\`)
+        .html(\`<i style="background:#5a6273"></i>all <span class="muted">\${baseEdges.length} edge(s)</span>\`)
         .on("click",()=>{selectedAgent = null; renderSankey();});
     legend.selectAll("span.swatch.agent").data(agents).join("span")
         .attr("class", a => "swatch agent" + (selectedAgent === a ? " active" : "") + (selectedAgent && selectedAgent !== a ? " dim" : ""))
@@ -2244,10 +2691,22 @@ function renderSankey() {
 
 // Table
 let sortKey = "count", sortDir = -1;
+function edgeMatchesSource(e) {
+    const hasCor = e.sources.includes("corpus");
+    const hasSim = e.sources.includes("similarity");
+    switch (currentSource) {
+        case "corpus":     return hasCor && !hasSim;
+        case "similarity": return hasSim && !hasCor;
+        case "both":       return hasCor && hasSim;
+        case "all":
+        default:           return true;
+    }
+}
 function renderTable() {
     const q = document.getElementById("filter").value.trim().toLowerCase();
     const tokens = q.split(/\\s+/).filter(Boolean);
     const filtered = PAYLOAD.edges.filter(e => {
+        if (!edgeMatchesSource(e)) return false;
         if (tokens.length === 0) return true;
         const blob = [e.expected, e.actual, ...(e.samples || []).map(s => s.phrase)].join(" ").toLowerCase();
         return tokens.every(t => blob.includes(t));
@@ -2255,20 +2714,46 @@ function renderTable() {
     filtered.sort((a, b) => {
         let av = a[sortKey], bv = b[sortKey];
         if (typeof av === "string") return sortDir * av.localeCompare(bv);
+        if (av === undefined) av = -Infinity;
+        if (bv === undefined) bv = -Infinity;
         return sortDir * (av - bv);
     });
-    document.getElementById("filterCount").textContent = \`\${filtered.length} edges · \${d3.sum(filtered, e => e.count)} phrases\`;
+    document.getElementById("filterCount").textContent =
+        \`\${filtered.length} edges · \${d3.sum(filtered, e => e.count)} phrases\`;
     const tbody = document.querySelector("#edges tbody");
     tbody.innerHTML = "";
     for (const e of filtered.slice(0, 500)) {
         const tr = document.createElement("tr");
         tr.className = "expandable";
-        tr.innerHTML = \`<td class="count">\${e.count}</td><td class="action">\${escapeHtml(e.expected)}</td><td class="muted">→</td><td class="action">\${escapeHtml(e.actual)}</td>\`;
+        const hasCor = e.sources.includes("corpus");
+        const hasSim = e.sources.includes("similarity");
+        const sourceBadge = (hasCor && hasSim)
+            ? \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#f472b6;font-weight:600;">both</span>\`
+            : (hasSim
+                ? \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#c084fc;font-weight:600;">sim</span>\`
+                : \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#fb923c;font-weight:600;">corpus</span>\`);
+        const countCell = e.count > 0 ? e.count : "·";
+        const scoreCell = e.similarityScore !== undefined
+            ? \`<span style="color:var(--accent);font-family:monospace;">\${e.similarityScore.toFixed(2)}</span>\`
+            : \`<span class="muted">·</span>\`;
+        tr.innerHTML =
+            \`<td class="count">\${countCell}</td>\` +
+            \`<td>\${scoreCell}</td>\` +
+            \`<td>\${sourceBadge}</td>\` +
+            \`<td class="action">\${escapeHtml(e.expected)}</td>\` +
+            \`<td class="muted">→</td>\` +
+            \`<td class="action">\${escapeHtml(e.actual)}</td>\`;
         tbody.appendChild(tr);
         const sampleTr = document.createElement("tr");
         sampleTr.className = "samples";
         sampleTr.style.display = "none";
-        sampleTr.innerHTML = \`<td colspan="4"><ul>\${(e.samples || []).map(s => \`<li><span class="style">[\${s.model ?? ""} · \${s.style ?? ""}]</span> \${escapeHtml(s.phrase)}</li>\`).join("")}</ul></td>\`;
+        const samplesHtml = (e.samples || []).map(s =>
+            \`<li><span class="style">[\${s.model ?? ""} · \${s.style ?? ""}]</span> \${escapeHtml(s.phrase)}</li>\`
+        ).join("");
+        const detailHtml = samplesHtml
+            ? \`<ul>\${samplesHtml}</ul>\`
+            : \`<div style="color:var(--muted);font-style:italic;">No corpus phrases for this edge (similarity-only).</div>\`;
+        sampleTr.innerHTML = \`<td colspan="6">\${detailHtml}</td>\`;
         tbody.appendChild(sampleTr);
         tr.addEventListener("click", () => { sampleTr.style.display = sampleTr.style.display === "none" ? "" : "none"; });
     }
@@ -2384,6 +2869,11 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
                 type: "string",
                 optional: true,
             },
+            styles: {
+                description: `Comma-separated phrase styles to generate. Available: ${PHRASE_STYLE_KEYS.join(",")}. Default: ${DEFAULT_PHRASE_STYLES.join(",")}.`,
+                type: "string",
+                optional: true,
+            },
             concurrency: {
                 description: `Concurrent LLM calls (default ${DEFAULT_CONCURRENCY})`,
                 type: "number",
@@ -2419,6 +2909,12 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
                   .map((s) => s.trim())
                   .filter(Boolean)
             : DEFAULT_MODELS;
+        const stylesResolved = resolveStyles(params.flags.styles);
+        if (stylesResolved.errors.length > 0) {
+            for (const e of stylesResolved.errors) displayWarn(e, context);
+            return;
+        }
+        const styles = stylesResolved.styles;
         const concurrency = Math.max(
             1,
             params.flags.concurrency ?? DEFAULT_CONCURRENCY,
@@ -2443,7 +2939,7 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
             const { corpus, errorCount, failedSchemas, perCallErrors } =
                 await generateCorpus(
                     systemContext,
-                    { schemas, models, concurrency },
+                    { schemas, models, concurrency, styles },
                     (phase, done, total) => {
                         if (phase === "loading") {
                             displayStatus(
@@ -2647,6 +3143,188 @@ class CollisionCorpusProbeCommandHandler implements CommandHandler {
 }
 
 // =============================================================================
+// Handler: @collision corpus translate
+// =============================================================================
+// Replays corpus phrases through the *LLM translator* (full translateRequest
+// path), capturing the typed action the translator picks per phrase. Distinct
+// from `corpus probe`, which only runs the embedding ranker. Forces
+// `first-match` to suppress user-clarify short-circuits and observes the
+// translator's pure verdict; emits `translation-results.json` (a
+// TranslationProbeFile) under the same `{summary, results}` envelope shape.
+// Sources: see translation/translationProbeRunner.ts.
+
+class CollisionCorpusTranslateCommandHandler implements CommandHandler {
+    public readonly description =
+        "Replay a phrase corpus through the LLM translator (cache/grammar/exec/fuzzy off) and classify each phrase as CLEAN / MISROUTE / CLARIFY / INVALID / ERROR. Distinct from 'corpus probe' — that one runs the embedding ranker; this runs the actual translator.";
+    public readonly parameters = {
+        flags: {
+            in: {
+                description:
+                    "Input corpus JSON path. Default: <workdir>/corpus.json",
+                type: "string",
+                optional: true,
+            },
+            out: {
+                description:
+                    "Output translation-results JSON path. Default: <workdir>/translation-results.json",
+                type: "string",
+                optional: true,
+            },
+            concurrency: {
+                description:
+                    "Concurrent translator calls (default 4 — chat completions are expensive)",
+                type: "number",
+                default: 4,
+            },
+            strategy: {
+                description:
+                    "llmSelect strategy to force during the run. Default 'first-match' (suppresses user-clarify short-circuit). Reserved: future runs will sweep multiple strategies in one go.",
+                type: "string",
+                default: "first-match",
+            },
+            "max-phrases": {
+                description:
+                    "Cap the run to N phrases (deterministic prefix). Useful for smoke tests.",
+                type: "number",
+                optional: true,
+            },
+            "model-label": {
+                description:
+                    "Label recorded in each row's `model` field. Reserved for future multi-model sweeps; defaults to 'default'.",
+                type: "string",
+                optional: true,
+            },
+            workdir: {
+                description:
+                    "Directory for default-named files. Default: <instanceDir>/collisions",
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const workdir = params.flags.workdir
+            ? resolveWorkdir(systemContext, params.flags.workdir)
+            : undefined;
+        const inPath = defaultPath(
+            systemContext,
+            params.flags.in,
+            workdir,
+            DEFAULT_FILES.corpus,
+        );
+        const outPath = defaultPath(
+            systemContext,
+            params.flags.out,
+            workdir,
+            "translation-results.json",
+        );
+        if (!fs.existsSync(inPath)) {
+            displayWarn(
+                `Corpus file not found: ${inPath}. Generate one with \`@collision corpus generate\`.`,
+                context,
+            );
+            return;
+        }
+        const concurrency = Math.max(1, params.flags.concurrency ?? 4);
+        const strategyFlag = params.flags.strategy ?? "first-match";
+        const validStrategies = new Set([
+            "first-match",
+            "score-rank",
+            "priority",
+            "user-clarify",
+        ]);
+        if (!validStrategies.has(strategyFlag)) {
+            displayWarn(
+                `Unknown --strategy '${strategyFlag}'. Expected one of: ${[...validStrategies].join(", ")}.`,
+                context,
+            );
+            return;
+        }
+        const maxPhrases = params.flags["max-phrases"];
+
+        ensureDir(path.dirname(outPath));
+
+        await withReadOnlySession(context, async () => {
+            displayStatus(`Translation probe\nLoading ${inPath}…`, context);
+            const corpus = JSON.parse(
+                fs.readFileSync(inPath, "utf8"),
+            ) as Corpus;
+            const totalPhrases = corpus.actions.reduce(
+                (n, a) => n + a.phrases.length,
+                0,
+            );
+            const cap = maxPhrases
+                ? Math.min(maxPhrases, totalPhrases)
+                : totalPhrases;
+            displayStatus(
+                `Translation probe\n[0/${cap}] starting (concurrency ${concurrency}, strategy ${strategyFlag})…`,
+                context,
+            );
+
+            const probeFile = await runTranslationProbe(
+                corpus as TranslationCorpus,
+                context,
+                {
+                    concurrency,
+                    strategy: strategyFlag as CollisionStrategy,
+                    ...(maxPhrases !== undefined && {
+                        maxPhrases,
+                    }),
+                    ...(params.flags["model-label"] !== undefined && {
+                        modelLabel: params.flags["model-label"],
+                    }),
+                },
+                (done, total) => {
+                    if (done % 10 === 0 || done === total) {
+                        displayStatus(
+                            `Translation probe\n[${done}/${total}] (concurrency ${concurrency}, strategy ${strategyFlag})`,
+                            context,
+                        );
+                    }
+                },
+            );
+            fs.writeFileSync(outPath, JSON.stringify(probeFile, null, 2));
+
+            const c = probeFile.summary.counts;
+            const total = probeFile.summary.totalPhrases;
+            const pct = (n: number) =>
+                total === 0 ? "0.0%" : ((n / total) * 100).toFixed(1) + "%";
+            const html =
+                `<h3 style="margin:0 0 6px;font-size:14px;">Translation probe complete</h3>` +
+                `<table style="font:12px ui-monospace,monospace;border-collapse:collapse;">` +
+                `<tr><td style="padding:1px 8px;color:#888;">CLEAN</td><td style="padding:1px 8px;text-align:right;">${c.CLEAN} (${pct(c.CLEAN)})</td></tr>` +
+                `<tr><td style="padding:1px 8px;color:#c44;">MISROUTE</td><td style="padding:1px 8px;text-align:right;">${c.MISROUTE} (${pct(c.MISROUTE)})</td></tr>` +
+                `<tr><td style="padding:1px 8px;color:#888;">CLARIFY</td><td style="padding:1px 8px;text-align:right;">${c.CLARIFY} (${pct(c.CLARIFY)})</td></tr>` +
+                `<tr><td style="padding:1px 8px;color:#888;">INVALID</td><td style="padding:1px 8px;text-align:right;">${c.INVALID} (${pct(c.INVALID)})</td></tr>` +
+                `<tr><td style="padding:1px 8px;color:#888;">ERROR</td><td style="padding:1px 8px;text-align:right;">${c.ERROR} (${pct(c.ERROR)})</td></tr>` +
+                `<tr><td style="padding:1px 8px;color:#888;">total</td><td style="padding:1px 8px;text-align:right;">${total}</td></tr>` +
+                `</table>` +
+                `<div style="font-family:system-ui,sans-serif;font-size:12px;padding:0 8px 8px;color:#777;">→ <code>${escapeShellHtml(outPath)}</code></div>`;
+            const text: string[] = [
+                `Translation probe complete (strategy: ${strategyFlag})`,
+                `  CLEAN    ${c.CLEAN.toString().padStart(5)} (${pct(c.CLEAN)})`,
+                `  MISROUTE ${c.MISROUTE.toString().padStart(5)} (${pct(c.MISROUTE)})`,
+                `  CLARIFY  ${c.CLARIFY.toString().padStart(5)} (${pct(c.CLARIFY)})`,
+                `  INVALID  ${c.INVALID.toString().padStart(5)} (${pct(c.INVALID)})`,
+                `  ERROR    ${c.ERROR.toString().padStart(5)} (${pct(c.ERROR)})`,
+                `  total    ${total.toString().padStart(5)}`,
+                `  → ${outPath}`,
+            ];
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: html,
+                alternates: [{ type: "text", content: text }],
+            });
+        });
+    }
+}
+
+// =============================================================================
 // Handler: @collision corpus reanalyze
 // =============================================================================
 
@@ -2744,9 +3422,115 @@ class CollisionCorpusReanalyzeCommandHandler implements CommandHandler {
 // Handler: @collision corpus visualize
 // =============================================================================
 
+// Shared defaults for the similarity overlay used by both the visualize
+// command and the orchestrator.
+const DEFAULT_VIZ_SIMILARITY_STRATEGY = "balanced";
+const DEFAULT_VIZ_SIMILARITY_THRESHOLD = 0.85;
+
+const SIMILARITY_CACHE_RELATIVE = path.join(
+    "agentCache",
+    "actionSimilarity",
+    "embeddings.json",
+);
+function resolveSimilarityCachePath(
+    ctx: CommandHandlerContext,
+): string | undefined {
+    const root = ctx.instanceDir;
+    if (!root) return undefined;
+    return path.join(root, SIMILARITY_CACHE_RELATIVE);
+}
+
+/**
+ * Run the cross-schema similarity scan against every loaded action and
+ * apply the chosen strategy at `threshold`. Returns the surviving pairs as
+ * canonically-sorted SimilarityEdge records, plus meta for the payload.
+ *
+ * Read-only: the scan is pure embedding lookups + in-memory cosine
+ * similarity. Reuses the on-disk embedding cache so subsequent runs are
+ * fast. Returns an empty array on failure (logs a warning) so collision
+ * hotspots viz still works without similarity overlay.
+ */
+async function runSimilarityScan(
+    systemContext: CommandHandlerContext,
+    strategyName: string,
+    threshold: number,
+    onStatus: (msg: string) => void,
+): Promise<{
+    edges: SimilarityEdge[];
+    meta?: { strategy: string; threshold: number };
+    skipped: { schemaName: string; reason: string }[];
+}> {
+    const configs = systemContext.agents.getActionConfigs();
+    const inputs: ActionSimilarityScanInput[] = [];
+    const skipped: { schemaName: string; reason: string }[] = [];
+    for (const config of configs) {
+        try {
+            const actionSchemaFile =
+                systemContext.agents.getActionSchemaFileForConfig(config);
+            const agentName = getAppAgentName(config.schemaName);
+            let agentDescription: string | undefined;
+            try {
+                agentDescription =
+                    systemContext.agents.getAppAgentDescription(agentName);
+            } catch {
+                agentDescription = undefined;
+            }
+            inputs.push({
+                schemaName: config.schemaName,
+                agentName,
+                agentDescription,
+                actionSchemaFile,
+            });
+        } catch (err) {
+            skipped.push({
+                schemaName: config.schemaName,
+                reason: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+    if (inputs.length === 0) {
+        return { edges: [], skipped };
+    }
+
+    const strategy = getStrategy(strategyName);
+    if (!strategy) {
+        onStatus(
+            `Similarity overlay skipped — unknown strategy "${strategyName}"`,
+        );
+        return { edges: [], skipped };
+    }
+
+    const cachePath = resolveSimilarityCachePath(systemContext);
+    onStatus(`Similarity overlay\n[0/${inputs.length}] preparing…`);
+    const scan = await computeActionSimilarity(inputs, {
+        cachePath,
+        onProgress: (phase, index, total, label) => {
+            if (index % 50 === 0 || index === total) {
+                onStatus(
+                    `Similarity overlay · ${phase}\n[${index}/${total}]${label ? ` ${label}` : ""}`,
+                );
+            }
+        },
+    });
+    const applied = applyStrategy(scan, strategy, threshold);
+
+    const edges: SimilarityEdge[] = applied.pairs.map((p) => {
+        const a = `${p.keyA.schemaName}.${p.keyA.actionName}`;
+        const b = `${p.keyB.schemaName}.${p.keyB.actionName}`;
+        return a < b
+            ? { a, b, score: p.aggregateScore }
+            : { a: b, b: a, score: p.aggregateScore };
+    });
+    return {
+        edges,
+        meta: { strategy: strategy.name, threshold },
+        skipped,
+    };
+}
+
 class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
     public readonly description =
-        "Build an interactive HTML visualization of misroute hotspots from reclassified probe results";
+        "Build an interactive HTML visualization of misroute hotspots from reclassified probe results, overlaid with a cross-schema similarity scan";
     public readonly parameters = {
         flags: {
             in: {
@@ -2765,6 +3549,22 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
                 description: `Sankey edge count (default ${DEFAULT_SANKEY_TOP})`,
                 type: "number",
                 default: DEFAULT_SANKEY_TOP,
+            },
+            "similarity-strategy": {
+                description: `Similarity strategy for the overlay (default ${DEFAULT_VIZ_SIMILARITY_STRATEGY})`,
+                type: "string",
+                optional: true,
+            },
+            "similarity-threshold": {
+                description: `Similarity threshold for the overlay, decimal in [0,1] (default ${DEFAULT_VIZ_SIMILARITY_THRESHOLD})`,
+                type: "string",
+                optional: true,
+            },
+            "no-similarity": {
+                description:
+                    "Skip the similarity overlay; produce a corpus-only viz",
+                type: "boolean",
+                default: false,
             },
             workdir: {
                 description:
@@ -2803,26 +3603,80 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
             return;
         }
         const sankeyTop = Math.max(1, params.flags.top ?? DEFAULT_SANKEY_TOP);
+
+        // Parse threshold (string flag → float; framework number flags are
+        // integer-only).
+        let simThreshold = DEFAULT_VIZ_SIMILARITY_THRESHOLD;
+        if (params.flags["similarity-threshold"] !== undefined) {
+            const parsed = parseFloat(params.flags["similarity-threshold"]);
+            if (Number.isNaN(parsed)) {
+                displayWarn(
+                    `Invalid --similarity-threshold "${params.flags["similarity-threshold"]}" — must be a decimal in [0, 1].`,
+                    context,
+                );
+                return;
+            }
+            simThreshold = Math.max(0, Math.min(1, parsed));
+        }
+        const simStrategy =
+            params.flags["similarity-strategy"] ??
+            DEFAULT_VIZ_SIMILARITY_STRATEGY;
+        const skipSim = params.flags["no-similarity"] ?? false;
+
         ensureDir(path.dirname(outPath));
 
         const probeFile = JSON.parse(
             fs.readFileSync(inPath, "utf8"),
         ) as ProbeFile;
-        const payload = buildVisualizationPayload(probeFile, sankeyTop);
+
+        let simEdges: SimilarityEdge[] = [];
+        let simMeta: { strategy: string; threshold: number } | undefined;
+        let simSkipped: { schemaName: string; reason: string }[] = [];
+        if (!skipSim) {
+            await withReadOnlySession(context, async () => {
+                const result = await runSimilarityScan(
+                    systemContext,
+                    simStrategy,
+                    simThreshold,
+                    (msg) => displayStatus(msg, context),
+                );
+                simEdges = result.edges;
+                simMeta = result.meta;
+                simSkipped = result.skipped;
+            });
+        }
+
+        const payload = buildVisualizationPayload(
+            probeFile,
+            sankeyTop,
+            simEdges,
+            simMeta,
+        );
         const html = buildVisualizationHTML(payload);
         fs.writeFileSync(outPath, html);
 
         const sizeKB = (fs.statSync(outPath).size / 1024).toFixed(0);
+        const simNote = skipSim
+            ? "<div style=\"font-size:11px;color:#c80;margin-top:4px;\">similarity overlay disabled (--no-similarity)</div>"
+            : `<div style="font-size:11px;color:#777;margin-top:4px;">similarity overlay: ${simEdges.length} pair(s) at threshold ${simThreshold} (strategy <code>${escapeShellHtml(simStrategy)}</code>)</div>`;
+        const skipNote = simSkipped.length
+            ? `<div style="font-size:11px;color:#c80;margin-top:4px;">${simSkipped.length} schema(s) failed to load: ${simSkipped.map((s) => `<code>${escapeShellHtml(s.schemaName)}</code>`).join(", ")}</div>`
+            : "";
         const summary =
             `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:900px;">` +
             `<h3 style="margin:0 0 6px;font-size:14px;">Visualization written</h3>` +
             `<div style="font-size:12px;color:#777;margin-bottom:6px;">${probeFile.results.length} probe(s) · ${payload.matrix.cells.length} schema-pair cells · ${payload.sankey.length} sankey edges · ${payload.edges.length} table edges · ${sizeKB} KB</div>` +
             `<div style="font-size:12px;">→ <code>${escapeShellHtml(outPath)}</code></div>` +
+            simNote +
+            skipNote +
             `<div style="font-size:11px;color:#777;margin-top:4px;">Open in any browser.</div>` +
             `</div>`;
         const text = [
             `Visualization written: ${outPath} (${sizeKB} KB)`,
             `  ${probeFile.results.length} probes · ${payload.matrix.cells.length} schema-pair cells · ${payload.sankey.length} sankey edges · ${payload.edges.length} table edges`,
+            skipSim
+                ? `  similarity overlay: disabled`
+                : `  similarity overlay: ${simEdges.length} pair(s) at threshold ${simThreshold}`,
             `  Open in any browser.`,
         ];
         context.actionIO.appendDisplay({
@@ -2863,6 +3717,11 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
             },
             models: {
                 description: "Comma-separated model names (corpus only)",
+                type: "string",
+                optional: true,
+            },
+            styles: {
+                description: `Comma-separated phrase styles (corpus only). Available: ${PHRASE_STYLE_KEYS.join(",")}. Default: ${DEFAULT_PHRASE_STYLES.join(",")}.`,
                 type: "string",
                 optional: true,
             },
@@ -2938,6 +3797,12 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                   .map((s) => s.trim())
                   .filter(Boolean)
             : DEFAULT_MODELS;
+        const stylesResolved = resolveStyles(params.flags.styles);
+        if (stylesResolved.errors.length > 0) {
+            for (const e of stylesResolved.errors) displayWarn(e, context);
+            return;
+        }
+        const styles = stylesResolved.styles;
         const concurrency = Math.max(
             1,
             params.flags.concurrency ?? DEFAULT_CONCURRENCY,
@@ -2957,7 +3822,7 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                 const { corpus, errorCount, failedSchemas } =
                     await generateCorpus(
                         systemContext,
-                        { schemas, models, concurrency },
+                        { schemas, models, concurrency, styles },
                         (phase, done, total) => {
                             if (phase === "generating") {
                                 displayStatus(
@@ -3039,9 +3904,20 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                 const probeFile = JSON.parse(
                     fs.readFileSync(files.reclassified, "utf8"),
                 ) as ProbeFile;
+                // The orchestrator runs the similarity overlay too so the
+                // hotspot HTML has a source filter populated. Run inside the
+                // existing read-only session — reuses the embedding cache.
+                const simResult = await runSimilarityScan(
+                    systemContext,
+                    DEFAULT_VIZ_SIMILARITY_STRATEGY,
+                    DEFAULT_VIZ_SIMILARITY_THRESHOLD,
+                    (msg) => displayStatus(msg, context),
+                );
                 const payload = buildVisualizationPayload(
                     probeFile,
                     sankeyTop,
+                    simResult.edges,
+                    simResult.meta,
                 );
                 const html = buildVisualizationHTML(payload);
                 fs.writeFileSync(files.html, html);
@@ -3049,7 +3925,7 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                     fs.statSync(files.html).size / 1024
                 ).toFixed(0);
                 displaySuccess(
-                    `Step 4/4 visualize: ${files.html} (${sizeKB} KB) — open in browser.`,
+                    `Step 4/4 visualize: ${files.html} (${sizeKB} KB) — open in browser. Similarity overlay: ${simResult.edges.length} pair(s).`,
                     context,
                 );
             }
@@ -3414,6 +4290,7 @@ export function getCollisionCorpusCommandHandlers(): CommandHandlerTable {
         commands: {
             generate: new CollisionCorpusGenerateCommandHandler(),
             probe: new CollisionCorpusProbeCommandHandler(),
+            translate: new CollisionCorpusTranslateCommandHandler(),
             reanalyze: new CollisionCorpusReanalyzeCommandHandler(),
             recovery: new CollisionCorpusRecoveryCommandHandler(),
             visualize: new CollisionCorpusVisualizeCommandHandler(),
