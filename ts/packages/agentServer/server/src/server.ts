@@ -31,8 +31,7 @@ import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
 import dotenv from "dotenv";
 import {
-    writeServerPid,
-    removeServerPid,
+    getAgentServerPort,
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
@@ -190,14 +189,13 @@ async function main() {
     debugStartup("prewarm complete");
 
     const portIdx = process.argv.indexOf("--port");
-    // Default to ephemeral port (0) — the OS picks a free port and we
-    // publish it via ~/.typeagent/agent-server.json (discovery file).
+    // Default to the well-known agent-server port (configurable via
+    // AGENT_SERVER_PORT). Clients connect to ws://localhost:<port>
+    // without any discovery file — the URL is the contract.
     const requestedPort =
         portIdx !== -1
             ? parseInt(process.argv[portIdx + 1], 10)
-            : process.env.AGENT_SERVER_PORT
-              ? parseInt(process.env.AGENT_SERVER_PORT, 10)
-              : 0;
+            : getAgentServerPort();
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
@@ -216,7 +214,6 @@ async function main() {
         console.log("Shutdown requested, stopping agent server...");
         wss.close();
         await conversationManager.close();
-        removeServerPid(boundPort);
         process.exit(0);
     }
 
@@ -424,14 +421,14 @@ async function main() {
 
     boundPort = wss.port;
     console.log(`Agent server started at ws://localhost:${boundPort}`);
-    writeServerPid(boundPort, process.pid);
 
-    // Single-machine discovery: the bound port is published in
-    // ~/.typeagent/agent-server.json via writeServerPid() above. The
+    // Single-machine discovery: clients connect to the well-known
+    // port (default 8999, configurable via AGENT_SERVER_PORT). The
     // OS-level instance lock (lockInstanceDir) guarantees there is at
-    // most one agent-server per machine, so clients can rely on the
-    // discovery file to find us. Cross-machine port coordination is
-    // not a goal — connect from another host with explicit URL.
+    // most one agent-server per data dir, so concurrent client spawns
+    // either land on the same agent-server or surface
+    // ERR_INSTANCE_LOCKED. Cross-machine connections work the same
+    // way — point the client at ws://<host>:<port>.
 
     scheduleIdleShutdown();
 }

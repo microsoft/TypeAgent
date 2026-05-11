@@ -46,7 +46,6 @@ import {
     getVerboseIndicator,
     getConversationCommandContext,
     getSlashCompletions,
-    getServerPort,
     getServerConnection,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
@@ -647,18 +646,13 @@ export function createEnhancedClientIO(
                 currentSpinner = null;
             }
             const conn = getServerConnection();
-            const port = getServerPort();
             const doShutdown = conn
                 ? conn.shutdown().catch(() => {
                       // Graceful via existing connection failed —
-                      // fall back to force kill via PID file.
-                      if (port !== undefined) {
-                          return stopAgentServer(port, true);
-                      }
+                      // fall back to RPC stop at the configured URL.
+                      return stopAgentServer();
                   })
-                : port !== undefined
-                  ? stopAgentServer(port, true)
-                  : Promise.resolve();
+                : stopAgentServer();
 
             doShutdown
                 .catch(() => {

@@ -9,19 +9,19 @@ export default class ServerStop extends Command {
     static flags = {
         port: Flags.integer({
             char: "p",
-            description: "Port the agent server is listening on",
-            default: 8999,
-        }),
-        force: Flags.boolean({
-            char: "f",
             description:
-                "Force stop the server by killing the process if graceful shutdown fails",
-            default: false,
+                "Port the agent server is listening on (overrides AGENT_SERVER_PORT)",
+            required: false,
         }),
     };
     async run(): Promise<void> {
         const { flags } = await this.parse(ServerStop);
-        await stopAgentServer(flags.port, flags.force);
+        // stopAgentServer reads AGENT_SERVER_PORT (default 8999).
+        // Honor the legacy --port flag by setting it for this process.
+        if (flags.port !== undefined) {
+            process.env.AGENT_SERVER_PORT = String(flags.port);
+        }
+        await stopAgentServer();
         process.exit(0);
     }
 }

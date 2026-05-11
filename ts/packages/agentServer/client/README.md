@@ -2,43 +2,52 @@
 
 Client library for connecting to a running agentServer, used by the Shell, vscode-shell, and CLI.
 
-## Discovery model
+## Connection model
 
-The agent-server picks an **ephemeral TCP port** at startup (the OS assigns a free port) and publishes it to a discovery file at `~/.typeagent/agent-server.json`:
+The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly — there is no discovery file.
 
-```json
-{ "port": 64357, "pid": 22940, "startedAt": "2026-05-08T22:47:37.875Z" }
-```
+This mirrors how a future cloud-hosted AS would be addressed: a stable, configured URL is the contract. Local AS uses the same model so client code does not have to special-case "local" vs "remote".
 
-Clients on the same machine read this file to find the server — there is no well-known port. The server takes an exclusive OS-level lock on its instance directory at startup, so at most one agent-server is ever running per machine. Cross-machine discovery is out of scope: connect from another host with an explicit URL via `connectAgentServer(url)`.
+The server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so at most one agent-server is ever running per data-dir profile. Concurrent client spawns targeting the same port are coordinated by a per-port lockfile in the OS temp dir; only one client wins the spawn race, the others fall through to a TCP probe + connect.
 
-The high-level helpers `ensureAgentServerViaDiscovery()` and `lookupAgentServerViaDiscovery()` encapsulate this flow — most callers should use them rather than the low-level building blocks.
+Cross-machine connections work the same way — pass an explicit URL to `connectAgentServer(url)`.
+
+The high-level helpers `ensureAgentServer()` and `lookupAgentServer()` encapsulate the probe-then-spawn flow — most callers should use them rather than the low-level building blocks.
 
 ## API
 
-### `ensureAgentServerViaDiscovery(options?)` — recommended
+### `ensureAgentServer(options?)` — recommended
 
-Discovery-file-aware ensure: returns a `{port, url}` handle. Reads the discovery file; if a live server is published, returns its port. Otherwise spawns a fresh agent-server (which picks its own ephemeral port and writes the file), waits for the file to appear, and returns the new port.
+Returns a `{port, url}` handle. TCP-probes the configured URL; if a live server answers, returns it. Otherwise spawns a fresh agent-server bound to the configured port, waits for the port to start answering, and returns the new handle.
 
 ```typescript
-const { port, url } = await ensureAgentServerViaDiscovery({
+const { port, url } = await ensureAgentServer({
     hidden: true, // spawn without showing a console window
     idleTimeout: 600, // 10 min idle shutdown
 });
 const connection = await connectAgentServer(url);
 ```
 
-### `lookupAgentServerViaDiscovery()` — recommended
+| Option        | Type      | Default | Description                                                                          |
+| ------------- | --------- | ------- | ------------------------------------------------------------------------------------ |
+| `hidden`      | `boolean` | `false` | When spawning, suppress the terminal/window                                          |
+| `idleTimeout` | `number`  | `0`     | Pass `--idle-timeout` to the spawned server; `0` disables (server runs indefinitely) |
 
-Read-only discovery: returns `{port, url}` if an agent-server is published in the discovery file and reachable, `undefined` otherwise. Never spawns. Use this from extensions / IDE integrations that should not auto-start an agent-server.
+### `lookupAgentServer()` — recommended
+
+Read-only lookup: returns `{port, url}` if an agent-server is reachable at the configured URL, `undefined` otherwise. Never spawns. Use this from extensions / IDE integrations that should not auto-start an agent-server.
 
 ```typescript
-const handle = await lookupAgentServerViaDiscovery();
+const handle = await lookupAgentServer();
 if (handle === undefined) {
     throw new Error("No agent-server is running. Start one via the shell or `agent-server`.");
 }
 const connection = await connectAgentServer(handle.url);
 ```
+
+### `getAgentServerPort()` / `getAgentServerUrl()`
+
+Returns the configured port (`AGENT_SERVER_PORT` env var, or `DEFAULT_AGENT_SERVER_PORT = 8999`) / corresponding `ws://localhost:<port>` URL.
 
 ### `connectAgentServer(url, onDisconnect?)`
 
@@ -79,48 +88,17 @@ await connection.close();
 | `deleteConversation(conversationId)`          | Delete a conversation and its persisted data                  |
 | `close()`                                     | Close the WebSocket connection                                |
 
-### `ensureAgentServer(port?, hidden?, idleTimeout?)`
+### `isServerRunning(url)` / `waitForServer(url, timeoutMs?)`
 
-Lower-level ensure: when `port` is omitted, behaves like `ensureAgentServerViaDiscovery` (and returns the discovered port). When `port` is provided, uses the legacy explicit-port path: probes that port, spawns an agent-server bound to it on miss, and returns the same port. Returns the resolved port number.
+`isServerRunning` returns `true` if a server is already listening at the given WebSocket URL. `waitForServer` polls until it answers or the timeout elapses.
 
-```typescript
-// Discovery-file path (recommended)
-const port = await ensureAgentServer();
+### `stopAgentServer()`
 
-// Explicit-port path (tests, remote-host)
-await ensureAgentServer(9000, true, 600);
-```
-
-| Parameter     | Type                  | Default     | Description                                                                          |
-| ------------- | --------------------- | ----------- | ------------------------------------------------------------------------------------ |
-| `port`        | `number \| undefined` | `undefined` | If set, pin to that port; otherwise use the discovery file                           |
-| `hidden`      | `boolean`             | `false`     | When spawning, suppress the terminal/window                                          |
-| `idleTimeout` | `number`              | `0`         | Pass `--idle-timeout` to the spawned server; `0` disables (server runs indefinitely) |
-
-### `isServerRunning(url)`
-
-Returns `true` if a server is already listening at the given WebSocket URL.
-
-### `stopAgentServer(port?, force?)`
-
-Connects to the running server (port from the discovery file when `port` is omitted) and sends `shutdown()`. With `force: true`, falls back to SIGKILL via the discovery file if graceful shutdown times out.
-
-### Low-level discovery helpers
-
-For tools that need to inspect the discovery file directly:
-
-| Function                           | Description                                                        |
-| ---------------------------------- | ------------------------------------------------------------------ |
-| `getDiscoveryFilePath()`           | Returns the absolute path to `~/.typeagent/agent-server.json`      |
-| `readDiscoveryFile()`              | Returns `{port, pid, startedAt}` or `undefined` if missing/invalid |
-| `writeDiscoveryFile(port, pid)`    | Writes a new record (used by the agent-server itself)              |
-| `removeDiscoveryFile()`            | Deletes the file (used during graceful shutdown)                   |
-| `isProcessAlive(pid)`              | Cross-platform process-existence check (handles Windows EPERM)     |
-| `waitForDiscoveryFile(timeoutMs?)` | Polls until the file exists with a live pid and reachable port     |
+Connects to the server at the configured URL and sends `shutdown()`. If graceful shutdown fails (e.g. the server hung), kill it via your OS tools (`Stop-Process -Id <pid>` on Windows, `kill -9 <pid>` on POSIX) — this client no longer maintains a pid file.
 
 ## Smoke test
 
-`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile directory, validates the discovery file is written with a live pid, opens a WebSocket connection, sends `shutdown()`, and asserts that the discovery file is removed when the server exits.
+`pnpm -F @typeagent/agent-server-client run smoke` spawns a real agent-server in an isolated profile on a fresh free port (so it never collides with a developer's running AS on `8999`), opens a WebSocket connection, validates `lookupAgentServer` finds it, asserts that a second AS in the same data-dir refuses with `ERR_INSTANCE_LOCKED`, sends `shutdown()`, and confirms no legacy discovery file is written.
 
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_

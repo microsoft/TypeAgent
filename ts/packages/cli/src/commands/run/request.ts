@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import {
     connectAgentServer,
-    ensureAgentServerViaDiscovery,
+    ensureAgentServer,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
@@ -52,7 +52,7 @@ export default class RequestCommand extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(RequestCommand);
 
-        const handle = await ensureAgentServerViaDiscovery({
+        const handle = await ensureAgentServer({
             hidden: !flags.show,
             idleTimeout: 600,
         });

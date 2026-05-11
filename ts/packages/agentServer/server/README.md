@@ -27,15 +27,17 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js
 node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --config test
 ```
 
-By default the agent-server picks an **ephemeral port** (the OS chooses a free TCP port) and publishes it to a discovery file at `~/.typeagent/agent-server.json`. Clients on the same machine read this file to find the server. The server also starts automatically when clients call `ensureAgentServer()` / `ensureAgentServerViaDiscovery()`.
+By default the agent-server binds the **well-known port** `8999` (override via the `AGENT_SERVER_PORT` environment variable or the `--port` flag). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly — there is no discovery file. The server also starts automatically when clients call `ensureAgentServer()`.
 
-There is at most one agent-server per machine: the server takes an exclusive OS-level lock on its instance directory at startup, so a second `agent-server` invocation exits with `ERR_INSTANCE_LOCKED`.
+This mirrors how a future cloud-hosted AS would be addressed: a stable, configured URL is the contract.
+
+There is at most one agent-server per data-dir profile: the server takes an exclusive OS-level lock on its instance directory at startup, so a second `agent-server` invocation against the same `TYPEAGENT_USER_DATA_DIR` exits with `ERR_INSTANCE_LOCKED`. Workflows that need parallel servers (benchmark workers, integration tests) must use both a per-worker `TYPEAGENT_USER_DATA_DIR` and a per-worker `AGENT_SERVER_PORT`.
 
 ### Server flags
 
 | Flag                       | Description                                                                                                                             |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `--port <port>`            | Pin to a specific TCP port instead of letting the OS pick one. Useful for tests and remote-host setups. The port is still published to the discovery file.                                                                                                       |
+| `--port <port>`            | Bind to a specific TCP port (default: `AGENT_SERVER_PORT` or `8999`).                                                                   |
 | `--config <name>`          | Load `config.<name>.json` instead of the default config                                                                                 |
 | `--idle-timeout <seconds>` | Exit after this many seconds with no connected clients (default: disabled). The CLI passes 600 (10 min) when it auto-spawns the server. |
 
@@ -46,7 +48,7 @@ There is at most one agent-server per machine: the server takes an exclusive OS-
 ### `server.ts` — WebSocket listener
 
 1. Creates a `ConversationManager` at startup with agent providers and storage options.
-2. Calls `createWebSocketChannelServer({ port })` to accept connections, with `port` defaulting to `0` (ephemeral). After the server is listening, writes `~/.typeagent/agent-server.json` with `{port, pid, startedAt}` for client discovery.
+2. Calls `createWebSocketChannelServer({ port })` to accept connections, with `port` resolved from `--port`, `AGENT_SERVER_PORT`, or the default `8999`.
 3. For each connection, exposes `AgentServerInvokeFunctions` over the `agent-server` RPC channel:
    - `joinConversation` / `leaveConversation` — join or leave a named conversation
    - `createConversation` / `listConversations` / `renameConversation` / `deleteConversation` — conversation CRUD

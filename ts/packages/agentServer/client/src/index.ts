@@ -2,36 +2,25 @@
 // Licensed under the MIT License.
 
 export {
+    DEFAULT_AGENT_SERVER_PORT,
+    getAgentServerPort,
+    getAgentServerUrl,
     connectAgentServer,
     AgentServerConnection,
     ConversationDispatcher,
     connectDispatcher,
     ensureAgentServer,
+    lookupAgentServer,
     ensureAndConnectDispatcher,
     ensureAndConnectConversation,
     stopAgentServer,
     isServerRunning,
-    waitForDiscoveryFile,
-    writeServerPid,
-    removeServerPid,
+    waitForServer,
 } from "./agentServerClient.js";
-export {
-    ensureAgentServerViaDiscovery,
-    lookupAgentServerViaDiscovery,
-} from "./discoveryClient.js";
 export type {
     AgentServerHandle,
     EnsureAgentServerOptions,
-} from "./discoveryClient.js";
-export {
-    DISCOVERY_FILE_NAME,
-    getDiscoveryFilePath,
-    readDiscoveryFile,
-    writeDiscoveryFile,
-    removeDiscoveryFile,
-    isProcessAlive,
-} from "./discovery.js";
-export type { DiscoveryRecord } from "./discovery.js";
+} from "./agentServerClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {
     ConversationInfo,

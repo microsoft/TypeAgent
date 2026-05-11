@@ -194,7 +194,7 @@ const slashCommands: SlashCommand[] = [
                 if (serverConnection) {
                     await serverConnection.shutdown();
                 } else {
-                    await stopAgentServer(port, true);
+                    await stopAgentServer();
                 }
                 console.log(chalk.green("Agent server stopped."));
             } catch (e: any) {

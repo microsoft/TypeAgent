@@ -1,25 +1,28 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// End-to-end smoke driver for the discovery-file architecture.
-// Spawns a real agent-server in an isolated profile, connects via
-// the discovery file, sends shutdown, and verifies the file is
-// removed.
+// End-to-end smoke driver for the well-known port architecture.
+// Spawns a real agent-server in an isolated profile on a non-default
+// port (so it never collides with a developer's running AS), then
+// verifies:
+//   - connectAgentServer succeeds at the configured URL
+//   - lookupAgentServer returns a handle pointing at the same port
+//   - a second AS in the same data dir refuses with ERR_INSTANCE_LOCKED
+//   - graceful shutdown via RPC stops the process
 //
-// Run from the package dir (after building the package):
+// Run from the package dir (after building both client + server):
 //   node scripts/smoke.mjs
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     connectAgentServer,
-    isProcessAlive,
-    readDiscoveryFile,
-    waitForDiscoveryFile,
-    getDiscoveryFilePath,
+    getAgentServerUrl,
+    lookupAgentServer,
 } from "../dist/index.js";
 
 const profileDir = path.join(
@@ -29,14 +32,21 @@ const profileDir = path.join(
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.resolve(here, "../../server/dist/server.js");
 
-// Point the parent (this script) at the isolated profile dir too, so
-// getDiscoveryFilePath()/readDiscoveryFile()/etc. resolve to the same
-// path the child writes. Without this, the parent would read the
-// developer's real ~/.typeagent/agent-server.json and never see the
-// child's discovery file.
-process.env.TYPEAGENT_USER_DATA_DIR = profileDir;
+async function pickFreePort() {
+    return await new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.unref();
+        srv.on("error", reject);
+        srv.listen(0, "127.0.0.1", () => {
+            const port = srv.address().port;
+            srv.close(() => resolve(port));
+        });
+    });
+}
 
-const discoveryFile = getDiscoveryFilePath();
+const port = await pickFreePort();
+process.env.TYPEAGENT_USER_DATA_DIR = profileDir;
+process.env.AGENT_SERVER_PORT = String(port);
 
 let pass = 0;
 let fail = 0;
@@ -52,44 +62,76 @@ function check(name, cond) {
     }
 }
 
+function spawnServer(env) {
+    return spawn("node", [serverPath], {
+        env: { ...process.env, ...env },
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+}
+
+async function waitFor(predicate, timeoutMs = 30_000, intervalMs = 100) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        try {
+            const v = await predicate();
+            if (v) return v;
+        } catch {}
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return undefined;
+}
+
 let child;
+let conflictChild;
 try {
     log(`spawning server: ${serverPath}`);
     log(`profile: ${profileDir}`);
-    child = spawn("node", [serverPath], {
-        env: {
-            ...process.env,
-            TYPEAGENT_USER_DATA_DIR: profileDir,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-    });
+    log(`port: ${port}`);
+    child = spawnServer({});
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d) => (stdout += d.toString()));
     child.stderr.on("data", (d) => (stderr += d.toString()));
 
-    const record = await waitForDiscoveryFile(120_000);
-    check("discovery file appears", record !== undefined);
+    const url = getAgentServerUrl();
     check(
-        "discovery file has port",
-        typeof record.port === "number" && record.port > 0,
+        "getAgentServerUrl honors AGENT_SERVER_PORT",
+        url.endsWith(`:${port}`),
     );
-    check(
-        "discovery file port is OS-assigned (not legacy 8999)",
-        record.port !== 8999,
-    );
-    check("discovery file pid alive", isProcessAlive(record.pid));
 
-    const url = `ws://localhost:${record.port}`;
+    const handle = await waitFor(() => lookupAgentServer(), 120_000);
+    check("lookupAgentServer finds running server", handle !== undefined);
+    check(
+        "lookupAgentServer reports configured port",
+        handle !== undefined && handle.port === port,
+    );
+
     const conn = await connectAgentServer(url);
-    check("client connects via discovery url", true);
+    check("client connects at configured url", true);
 
-    const reread = readDiscoveryFile();
+    log("spawning conflict server (same data dir, different port)...");
+    const conflictPort = await pickFreePort();
+    let conflictStderr = "";
+    let conflictStdout = "";
+    conflictChild = spawnServer({ AGENT_SERVER_PORT: String(conflictPort) });
+    conflictChild.stderr.on("data", (d) => (conflictStderr += d.toString()));
+    conflictChild.stdout.on("data", (d) => (conflictStdout += d.toString()));
+    const conflictExit = await new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(undefined), 90_000);
+        conflictChild.once("exit", (code) => {
+            clearTimeout(timer);
+            resolve(code);
+        });
+    });
     check(
-        "readDiscoveryFile returns matching record",
-        reread !== undefined &&
-            reread.port === record.port &&
-            reread.pid === record.pid,
+        "second AS in same data dir exits non-zero",
+        conflictExit !== 0 && conflictExit !== undefined,
+    );
+    const conflictAll = conflictStderr + conflictStdout;
+    check(
+        "second AS reports instance lock conflict",
+        conflictAll.includes("ERR_INSTANCE_LOCKED") ||
+            conflictAll.includes("already using the instance directory"),
     );
 
     // Shutdown: the server closes the WebSocket as part of shutting
@@ -103,34 +145,32 @@ try {
             clearTimeout(timer);
             resolve();
         });
-        child.once("close", () => {
-            clearTimeout(timer);
-            resolve();
-        });
     });
 
     check(
-        "server process exited",
+        "server process exited after shutdown rpc",
         child.exitCode !== null || child.killed,
     );
-    check(
-        "discovery file removed on shutdown",
-        !fs.existsSync(discoveryFile),
-    );
+
+    const legacyDiscovery = path.join(profileDir, "agent-server.json");
+    check("no legacy discovery file written", !fs.existsSync(legacyDiscovery));
 
     if (fail > 0) {
         log(`\n--- server stdout ---\n${stdout}`);
         log(`\n--- server stderr ---\n${stderr}`);
+        log(`\n--- conflict stderr ---\n${conflictStderr}`);
     }
 } catch (err) {
     fail++;
     log(`FAIL  unexpected error: ${err.stack || err}`);
 } finally {
-    try {
-        if (child && !child.killed && child.exitCode === null) {
-            child.kill("SIGKILL");
-        }
-    } catch {}
+    for (const c of [child, conflictChild]) {
+        try {
+            if (c && !c.killed && c.exitCode === null) {
+                c.kill("SIGKILL");
+            }
+        } catch {}
+    }
     try {
         fs.rmSync(profileDir, { recursive: true, force: true });
     } catch {}

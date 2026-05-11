@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import * as os from "os";
 import {
     connectAgentServer,
-    lookupAgentServerViaDiscovery,
+    lookupAgentServer,
 } from "@typeagent/agent-server-client";
 import type {
     AgentServerConnection,
@@ -440,11 +440,11 @@ export class AgentServerBridge {
     }
 
     private async connectImpl(): Promise<void> {
-        // Discovery: locate the running agent-server via
-        // ~/.typeagent/agent-server.json. The vscode-shell extension
-        // does not spawn an agent-server itself — it expects one to
-        // already be running (started by the Electron shell, the CLI,
-        // or `agent-server` directly). The legacy serverUrl setting
+        // Locate the running agent-server at the configured well-known
+        // port (AGENT_SERVER_PORT, default 8999). The vscode-shell
+        // extension does not spawn an agent-server itself — it expects
+        // one to already be running (started by the Electron shell, the
+        // CLI, or `agent-server` directly). The legacy serverUrl setting
         // is retained as an explicit override.
         let serverUrl: string;
         const config = vscode.workspace.getConfiguration("typeagent");
@@ -452,7 +452,7 @@ export class AgentServerBridge {
         if (explicitUrl) {
             serverUrl = explicitUrl;
         } else {
-            const handle = await lookupAgentServerViaDiscovery();
+            const handle = await lookupAgentServer();
             if (handle === undefined) {
                 throw new Error(
                     "TypeAgent agent server is not running. Start one via the Electron shell, the `agent-server` CLI, or set the `typeagent.serverUrl` setting to an explicit URL.",

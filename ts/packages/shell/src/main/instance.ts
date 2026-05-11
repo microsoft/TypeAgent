@@ -41,7 +41,7 @@ import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/clie
 import { isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
-    ensureAgentServerViaDiscovery,
+    ensureAgentServer,
     connectAgentServer,
     stopAgentServer,
 } from "@typeagent/agent-server-client";
@@ -161,8 +161,9 @@ async function initializeDispatcher(
                     connection
                         .shutdown()
                         .catch(() => {
-                            // Graceful failed — force kill via discovery file
-                            return stopAgentServer(undefined, true);
+                            // Graceful failed — fall back to direct
+                            // RPC stop at the configured URL.
+                            return stopAgentServer();
                         })
                         .catch(() => {
                             // Best-effort: server may already be stopped.
@@ -194,18 +195,16 @@ async function initializeDispatcher(
                     ? idleTimeout
                     : userSettings.server.idleTimeout;
 
-            // Discovery: the shell does not pin the agent-server's
-            // port. It looks up (or spawns) the AS via the discovery
-            // file (~/.typeagent/agent-server.json). The `--connect
-            // <port>` flag is retained as a compatibility alias —
-            // present meaning "auto-discover", absent meaning "no
-            // remote dispatcher".
-            const handle = await ensureAgentServerViaDiscovery({
+            // The shell looks up (or spawns) the AS at the configured
+            // well-known port (AGENT_SERVER_PORT, default 8999). The
+            // `--connect <port>` flag is retained as a compatibility
+            // alias — present meaning "auto-discover", absent meaning
+            // "no remote dispatcher".
+            const handle = await ensureAgentServer({
                 hidden: effectiveHidden,
                 idleTimeout: effectiveIdleTimeout,
             });
-            const resolvedPort = handle.port;
-            const url = `ws://localhost:${resolvedPort}`;
+            const url = handle.url;
 
             // Reconnect state. When the WebSocket drops we attempt a few
             // backoff retries before giving up and surfacing the modal
