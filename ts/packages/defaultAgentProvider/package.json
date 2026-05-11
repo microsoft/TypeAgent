@@ -52,6 +52,7 @@
     "chat-agent": "workspace:*",
     "code-agent": "workspace:*",
     "debug": "^4.4.0",
+    "discord-agent": "workspace:*",
     "desktop-automation": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "email": "workspace:*",

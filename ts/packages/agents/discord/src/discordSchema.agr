@@ -1,0 +1,1382 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Generated grammar for Discord API actions
+// This file contains common patterns for user requests
+// Types: wildcard = 1+ words, word = exactly 1 word
+
+// ============================================================
+// Message Management
+// ============================================================
+
+// createMessage
+<CreateMessage> = send $(content:wildcard) to channel $(channel_id:wildcard) -> {
+    actionName: "createMessage",
+    parameters: {
+        channel_id,
+        content
+    }
+}
+  | post $(content:wildcard) in channel $(channel_id:wildcard) -> {
+    actionName: "createMessage",
+    parameters: {
+        channel_id,
+        content
+    }
+}
+  | (can you)? create a (new)? message in (the)? (channel)? $(channel_id:wildcard) (saying|with the text|with content) $(content:wildcard) -> {
+    actionName: "createMessage",
+    parameters: {
+        channel_id,
+        content
+    }
+}
+  | (please)? write $(content:wildcard) in (the)? channel $(channel_id:wildcard) -> {
+    actionName: "createMessage",
+    parameters: {
+        channel_id,
+        content
+    }
+};
+
+// getChannelMessages
+<GetChannelMessages> = (can you)? show me (the)? (latest|recent)? messages from (the)? channel $(channel_id:wildcard) -> {
+    actionName: "getChannelMessages",
+    parameters: {
+        channel_id
+    }
+}
+  | fetch (the)? (last)? messages from (the)? channel $(channel_id:wildcard) -> {
+    actionName: "getChannelMessages",
+    parameters: {
+        channel_id
+    }
+}
+  | get messages from (the)? channel $(channel_id:wildcard) -> {
+    actionName: "getChannelMessages",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? list (the)? messages in (the)? channel $(channel_id:wildcard) -> {
+    actionName: "getChannelMessages",
+    parameters: {
+        channel_id
+    }
+};
+
+// ============================================================
+// Guild Management
+// ============================================================
+
+// createGuild
+<CreateGuild> = (can you)? create a (new)? guild (called|named) $(name:wildcard) -> {
+    actionName: "createGuild",
+    parameters: {
+        name
+    }
+}
+  | (please)? set up a guild (called|named) $(name:wildcard) -> {
+    actionName: "createGuild",
+    parameters: {
+        name
+    }
+}
+  | I (need|want) a new guild (called|named) $(name:wildcard) -> {
+    actionName: "createGuild",
+    parameters: {
+        name
+    }
+}
+  | make a (new)? guild (called|named) $(name:wildcard) -> {
+    actionName: "createGuild",
+    parameters: {
+        name
+    }
+};
+
+// getGuild
+<GetGuild> = (can you)? get (the)? (details|information) for (the)? guild (with ID)? $(guild_id:word) -> {
+    actionName: "getGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | fetch (the)? guild (info|information|details) for (guild)? (ID)? $(guild_id:word) -> {
+    actionName: "getGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | show me (the)? guild $(guild_id:word) -> {
+    actionName: "getGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | I need (the)? guild (object|details) for (the)? (guild with)? ID $(guild_id:word) -> {
+    actionName: "getGuild",
+    parameters: {
+        guild_id
+    }
+};
+
+// createWebhook
+<CreateWebhook> = (can you)? (create|set up) a (new)? webhook (called|named) $(name:wildcard) in (the)? channel $(channel_id:word) -> {
+    actionName: "createWebhook",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | (please)? make a webhook (called|named) $(name:wildcard) in (the)? channel $(channel_id:word) -> {
+    actionName: "createWebhook",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | I need a (new)? webhook (called|named) $(name:wildcard) in channel $(channel_id:word) -> {
+    actionName: "createWebhook",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | add a webhook (called|named) $(name:wildcard) to (the)? channel $(channel_id:word) -> {
+    actionName: "createWebhook",
+    parameters: {
+        channel_id,
+        name
+    }
+};
+
+// getWebhook
+<GetWebhook> = (can you)? (get|fetch) (the)? webhook (details|info|information) for (ID)? $(webhook_id:word) -> {
+    actionName: "getWebhook",
+    parameters: {
+        webhook_id
+    }
+}
+  | show me (the)? webhook $(webhook_id:word) -> {
+    actionName: "getWebhook",
+    parameters: {
+        webhook_id
+    }
+}
+  | I need (the)? webhook (object|info) for (the)? (ID)? $(webhook_id:word) -> {
+    actionName: "getWebhook",
+    parameters: {
+        webhook_id
+    }
+}
+  | (please)? get (the)? webhook (with ID)? $(webhook_id:word) -> {
+    actionName: "getWebhook",
+    parameters: {
+        webhook_id
+    }
+};
+
+// executeWebhook
+<ExecuteWebhook> = (can you)? execute (the)? webhook $(webhook_id:word) with token $(webhook_token:word) (saying|with content|with message) $(content:wildcard) -> {
+    actionName: "executeWebhook",
+    parameters: {
+        webhook_id,
+        webhook_token,
+        content
+    }
+}
+  | send a message (using|via|through) (the)? webhook $(webhook_id:word) (with)? token $(webhook_token:word) (saying|with content) $(content:wildcard) -> {
+    actionName: "executeWebhook",
+    parameters: {
+        webhook_id,
+        webhook_token,
+        content
+    }
+}
+  | (please)? trigger (the)? webhook $(webhook_id:word) (with)? token $(webhook_token:word) to send $(content:wildcard) -> {
+    actionName: "executeWebhook",
+    parameters: {
+        webhook_id,
+        webhook_token,
+        content
+    }
+}
+  | fire (the)? webhook $(webhook_id:word) (with)? token $(webhook_token:word) (with message|saying) $(content:wildcard) -> {
+    actionName: "executeWebhook",
+    parameters: {
+        webhook_id,
+        webhook_token,
+        content
+    }
+};
+
+// ============================================================
+// User Management
+// ============================================================
+
+// getCurrentUser
+<GetCurrentUser> = (can you)? show me my (account|user|profile) (details|info|information)? -> {
+    actionName: "getCurrentUser"
+}
+  | what's my user info -> {
+    actionName: "getCurrentUser"
+}
+  | get my (profile|account) (information|details)? -> {
+    actionName: "getCurrentUser"
+}
+  | who am I -> {
+    actionName: "getCurrentUser"
+};
+
+// getUser
+<GetUser> = (can you)? (get|fetch) (the)? user (details|info|information) for (ID)? $(user_id:word) -> {
+    actionName: "getUser",
+    parameters: {
+        user_id
+    }
+}
+  | show me (the)? user (with ID)? $(user_id:word) -> {
+    actionName: "getUser",
+    parameters: {
+        user_id
+    }
+}
+  | I need (the)? (information|details) (on|for|about) (the)? user (with ID)? $(user_id:word) -> {
+    actionName: "getUser",
+    parameters: {
+        user_id
+    }
+}
+  | look up (the)? user $(user_id:word) -> {
+    actionName: "getUser",
+    parameters: {
+        user_id
+    }
+};
+
+// modifyCurrentUser
+<ModifyCurrentUser> = (can you)? (update|change|modify) my username to $(username:wildcard) -> {
+    actionName: "modifyCurrentUser",
+    parameters: {
+        username
+    }
+}
+  | (please)? change my (profile|account) (settings)? (with a new)? username (to)? $(username:wildcard) -> {
+    actionName: "modifyCurrentUser",
+    parameters: {
+        username
+    }
+}
+  | set my username to $(username:wildcard) -> {
+    actionName: "modifyCurrentUser",
+    parameters: {
+        username
+    }
+}
+  | (I'd like to)? update my (account|profile) settings -> {
+    actionName: "modifyCurrentUser"
+};
+
+// getCurrentUserGuilds
+<GetCurrentUserGuilds> = (can you)? show me (the)? (servers|guilds) I'm (part of|in|a member of) -> {
+    actionName: "getCurrentUserGuilds"
+}
+  | list (all)? (the)? (guilds|servers) I'm (currently)? in -> {
+    actionName: "getCurrentUserGuilds"
+}
+  | what (are the|Discord)? (servers|guilds) (do)? I belong to -> {
+    actionName: "getCurrentUserGuilds"
+}
+  | show my (server|guild) list -> {
+    actionName: "getCurrentUserGuilds"
+};
+
+// getCurrentUserGuildMember
+<GetCurrentUserGuildMember> = (can you)? show me my member (details|info) for (the)? (server|guild) (with ID)? $(guild_id:word) -> {
+    actionName: "getCurrentUserGuildMember",
+    parameters: {
+        guild_id
+    }
+}
+  | get my (guild|server) member (info|details) for (the)? (server|guild) $(guild_id:word) -> {
+    actionName: "getCurrentUserGuildMember",
+    parameters: {
+        guild_id
+    }
+}
+  | I need my member (object|info) for (the)? guild (with ID)? $(guild_id:word) -> {
+    actionName: "getCurrentUserGuildMember",
+    parameters: {
+        guild_id
+    }
+}
+  | what's my (role|member info) in (the)? (server|guild) $(guild_id:word) -> {
+    actionName: "getCurrentUserGuildMember",
+    parameters: {
+        guild_id
+    }
+};
+
+// leaveGuild
+<LeaveGuild> = I want to leave (the)? (server|guild) (with ID)? $(guild_id:word) -> {
+    actionName: "leaveGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | (please)? remove me from (the)? (guild|server) (with ID)? $(guild_id:word) -> {
+    actionName: "leaveGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | (can you)? (help me)? (exit|leave) (the)? (guild|server) (with ID)? $(guild_id:word) -> {
+    actionName: "leaveGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | quit (the)? (server|guild) $(guild_id:word) -> {
+    actionName: "leaveGuild",
+    parameters: {
+        guild_id
+    }
+};
+
+// createDM
+<CreateDM> = (can you)? (start|open|create) a (direct message|DM) (channel)? with (user)? (ID)? $(recipient_id:word) -> {
+    actionName: "createDM",
+    parameters: {
+        recipient_id
+    }
+}
+  | (I'd like to)? (create|open) a DM (channel)? with (the)? user (whose ID is|with ID)? $(recipient_id:word) -> {
+    actionName: "createDM",
+    parameters: {
+        recipient_id
+    }
+}
+  | (please)? DM (the)? user $(recipient_id:word) -> {
+    actionName: "createDM",
+    parameters: {
+        recipient_id
+    }
+}
+  | message (the)? user $(recipient_id:word) (directly)? -> {
+    actionName: "createDM",
+    parameters: {
+        recipient_id
+    }
+};
+
+// createGroupDM
+<CreateGroupDM> = (can you)? (start|create) a (new)? group DM -> {
+    actionName: "createGroupDM"
+}
+  | (please)? (set up|create) a group (chat|DM) (with)? $(access_tokens:wildcard) -> {
+    actionName: "createGroupDM"
+}
+  | (I'd like to)? (start|create) a group (direct message|DM) (with my)? $(access_tokens:wildcard) -> {
+    actionName: "createGroupDM"
+}
+  | make a group DM -> {
+    actionName: "createGroupDM"
+};
+
+// getCurrentUserConnections
+<GetCurrentUserConnections> = (can you)? show me my (current)? connections -> {
+    actionName: "getCurrentUserConnections"
+}
+  | what are my linked accounts -> {
+    actionName: "getCurrentUserConnections"
+}
+  | (I'd like to)? see my (active)? connections -> {
+    actionName: "getCurrentUserConnections"
+}
+  | list my connections -> {
+    actionName: "getCurrentUserConnections"
+};
+
+// getCurrentUserApplicationRoleConnection
+<GetCurrentUserApplicationRoleConnection> = (can you)? show me my role connection for (the)? (app|application) (with ID)? $(application_id:word) -> {
+    actionName: "getCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+}
+  | what's my (application)? role connection for (the)? (app|application) (with ID)? $(application_id:word) -> {
+    actionName: "getCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+}
+  | (please)? get my role connection for (the)? application (with ID)? $(application_id:word) -> {
+    actionName: "getCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+}
+  | fetch my role connection for (app|application) $(application_id:word) -> {
+    actionName: "getCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+};
+
+// updateCurrentUserApplicationRoleConnection
+<UpdateCurrentUserApplicationRoleConnection> = (can you)? update my role connection for (the)? (app|application) (with ID)? $(application_id:word) -> {
+    actionName: "updateCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+}
+  | (please)? change my (application)? role connection (details)? for (the)? (app|application) (with ID)? $(application_id:word) -> {
+    actionName: "updateCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+}
+  | (I need to)? update my role connection for (the)? (app|application) $(application_id:word) (with)? (platform name)? $(platform_name:wildcard) -> {
+    actionName: "updateCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id,
+        platform_name
+    }
+}
+  | modify my role connection for (app|application) $(application_id:word) -> {
+    actionName: "updateCurrentUserApplicationRoleConnection",
+    parameters: {
+        application_id
+    }
+};
+
+// ============================================================
+// Invite Management
+// ============================================================
+
+// getInvite
+<GetInvite> = (can you)? (get|fetch) (the)? invite (details|info) for (the)? (code)? $(invite_code:word) -> {
+    actionName: "getInvite",
+    parameters: {
+        invite_code
+    }
+}
+  | show me (the)? invite (with)? code $(invite_code:word) -> {
+    actionName: "getInvite",
+    parameters: {
+        invite_code
+    }
+}
+  | I need (the)? invite (info|details) for (the)? code $(invite_code:word) -> {
+    actionName: "getInvite",
+    parameters: {
+        invite_code
+    }
+}
+  | look up (the)? invite $(invite_code:word) -> {
+    actionName: "getInvite",
+    parameters: {
+        invite_code
+    }
+};
+
+// deleteInvite
+<DeleteInvite> = (can you)? delete (the)? invite (with)? (code)? $(invite_code:word) -> {
+    actionName: "deleteInvite",
+    parameters: {
+        invite_code
+    }
+}
+  | (please)? remove (the)? invite (link)? (with the code)? $(invite_code:word) -> {
+    actionName: "deleteInvite",
+    parameters: {
+        invite_code
+    }
+}
+  | I need you to delete (the)? invite (that has the code)? $(invite_code:word) -> {
+    actionName: "deleteInvite",
+    parameters: {
+        invite_code
+    }
+}
+  | revoke (the)? invite $(invite_code:word) -> {
+    actionName: "deleteInvite",
+    parameters: {
+        invite_code
+    }
+};
+
+// getTargetUsers
+<GetTargetUsers> = (can you)? show me (the)? (list of)? (target)? users (who can accept|allowed to see|for) (this|the)? invite (with code)? $(invite_code:word) -> {
+    actionName: "getTargetUsers",
+    parameters: {
+        invite_code
+    }
+}
+  | get (me)? (the)? (target)? users (allowed to see|for) (this|the)? invite (with code)? $(invite_code:word) -> {
+    actionName: "getTargetUsers",
+    parameters: {
+        invite_code
+    }
+}
+  | I need (the)? (target)? user IDs for (the)? invite (with code)? $(invite_code:word) -> {
+    actionName: "getTargetUsers",
+    parameters: {
+        invite_code
+    }
+}
+  | who can (accept|see) (the)? invite $(invite_code:word) -> {
+    actionName: "getTargetUsers",
+    parameters: {
+        invite_code
+    }
+};
+
+// updateTargetUsers
+<UpdateTargetUsers> = (can you)? update (the)? (target)? users for (the)? invite (with code)? $(invite_code:word) -> {
+    actionName: "updateTargetUsers",
+    parameters: {
+        invite_code
+    }
+}
+  | (please)? (refresh|change) (the)? (list of)? (allowed)? users (who can access|for) (this|the)? invite (with code)? $(invite_code:word) -> {
+    actionName: "updateTargetUsers",
+    parameters: {
+        invite_code
+    }
+}
+  | (I'd like to)? change (the)? allowed users for (this|the)? invite $(invite_code:word) -> {
+    actionName: "updateTargetUsers",
+    parameters: {
+        invite_code
+    }
+}
+  | set (the)? target users for invite $(invite_code:word) -> {
+    actionName: "updateTargetUsers",
+    parameters: {
+        invite_code
+    }
+};
+
+// getTargetUsersJobStatus
+<GetTargetUsersJobStatus> = (can you)? check (the)? (status of the)? (target users)? job (status)? for (the)? invite (with code)? $(invite_code:word) -> {
+    actionName: "getTargetUsersJobStatus",
+    parameters: {
+        invite_code
+    }
+}
+  | what's (the)? (current)? (status of the)? (processing)? job (status)? for (the)? invite (code)? $(invite_code:word) -> {
+    actionName: "getTargetUsersJobStatus",
+    parameters: {
+        invite_code
+    }
+}
+  | (please)? tell me (the)? job status for (the)? invite (code)? $(invite_code:word) -> {
+    actionName: "getTargetUsersJobStatus",
+    parameters: {
+        invite_code
+    }
+}
+  | is (the)? target users (processing|job) (done|complete|finished) for invite $(invite_code:word) -> {
+    actionName: "getTargetUsersJobStatus",
+    parameters: {
+        invite_code
+    }
+};
+
+// ============================================================
+// Channel Management
+// ============================================================
+
+// getChannel
+<GetChannel> = (can you)? (get|fetch) (the)? (details|info|information) for (the)? channel (with ID)? $(channel_id:word) -> {
+    actionName: "getChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | show me (the)? channel $(channel_id:word) -> {
+    actionName: "getChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | I need (the)? channel (details|info) for $(channel_id:word) -> {
+    actionName: "getChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | look up (the)? channel $(channel_id:word) -> {
+    actionName: "getChannel",
+    parameters: {
+        channel_id
+    }
+};
+
+// modifyChannel
+<ModifyChannel> = (can you)? (modify|update|change|edit) (the)? channel $(channel_id:word) (name to|to be named) $(name:wildcard) -> {
+    actionName: "modifyChannel",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | (please)? rename (the)? channel $(channel_id:word) to $(name:wildcard) -> {
+    actionName: "modifyChannel",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | change (the)? (settings|properties) (of|for) (the)? channel $(channel_id:word) -> {
+    actionName: "modifyChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | update (the)? channel $(channel_id:word) -> {
+    actionName: "modifyChannel",
+    parameters: {
+        channel_id
+    }
+};
+
+// setVoiceChannelStatus
+<SetVoiceChannelStatus> = (can you)? set (the)? (voice)? channel $(channel_id:word) status to $(status:wildcard) -> {
+    actionName: "setVoiceChannelStatus",
+    parameters: {
+        channel_id,
+        status
+    }
+}
+  | (please)? update (the)? voice channel $(channel_id:word) status to $(status:wildcard) -> {
+    actionName: "setVoiceChannelStatus",
+    parameters: {
+        channel_id,
+        status
+    }
+}
+  | change (the)? status (of|for) (the)? voice channel $(channel_id:word) to $(status:wildcard) -> {
+    actionName: "setVoiceChannelStatus",
+    parameters: {
+        channel_id,
+        status
+    }
+}
+  | put $(status:wildcard) as (the)? status (for|on) voice channel $(channel_id:word) -> {
+    actionName: "setVoiceChannelStatus",
+    parameters: {
+        channel_id,
+        status
+    }
+};
+
+// deleteChannel
+<DeleteChannel> = (can you)? delete (the)? channel (with ID)? $(channel_id:word) -> {
+    actionName: "deleteChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? remove (the)? channel $(channel_id:word) -> {
+    actionName: "deleteChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | I (want|need) to delete (the)? channel $(channel_id:word) -> {
+    actionName: "deleteChannel",
+    parameters: {
+        channel_id
+    }
+}
+  | destroy (the)? channel $(channel_id:word) -> {
+    actionName: "deleteChannel",
+    parameters: {
+        channel_id
+    }
+};
+
+// editChannelPermissions
+<EditChannelPermissions> = (can you)? edit (the)? (channel)? permissions for (the)? channel $(channel_id:word) -> {
+    actionName: "editChannelPermissions",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? (update|modify|change) (the)? permissions (for|on|of) (the)? channel $(channel_id:word) -> {
+    actionName: "editChannelPermissions",
+    parameters: {
+        channel_id
+    }
+}
+  | set (the)? permissions (for|on) channel $(channel_id:word) -> {
+    actionName: "editChannelPermissions",
+    parameters: {
+        channel_id
+    }
+}
+  | configure (the)? permissions (for|on) channel $(channel_id:word) -> {
+    actionName: "editChannelPermissions",
+    parameters: {
+        channel_id
+    }
+};
+
+// getChannelInvites
+<GetChannelInvites> = (can you)? (get|show me|list|fetch) (the)? invites for (the)? channel $(channel_id:word) -> {
+    actionName: "getChannelInvites",
+    parameters: {
+        channel_id
+    }
+}
+  | what invites (are there|exist) for (the)? channel $(channel_id:word) -> {
+    actionName: "getChannelInvites",
+    parameters: {
+        channel_id
+    }
+}
+  | show (all)? (the)? channel $(channel_id:word) invites -> {
+    actionName: "getChannelInvites",
+    parameters: {
+        channel_id
+    }
+}
+  | list (the)? invites (on|in) channel $(channel_id:word) -> {
+    actionName: "getChannelInvites",
+    parameters: {
+        channel_id
+    }
+};
+
+// createChannelInvite
+<CreateChannelInvite> = (can you)? create (a|an) invite for (the)? channel $(channel_id:wildcard) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? make (a|an) invite (link)? for (the)? channel $(channel_id:wildcard) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id
+    }
+}
+  | generate (a|an) invite for channel $(channel_id:wildcard) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id
+    }
+}
+  | I need an invite (link)? for (the)? channel $(channel_id:wildcard) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id
+    }
+}
+  | (can you)? create (a|an) invite for (the)? (channel)? $(channel_id:wildcard) that (doesn't|does not|never) (expire|expires) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id,
+        never_expires: true
+    }
+}
+  | (can you)? create (a|an) permanent invite for (the)? (channel)? $(channel_id:wildcard) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id,
+        never_expires: true
+    }
+}
+  | (can you)? make (a|an) invite for (the)? (channel)? $(channel_id:wildcard) that (doesn't|does not|never) (expire|expires) -> {
+    actionName: "createChannelInvite",
+    parameters: {
+        channel_id,
+        never_expires: true
+    }
+};
+
+// deleteChannelPermission
+<DeleteChannelPermission> = (can you)? delete (the)? (channel)? permission (for)? $(overwrite_id:word) (from|on|in) (the)? channel $(channel_id:word) -> {
+    actionName: "deleteChannelPermission",
+    parameters: {
+        channel_id,
+        overwrite_id
+    }
+}
+  | (please)? remove (the)? permission (override|overwrite) $(overwrite_id:word) from (the)? channel $(channel_id:word) -> {
+    actionName: "deleteChannelPermission",
+    parameters: {
+        channel_id,
+        overwrite_id
+    }
+}
+  | revoke (the)? permission $(overwrite_id:word) (from|on) channel $(channel_id:word) -> {
+    actionName: "deleteChannelPermission",
+    parameters: {
+        channel_id,
+        overwrite_id
+    }
+}
+  | clear (the)? permission $(overwrite_id:word) (from|on) channel $(channel_id:word) -> {
+    actionName: "deleteChannelPermission",
+    parameters: {
+        channel_id,
+        overwrite_id
+    }
+};
+
+// followAnnouncementChannel
+<FollowAnnouncementChannel> = (can you)? follow (the)? announcement channel $(channel_id:word) (in|to) $(webhook_channel_id:word) -> {
+    actionName: "followAnnouncementChannel",
+    parameters: {
+        channel_id,
+        webhook_channel_id
+    }
+}
+  | (please)? subscribe to (the)? announcement channel $(channel_id:word) (sending to|in) $(webhook_channel_id:word) -> {
+    actionName: "followAnnouncementChannel",
+    parameters: {
+        channel_id,
+        webhook_channel_id
+    }
+}
+  | forward (the)? announcements from (channel)? $(channel_id:word) to (channel)? $(webhook_channel_id:word) -> {
+    actionName: "followAnnouncementChannel",
+    parameters: {
+        channel_id,
+        webhook_channel_id
+    }
+}
+  | crosspost (the)? announcement channel $(channel_id:word) to $(webhook_channel_id:word) -> {
+    actionName: "followAnnouncementChannel",
+    parameters: {
+        channel_id,
+        webhook_channel_id
+    }
+};
+
+// triggerTypingIndicator
+<TriggerTypingIndicator> = (can you)? trigger (the)? typing indicator in (the)? channel $(channel_id:word) -> {
+    actionName: "triggerTypingIndicator",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? show (the)? typing (indicator)? in (the)? channel $(channel_id:word) -> {
+    actionName: "triggerTypingIndicator",
+    parameters: {
+        channel_id
+    }
+}
+  | start typing in (the)? channel $(channel_id:word) -> {
+    actionName: "triggerTypingIndicator",
+    parameters: {
+        channel_id
+    }
+}
+  | send (a)? typing (indicator|notification) (to|in) (the)? channel $(channel_id:word) -> {
+    actionName: "triggerTypingIndicator",
+    parameters: {
+        channel_id
+    }
+};
+
+// groupDmAddRecipient
+<GroupDmAddRecipient> = (can you)? add (the)? (user|recipient) $(user_id:word) to (the)? group DM $(channel_id:word) -> {
+    actionName: "groupDmAddRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | (please)? invite (user)? $(user_id:word) to (the)? group DM $(channel_id:word) -> {
+    actionName: "groupDmAddRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | include (user)? $(user_id:word) in (the)? group DM $(channel_id:word) -> {
+    actionName: "groupDmAddRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | bring (user)? $(user_id:word) into (the)? group (chat|DM) $(channel_id:word) -> {
+    actionName: "groupDmAddRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+};
+
+// groupDmRemoveRecipient
+<GroupDmRemoveRecipient> = (can you)? remove (the)? (user|recipient) $(user_id:word) from (the)? group DM $(channel_id:word) -> {
+    actionName: "groupDmRemoveRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | (please)? kick (user)? $(user_id:word) from (the)? group DM $(channel_id:word) -> {
+    actionName: "groupDmRemoveRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | take (user)? $(user_id:word) out of (the)? group DM $(channel_id:word) -> {
+    actionName: "groupDmRemoveRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | exclude (user)? $(user_id:word) from (the)? group (chat|DM) $(channel_id:word) -> {
+    actionName: "groupDmRemoveRecipient",
+    parameters: {
+        channel_id,
+        user_id
+    }
+};
+
+// ============================================================
+// Thread Management
+// ============================================================
+
+// startThreadFromMessage
+<StartThreadFromMessage> = (can you)? start a thread from (the)? message $(message_id:word) in (the)? channel $(channel_id:word) (called|named) $(name:wildcard) -> {
+    actionName: "startThreadFromMessage",
+    parameters: {
+        channel_id,
+        message_id,
+        name
+    }
+}
+  | (please)? create a thread (called|named) $(name:wildcard) from message $(message_id:word) in channel $(channel_id:word) -> {
+    actionName: "startThreadFromMessage",
+    parameters: {
+        channel_id,
+        message_id,
+        name
+    }
+}
+  | open a thread on message $(message_id:word) in channel $(channel_id:word) (called|named) $(name:wildcard) -> {
+    actionName: "startThreadFromMessage",
+    parameters: {
+        channel_id,
+        message_id,
+        name
+    }
+}
+  | make a thread from message $(message_id:word) in channel $(channel_id:word) -> {
+    actionName: "startThreadFromMessage",
+    parameters: {
+        channel_id,
+        message_id
+    }
+};
+
+// startThreadWithoutMessage
+<StartThreadWithoutMessage> = (can you)? start a thread (called|named) $(name:wildcard) in (the)? channel $(channel_id:word) -> {
+    actionName: "startThreadWithoutMessage",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | (please)? create a (new)? thread (called|named) $(name:wildcard) in channel $(channel_id:word) -> {
+    actionName: "startThreadWithoutMessage",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | open a (new)? thread in channel $(channel_id:word) (called|named) $(name:wildcard) -> {
+    actionName: "startThreadWithoutMessage",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | make a thread (called|named) $(name:wildcard) in channel $(channel_id:word) -> {
+    actionName: "startThreadWithoutMessage",
+    parameters: {
+        channel_id,
+        name
+    }
+};
+
+// startThreadInForumOrMediaChannel
+<StartThreadInForumOrMediaChannel> = (can you)? start a (forum|media) thread (called|named) $(name:wildcard) in (the)? channel $(channel_id:word) -> {
+    actionName: "startThreadInForumOrMediaChannel",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | (please)? create a (forum|media) (post|thread) (called|named) $(name:wildcard) in channel $(channel_id:word) -> {
+    actionName: "startThreadInForumOrMediaChannel",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | post a (new)? (forum|media) thread (called|named) $(name:wildcard) in channel $(channel_id:word) -> {
+    actionName: "startThreadInForumOrMediaChannel",
+    parameters: {
+        channel_id,
+        name
+    }
+}
+  | make a (forum|media) post (called|named) $(name:wildcard) in channel $(channel_id:word) -> {
+    actionName: "startThreadInForumOrMediaChannel",
+    parameters: {
+        channel_id,
+        name
+    }
+};
+
+// joinThread
+<JoinThread> = (can you)? join (the)? thread $(channel_id:word) -> {
+    actionName: "joinThread",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? add me to (the)? thread $(channel_id:word) -> {
+    actionName: "joinThread",
+    parameters: {
+        channel_id
+    }
+}
+  | I want to join (the)? thread $(channel_id:word) -> {
+    actionName: "joinThread",
+    parameters: {
+        channel_id
+    }
+}
+  | enter (the)? thread $(channel_id:word) -> {
+    actionName: "joinThread",
+    parameters: {
+        channel_id
+    }
+};
+
+// addThreadMember
+<AddThreadMember> = (can you)? add (the)? (user|member) $(user_id:word) to (the)? thread $(channel_id:word) -> {
+    actionName: "addThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | (please)? invite (user)? $(user_id:word) to (the)? thread $(channel_id:word) -> {
+    actionName: "addThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | include (user)? $(user_id:word) in (the)? thread $(channel_id:word) -> {
+    actionName: "addThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | bring (user)? $(user_id:word) into (the)? thread $(channel_id:word) -> {
+    actionName: "addThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+};
+
+// leaveThread
+<LeaveThread> = (can you)? leave (the)? thread $(channel_id:word) -> {
+    actionName: "leaveThread",
+    parameters: {
+        channel_id
+    }
+}
+  | I want to leave (the)? thread $(channel_id:word) -> {
+    actionName: "leaveThread",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? remove me from (the)? thread $(channel_id:word) -> {
+    actionName: "leaveThread",
+    parameters: {
+        channel_id
+    }
+}
+  | exit (the)? thread $(channel_id:word) -> {
+    actionName: "leaveThread",
+    parameters: {
+        channel_id
+    }
+};
+
+// removeThreadMember
+<RemoveThreadMember> = (can you)? remove (the)? (user|member) $(user_id:word) from (the)? thread $(channel_id:word) -> {
+    actionName: "removeThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | (please)? kick (user)? $(user_id:word) from (the)? thread $(channel_id:word) -> {
+    actionName: "removeThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | take (user)? $(user_id:word) out of (the)? thread $(channel_id:word) -> {
+    actionName: "removeThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | exclude (user)? $(user_id:word) from (the)? thread $(channel_id:word) -> {
+    actionName: "removeThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+};
+
+// getThreadMember
+<GetThreadMember> = (can you)? get (the)? (thread)? member (info|details) for (user)? $(user_id:word) in (the)? thread $(channel_id:word) -> {
+    actionName: "getThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | show me (the)? member $(user_id:word) in (the)? thread $(channel_id:word) -> {
+    actionName: "getThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | fetch (the)? thread member $(user_id:word) from (the)? thread $(channel_id:word) -> {
+    actionName: "getThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+}
+  | is (user)? $(user_id:word) in (the)? thread $(channel_id:word) -> {
+    actionName: "getThreadMember",
+    parameters: {
+        channel_id,
+        user_id
+    }
+};
+
+// listThreadMembers
+<ListThreadMembers> = (can you)? list (the)? (thread)? members (of|in) (the)? thread $(channel_id:word) -> {
+    actionName: "listThreadMembers",
+    parameters: {
+        channel_id
+    }
+}
+  | show me (all)? (the)? members (of|in) (the)? thread $(channel_id:word) -> {
+    actionName: "listThreadMembers",
+    parameters: {
+        channel_id
+    }
+}
+  | who is in (the)? thread $(channel_id:word) -> {
+    actionName: "listThreadMembers",
+    parameters: {
+        channel_id
+    }
+}
+  | get (the)? member list for (the)? thread $(channel_id:word) -> {
+    actionName: "listThreadMembers",
+    parameters: {
+        channel_id
+    }
+};
+
+// listPublicArchivedThreads
+<ListPublicArchivedThreads> = (can you)? list (the)? public archived threads in (the)? channel $(channel_id:word) -> {
+    actionName: "listPublicArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | show me (the)? public archived threads (in|for) (the)? channel $(channel_id:word) -> {
+    actionName: "listPublicArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? get (the)? archived public threads (from|in) channel $(channel_id:word) -> {
+    actionName: "listPublicArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | what public threads are archived in channel $(channel_id:word) -> {
+    actionName: "listPublicArchivedThreads",
+    parameters: {
+        channel_id
+    }
+};
+
+// listPrivateArchivedThreads
+<ListPrivateArchivedThreads> = (can you)? list (the)? private archived threads in (the)? channel $(channel_id:word) -> {
+    actionName: "listPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | show me (the)? private archived threads (in|for) (the)? channel $(channel_id:word) -> {
+    actionName: "listPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? get (the)? archived private threads (from|in) channel $(channel_id:word) -> {
+    actionName: "listPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | what private threads are archived in channel $(channel_id:word) -> {
+    actionName: "listPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+};
+
+// listJoinedPrivateArchivedThreads
+<ListJoinedPrivateArchivedThreads> = (can you)? list (the)? private archived threads I've joined in (the)? channel $(channel_id:word) -> {
+    actionName: "listJoinedPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | show me (the)? private archived threads I'm in (for|in) (the)? channel $(channel_id:word) -> {
+    actionName: "listJoinedPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | (please)? get my joined private archived threads (from|in) channel $(channel_id:word) -> {
+    actionName: "listJoinedPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+}
+  | what private archived threads have I joined in channel $(channel_id:word) -> {
+    actionName: "listJoinedPrivateArchivedThreads",
+    parameters: {
+        channel_id
+    }
+};
+
+// ============================================================
+// Server/Guild Setup
+// ============================================================
+
+<SetGuild> = (can you)? set my discord (server|guild) (to|id)? $(guild_id:word) -> {
+    actionName: "setGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | my discord (server|guild) (id|is)? $(guild_id:word) -> {
+    actionName: "setGuild",
+    parameters: {
+        guild_id
+    }
+}
+  | use (discord)? (server|guild) $(guild_id:word) -> {
+    actionName: "setGuild",
+    parameters: {
+        guild_id
+    }
+};
+
+// ============================================================
+// Channel Listing & Refresh
+// ============================================================
+
+<ListChannels> = (can you)? (list|show|show me) (all|the|my)? (discord)? channels -> {
+    actionName: "listChannels"
+}
+  | what (discord)? channels (are|do I have|are available)? -> {
+    actionName: "listChannels"
+};
+
+<RefreshChannels> = (can you)? refresh (the)? (discord)? (channel)? (cache|channels|list) -> {
+    actionName: "refreshChannels"
+}
+  | (please)? update (the)? (discord)? channel (cache|list) -> {
+    actionName: "refreshChannels"
+};
+
+import { DiscordActions } from "./discordSchema.ts";
+
+<Start> : DiscordActions = <CreateMessage>
+  | <GetChannelMessages>
+  | <CreateGuild>
+  | <GetGuild>
+  | <CreateWebhook>
+  | <GetWebhook>
+  | <ExecuteWebhook>
+  | <GetCurrentUser>
+  | <GetUser>
+  | <ModifyCurrentUser>
+  | <GetCurrentUserGuilds>
+  | <GetCurrentUserGuildMember>
+  | <LeaveGuild>
+  | <CreateDM>
+  | <CreateGroupDM>
+  | <GetCurrentUserConnections>
+  | <GetCurrentUserApplicationRoleConnection>
+  | <UpdateCurrentUserApplicationRoleConnection>
+  | <GetInvite>
+  | <DeleteInvite>
+  | <GetTargetUsers>
+  | <UpdateTargetUsers>
+  | <GetTargetUsersJobStatus>
+  | <GetChannel>
+  | <ModifyChannel>
+  | <SetVoiceChannelStatus>
+  | <DeleteChannel>
+  | <EditChannelPermissions>
+  | <GetChannelInvites>
+  | <CreateChannelInvite>
+  | <DeleteChannelPermission>
+  | <FollowAnnouncementChannel>
+  | <TriggerTypingIndicator>
+  | <GroupDmAddRecipient>
+  | <GroupDmRemoveRecipient>
+  | <StartThreadFromMessage>
+  | <StartThreadWithoutMessage>
+  | <StartThreadInForumOrMediaChannel>
+  | <JoinThread>
+  | <AddThreadMember>
+  | <LeaveThread>
+  | <RemoveThreadMember>
+  | <GetThreadMember>
+  | <ListThreadMembers>
+  | <ListPublicArchivedThreads>
+  | <ListPrivateArchivedThreads>
+  | <ListJoinedPrivateArchivedThreads>
+  | <SetGuild>
+  | <ListChannels>
+  | <RefreshChannels>;

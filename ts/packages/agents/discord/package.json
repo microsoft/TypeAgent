@@ -1,0 +1,30 @@
+{
+  "name": "discord-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent agent for discord",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/discordManifest.json",
+    "./agent/handlers": "./dist/discordActionHandler.js"
+  },
+  "scripts": {
+    "asc": "asc -i ./src/discordSchema.ts -o ./dist/discordSchema.pas.json -t DiscordActions",
+    "agc": "agc -i ./src/discordSchema.agr -o ./dist/discordSchema.ag.json",
+    "tsc": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "build": "concurrently npm:tsc npm:asc npm:agc"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
