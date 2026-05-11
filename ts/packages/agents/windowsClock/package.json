@@ -34,5 +34,22 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "asc:main": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windowsClockSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/windowsClockSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

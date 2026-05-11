@@ -59,13 +59,26 @@ export interface EmailUser {
 }
 
 /**
- * Callback for device code / browser authentication flow
+ * Sign-in prompt surfaced to the user during authentication.
+ * Mirrors the calendarProvider SignInPrompt type so handlers in either
+ * agent can use the same branching shape.
  */
-export type EmailDeviceCodeCallback = (
-    userCode: string,
-    verificationUri: string,
-    message: string,
-) => void;
+export type SignInPrompt =
+    | {
+          kind: "deviceCode";
+          userCode: string;
+          verificationUri: string;
+          message: string;
+      }
+    | { kind: "browser"; url?: string; message: string }
+    | { kind: "error"; message: string };
+
+/**
+ * Callback for sign-in prompts (device code, browser open, or error).
+ * Renamed from the old (userCode, verificationUri, message) tuple shape
+ * when the interactive browser flow was added.
+ */
+export type EmailDeviceCodeCallback = (prompt: SignInPrompt) => void;
 
 /**
  * Email provider interface - implement this for each email service

@@ -54,8 +54,21 @@ export async function loadGrammarFromFile(
 
 /**
  * Load a grammar from an in-memory text buffer.
+ * If a `fileLoader` is provided, `import ... from "./other.agr"` statements
+ * in the buffer will be resolved via the loader.  The `id` is used as the
+ * file identity for import path resolution.
  */
-export function loadGrammarFromBuffer(id: string, text: string): LoadResult {
+export function loadGrammarFromBuffer(
+    id: string,
+    text: string,
+    fileLoader?: FileLoader,
+): LoadResult {
+    if (fileLoader) {
+        return loadFromFileLoader(id, text, id, fileLoader, {
+            kind: "buffer",
+            id,
+        });
+    }
     return loadFromText(text, { kind: "buffer", id });
 }
 
@@ -84,31 +97,43 @@ export function loadGrammarFromSnapshot(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function loadFromText(text: string, source: GrammarSource): LoadResult {
-    const file: SourceFile = { id: sourceId(source), text };
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const collector: DebugInfoCollector = {
+function makeCollector(fileId: string, text: string): DebugInfoCollector {
+    return {
         partPositions: new Map(),
         rulePositions: new Map(),
-        fileId: sourceId(source),
+        partRules: new Map(),
+        fileContents: new Map([[fileId, text]]),
+        filePaths: new Map(),
     };
-    const grammar = loadGrammarRulesNoThrow(
-        sourceId(source),
-        text,
-        errors,
-        warnings,
-        { debugCollector: collector },
-    );
+}
 
+function buildLoadResult(
+    grammar: Grammar | undefined,
+    errors: string[],
+    warnings: string[],
+    collector: DebugInfoCollector,
+    source: GrammarSource,
+    file: SourceFile,
+    text: string,
+): LoadResult {
     if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
-        const debugInfo = buildDebugInfo(collector, text, sourceId(source));
+        const debugInfo = buildDebugInfo(collector);
+
+        // Build file list: root file + any imported files from the collector
+        const rootId = file.id;
+        const files: SourceFile[] = [file];
+        for (const [fileId, fileText] of collector.fileContents) {
+            if (fileId !== rootId) {
+                files.push({ id: fileId, text: fileText, imported: true });
+            }
+        }
+
         const loaded: LoadedGrammar = {
             source,
             grammar,
             debugInfo,
-            files: [file],
+            files,
             identifiers,
         };
         const diagnostics: Diagnostic[] | undefined =
@@ -143,6 +168,30 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
     return { ok: false, diagnostics, files: [file] };
 }
 
+function loadFromText(text: string, source: GrammarSource): LoadResult {
+    const file: SourceFile = { id: sourceId(source), text };
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const collector = makeCollector(sourceId(source), text);
+    const grammar = loadGrammarRulesNoThrow(
+        sourceId(source),
+        text,
+        errors,
+        warnings,
+        { debugCollector: collector },
+    );
+
+    return buildLoadResult(
+        grammar,
+        errors,
+        warnings,
+        collector,
+        source,
+        file,
+        text,
+    );
+}
+
 /**
  * Load a grammar using a FileLoader so the compiler can resolve
  * `import ... from "./other.agr"` statements.
@@ -157,11 +206,7 @@ function loadFromFileLoader(
     const file: SourceFile = { id: sourceId(source), text };
     const errors: string[] = [];
     const warnings: string[] = [];
-    const collector: DebugInfoCollector = {
-        partPositions: new Map(),
-        rulePositions: new Map(),
-        fileId: displayPath,
-    };
+    const collector = makeCollector(displayPath, text);
     const grammar = loadGrammarRulesNoThrow(
         fullPath,
         fileLoader,
@@ -170,46 +215,15 @@ function loadFromFileLoader(
         { debugCollector: collector },
     );
 
-    if (grammar && errors.length === 0) {
-        const identifiers = buildIdentifierIndex(grammar);
-        const debugInfo = buildDebugInfo(collector, text, displayPath);
-        const loaded: LoadedGrammar = {
-            source,
-            grammar,
-            debugInfo,
-            files: [file],
-            identifiers,
-        };
-        const diagnostics: Diagnostic[] | undefined =
-            warnings.length > 0
-                ? warnings.map((message) => ({
-                      range: extractRange(message, text),
-                      severity: "warning" as const,
-                      message,
-                      source: "grammar-tools-core" as const,
-                  }))
-                : undefined;
-        if (diagnostics) {
-            return { ok: true, grammar: loaded, diagnostics };
-        }
-        return { ok: true, grammar: loaded };
-    }
-
-    const diagnostics: Diagnostic[] = [
-        ...errors.map((message) => ({
-            range: extractRange(message, text),
-            severity: "error" as const,
-            message,
-            source: "grammar-tools-core" as const,
-        })),
-        ...warnings.map((message) => ({
-            range: extractRange(message, text),
-            severity: "warning" as const,
-            message,
-            source: "grammar-tools-core" as const,
-        })),
-    ];
-    return { ok: false, diagnostics, files: [file] };
+    return buildLoadResult(
+        grammar,
+        errors,
+        warnings,
+        collector,
+        source,
+        file,
+        text,
+    );
 }
 
 function sourceId(source: GrammarSource): string {
@@ -314,41 +328,51 @@ function offsetToPosition(
 }
 
 /**
- * Build a `GrammarDebugInfo` from the raw offsets collected during compilation.
+ * Build a `GrammarDebugInfo` from the raw positions collected during compilation.
+ * Each position entry carries its own fileId, so multi-file grammars resolve correctly.
  */
-function buildDebugInfo(
-    collector: DebugInfoCollector,
-    text: string,
-    fileId: string,
-): GrammarDebugInfo {
+function buildDebugInfo(collector: DebugInfoCollector): GrammarDebugInfo {
     const rules = new Map<string, SourceLocation>();
-    for (const [ruleId, offset] of collector.rulePositions) {
-        const start = offsetToPosition(text, offset);
+    for (const [ruleId, pos] of collector.rulePositions) {
+        const text = collector.fileContents.get(pos.fileId) ?? "";
+        const start = offsetToPosition(text, pos.offset);
         rules.set(ruleId, {
-            fileId,
-            displayPath: fileId,
+            fileId: pos.fileId,
+            displayPath: pos.fileId,
             range: {
-                start: { ...start, offset },
-                end: { ...start, offset },
+                start: { ...start, offset: pos.offset },
+                end: { ...start, offset: pos.offset },
             },
         });
     }
 
     const parts = new Map<number, SourceLocation>();
-    for (const [partId, offset] of collector.partPositions) {
-        const start = offsetToPosition(text, offset);
+    for (const [partId, pos] of collector.partPositions) {
+        const text = collector.fileContents.get(pos.fileId) ?? "";
+        const start = offsetToPosition(text, pos.offset);
         parts.set(partId, {
-            fileId,
-            displayPath: fileId,
+            fileId: pos.fileId,
+            displayPath: pos.fileId,
             range: {
-                start: { ...start, offset },
-                end: { ...start, offset },
+                start: { ...start, offset: pos.offset },
+                end: { ...start, offset: pos.offset },
             },
         });
     }
 
-    // Simple hash: length + first/last chars + part count
-    const grammarHash = `${text.length}:${collector.partPositions.size}:${collector.rulePositions.size}`;
+    // Hash incorporating file names, total length, and part/rule counts
+    const fileKeys = Array.from(collector.fileContents.keys()).sort().join("|");
+    const totalLen = [...collector.fileContents.values()].reduce(
+        (sum, t) => sum + t.length,
+        0,
+    );
+    const grammarHash = `${totalLen}:${fileKeys}:${collector.partPositions.size}:${collector.rulePositions.size}`;
 
-    return { grammarHash, rules, parts };
+    return {
+        grammarHash,
+        rules,
+        parts,
+        partRules: collector.partRules,
+        filePaths: collector.filePaths,
+    };
 }

@@ -79,6 +79,7 @@ function parseJsonSchema(schema: JsonSchema): SchemaType {
         case "string":
             return parseJsonSchemaString(schema);
         case "number":
+        case "integer":
             return parseJsonSchemaNumber(schema);
         case "boolean":
             return parseJsonSchemaBoolean(schema);
@@ -94,10 +95,33 @@ type ToolsJsonSchema = {
     description?: string;
     inputSchema: JsonSchemaObject;
 };
+
+/**
+ * Convert a tool name to PascalCase by splitting on non-alphanumeric
+ * characters and capitalizing each segment.
+ *   "get_weather"     -> "GetWeather"
+ *   "d1-standup-prep" -> "D1StandupPrep"
+ */
+export function toPascalCase(name: string): string {
+    return name
+        .split(/[^a-zA-Z0-9]+/)
+        .filter((s) => s.length > 0)
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join("");
+}
+
+export type ToolsJsonSchemaOptions = {
+    /** Transform a tool name into a TypeScript type name.
+     *  Defaults to `toPascalCase`. */
+    nameTransform?: (name: string) => string;
+};
+
 export function parseToolsJsonSchema(
     tools: unknown[],
     entryTypeName: string = "AgentActions",
+    options?: ToolsJsonSchemaOptions,
 ) {
+    const nameTransform = options?.nameTransform ?? toPascalCase;
     const refs: SchemaTypeReference[] = [];
     for (const tool of tools) {
         if (!validateToolsJsonSchema(tool)) {
@@ -110,11 +134,7 @@ export function parseToolsJsonSchema(
             actionName: sc.string(actionName),
             parameters: parseJsonSchemaObject(inputSchema),
         });
-        const def = sc.type(
-            `${tool.name[0].toUpperCase()}${tool.name.slice(1)}`,
-            type,
-            tool.description,
-        );
+        const def = sc.type(nameTransform(tool.name), type, tool.description);
         refs.push(sc.ref(def));
     }
 
@@ -203,6 +223,7 @@ function validateJsonSchema(schema: unknown): schema is JsonSchema {
         case "string":
             return schema.enum === undefined || isStringArray(schema.enum);
         case "number":
+        case "integer":
         case "boolean":
         case "null":
             return true;

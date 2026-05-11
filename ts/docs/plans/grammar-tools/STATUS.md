@@ -11,7 +11,7 @@ possible.
 
 ## Progress by track
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-08_
 
 ### Track 0 - Critical path
 
@@ -42,28 +42,29 @@ _Last updated: 2026-05-07_
 
 ### Track C - VS Code extension
 
-| Item | Description                                  | Status      |
-| ---- | -------------------------------------------- | ----------- |
-| C.0  | Multi-package layout, reuse TextMate grammar | done        |
-| C.1  | LSP diagnostics                              | done        |
-| C.2  | LSP go-to-definition                         | done        |
-| C.3  | LSP find-references                          | done        |
-| C.4  | LSP hover                                    | done        |
-| C.5  | LSP document formatting                      | done        |
-| C.6  | Webview debug panel                          | not started |
-| C.7  | Coverage decorations                         | not started |
-| C.8  | Diff command                                 | not started |
+| Item | Description                                  | Status |
+| ---- | -------------------------------------------- | ------ |
+| C.0  | Multi-package layout, reuse TextMate grammar | done   |
+| C.1  | LSP diagnostics                              | done   |
+| C.2  | LSP go-to-definition                         | done   |
+| C.3  | LSP find-references                          | done   |
+| C.4  | LSP hover                                    | done   |
+| C.5  | LSP document formatting                      | done   |
+| C.6  | Webview debug panel                          | done   |
+| C.7  | Coverage decorations                         | done   |
+| C.8  | Diff command                                 | done   |
 
 ### Track D - Shared UI
 
-| Item | Description                          | Status      |
-| ---- | ------------------------------------ | ----------- |
-| D.0  | Scaffold `grammar-tools-ui` with Lit | not started |
-| D.1  | `<completion-preview>` component     | not started |
-| D.2  | `<rule-trace>` component             | not started |
-| D.3  | `<grammar-picker>` component         | not started |
-| D.4  | `<coverage-view>` component          | not started |
-| D.5  | `<diff-view>` component              | not started |
+| Item | Description                                 | Status |
+| ---- | ------------------------------------------- | ------ |
+| D.0  | Scaffold `grammar-tools-ui` with Lit        | done   |
+| D.1  | `<gt-completion-panel>` component           | done   |
+| D.2  | `<gt-trace-timeline>` component             | done   |
+| D.3  | `<gt-source-view>` (grammar picker)         | done   |
+| D.4  | `<gt-coverage-heatmap>` component           | done   |
+| D.5  | `<gt-diff-view>` component                  | done   |
+| D.6  | `<gt-debug-panel>` composite host component | done   |
 
 ### Track E - CLI
 
@@ -177,6 +178,14 @@ Promote into "Queued actions" when scheduling.
   coverage analysis for the NFA/DFA compile paths as well. Lower
   priority since the rule-level matcher is the primary matching backend
   for authoring/debugging; NFA/DFA are production-optimized paths.
+- **Optimizer partId lineage map.** When the grammar optimizer
+  (dispatchify) merges or splits parts, only the first token of an
+  exploded string keeps its original partId. This makes coverage
+  attribution approximate for optimized grammars. Explore emitting an
+  `optimizedPartId -> originalPartId[]` map from the optimizer so
+  coverage and trace can attribute merged tokens back to all source
+  parts. Touches `grammarOptimizer.ts` (emit the map alongside the
+  optimized grammar) and `GrammarDebugInfo` (carry the map).
 - **B.3 coverage / B.4 diff implementation.** ~~Stubs removed during
   self-review (2026-05-07).~~ Implemented 2026-05-07: `computeCoverage`
   in `coverage.ts`, `diffGrammars` in `diff.ts`. CLI commands E.4 and
