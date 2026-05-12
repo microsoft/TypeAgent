@@ -40,6 +40,7 @@ export interface TaskNode {
     next?: string;
     onError?: string;
     bind?: string;
+    timeoutMs?: number;
 }
 
 export interface BranchNode {
@@ -71,6 +72,7 @@ export interface LoopNode {
     next?: string;
     onError?: string;
     bind?: string;
+    timeoutMs?: number;
 }
 
 export type WorkflowNode = TaskNode | BranchNode | LoopNode;

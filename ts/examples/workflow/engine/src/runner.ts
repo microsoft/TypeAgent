@@ -171,7 +171,12 @@ class TaskFailure extends Error {
 // ---- Scope exit ----
 
 type ScopeExit =
-    | { kind: "terminal" }
+    | {
+          kind: "terminal";
+          errorHandled?:
+              | { message: string; nodeId: string | undefined }
+              | undefined;
+      }
     | { kind: "sentinel"; sentinel: "@iterate" | "@exit" };
 
 // ---- Public types ----
@@ -346,7 +351,7 @@ export class WorkflowEngine {
         });
 
         try {
-            await this.executeScope(
+            const exit = await this.executeScope(
                 ir.nodes,
                 ir.entry,
                 scope,
@@ -359,7 +364,34 @@ export class WorkflowEngine {
                 constraints,
             );
 
-            const output = resolveTemplate(ir.output, scope);
+            let output: unknown;
+            try {
+                output = resolveTemplate(ir.output, scope);
+            } catch (resolveErr) {
+                // Output resolution failed. If we went through an error
+                // recovery path (e.g. cleanup), report the original error
+                // instead of the confusing "unresolved reference" message.
+                if (exit.kind === "terminal" && exit.errorHandled) {
+                    const { message, nodeId } = exit.errorHandled;
+                    debug(
+                        "run %s failed (error handled, output unresolvable): %s",
+                        runId,
+                        message,
+                    );
+                    this.emit({
+                        type: "runFailed",
+                        runId,
+                        error: { message },
+                        timestamp: Date.now(),
+                    });
+                    return {
+                        runId,
+                        success: false,
+                        error: { message, nodeId },
+                    };
+                }
+                throw resolveErr;
+            }
 
             debug("run %s completed", runId);
 
@@ -401,6 +433,11 @@ export class WorkflowEngine {
         let currentId: string | undefined = entryId;
         let pendingError:
             | { error: Record<string, unknown>; trigger: unknown }
+            | undefined;
+        // Track the first error that was handled via onError so the caller
+        // knows this scope completed through an error-recovery path.
+        let handledError:
+            | { message: string; nodeId: string | undefined }
             | undefined;
 
         while (currentId) {
@@ -444,6 +481,12 @@ export class WorkflowEngine {
                         signal,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
                         },
                         policy,
                         approve,
@@ -483,6 +526,12 @@ export class WorkflowEngine {
                         signal,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
                         },
                         policy,
                         approve,
@@ -493,7 +542,9 @@ export class WorkflowEngine {
             }
         }
 
-        return { kind: "terminal" };
+        return handledError
+            ? { kind: "terminal", errorHandled: handledError }
+            : { kind: "terminal" };
     }
 
     private async executeTask(
@@ -556,9 +607,11 @@ export class WorkflowEngine {
             debug("task %s (%s) executing", nodeId, node.task);
 
             // Build per-task signal with optional timeout.
+            // Node-level timeoutMs overrides the global default.
+            const effectiveTimeout = node.timeoutMs ?? taskTimeoutMs;
             let taskSignal = signal;
             let taskAbortController: AbortController | undefined;
-            if (taskTimeoutMs !== undefined) {
+            if (effectiveTimeout !== undefined) {
                 taskAbortController = new AbortController();
                 // Propagate parent signal
                 if (signal.aborted) {
@@ -585,7 +638,7 @@ export class WorkflowEngine {
             };
 
             let result: TaskResult;
-            if (taskTimeoutMs !== undefined) {
+            if (effectiveTimeout !== undefined) {
                 let timeoutId: ReturnType<typeof setTimeout>;
                 let completed = false;
                 const timeout = new Promise<never>((_, reject) => {
@@ -594,11 +647,11 @@ export class WorkflowEngine {
                             taskAbortController!.abort("Task timed out");
                             reject(
                                 new EngineError(
-                                    `Task "${node.task}" at "${nodeId}" timed out after ${taskTimeoutMs}ms`,
+                                    `Task "${node.task}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
                                 ),
                             );
                         }
-                    }, taskTimeoutMs);
+                    }, effectiveTimeout);
                 });
                 result = await Promise.race([
                     task.execute(resolvedInput, ctx).then((r) => {

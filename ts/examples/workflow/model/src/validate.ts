@@ -45,6 +45,35 @@ export function validateWorkflowIR(
     // Static schema compatibility for the top-level scope.
     validateSchemaCompat(ir.nodes, "nodes", errors);
 
+    // Validate that the workflow output template only references existing
+    // bindings. This catches references to names that no node binds.
+    if (ir.output) {
+        const bindings = buildBindingMap(ir.nodes);
+        const outputRefs = collectScopeRefs(ir.output, "output");
+        for (const ref of outputRefs) {
+            if (!bindings.has(ref.name)) {
+                if (!ref.optional) {
+                    errors.push({
+                        path: ref.templatePath,
+                        message:
+                            `$from "scope", name "${ref.name}": no node in ` +
+                            `the workflow binds that name.`,
+                    });
+                }
+            } else {
+                const producerSchema = bindings.get(ref.name)!;
+                const err = checkSchemaCompat(
+                    producerSchema,
+                    ref.path,
+                    `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+                );
+                if (err) {
+                    errors.push({ path: ref.templatePath, message: err });
+                }
+            }
+        }
+    }
+
     return { valid: errors.length === 0, errors };
 }
 
@@ -438,6 +467,7 @@ function checkNodeTaskSchemas(
 interface ScopeRef {
     name: string;
     path: (string | number)[] | undefined;
+    optional: boolean;
     templatePath: string;
 }
 
@@ -463,6 +493,7 @@ function collectScopeRefs(
             {
                 name: obj["name"] as string,
                 path: obj["path"] as (string | number)[] | undefined,
+                optional: obj["optional"] === true,
                 templatePath,
             },
         ];
@@ -553,9 +584,14 @@ function validateSchemaCompat(
         for (const ref of refs) {
             const producerSchema = bindings.get(ref.name);
             if (!producerSchema) {
-                // Binding not found in this scope. Could be valid if
-                // produced conditionally (onError path). Don't error here;
-                // runtime will catch unresolved refs.
+                if (!ref.optional) {
+                    errors.push({
+                        path: ref.templatePath,
+                        message:
+                            `$from "scope", name "${ref.name}": no node in ` +
+                            `this scope binds that name.`,
+                    });
+                }
                 continue;
             }
             // Extract consumer expected type from inputSchema.

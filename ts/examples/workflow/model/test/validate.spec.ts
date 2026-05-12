@@ -664,6 +664,7 @@ describe("validateWorkflowIR", () => {
                     default: "start",
                 } as any,
             },
+            output: "done",
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -680,6 +681,7 @@ describe("validateWorkflowIR", () => {
                     default: "start",
                 } as any,
             },
+            output: "done",
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -696,6 +698,7 @@ describe("validateWorkflowIR", () => {
                     default: "start",
                 } as any,
             },
+            output: "done",
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(false);
@@ -948,6 +951,132 @@ describe("validateWorkflowIR", () => {
                     e.message.includes("string") &&
                     e.message.includes("integer"),
             ),
+        ).toBe(true);
+    });
+
+    // ---- Unresolved binding detection ----
+
+    it("rejects $from scope reference to non-existent binding", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: { $from: "scope", name: "ghost" },
+                    },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("ghost") &&
+                    e.message.includes("no node"),
+            ),
+        ).toBe(true);
+    });
+
+    it("accepts $from scope reference to existing binding", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                first: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {},
+                    next: "second",
+                    bind: "firstOut",
+                },
+                second: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: { $from: "scope", name: "firstOut" },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "first",
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(true);
+    });
+
+    it("allows optional $from scope reference to non-existent binding", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: { $from: "scope", name: "ghost", optional: true },
+                    },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects workflow output referencing non-existent binding", () => {
+        const ir = makeMinimalIR({
+            output: { $from: "scope", name: "missing" },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("missing") &&
+                    e.message.includes("no node"),
+            ),
+        ).toBe(true);
+    });
+
+    it("accepts workflow output referencing existing binding", () => {
+        const ir = makeMinimalIR({
+            output: { $from: "scope", name: "out" },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects nested $from scope reference to non-existent binding", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        vars: {
+                            nested: {
+                                $from: "scope",
+                                name: "noSuchBinding",
+                            },
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes("noSuchBinding")),
         ).toBe(true);
     });
 });

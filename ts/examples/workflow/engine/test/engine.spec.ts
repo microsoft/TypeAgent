@@ -5334,8 +5334,8 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("unresolved");
             expect(result.error?.message).toContain("doesNotExist");
+            expect(result.error?.message).toContain("no node");
         });
     });
 
@@ -5945,6 +5945,222 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.error?.message).toContain(
                 "not in the allowed hosts list",
             );
+        });
+    });
+
+    describe("onError cleanup-then-fail", () => {
+        it("reports original error when cleanup path leaves output unresolvable", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "the original problem" },
+                    };
+                },
+            };
+            const cleanupTask: TaskDefinition = {
+                name: "test.cleanup",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: { cleaned: true } };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                cleanupTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            // step fails -> cleanup runs (binds "cleanupResult")
+            // but output references "happyResult" which was never bound
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "cleanupFail",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "cleanup",
+                        bind: "happyResult",
+                    },
+                    cleanup: {
+                        kind: "task",
+                        task: "test.cleanup",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "cleanupResult",
+                    },
+                },
+                entry: "step",
+                output: {
+                    $from: "scope",
+                    name: "happyResult",
+                } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            // Should report the *original* error, not "unresolved reference"
+            expect(result.error?.message).toContain("the original problem");
+        });
+
+        it("succeeds when onError handler produces a valid output", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "step failed" },
+                    };
+                },
+            };
+            const recoverTask: TaskDefinition = {
+                name: "test.recover",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return {
+                        kind: "ok" as const,
+                        output: {
+                            fallback: true,
+                            reason: input.error?.message,
+                        },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                recoverTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            // step fails -> recover runs and binds "result"
+            // output references "result", which IS bound by the recovery node
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "recoverSuccess",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "recover",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.recover",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect((result.output as any).fallback).toBe(true);
+            expect((result.output as any).reason).toBe("step failed");
+        });
+
+        it("reports original error with nodeId from the failing task", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "boom" },
+                    };
+                },
+            };
+            const noopTask: TaskDefinition = {
+                name: "test.noop",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: {} };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                noopTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "nodeIdCheck",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    doWork: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "cleanup",
+                        bind: "workOutput",
+                    },
+                    cleanup: {
+                        kind: "task",
+                        task: "test.noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "cleanedUp",
+                    },
+                },
+                entry: "doWork",
+                output: {
+                    $from: "scope",
+                    name: "workOutput",
+                } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.nodeId).toBe("doWork");
         });
     });
 });

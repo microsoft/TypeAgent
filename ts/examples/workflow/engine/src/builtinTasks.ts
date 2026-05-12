@@ -15,8 +15,39 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { TaskDefinition } from "workflow-model";
+import { JSONSchema, TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
+
+/**
+ * Recursively enforce OpenAI structured output requirements on a schema:
+ * - `additionalProperties: false` on every object
+ * - `required` must list every key in `properties`
+ * Returns a deep copy; the original schema is not mutated.
+ */
+function sealObjects(schema: JSONSchema): JSONSchema {
+    const copy = { ...schema };
+    if (copy.type === "object" || copy.properties) {
+        copy.additionalProperties = false;
+        if (copy.properties) {
+            const sealed: Record<string, JSONSchema> = {};
+            for (const [key, sub] of Object.entries(copy.properties)) {
+                if (typeof sub !== "boolean") {
+                    sealed[key] = sealObjects(sub);
+                }
+            }
+            copy.properties = sealed;
+            copy.required = Object.keys(sealed);
+        }
+    }
+    if (
+        copy.items &&
+        typeof copy.items !== "boolean" &&
+        !Array.isArray(copy.items)
+    ) {
+        copy.items = sealObjects(copy.items);
+    }
+    return copy;
+}
 
 export const intAdd: TaskDefinition<
     { a: number; b: number },
@@ -338,7 +369,10 @@ export const llmGenerateJson: TaskDefinition<
                 ? {
                       name: "response",
                       strict: true as const,
-                      schema: valueSchema as Record<string, unknown>,
+                      schema: sealObjects(valueSchema) as Record<
+                          string,
+                          unknown
+                      >,
                   }
                 : undefined;
         const result = await model.complete(
