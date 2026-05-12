@@ -33,6 +33,13 @@ export async function executeSettingsAction(
             );
             break;
 
+        case "setAutoComplete":
+            await processCommandNoLock(
+                `@settings ui autoComplete ${settingsAction.parameters.enable}`,
+                context.sessionContext.agentContext,
+            );
+            break;
+
         default:
             throw new Error(
                 `Unknown settings action: ${(settingsAction as UserSettingsAction).actionName}`,
