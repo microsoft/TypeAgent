@@ -138,6 +138,19 @@ describe("PortRegistrar", () => {
             r.release(id2);
             expect(r.lookup("browser", "ws")).toBe(1);
         });
+
+        test("re-registering an older session moves it to most-recent (regression: insertion-order)", () => {
+            // SID_A registers first, then SID_B (newer). Without the
+            // delete+reinsert fix, an SID_A re-register would update
+            // its port in place but leave SID_B as the most-recent
+            // entry by insertion order, so lookup would still return
+            // SID_B's port.
+            const r = new PortRegistrar();
+            r.register("browser", "ws", 1, SID_A);
+            r.register("browser", "ws", 2, SID_B);
+            r.register("browser", "ws", 99, SID_A); // SID_A re-registers
+            expect(r.lookup("browser", "ws")).toBe(99);
+        });
     });
 
     describe("hasActiveAllocations", () => {

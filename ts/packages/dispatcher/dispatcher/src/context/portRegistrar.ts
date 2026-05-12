@@ -128,7 +128,16 @@ export class PortRegistrar {
                 debug(
                     `re-register ${agentName}/${role} session=${sessionContextId} port=${allocation.port}->${port} regId=${existing}`,
                 );
+                // Delete + reinsert so Map insertion order reflects
+                // recency. lookup() relies on insertion order to pick
+                // the most recent registration for a given (agentName,
+                // role) tuple; in-place mutation would leave the
+                // updated entry in its original slot and a more recent
+                // *different-session* registration would incorrectly
+                // win the lookup.
                 allocation.port = port;
+                this.allocations.delete(existing);
+                this.allocations.set(existing, allocation);
                 return existing;
             }
             // Index entry was stale; fall through to fresh insert.

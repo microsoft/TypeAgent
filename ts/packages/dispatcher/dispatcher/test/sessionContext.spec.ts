@@ -31,6 +31,10 @@ function makeContext(overrides: {
                 getSharedLocalHostPort: async () => undefined,
                 setLocalHostPort: () => {},
             },
+            portRegistrar: {
+                register: () => "test-reg-id",
+                release: () => {},
+            },
             clientIO: {
                 notify: () => {},
                 question: async () => 0,
@@ -49,7 +53,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: "/global/instance",
             persistDir: "/session/persist",
         });
-        createSessionContext("myAgent", {}, context, false);
+        createSessionContext("myAgent", {}, context, false, "test-session-id");
         const instanceCall = calls.find((c) => c.name === "myAgent");
         expect(instanceCall?.baseDir).toBe("/global/instance");
     });
@@ -59,7 +63,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: "/session/persist",
         });
-        createSessionContext("myAgent", {}, context, false);
+        createSessionContext("myAgent", {}, context, false, "test-session-id");
         const instanceCall = calls.find((c) => c.name === "myAgent");
         expect(instanceCall?.baseDir).toBe("/session/persist");
     });
@@ -73,8 +77,8 @@ describe("createSessionContext storage routing", () => {
             instanceDir: "/global/instance",
             persistDir: "/session/session-2",
         });
-        createSessionContext("myAgent", {}, ctx1, false);
-        createSessionContext("myAgent", {}, ctx2, false);
+        createSessionContext("myAgent", {}, ctx1, false, "test-session-id");
+        createSessionContext("myAgent", {}, ctx2, false, "test-session-id");
         expect(calls1.find((c) => c.name === "myAgent")?.baseDir).toBe(
             "/global/instance",
         );
@@ -88,7 +92,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: undefined,
         });
-        const sessionCtx = createSessionContext("myAgent", {}, context, false);
+        const sessionCtx = createSessionContext("myAgent", {}, context, false, "test-session-id");
         expect(sessionCtx.instanceStorage).toBeUndefined();
     });
 });
@@ -124,3 +128,4 @@ describe("initializeCommandHandlerContext option validation", () => {
         );
     });
 });
+

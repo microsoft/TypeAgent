@@ -195,6 +195,15 @@ export interface SessionContext<T = unknown> {
     readonly sessionStorage: Storage | undefined;
     readonly instanceStorage: Storage | undefined; // storage that are preserved across sessions
 
+    /**
+     * Opaque identifier for the agent's current session-context lifetime.
+     * Re-generated each time the agent is (re-)initialized; stable for the
+     * lifetime of this `SessionContext` instance. Provided so out-of-process
+     * agents (via agent-rpc) can scope port registrations to their session;
+     * most in-process agents do not need to read this directly.
+     */
+    readonly sessionContextId: string;
+
     notify(
         event: AppAgentEvent,
         message: string | DisplayContent,
@@ -226,11 +235,41 @@ export interface SessionContext<T = unknown> {
     // The dispatcher will call getDynamicSchema/getDynamicGrammar to get the updated content.
     reloadAgentSchema(): Promise<void>;
 
-    // Experimental: get the shared local host port
-    getSharedLocalHostPort(agentName: string): Promise<number>;
+    /**
+     * Register a port this agent has just bound (typically with
+     * `bind(0)` so the OS picks a free ephemeral port). The dispatcher
+     * records the `(agent, role, port)` tuple in its `PortRegistrar`
+     * so other in-process agents and out-of-process clients (Chrome
+     * extension, VS Code extension, etc.) can discover it.
+     *
+     * `role` is a free-form string scoping the registration within
+     * this agent — e.g. `"ws-bridge"`, `"http-debug"`. Use distinct
+     * roles when an agent exposes multiple listeners.
+     *
+     * Returns a `release()` callback the agent should invoke when the
+     * listener is torn down. Forgetting to release is non-fatal — the
+     * dispatcher releases all of an agent's allocations as a backstop
+     * when the agent's session context closes — but explicit release
+     * keeps lookups accurate while the agent is still alive.
+     */
+    registerPort(role: string, port: number): { release: () => void };
 
-    // Experimental: update this agent's bound local host port (used after OS port assignment)
+    /**
+     * @deprecated Use {@link registerPort} with a meaningful role
+     * instead. Kept for backwards compatibility with agents that
+     * predate the multi-role registrar; routes through the registrar
+     * with `role="default"`.
+     */
     setLocalHostPort(port: number): void;
+
+    /**
+     * @deprecated Use {@link lookupPort} (out-of-process discovery
+     * channel) or, for in-process cross-agent lookups, ask the target
+     * agent directly. Kept for backwards compatibility; routes through
+     * the registrar with `role="default"` and enforces the existing
+     * `manifest.sharedLocalView` permission check.
+     */
+    getSharedLocalHostPort(agentName: string): Promise<number>;
 
     // Experimental: get the available indexes
     indexes(type: "image" | "email" | "website" | "all"): Promise<any[]>;

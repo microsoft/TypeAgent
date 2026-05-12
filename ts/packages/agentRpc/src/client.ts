@@ -31,6 +31,7 @@ import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
+import { randomUUID } from "crypto";
 
 /**
  * Race a promise against an AbortSignal. If the signal fires before the
@@ -184,6 +185,9 @@ export async function createAgentRpcClient(
 ) {
     const channel = channelProvider.createChannel(`agent:${name}`);
     const contextMap = createObjectMap<SessionContext<ShimContext>>();
+    // Tracks port registration handles returned by sessionContext.registerPort
+    // so the out-of-process agent can release them via the regId we sent back.
+    const registrationHandles = new Map<string, { release: () => void }>();
     function getContextParam(
         context: SessionContext<ShimContext>,
     ): ContextParams {
@@ -192,6 +196,7 @@ export async function createAgentRpcClient(
             hasInstanceStorage: context.instanceStorage !== undefined,
             hasSessionStorage: context.sessionStorage !== undefined,
             agentContextId: context.agentContext?.contextId,
+            sessionContextId: context.sessionContextId,
         };
     }
 
@@ -323,6 +328,24 @@ export async function createAgentRpcClient(
         }) => {
             const context = contextMap.get(param.contextId);
             context.setLocalHostPort(param.port);
+        },
+        registerPort: async (param: {
+            contextId: number;
+            role: string;
+            port: number;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            const handle = context.registerPort(param.role, param.port);
+            const regId = randomUUID();
+            registrationHandles.set(regId, handle);
+            return { regId };
+        },
+        releasePort: async (param: { regId: string }) => {
+            const handle = registrationHandles.get(param.regId);
+            if (handle !== undefined) {
+                registrationHandles.delete(param.regId);
+                handle.release();
+            }
         },
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);

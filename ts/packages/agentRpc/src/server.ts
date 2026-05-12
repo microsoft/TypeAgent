@@ -412,6 +412,7 @@ export function createAgentRpcServer(
         contextId: number,
         hasInstanceStorage: boolean,
         hasSessionStorage: boolean,
+        sessionContextId: string,
         context: any,
     ): SessionContext<any> {
         const dynamicAgentRpcServer = new Map<string, () => void>();
@@ -424,6 +425,7 @@ export function createAgentRpcServer(
             instanceStorage: hasInstanceStorage
                 ? getStorage(contextId, false)
                 : undefined,
+            sessionContextId,
             notify: (
                 event: AppAgentEvent,
                 message: string | DisplayContent,
@@ -463,6 +465,29 @@ export function createAgentRpcServer(
                 void rpc
                     .invoke("setLocalHostPort", { contextId, port })
                     .catch();
+            },
+            registerPort(role: string, port: number) {
+                // Fire-and-forget the invoke; resolve the regId lazily so
+                // release() waits for the round-trip if it gets called
+                // before the registration response arrives.
+                const regIdPromise: Promise<string> = rpc
+                    .invoke("registerPort", { contextId, role, port })
+                    .then((r: { regId: string }) => r.regId);
+                regIdPromise.catch(() => {
+                    // Swallow registration failures here — they're logged
+                    // on the dispatcher side via the registrar; throwing
+                    // synchronously from registerPort would force every
+                    // agent caller to add try/catch around the bind path.
+                });
+                return {
+                    release: () => {
+                        void regIdPromise
+                            .then((regId) =>
+                                rpc.invoke("releasePort", { regId }),
+                            )
+                            .catch();
+                    },
+                };
             },
             addDynamicAgent: async (
                 name: string,
@@ -573,6 +598,7 @@ export function createAgentRpcServer(
             contextId,
             hasInstanceStorage,
             hasSessionStorage,
+            sessionContextId,
             agentContextId,
         } = param;
         if (contextId === undefined) {
@@ -586,6 +612,11 @@ export function createAgentRpcServer(
         if (hasSessionStorage === undefined) {
             throw new Error("Invalid context param: missing hasSessionStorage");
         }
+        if (sessionContextId === undefined) {
+            throw new Error(
+                "Invalid context param: missing sessionContextId",
+            );
+        }
 
         const agentContext =
             agentContextId !== undefined
@@ -596,6 +627,7 @@ export function createAgentRpcServer(
             contextId,
             hasInstanceStorage,
             hasSessionStorage,
+            sessionContextId,
             agentContext,
         );
     }
