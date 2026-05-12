@@ -15,7 +15,7 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 ```
 Shell (Electron)              CLI (Node.js)              Application extensions
    │  in-process (default)       │  always remote            │  always remote
-   │  OR --connect               │                           │  (vscode-shell, etc.)
+   │  OR --connect [port]        │                           │  (vscode-shell, etc.)
    └──────────────┬──────────────┴───────────────────────────┘
                   │
                   │   ws://localhost:8999  (configurable)
@@ -155,13 +155,11 @@ On disconnect, the server removes all of that connection's conversations from it
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ in-process Dispatcher
 ```
 
-**Connected (`--connect`)** — connects to a running agentServer (or auto-spawns one) at the configured well-known port.
+**Connected (`--connect [port]`)** — connects to a running agentServer (or auto-spawns one). The port defaults to `AGENT_SERVER_PORT` (then `8999`); pass an explicit port to override.
 
 ```
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ WebSocket ↔ agentServer
 ```
-
-The shell does not pin a port — `--connect` simply means "connect (and auto-spawn if needed) the agent-server at `AGENT_SERVER_PORT`" rather than running the dispatcher in-process.
 
 ---
 
@@ -175,7 +173,7 @@ Terminal ↔ ConsoleClientIO ↔ WebSocket ↔ agentServer
 
 ### `agent-cli connect` (interactive)
 
-`connect` calls `ensureAgentServer({ hidden, idleTimeout })` to auto-spawn the server if no live agentServer answers at the configured URL, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
+`connect` calls `ensureAgentServer({ port, hidden, idleTimeout })` to auto-spawn the server if no live agentServer answers at the configured URL, then calls `connectAgentServer()` and `joinConversation()` directly. Pass `--port <port>` to override `AGENT_SERVER_PORT` for this invocation. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
 
 ### `agent-cli run` (non-interactive)
 
