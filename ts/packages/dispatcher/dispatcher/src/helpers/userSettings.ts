@@ -22,6 +22,9 @@ export interface UserSettings {
         // means "no prior preference".
         lastConversationId?: string;
     };
+    ui: {
+        autoComplete: boolean;
+    };
 }
 
 export const defaultUserSettings: UserSettings = {
@@ -31,6 +34,9 @@ export const defaultUserSettings: UserSettings = {
     },
     conversation: {
         resume: false,
+    },
+    ui: {
+        autoComplete: true,
     },
 };
 
