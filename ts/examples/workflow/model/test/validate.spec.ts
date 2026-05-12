@@ -2180,6 +2180,65 @@ describe("validateWorkflowIR", () => {
                 ),
             ).toBe(true);
         });
+
+        it("rejects $from state reference with incompatible type", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            count: {
+                                schema: { type: "integer" },
+                                initial: 0,
+                            },
+                        },
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "noop",
+                                    inputSchema: {
+                                        type: "object",
+                                        properties: {
+                                            label: { type: "string" },
+                                        },
+                                    },
+                                    outputSchema: { type: "object" },
+                                    inputs: {
+                                        label: {
+                                            $from: "state",
+                                            name: "count",
+                                        },
+                                    },
+                                    next: "@iterate",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            count: { $from: "state", name: "count" },
+                        },
+                        output: null,
+                        outputSchema: { type: "null" },
+                        maxIterations: 10,
+                        bind: "out",
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("type mismatch") &&
+                    e.message.includes("integer") &&
+                    e.message.includes("string"),
+                ),
+            ).toBe(true);
+        });
     });
 
     // ---- Phase 7: Output binding coverage (pass 12) ----

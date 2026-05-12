@@ -942,10 +942,18 @@ function checkStateSoundness(
     }
 
     // Check $from: "state" refs in body nodes reference declared state vars
+    // and that the state variable's schema type is compatible with the
+    // consumer's expected type at that input position.
     for (const [id, node] of Object.entries(loopNode.body.nodes)) {
         let inputs: Record<string, Template> | undefined;
-        if (node.kind === "task") inputs = node.inputs;
-        else if (node.kind === "loop") inputs = node.inputs;
+        let inputSchema: JSONSchema | undefined;
+        if (node.kind === "task") {
+            inputs = node.inputs;
+            inputSchema = node.inputSchema;
+        } else if (node.kind === "loop") {
+            inputs = node.inputs;
+            inputSchema = node.inputSchema;
+        }
         if (!inputs) continue;
 
         const stateRefs = collectStateRefs(
@@ -960,6 +968,41 @@ function checkStateSoundness(
                         `$from "state", name "${ref.name}": no state ` +
                         `variable "${ref.name}" is declared on this loop.`,
                 });
+            } else if (inputSchema) {
+                // Type-compatibility: check the state variable's schema
+                // type against the consumer's expected type at this position.
+                const stateSchema = loopNode.state[ref.name].schema;
+                const inputKey = ref.templatePath.split(".").pop()!;
+                const consumerPropDef =
+                    inputSchema.properties?.[inputKey];
+                const consumerPropSchema =
+                    consumerPropDef !== undefined &&
+                    typeof consumerPropDef !== "boolean"
+                        ? consumerPropDef
+                        : undefined;
+                if (
+                    stateSchema.type &&
+                    consumerPropSchema?.type
+                ) {
+                    const stateTypes = normalizeTypeSet(stateSchema.type);
+                    const consumerTypes = normalizeTypeSet(
+                        consumerPropSchema.type,
+                    );
+                    const overlap = consumerTypes.some((ct) =>
+                        stateTypes.includes(ct),
+                    );
+                    if (!overlap) {
+                        errors.push({
+                            path: ref.templatePath,
+                            message:
+                                `$from "state", name "${ref.name}": type ` +
+                                `mismatch: state variable declares ` +
+                                `${JSON.stringify(stateSchema.type)} but ` +
+                                `consumer expects ` +
+                                `${JSON.stringify(consumerPropSchema.type)}.`,
+                        });
+                    }
+                }
             }
         }
     }
