@@ -1949,6 +1949,7 @@ export async function processCommandsEnhanced<T>(
     inputs?: string[],
     completionController?: CompletionController,
     dispatcherForCancel?: Dispatcher,
+    isCompletionEnabled?: () => boolean,
 ) {
     const fs = await import("node:fs");
     const historyFile = path.join(
@@ -1996,7 +1997,9 @@ export async function processCommandsEnhanced<T>(
         } else if (completionController) {
             request = await questionWithCompletion(
                 promptColor(prompt),
-                completionController,
+                isCompletionEnabled && !isCompletionEnabled()
+                    ? undefined
+                    : completionController,
                 history,
             );
         } else {
