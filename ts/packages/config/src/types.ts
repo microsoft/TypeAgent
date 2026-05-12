@@ -66,8 +66,14 @@ export type SourceMap = Record<string, ConfigSource>;
  * `typeagent-config` (defined in `keyVault.ts`).
  */
 export interface KeyVaultOptions {
-    /** Azure Key Vault name (e.g., `aisystems`). Required. */
-    vaultName: string;
+    /**
+     * Azure Key Vault name (e.g., `aisystems`). When omitted, the
+     * loader auto-discovers the vault name from the `vault.shared`
+     * key in the already-loaded defaults / local layers (which
+     * flattens to `TYPEAGENT_SHAREDVAULT`). If no vault name can
+     * be resolved, the Key Vault layer is silently skipped.
+     */
+    vaultName?: string;
 
     /**
      * Secret name holding the YAML blob. Defaults to

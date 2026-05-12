@@ -203,10 +203,37 @@ export async function loadConfig(
     const populateProcessEnv = options.populateProcessEnv ?? true;
     const strict = options.strict ?? true;
 
+    // Resolve vault name. If the caller didn't supply one, do a quick
+    // sync pre-pass of defaults+local to discover TYPEAGENT_SHAREDVAULT
+    // (the flat form of `vault.shared`).
+    let vaultName = options.keyVault.vaultName;
+    if (!vaultName) {
+        const preLayers: { source: ConfigSource; flat: FlatEnv }[] = [];
+        pushYamlLayer(preLayers, ConfigSource.Defaults, defaultsPath, false);
+        pushYamlLayer(preLayers, ConfigSource.Local, localPath, false);
+        pushFileLayer(
+            preLayers,
+            ConfigSource.DotEnv,
+            () => readDotEnvFile(dotEnvPath),
+            false,
+            ".env",
+        );
+        const preMerged = mergeFlat(preLayers.map((l) => l.flat));
+        vaultName = preMerged.TYPEAGENT_SHAREDVAULT;
+        if (!vaultName) {
+            debug(
+                "key vault requested but no vault name supplied and " +
+                    "vault.shared not found in defaults/local — skipping KV layer",
+            );
+            return loadConfigSync(options);
+        }
+        debug("auto-discovered vault name: %s", vaultName);
+    }
+
     debug(
         "loading config with key vault (workspaceRoot=%s, vault=%s)",
         root,
-        options.keyVault.vaultName,
+        vaultName,
     );
 
     const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
@@ -227,6 +254,7 @@ export async function loadConfig(
     try {
         const tree = await fetchKeyVaultConfig({
             ...options.keyVault,
+            vaultName,
             failOnError: options.keyVault.failOnError ?? strict,
         });
         if (tree) {
