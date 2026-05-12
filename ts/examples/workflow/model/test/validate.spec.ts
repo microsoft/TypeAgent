@@ -266,6 +266,7 @@ describe("validateWorkflowIR", () => {
                     bind: "out",
                 } as any,
             },
+            outputSchema: { type: "integer" },
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -552,7 +553,7 @@ describe("validateWorkflowIR", () => {
         expect(result.valid).toBe(true);
     });
 
-    it("allows type union overlap (producer: [string, null], consumer: string)", () => {
+    it("rejects union producer [string, null] against consumer string (null has no match)", () => {
         const ir = makeMinimalIR({
             nodes: {
                 producer: {
@@ -577,6 +578,52 @@ describe("validateWorkflowIR", () => {
                         type: "object",
                         required: ["x"],
                         properties: { x: { type: "string" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: {
+                            $from: "scope",
+                            name: "data",
+                            path: ["value"],
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "producer",
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes("not compatible")),
+        ).toBe(true);
+    });
+
+    it("allows union producer [string, null] when consumer also accepts null", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                producer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: {
+                            value: { type: ["string", "null"] },
+                        },
+                    },
+                    inputs: {},
+                    next: "consumer",
+                    bind: "data",
+                },
+                consumer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: {
+                        type: "object",
+                        required: ["x"],
+                        properties: { x: { type: ["string", "null"] } },
                     },
                     outputSchema: { type: "object" },
                     inputs: {
@@ -672,6 +719,7 @@ describe("validateWorkflowIR", () => {
                 },
             },
             output: "done",
+            outputSchema: { type: "string" },
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -696,6 +744,7 @@ describe("validateWorkflowIR", () => {
                 },
             },
             output: "done",
+            outputSchema: { type: "string" },
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -1889,9 +1938,10 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("no binder of") &&
-                    e.message.includes("dominates"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("no binder of") &&
+                        e.message.includes("dominates"),
                 ),
             ).toBe(true);
         });
@@ -1976,9 +2026,10 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("Bind name") &&
-                    e.message.includes("one dominates the other"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bind name") &&
+                        e.message.includes("one dominates the other"),
                 ),
             ).toBe(true);
         });
@@ -2072,9 +2123,12 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes('"j"') &&
-                    e.message.includes("no corresponding entry in iterateState"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes('"j"') &&
+                        e.message.includes(
+                            "no corresponding entry in iterateState",
+                        ),
                 ),
             ).toBe(true);
         });
@@ -2125,9 +2179,10 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes('"nonexistent"') &&
-                    e.message.includes("no state variable"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes('"nonexistent"') &&
+                        e.message.includes("no state variable"),
                 ),
             ).toBe(true);
         });
@@ -2174,9 +2229,10 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes('"phantom"') &&
-                    e.message.includes("no corresponding state variable"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes('"phantom"') &&
+                        e.message.includes("no corresponding state variable"),
                 ),
             ).toBe(true);
         });
@@ -2232,10 +2288,11 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("type mismatch") &&
-                    e.message.includes("integer") &&
-                    e.message.includes("string"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("type mismatch") &&
+                        e.message.includes("integer") &&
+                        e.message.includes("string"),
                 ),
             ).toBe(true);
         });
@@ -2274,7 +2331,9 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(false);
             expect(
                 result.errors.some((e) =>
-                    e.message.includes("not covered on the path through terminal"),
+                    e.message.includes(
+                        "not covered on the path through terminal",
+                    ),
                 ),
             ).toBe(true);
         });
@@ -2339,7 +2398,586 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(false);
             expect(
                 result.errors.some((e) =>
-                    e.message.includes("not covered on the path through terminal"),
+                    e.message.includes(
+                        "not covered on the path through terminal",
+                    ),
+                ),
+            ).toBe(true);
+        });
+    });
+
+    describe("type compatibility (pass 7)", () => {
+        it("rejects literal string input where consumer expects integer", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["count"],
+                            properties: { count: { type: "integer" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: { count: "not-a-number" },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("inputs.count") &&
+                        e.message.includes("not compatible"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts literal string input where consumer expects string", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["mode"],
+                            properties: { mode: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: { mode: "fast" },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts $literal input with compatible type", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["config"],
+                            properties: {
+                                config: {
+                                    type: "object",
+                                    properties: { x: { type: "number" } },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            config: { $literal: { x: 42 } },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects $literal input with incompatible type", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["count"],
+                            properties: { count: { type: "integer" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            count: { $literal: "hello" },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("inputs.count") &&
+                        e.message.includes("not compatible"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects selector type incompatible with selectorSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: 42,
+                        selectorSchema: { type: "string" },
+                        cases: { a: "end" },
+                        default: "end",
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("selector") &&
+                        e.message.includes("Selector resolved type"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts selector type compatible with selectorSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "done",
+                        selectorSchema: { type: "string" },
+                        cases: { done: "end" },
+                        default: "end",
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects cases key not in selectorSchema enum", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: { $from: "input", name: "choice" },
+                        selectorSchema: {
+                            type: "string",
+                            enum: ["yes", "no"],
+                        },
+                        cases: { yes: "end", maybe: "end" },
+                        default: "end",
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                inputSchema: {
+                    type: "object",
+                    properties: { choice: { type: "string" } },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("cases.maybe") &&
+                        e.message.includes("not a valid value"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts cases keys that are all in selectorSchema enum", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: { $from: "input", name: "choice" },
+                        selectorSchema: {
+                            type: "string",
+                            enum: ["yes", "no"],
+                        },
+                        cases: { yes: "end", no: "end" },
+                        default: "end",
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                inputSchema: {
+                    type: "object",
+                    properties: { choice: { type: "string" } },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects workflow output type incompatible with outputSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                output: { $from: "scope", name: "result" },
+                outputSchema: {
+                    type: "object",
+                    required: ["val"],
+                    properties: { val: { type: "integer" } },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path === "output" &&
+                        e.message.includes("not compatible"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts workflow output type compatible with outputSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                output: { $from: "scope", name: "result" },
+                outputSchema: {
+                    type: "object",
+                    required: ["val"],
+                    properties: { val: { type: "string" } },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects phi-merge binder with incompatible type", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    trigger: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "success",
+                        onError: "recovery",
+                    },
+                    success: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: { x: { type: "string" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    recovery: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: { x: { type: "integer" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            val: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["x"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "trigger",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Phi-merge") &&
+                        e.message.includes("recovery"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts phi-merge when all binders are compatible", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    trigger: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "success",
+                        onError: "recovery",
+                    },
+                    success: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: { x: { type: "string" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    recovery: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: { x: { type: "string" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            val: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["x"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "trigger",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("checks integer is subtype of number", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "number" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: { val: 42 },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects object input missing required consumer property", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["cfg"],
+                            properties: {
+                                cfg: {
+                                    type: "object",
+                                    required: ["a", "b"],
+                                    properties: {
+                                        a: { type: "string" },
+                                        b: { type: "string" },
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            cfg: { a: "hello" },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("inputs.cfg") &&
+                        e.message.includes("not compatible"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts object input with all required consumer properties", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["cfg"],
+                            properties: {
+                                cfg: {
+                                    type: "object",
+                                    required: ["a"],
+                                    properties: {
+                                        a: { type: "string" },
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            cfg: { a: "hello", b: "extra" },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects loop output type incompatible with loop outputSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0,
+                            },
+                        },
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "noop",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["val"],
+                                        properties: {
+                                            val: { type: "string" },
+                                        },
+                                    },
+                                    inputs: {},
+                                    next: "@exit",
+                                    bind: "stepOut",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            i: { $from: "state", name: "i" },
+                        },
+                        output: {
+                            $from: "scope",
+                            name: "stepOut",
+                            path: ["val"],
+                        },
+                        outputSchema: { type: "integer" },
+                        maxIterations: 5,
+                        bind: "out",
+                    } as any,
+                },
+                outputSchema: { type: "integer" },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("output") &&
+                        e.message.includes("not compatible"),
                 ),
             ).toBe(true);
         });

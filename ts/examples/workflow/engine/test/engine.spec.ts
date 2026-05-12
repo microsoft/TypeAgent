@@ -206,11 +206,7 @@ function makeA4IR(): WorkflowIR {
                 maxCommits: { type: "integer", minimum: 1 },
             },
         },
-        outputSchema: {
-            type: "object",
-            required: ["brief"],
-            properties: { brief: { type: "string" } },
-        },
+        outputSchema: { type: "string" },
         constants: {
             one: { schema: { type: "integer" }, value: 1 },
         },
@@ -2782,7 +2778,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badLoopState",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -3771,7 +3767,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "loopAbortTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -3861,7 +3857,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "maxIterTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -3949,7 +3945,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "loopConstantTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 constants: {
                     step: {
                         schema: { type: "integer" },
@@ -5237,7 +5233,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "noSentinel",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",

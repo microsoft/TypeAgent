@@ -1,7 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WorkflowIR, WorkflowNode, Template, JSONSchema } from "./ir.js";
+import {
+    WorkflowIR,
+    WorkflowNode,
+    Template,
+    JSONSchema,
+    ConstantDef,
+    LoopStateVar,
+} from "./ir.js";
 import { TaskDefinition } from "./taskDefinition.js";
 
 export interface ValidationError {
@@ -77,6 +84,19 @@ export function validateWorkflowIR(
     // CFG-based passes: acyclicity, onError rules, termination,
     // scope closure, dominator analysis, state soundness, output binding.
     validateCFGPasses(ir, errors);
+
+    // Pass 7: Type compatibility (compositional resolved types).
+    validateTypeCompatibility(
+        ir.nodes,
+        "nodes",
+        errors,
+        ir.inputSchema,
+        undefined,
+        ir.constants,
+        ir.output,
+        "output",
+        ir.outputSchema,
+    );
 
     return { valid: errors.length === 0, errors };
 }
@@ -658,6 +678,11 @@ function checkDominance(
             }
         }
     }
+
+    // Pass 7 (phi-merge): when multiple binders contribute to the same
+    // name, each binder's output type must be compatible with every
+    // consumer's expected type.
+    checkPhiMergeTypes(nodes, binders, prefix, errors);
 }
 
 // ---- Orchestrate CFG-based passes ----
@@ -1315,6 +1340,470 @@ function normalizeTypeSet(type: unknown): string[] {
 /** True when a schema is the top type (empty object: no constraints). */
 function isTopSchema(schema: JSONSchema): boolean {
     return Object.keys(schema).length === 0;
+}
+
+// ---- Pass 7: Type compatibility ----
+
+/** Context for resolving template types within a scope. */
+interface TypeResolutionContext {
+    bindings: Map<string, JSONSchema>;
+    inputSchema: JSONSchema | undefined;
+    stateVars: Record<string, LoopStateVar> | undefined;
+    constants: Record<string, ConstantDef> | undefined;
+}
+
+/** Derive a JSON Schema from a literal JSON value. */
+function jsonValueToSchema(value: unknown): JSONSchema {
+    if (value === null) return { type: "null" };
+    if (typeof value === "string") return { type: "string" };
+    if (typeof value === "number") {
+        return Number.isInteger(value)
+            ? { type: "integer" }
+            : { type: "number" };
+    }
+    if (typeof value === "boolean") return { type: "boolean" };
+    if (Array.isArray(value)) {
+        if (value.length === 0) return { type: "array" };
+        const elemSchemas = value.map(jsonValueToSchema);
+        const firstJson = JSON.stringify(elemSchemas[0]);
+        const allSame = elemSchemas.every(
+            (s) => JSON.stringify(s) === firstJson,
+        );
+        return allSame
+            ? { type: "array", items: elemSchemas[0] }
+            : { type: "array" };
+    }
+    if (typeof value === "object") {
+        const properties: Record<string, JSONSchema> = {};
+        const required: string[] = [];
+        for (const [k, v] of Object.entries(
+            value as Record<string, unknown>,
+        )) {
+            properties[k] = jsonValueToSchema(v);
+            required.push(k);
+        }
+        return {
+            type: "object",
+            properties,
+            ...(required.length > 0 ? { required } : {}),
+        };
+    }
+    return {};
+}
+
+/**
+ * Compute the JSON Schema type that a template expression resolves to.
+ * Returns undefined if the type cannot be determined (e.g. unknown ref).
+ */
+function resolveTemplateType(
+    template: Template,
+    ctx: TypeResolutionContext,
+): JSONSchema | undefined {
+    if (template === null) return { type: "null" };
+    if (typeof template === "string") return { type: "string" };
+    if (typeof template === "number") {
+        return Number.isInteger(template)
+            ? { type: "integer" }
+            : { type: "number" };
+    }
+    if (typeof template === "boolean") return { type: "boolean" };
+    if (Array.isArray(template)) {
+        const elemSchemas = template
+            .map((e) => resolveTemplateType(e, ctx))
+            .filter((s): s is JSONSchema => s !== undefined);
+        if (elemSchemas.length === 0) return { type: "array" };
+        const firstJson = JSON.stringify(elemSchemas[0]);
+        const allSame = elemSchemas.every(
+            (s) => JSON.stringify(s) === firstJson,
+        );
+        return allSame
+            ? { type: "array", items: elemSchemas[0] }
+            : { type: "array" };
+    }
+
+    const obj = template as Record<string, unknown>;
+
+    if ("$from" in obj) {
+        const from = obj["$from"] as string;
+        const name = obj["name"] as string;
+        const path = obj["path"] as (string | number)[] | undefined;
+
+        let baseSchema: JSONSchema | undefined;
+        switch (from) {
+            case "scope":
+                baseSchema = ctx.bindings.get(name);
+                break;
+            case "input":
+                if (ctx.inputSchema?.properties) {
+                    const prop = ctx.inputSchema.properties[name];
+                    if (prop && typeof prop !== "boolean") {
+                        baseSchema = prop;
+                    }
+                }
+                break;
+            case "state":
+                baseSchema = ctx.stateVars?.[name]?.schema;
+                break;
+            case "constant":
+                baseSchema = ctx.constants?.[name]?.schema;
+                break;
+        }
+        if (!baseSchema) return undefined;
+        if (path && path.length > 0) {
+            return resolveSchemaPath(baseSchema, path);
+        }
+        return baseSchema;
+    }
+
+    if ("$literal" in obj) {
+        return jsonValueToSchema(obj["$literal"]);
+    }
+
+    // Plain object: property-wise composition
+    const properties: Record<string, JSONSchema> = {};
+    const required: string[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+        const propType = resolveTemplateType(value as Template, ctx);
+        if (propType) {
+            properties[key] = propType;
+            required.push(key);
+        }
+    }
+    return {
+        type: "object",
+        properties,
+        ...(required.length > 0 ? { required } : {}),
+    };
+}
+
+/**
+ * Structural subtype check per section 4.2.
+ * Returns true if producer P is compatible with consumer C.
+ */
+function isStructuralSubtype(
+    producer: JSONSchema,
+    consumer: JSONSchema,
+): boolean {
+    if (isTopSchema(consumer)) return true;
+    if (isTopSchema(producer) && !isTopSchema(consumer)) {
+        // Producer is unconstrained; can't prove it's a subtype of
+        // a constrained consumer. Be lenient: skip.
+        return true;
+    }
+
+    // Type check
+    if (producer.type && consumer.type) {
+        const pTypes = normalizeTypeSet(producer.type);
+        const cTypes = normalizeTypeSet(consumer.type);
+        for (const pt of pTypes) {
+            // "integer" is a subtype of "number"
+            const ok = cTypes.some(
+                (ct) => ct === pt || (pt === "integer" && ct === "number"),
+            );
+            if (!ok) return false;
+        }
+    } else if (consumer.type && !producer.type) {
+        return true; // producer unconstrained, be lenient
+    }
+
+    // Object: every required property of C must be present in P
+    // with a compatible type
+    const cRequired = consumer.required ?? [];
+    const pProps = producer.properties ?? {};
+    const cProps = consumer.properties ?? {};
+
+    for (const req of cRequired) {
+        if (!(req in pProps)) return false;
+        const pProp = pProps[req];
+        const cProp = cProps[req];
+        if (
+            pProp &&
+            cProp &&
+            typeof pProp !== "boolean" &&
+            typeof cProp !== "boolean"
+        ) {
+            if (!isStructuralSubtype(pProp, cProp)) return false;
+        }
+    }
+
+    // Check optional consumer props present in producer
+    for (const [key, cPropDef] of Object.entries(cProps)) {
+        if (cRequired.includes(key)) continue;
+        const pPropDef = pProps[key];
+        if (
+            pPropDef &&
+            cPropDef &&
+            typeof pPropDef !== "boolean" &&
+            typeof cPropDef !== "boolean"
+        ) {
+            if (!isStructuralSubtype(pPropDef, cPropDef)) return false;
+        }
+    }
+
+    // Array: element type compatibility
+    if (consumer.items && producer.items) {
+        if (
+            typeof consumer.items !== "boolean" &&
+            typeof producer.items !== "boolean" &&
+            !Array.isArray(consumer.items) &&
+            !Array.isArray(producer.items)
+        ) {
+            if (!isStructuralSubtype(producer.items, consumer.items)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Validate type compatibility (pass 7) within a scope.
+ *
+ * For each node:
+ * - Compute the resolved type of each input template value and check
+ *   it against the corresponding inputSchema property.
+ * - For branch nodes: check selector resolved type vs selectorSchema
+ *   and validate cases keys against selectorSchema enum (if declared).
+ *
+ * Also checks the scope's output template resolved type against
+ * outputSchema.
+ */
+function validateTypeCompatibility(
+    nodes: Record<string, WorkflowNode>,
+    prefix: string,
+    errors: ValidationError[],
+    scopeInputSchema?: JSONSchema,
+    stateVars?: Record<string, LoopStateVar>,
+    constants?: Record<string, ConstantDef>,
+    outputTemplate?: Template,
+    outputPrefix?: string,
+    outputSchema?: JSONSchema,
+): void {
+    const bindings = buildBindingMap(nodes);
+    const ctx: TypeResolutionContext = {
+        bindings,
+        inputSchema: scopeInputSchema,
+        stateVars,
+        constants,
+    };
+
+    for (const [id, node] of Object.entries(nodes)) {
+        const path = `${prefix}.${id}`;
+
+        if (node.kind === "task" || node.kind === "loop") {
+            // Check each input template value against the corresponding
+            // inputSchema property.
+            const inputs = node.inputs;
+            const inputProps = node.inputSchema.properties ?? {};
+            for (const [fieldName, templateValue] of Object.entries(inputs)) {
+                const resolved = resolveTemplateType(
+                    templateValue,
+                    ctx,
+                );
+                if (!resolved) continue;
+                const consumerPropDef = inputProps[fieldName];
+                if (
+                    !consumerPropDef ||
+                    typeof consumerPropDef === "boolean"
+                ) {
+                    continue;
+                }
+                if (!isStructuralSubtype(resolved, consumerPropDef)) {
+                    errors.push({
+                        path: `${path}.inputs.${fieldName}`,
+                        message:
+                            `Type mismatch: resolved input type ` +
+                            `${formatSchemaType(resolved)} is not ` +
+                            `compatible with expected type ` +
+                            `${formatSchemaType(consumerPropDef)}.`,
+                    });
+                }
+            }
+        }
+
+        if (node.kind === "branch") {
+            // Check selector template resolved type vs selectorSchema
+            const selectorType = resolveTemplateType(node.selector, ctx);
+            if (selectorType && !isTopSchema(node.selectorSchema)) {
+                if (!isStructuralSubtype(selectorType, node.selectorSchema)) {
+                    errors.push({
+                        path: `${path}.selector`,
+                        message:
+                            `Selector resolved type ` +
+                            `${formatSchemaType(selectorType)} is not ` +
+                            `compatible with selectorSchema ` +
+                            `${formatSchemaType(node.selectorSchema)}.`,
+                    });
+                }
+            }
+
+            // Check cases keys against selectorSchema enum
+            if (node.selectorSchema.enum) {
+                const validKeys = new Set(
+                    node.selectorSchema.enum.map(String),
+                );
+                for (const caseKey of Object.keys(node.cases)) {
+                    if (!validKeys.has(caseKey)) {
+                        errors.push({
+                            path: `${path}.cases.${caseKey}`,
+                            message:
+                                `Case key "${caseKey}" is not a valid ` +
+                                `value in selectorSchema.enum ` +
+                                `${JSON.stringify(node.selectorSchema.enum)}.`,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Recurse into loop bodies
+        if (node.kind === "loop" && node.body.entry in node.body.nodes) {
+            const bodyBindings = buildBindingMap(node.body.nodes);
+            const bodyCtx: TypeResolutionContext = {
+                bindings: bodyBindings,
+                inputSchema: node.inputSchema,
+                stateVars: node.state,
+                constants,
+            };
+
+            validateTypeCompatibility(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                errors,
+                node.inputSchema,
+                node.state,
+                constants,
+                node.output,
+                `${path}.output`,
+                node.outputSchema,
+            );
+
+            // Check loop output template type vs loop outputSchema
+            if (node.output && node.outputSchema) {
+                const outputResolved = resolveTemplateType(
+                    node.output,
+                    bodyCtx,
+                );
+                if (
+                    outputResolved &&
+                    !isTopSchema(node.outputSchema)
+                ) {
+                    if (
+                        !isStructuralSubtype(
+                            outputResolved,
+                            node.outputSchema,
+                        )
+                    ) {
+                        errors.push({
+                            path: `${path}.output`,
+                            message:
+                                `Loop output resolved type ` +
+                                `${formatSchemaType(outputResolved)} is not ` +
+                                `compatible with loop outputSchema ` +
+                                `${formatSchemaType(node.outputSchema)}.`,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Check scope output template type vs outputSchema
+    if (outputTemplate && outputSchema && outputPrefix) {
+        const outputResolved = resolveTemplateType(outputTemplate, ctx);
+        if (outputResolved && !isTopSchema(outputSchema)) {
+            if (!isStructuralSubtype(outputResolved, outputSchema)) {
+                errors.push({
+                    path: outputPrefix,
+                    message:
+                        `Output resolved type ` +
+                        `${formatSchemaType(outputResolved)} is not ` +
+                        `compatible with outputSchema ` +
+                        `${formatSchemaType(outputSchema)}.`,
+                });
+            }
+        }
+    }
+}
+
+/**
+ * Check that every binder of a phi-merged name produces a type
+ * compatible with each consumer's expected type (pass 7 phi-merge).
+ */
+function checkPhiMergeTypes(
+    nodes: Record<string, WorkflowNode>,
+    binders: Map<string, string[]>,
+    prefix: string,
+    errors: ValidationError[],
+): void {
+    for (const [id, node] of Object.entries(nodes)) {
+        if (node.kind !== "task" && node.kind !== "loop") continue;
+        const inputs = node.inputs;
+        const inputProps = node.inputSchema.properties ?? {};
+
+        for (const [fieldName, templateValue] of Object.entries(inputs)) {
+            if (
+                typeof templateValue !== "object" ||
+                templateValue === null ||
+                Array.isArray(templateValue)
+            ) {
+                continue;
+            }
+            const obj = templateValue as Record<string, unknown>;
+            if (obj["$from"] !== "scope") continue;
+            const refName = obj["name"] as string;
+            const binderList = binders.get(refName);
+            if (!binderList || binderList.length < 2) continue;
+
+            const consumerPropDef = inputProps[fieldName];
+            if (
+                !consumerPropDef ||
+                typeof consumerPropDef === "boolean" ||
+                isTopSchema(consumerPropDef)
+            ) {
+                continue;
+            }
+
+            for (const binderId of binderList) {
+                const binderNode = nodes[binderId];
+                if (!binderNode) continue;
+                const binderSchema =
+                    binderNode.kind === "task" || binderNode.kind === "loop"
+                        ? binderNode.outputSchema
+                        : undefined;
+                if (!binderSchema) continue;
+
+                // Apply path projection if present
+                const refPath = obj["path"] as
+                    | (string | number)[]
+                    | undefined;
+                const projected =
+                    refPath && refPath.length > 0
+                        ? resolveSchemaPath(binderSchema, refPath)
+                        : binderSchema;
+                if (!projected) continue;
+
+                if (!isStructuralSubtype(projected, consumerPropDef)) {
+                    errors.push({
+                        path: `${prefix}.${id}.inputs.${fieldName}`,
+                        message:
+                            `Phi-merge: binder "${binderId}" produces ` +
+                            `${formatSchemaType(projected)} which is not ` +
+                            `compatible with consumer's expected type ` +
+                            `${formatSchemaType(consumerPropDef)}.`,
+                    });
+                }
+            }
+        }
+    }
+}
+
+/** Format a schema type for error messages. */
+function formatSchemaType(schema: JSONSchema): string {
+    if (schema.type) return JSON.stringify(schema.type);
+    if (schema.enum) return `enum ${JSON.stringify(schema.enum)}`;
+    return JSON.stringify(schema);
 }
 
 /**
