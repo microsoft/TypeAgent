@@ -24,6 +24,9 @@ docs/design/workflowSystem/
 │   ├── ir-v1.md                     authoritative v1 IR
 │   ├── decisions/                     numbered design records (0001-, 0002-, ...)
 │   └── post-v1/                       deferred IR features
+├── dsl/                             the authoring surface (component: dsl)
+│   ├── dsl-v1.md                    authoritative v1 DSL (pending)
+│   └── decisions/                     numbered design records
 ├── engineering/                       cross-component plan, milestones, packaging
 ```
 
