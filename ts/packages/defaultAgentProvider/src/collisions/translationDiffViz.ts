@@ -126,18 +126,35 @@ export function buildTranslationDiffHTML(payload: DiffPayload): string {
 <html><head><meta charset="utf-8"/>
 <title>Translation diff: baseline vs candidate</title>
 <style>
-    body { font: 13px system-ui, sans-serif; color: #222; max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    body { font: 13px system-ui, sans-serif; color: #222; max-width: 1500px; margin: 24px auto; padding: 0 16px; }
     h1 { font-size: 18px; margin: 0 0 4px; }
     h2 { font-size: 14px; margin: 24px 0 8px; color: #444; }
     code { font: 12px ui-monospace, monospace; background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
-    .pillbar { margin: 12px 0 16px; }
+    .pillbar { margin: 12px 0 8px; }
     .pillbar-label { font: 11px system-ui, sans-serif; color: #666; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 8px; }
     .pill { display: inline-block; padding: 3px 10px; margin: 2px 4px 2px 0; border: 1px solid #aaa; border-radius: 999px; background: #eef; color: #224; font: 12px ui-monospace, monospace; cursor: pointer; user-select: none; }
     .pill.off { background: #f5f5f5; color: #aaa; border-color: #ddd; text-decoration: line-through; }
     .pill .count { color: #888; font-size: 11px; margin-left: 4px; }
     .pillbar-buttons { display: inline-block; margin-left: 8px; font-size: 11px; }
     .pillbar-buttons a { color: #36a; cursor: pointer; text-decoration: underline; margin: 0 4px; }
-    #filtered-count { color: #666; font: 12px ui-monospace, monospace; margin-bottom: 12px; }
+    #filtered-count { color: #666; font: 12px ui-monospace, monospace; margin: 10px 0 16px; }
+    /* Two-pane main layout */
+    .main { display: flex; align-items: flex-start; gap: 20px; }
+    #tree { flex: 0 0 300px; max-height: calc(100vh - 80px); overflow-y: auto; position: sticky; top: 16px; border-right: 1px solid #eee; padding-right: 12px; }
+    .content { flex: 1 1 auto; min-width: 0; }
+    /* Tree styling */
+    .tree-section-label { font: 11px system-ui, sans-serif; color: #666; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 6px 0; }
+    .tree-node { display: flex; align-items: center; padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none; font: 12px ui-monospace, monospace; }
+    .tree-node:hover { background: #f0f4ff; }
+    .tree-node.selected { background: #dbe7ff; }
+    .tree-node .tw { display: inline-block; width: 12px; text-align: center; color: #888; }
+    .tree-node .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #224; }
+    .tree-node .badge-row { font-size: 10px; color: #888; margin-left: 6px; }
+    .tree-node .badge-row .b-rescue { color: #2a8; }
+    .tree-node .badge-row .b-regress { color: #c44; }
+    .tree-node.is-agent { font-weight: 600; }
+    .tree-children { margin-left: 16px; }
+    .tree-children.collapsed { display: none; }
 </style>
 </head><body>`;
 
@@ -185,13 +202,22 @@ export function buildTranslationDiffHTML(payload: DiffPayload): string {
     const dataScript = `<script>window.__DIFF_DATA__ = ${JSON.stringify(data)};</script>`;
 
     const containers = `
-        <div id="tiles"></div>
-        <h2>Transition matrix</h2>
-        <div id="matrix"></div>
-        <h2>Per-schema breakdown</h2>
-        <div id="schema"></div>
-        <h2>Sample phrases</h2>
-        <div id="samples"></div>`;
+        <div class="main">
+            <div id="tree">
+                <div class="tree-section-label">Scope</div>
+                <!-- JS-rendered tree of agents / schemas; click to filter. -->
+            </div>
+            <div class="content">
+                <div id="scope-header" style="font:12px system-ui,sans-serif;color:#444;margin-bottom:10px;"></div>
+                <div id="tiles"></div>
+                <h2>Transition matrix</h2>
+                <div id="matrix"></div>
+                <h2>Per-schema breakdown</h2>
+                <div id="schema"></div>
+                <h2>Sample phrases</h2>
+                <div id="samples"></div>
+            </div>
+        </div>`;
 
     return (
         head +
@@ -407,6 +433,119 @@ function diffVizClientScript(): string {
             renderSamplesBlock(transitionLabel("other"), byClass.other, "#888", 10);
     }
 
+    // ---- scope filter (agent / schema) ----
+    // scope shape: { kind: "all" } | { kind: "agent", agent: "code" }
+    //            | { kind: "schema", schema: "code.code-debug" }
+    let scope = { kind: "all" };
+
+    function agentOf(schemaName) {
+        const i = schemaName.indexOf('.');
+        return i < 0 ? schemaName : schemaName.substring(0, i);
+    }
+    function rowInScope(row) {
+        if (scope.kind === "all") return true;
+        if (scope.kind === "agent") return agentOf(row.expectedSchema) === scope.agent;
+        if (scope.kind === "schema") return row.expectedSchema === scope.schema;
+        return true;
+    }
+
+    // Build the tree structure once from the data.
+    function buildTreeData() {
+        const byAgent = new Map();
+        for (const t of TX) {
+            const a = agentOf(t.expectedSchema);
+            let agentNode = byAgent.get(a);
+            if (!agentNode) {
+                agentNode = { agent: a, schemas: new Map(), total: 0 };
+                byAgent.set(a, agentNode);
+            }
+            agentNode.total++;
+            let schemaNode = agentNode.schemas.get(t.expectedSchema);
+            if (!schemaNode) {
+                schemaNode = { schema: t.expectedSchema, total: 0 };
+                agentNode.schemas.set(t.expectedSchema, schemaNode);
+            }
+            schemaNode.total++;
+        }
+        const agents = [...byAgent.values()].sort((a, b) =>
+            b.total - a.total || a.agent.localeCompare(b.agent)
+        );
+        for (const ag of agents) {
+            ag.schemaList = [...ag.schemas.values()].sort((a, b) =>
+                // Bare-agent schema (where schema === agent name) appears
+                // first; then sub-schemas alphabetically.
+                (a.schema === ag.agent ? 0 : 1) - (b.schema === ag.agent ? 0 : 1) ||
+                a.schema.localeCompare(b.schema)
+            );
+        }
+        return agents;
+    }
+    const TREE = buildTreeData();
+
+    function renderTree(rows) {
+        // Per-node metric: rescue / regression counts restricted to the
+        // currently pill-filtered rows. Recomputed on every applyFilter
+        // call so the tree badges respect style/model pills.
+        const agentMetrics = new Map();
+        const schemaMetrics = new Map();
+        function bump(map, key, transitionClass) {
+            let m = map.get(key);
+            if (!m) { m = { rescue: 0, regression: 0, total: 0 }; map.set(key, m); }
+            m.total++;
+            if (transitionClass === "rescue") m.rescue++;
+            else if (transitionClass === "regression") m.regression++;
+        }
+        for (const t of rows) {
+            bump(agentMetrics, agentOf(t.expectedSchema), t.transitionClass);
+            bump(schemaMetrics, t.expectedSchema, t.transitionClass);
+        }
+
+        function badge(m) {
+            if (!m || m.total === 0) return '';
+            const parts = [];
+            parts.push('<span style="color:#888;">' + m.total + '</span>');
+            if (m.rescue > 0) parts.push('<span class="b-rescue">↑' + m.rescue + '</span>');
+            if (m.regression > 0) parts.push('<span class="b-regress">↓' + m.regression + '</span>');
+            return '<span class="badge-row">' + parts.join(' ') + '</span>';
+        }
+
+        let html = '<div class="tree-node ' + (scope.kind === "all" ? "selected" : "") +
+            '" data-scope="all"><span class="tw"></span><span class="name">All</span>' +
+            badge({ total: rows.length, rescue: rows.filter(r=>r.transitionClass==="rescue").length, regression: rows.filter(r=>r.transitionClass==="regression").length }) +
+            '</div>';
+
+        for (const ag of TREE) {
+            const agSelected = scope.kind === "agent" && scope.agent === ag.agent;
+            const expanded = agSelected || (scope.kind === "schema" && agentOf(scope.schema) === ag.agent);
+            const tw = ag.schemaList.length > 1 ? (expanded ? '▾' : '▸') : '·';
+            html += '<div class="tree-node is-agent ' + (agSelected ? "selected" : "") + '" data-scope="agent" data-agent="' + esc(ag.agent) + '">' +
+                '<span class="tw">' + tw + '</span>' +
+                '<span class="name">' + esc(ag.agent) + '</span>' +
+                badge(agentMetrics.get(ag.agent)) +
+                '</div>';
+            if (ag.schemaList.length > 1) {
+                html += '<div class="tree-children ' + (expanded ? '' : 'collapsed') + '" data-children-of="' + esc(ag.agent) + '">';
+                for (const s of ag.schemaList) {
+                    const schSelected = scope.kind === "schema" && scope.schema === s.schema;
+                    const subName = s.schema === ag.agent ? '(own actions)' : s.schema.substring(ag.agent.length + 1);
+                    html += '<div class="tree-node ' + (schSelected ? "selected" : "") + '" data-scope="schema" data-schema="' + esc(s.schema) + '">' +
+                        '<span class="tw"></span>' +
+                        '<span class="name">' + esc(subName) + '</span>' +
+                        badge(schemaMetrics.get(s.schema)) +
+                        '</div>';
+                }
+                html += '</div>';
+            }
+        }
+        return html;
+    }
+
+    function scopeLabel() {
+        if (scope.kind === "all") return "All schemas";
+        if (scope.kind === "agent") return "Agent: <code>" + esc(scope.agent) + "</code> (all sub-schemas)";
+        return "Schema: <code>" + esc(scope.schema) + "</code>";
+    }
+
     function activePills(kind) {
         const set = new Set();
         document.querySelectorAll('.pill[data-kind="' + kind + '"]').forEach(el => {
@@ -422,22 +561,40 @@ function diffVizClientScript(): string {
         // as "match nothing" so the displayed counts are honest about the
         // intent (rather than silently passing every row through).
         const allowAll = styles.size === 0 && models.size === 0;
-        const filtered = TX.filter(t => {
+        // First-pass filter: pill match only. The tree uses this set to
+        // compute per-node rescue/regression badges; the right pane
+        // additionally restricts to the active scope.
+        const pillFiltered = TX.filter(t => {
             if (allowAll) return false;
             const sources = t.phraseSources || [];
             if (sources.length === 0) {
-                // Legacy rows without source provenance: include when at
-                // least one pill in each dimension is enabled.
                 return styles.size > 0 && models.size > 0;
             }
             return sources.some(s => styles.has(s.style) && models.has(s.model));
         });
-        document.getElementById('tiles').innerHTML = renderTiles(filtered);
-        document.getElementById('matrix').innerHTML = renderMatrix(filtered);
-        document.getElementById('schema').innerHTML = renderSchema(filtered);
-        document.getElementById('samples').innerHTML = renderSamples(filtered);
+        const scoped = pillFiltered.filter(rowInScope);
+
+        document.getElementById('tree').innerHTML =
+            '<div class="tree-section-label">Scope</div>' + renderTree(pillFiltered);
+        document.getElementById('scope-header').innerHTML = scopeLabel() + ' &nbsp; · &nbsp; ' + scoped.length + ' rows after filters';
+        document.getElementById('tiles').innerHTML = renderTiles(scoped);
+        document.getElementById('matrix').innerHTML = renderMatrix(scoped);
+        document.getElementById('schema').innerHTML = renderSchema(scoped);
+        document.getElementById('samples').innerHTML = renderSamples(scoped);
         document.getElementById('filtered-count').textContent =
-            'showing ' + filtered.length + ' of ' + TX.length + ' phrases';
+            'showing ' + pillFiltered.length + ' of ' + TX.length + ' phrases after source filters';
+
+        // (re-)attach tree click handlers (the innerHTML replacement
+        // discards them).
+        document.querySelectorAll('#tree .tree-node').forEach(el => {
+            el.addEventListener('click', () => {
+                const kind = el.dataset.scope;
+                if (kind === "all") scope = { kind: "all" };
+                else if (kind === "agent") scope = { kind: "agent", agent: el.dataset.agent };
+                else if (kind === "schema") scope = { kind: "schema", schema: el.dataset.schema };
+                applyFilter();
+            });
+        });
     }
 
     // Click handlers for individual pills.
