@@ -1995,6 +1995,13 @@ export async function processCommandsEnhanced<T>(
             );
             request = getNextInput(prompt, inputs, promptColor);
         } else if (completionController) {
+            // Always use questionWithCompletion regardless of whether autocomplete is
+            // enabled — it owns stdin in raw mode for the lifetime of the session.
+            // Switching to readline mid-session causes stdin ownership conflicts
+            // (doubled echo, hanging input) because readline and questionWithCompletion
+            // use incompatible stdin modes. Instead, pass undefined as the controller
+            // when autocomplete is disabled: questionWithCompletion handles that case
+            // gracefully, giving normal input with no completion suggestions.
             request = await questionWithCompletion(
                 promptColor(prompt),
                 isCompletionEnabled && !isCompletionEnabled()

@@ -20,6 +20,7 @@ import {
     saveUserSettings,
     resetUserSettings,
 } from "../../../helpers/userSettings.js";
+import { processCommandNoLock } from "../../../command/command.js";
 import chalk from "chalk";
 
 class SettingsShowCommandHandler implements CommandHandler {
@@ -186,6 +187,15 @@ class SettingsUIAutoCompleteCommandHandler implements CommandHandler {
             `ui.autoComplete set to ${settings.ui.autoComplete}`,
             context,
         );
+
+        // Hot-reload the shell's partialCompletion setting if the shell agent is active.
+        const agentContext = context.sessionContext.agentContext;
+        if (agentContext.agents.getAppAgentNames().includes("shell")) {
+            await processCommandNoLock(
+                `@shell set partialCompletion ${autoComplete}`,
+                agentContext,
+            );
+        }
     }
 
     public async getCompletion(
