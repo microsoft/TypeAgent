@@ -6,8 +6,6 @@ Client library for connecting to a running agentServer, used by the Shell, the C
 
 The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable). Clients connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
 
-This mirrors how a future cloud-hosted agentServer would be addressed: a stable, configured URL is the contract. The local agentServer uses the same model so client code does not have to special-case "local" vs "remote".
-
 The server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so at most one agent-server is ever running per data-dir profile. Concurrent client spawns targeting the same port are coordinated by a per-port lockfile in the OS temp dir; only one client wins the spawn race, the others fall through to a TCP probe + connect.
 
 Cross-machine connections work the same way — pass an explicit URL to `connectAgentServer(url)`.

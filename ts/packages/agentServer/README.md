@@ -40,8 +40,6 @@ Each conversation has its own `SharedDispatcher` instance with isolated chat his
 
 The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable or `--port` flag). Clients on the same machine connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
 
-This mirrors how a future cloud-hosted agentServer would look: a stable, configured URL is the contract. The local agentServer uses the same model so client code does not have to special-case "local" vs "remote".
-
 There is at most one agent-server per data-dir profile: the server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so a second `agent-server` invocation against the same `TYPEAGENT_USER_DATA_DIR` exits with `ERR_INSTANCE_LOCKED`. Workflows that need parallel agent-servers (benchmark workers, integration tests, side-by-side dev profiles) set both a per-worker `TYPEAGENT_USER_DATA_DIR` *and* a per-worker `AGENT_SERVER_PORT`.
 
 To coordinate concurrent client spawns targeting the same port, the client library uses a per-port lockfile in the OS temp dir; only one client wins the spawn race, the others fall through to a TCP probe + connect.
