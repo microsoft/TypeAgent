@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { connectAgentServer } from "@typeagent/agent-server-client";
+import {
+    connectAgentServer,
+    getAgentServerUrl,
+} from "@typeagent/agent-server-client";
 import { createInterface } from "readline/promises";
 
 export default class ConversationsDelete extends Command {
@@ -10,8 +13,8 @@ export default class ConversationsDelete extends Command {
         "Delete a conversation and its persisted data from the agent server. Usage: conversations delete <id>";
     static flags = {
         port: Flags.integer({
-            description: "Port for type agent server",
-            default: 8999,
+            description:
+                "Override the agent-server port. Defaults to AGENT_SERVER_PORT, then 8999.",
         }),
         yes: Flags.boolean({
             char: "y",
@@ -48,7 +51,7 @@ export default class ConversationsDelete extends Command {
             }
         }
 
-        const url = `ws://localhost:${flags.port}`;
+        const url = getAgentServerUrl(flags.port);
         const connection = await connectAgentServer(url);
         try {
             await connection.deleteConversation(args.id);

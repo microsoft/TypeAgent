@@ -37,10 +37,15 @@ const debugErr = registerDebug("typeagent:agent-server-client:error");
 export const DEFAULT_AGENT_SERVER_PORT = 8999;
 
 /**
- * Resolve the agent-server port from the `AGENT_SERVER_PORT` env var,
- * falling back to {@link DEFAULT_AGENT_SERVER_PORT}.
+ * Resolve the agent-server port. Order:
+ *  1. Explicit `override` argument (e.g. from a `--port` flag).
+ *  2. The `AGENT_SERVER_PORT` env var.
+ *  3. {@link DEFAULT_AGENT_SERVER_PORT}.
  */
-export function getAgentServerPort(): number {
+export function getAgentServerPort(override?: number): number {
+    if (override !== undefined && Number.isFinite(override) && override > 0) {
+        return override;
+    }
     const raw = process.env.AGENT_SERVER_PORT;
     if (raw !== undefined && raw !== "") {
         const n = parseInt(raw, 10);
@@ -55,8 +60,8 @@ export function getAgentServerPort(): number {
  * Resolve the agent-server URL — `ws://localhost:<port>` where the
  * port comes from {@link getAgentServerPort}.
  */
-export function getAgentServerUrl(): string {
-    return `ws://localhost:${getAgentServerPort()}`;
+export function getAgentServerUrl(override?: number): string {
+    return `ws://localhost:${getAgentServerPort(override)}`;
 }
 
 export type ConversationDispatcher = {
@@ -414,8 +419,15 @@ export async function waitForServer(
 }
 
 export interface EnsureAgentServerOptions {
-    hidden?: boolean;
-    idleTimeout?: number;
+    /**
+     * Optional port override. If provided, the client uses this port
+     * instead of `AGENT_SERVER_PORT` / the default. This is the
+     * per-invocation escape hatch (e.g. shell `--connect <port>` or
+     * CLI `--port <port>`).
+     */
+    port?: number | undefined;
+    hidden?: boolean | undefined;
+    idleTimeout?: number | undefined;
 }
 
 export interface AgentServerHandle {
@@ -444,7 +456,7 @@ export async function ensureAgentServer(
 ): Promise<AgentServerHandle> {
     const hidden = options.hidden ?? false;
     const idleTimeout = options.idleTimeout ?? 0;
-    const port = getAgentServerPort();
+    const port = getAgentServerPort(options.port);
     const url = `ws://localhost:${port}`;
     if (await isServerRunning(url)) {
         console.log(
@@ -469,11 +481,11 @@ export async function ensureAgentServer(
  * answering at the configured port, `undefined` otherwise. Never
  * spawns.
  */
-export async function lookupAgentServer(): Promise<
-    AgentServerHandle | undefined
-> {
-    const port = getAgentServerPort();
-    const url = getAgentServerUrl();
+export async function lookupAgentServer(
+    portOverride?: number,
+): Promise<AgentServerHandle | undefined> {
+    const port = getAgentServerPort(portOverride);
+    const url = `ws://localhost:${port}`;
     if (!(await isServerRunning(url))) {
         return undefined;
     }
@@ -506,8 +518,8 @@ export async function ensureAndConnectConversation(
     return conversation;
 }
 
-export async function stopAgentServer(): Promise<void> {
-    const url = getAgentServerUrl();
+export async function stopAgentServer(portOverride?: number): Promise<void> {
+    const url = getAgentServerUrl(portOverride);
 
     // Try graceful shutdown first
     const gracefulShutdown = (): Promise<void> => {

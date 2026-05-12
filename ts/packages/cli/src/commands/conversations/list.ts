@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { Command, Flags } from "@oclif/core";
-import { connectAgentServer } from "@typeagent/agent-server-client";
+import {
+    connectAgentServer,
+    getAgentServerUrl,
+} from "@typeagent/agent-server-client";
 import type { ConversationInfo } from "@typeagent/agent-server-client";
 
 function formatTable(conversations: ConversationInfo[]): string {
@@ -58,8 +61,8 @@ export default class ConversationsList extends Command {
         "List conversations on the agent server. Usage: conversations list [--name <filter>]";
     static flags = {
         port: Flags.integer({
-            description: "Port for type agent server",
-            default: 8999,
+            description:
+                "Override the agent-server port. Defaults to AGENT_SERVER_PORT, then 8999.",
         }),
         name: Flags.string({
             description:
@@ -70,7 +73,7 @@ export default class ConversationsList extends Command {
 
     async run(): Promise<void> {
         const { flags } = await this.parse(ConversationsList);
-        const url = `ws://localhost:${flags.port}`;
+        const url = getAgentServerUrl(flags.port);
         const connection = await connectAgentServer(url);
         try {
             const conversations = await connection.listConversations(

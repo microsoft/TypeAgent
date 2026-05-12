@@ -94,8 +94,8 @@ export default class Connect extends Command {
         }),
         port: Flags.integer({
             char: "p",
-            description: "Port for type agent server",
-            default: 8999,
+            description:
+                "Override the agent-server port. Defaults to AGENT_SERVER_PORT, then 8999.",
         }),
         resume: Flags.boolean({
             char: "r",
@@ -182,11 +182,11 @@ export default class Connect extends Command {
         const isEphemeral = flags.memory;
 
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
-            // Resolve the agent server's URL up front. With the registry
-            // feature flag on, this is a registry lookup; otherwise it
-            // falls back to ws://localhost:${flags.port}.
+            // Resolve the agent server's URL up front. The port comes
+            // from --port (if provided) > AGENT_SERVER_PORT > 8999.
             const ensureServer = async () => {
                 const handle = await ensureAgentServer({
+                    port: flags.port,
                     hidden: flags.hidden,
                     idleTimeout: flags.idleTimeout,
                 });

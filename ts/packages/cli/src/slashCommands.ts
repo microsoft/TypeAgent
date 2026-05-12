@@ -52,7 +52,7 @@ export function getConversationCommandContext():
 let serverPort: number | undefined;
 let serverConnection: { shutdown(): Promise<void> } | undefined;
 
-export function setServerPort(port: number): void {
+export function setServerPort(port: number | undefined): void {
     serverPort = port;
 }
 
@@ -184,7 +184,10 @@ const slashCommands: SlashCommand[] = [
         name: "shutdown",
         description: "Shut down the agent server",
         handler: async () => {
-            const port = serverPort ?? 8999;
+            const { getAgentServerPort } = await import(
+                "@typeagent/agent-server-client"
+            );
+            const port = getAgentServerPort(serverPort);
             console.log(
                 chalk.dim(
                     `Sending shutdown request to server on port ${port}...`,
@@ -194,7 +197,7 @@ const slashCommands: SlashCommand[] = [
                 if (serverConnection) {
                     await serverConnection.shutdown();
                 } else {
-                    await stopAgentServer();
+                    await stopAgentServer(serverPort);
                 }
                 console.log(chalk.green("Agent server stopped."));
             } catch (e: any) {

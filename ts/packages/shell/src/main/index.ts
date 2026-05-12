@@ -450,7 +450,7 @@ export async function reloadInstance() {
         await closeInstance();
         const shellSettings = new ShellSettingManager(instanceDir);
         await initializeInstance(
-            parsedArgs.connect ? undefined : instanceDir,
+            parsedArgs.connect !== undefined ? undefined : instanceDir,
             shellSettings,
             mockGreetings,
             parsedArgs.inputOnly,

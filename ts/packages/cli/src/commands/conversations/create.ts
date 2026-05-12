@@ -2,15 +2,18 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { connectAgentServer } from "@typeagent/agent-server-client";
+import {
+    connectAgentServer,
+    getAgentServerUrl,
+} from "@typeagent/agent-server-client";
 
 export default class ConversationsCreate extends Command {
     static description =
         "Create a new named conversation on the agent server. Defaults to 'CLI' if no name is provided.";
     static flags = {
         port: Flags.integer({
-            description: "Port for type agent server",
-            default: 8999,
+            description:
+                "Override the agent-server port. Defaults to AGENT_SERVER_PORT, then 8999.",
         }),
     };
     static args = {
@@ -23,7 +26,7 @@ export default class ConversationsCreate extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ConversationsCreate);
-        const url = `ws://localhost:${flags.port}`;
+        const url = getAgentServerUrl(flags.port);
         const connection = await connectAgentServer(url);
         try {
             const conversation = await connection.createConversation(

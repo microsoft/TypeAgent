@@ -28,8 +28,8 @@ export default class RequestCommand extends Command {
     static flags = {
         port: Flags.integer({
             char: "p",
-            description: "Port for type agent server",
-            default: 8999,
+            description:
+                "Override the agent-server port. Defaults to AGENT_SERVER_PORT, then 8999.",
         }),
         show: Flags.boolean({
             description:
@@ -53,6 +53,7 @@ export default class RequestCommand extends Command {
         const { args, flags } = await this.parse(RequestCommand);
 
         const handle = await ensureAgentServer({
+            port: flags.port,
             hidden: !flags.show,
             idleTimeout: 600,
         });

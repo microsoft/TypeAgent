@@ -195,11 +195,13 @@ async function initializeDispatcher(
                     ? idleTimeout
                     : userSettings.server.idleTimeout;
 
-            // The shell looks up (or spawns) the AS at the configured
-            // well-known port (AGENT_SERVER_PORT, default 8999).
-            // `--connect` opts into the remote dispatcher; absent means
-            // run the dispatcher in-process.
+            // The shell looks up (or spawns) the agent-server. With
+            // bare `--connect`, the port comes from AGENT_SERVER_PORT
+            // (default 8999). With `--connect <port>`, the explicit
+            // port overrides both.
+            const portOverride = connect && connect > 0 ? connect : undefined;
             const handle = await ensureAgentServer({
+                port: portOverride,
                 hidden: effectiveHidden,
                 idleTimeout: effectiveIdleTimeout,
             });

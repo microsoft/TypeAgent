@@ -163,7 +163,11 @@ export function parseShellCommandLine() {
                         result.connect = port;
                     }
                 } else {
-                    result.connect = 8999; // default port
+                    // Bare `--connect` with no port arg: defer to
+                    // AGENT_SERVER_PORT / DEFAULT_AGENT_SERVER_PORT
+                    // (resolved by the agent-server client). 0 is a
+                    // sentinel meaning "connect, use configured port".
+                    result.connect = 0;
                 }
                 continue;
             }

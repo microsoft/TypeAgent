@@ -16,12 +16,9 @@ export default class ServerStop extends Command {
     };
     async run(): Promise<void> {
         const { flags } = await this.parse(ServerStop);
-        // stopAgentServer reads AGENT_SERVER_PORT (default 8999); the
-        // --port flag overrides it for this process.
-        if (flags.port !== undefined) {
-            process.env.AGENT_SERVER_PORT = String(flags.port);
-        }
-        await stopAgentServer();
+        // stopAgentServer resolves the port as:
+        //   flags.port > AGENT_SERVER_PORT env var > default 8999.
+        await stopAgentServer(flags.port);
         process.exit(0);
     }
 }
