@@ -34,7 +34,8 @@
     "dotenv": "^16.3.1",
     "express": "^4.22.0",
     "open": "^10.1.0",
-    "typechat": "^0.1.1"
+    "typechat": "^0.1.1",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

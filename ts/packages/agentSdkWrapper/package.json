@@ -43,7 +43,8 @@
     "mic": "^2.1.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "openai": "^4.73.0",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.17.28",

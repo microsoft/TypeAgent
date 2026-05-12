@@ -37,7 +37,8 @@
     "cheerio": "1.0.0-rc.12",
     "debug": "^4.4.0",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5"
+    "typescript": "~5.4.5",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",

@@ -38,7 +38,8 @@
     "@anthropic-ai/sdk": "^0.91.1",
     "aiclient": "workspace:*",
     "dotenv": "^16.4.5",
-    "microsoft-cognitiveservices-speech-sdk": "^1.40.0"
+    "microsoft-cognitiveservices-speech-sdk": "^1.40.0",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",

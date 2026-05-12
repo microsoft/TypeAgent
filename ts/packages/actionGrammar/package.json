@@ -50,7 +50,8 @@
     "@typeagent/action-schema": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.4.5",
-    "regexp.escape": "^2.0.1"
+    "regexp.escape": "^2.0.1",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",

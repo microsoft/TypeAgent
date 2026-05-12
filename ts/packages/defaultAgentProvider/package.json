@@ -84,7 +84,8 @@
     "weather-agent": "workspace:*",
     "windowsclock-agent": "workspace:*",
     "ws": "^8.17.1",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

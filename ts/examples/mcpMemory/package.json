@@ -28,7 +28,8 @@
     "interactive-app": "workspace:*",
     "knowpro": "workspace:*",
     "typeagent": "workspace:*",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "copyfiles": "^2.4.1",

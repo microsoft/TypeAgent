@@ -127,6 +127,13 @@ export async function fetchKeyVaultConfig(
 
     debug("fetching vault=%s secret=%s", vaultName, secretName);
 
+    if (!vaultName) {
+        const msg = "vaultName is required for Key Vault fetch";
+        if (failOnError) throw new Error(msg);
+        debug(msg);
+        return null;
+    }
+
     let raw: string | null;
     try {
         raw = await fetcher(vaultName, secretName);

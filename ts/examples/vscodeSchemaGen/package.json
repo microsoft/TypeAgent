@@ -30,7 +30,8 @@
     "fastest-levenshtein": "^1.0.16",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.1"
+    "typechat": "^0.1.1",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

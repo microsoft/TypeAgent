@@ -218,7 +218,7 @@ export async function loadConfig(
             false,
             ".env",
         );
-        const preMerged = mergeFlat(preLayers.map((l) => l.flat));
+        const preMerged = mergeFlat(...preLayers.map((l) => l.flat));
         vaultName = preMerged.TYPEAGENT_SHAREDVAULT;
         if (!vaultName) {
             debug(

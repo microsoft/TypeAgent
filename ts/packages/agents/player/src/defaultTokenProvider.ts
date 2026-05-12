@@ -1,14 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { loadConfigSync } from "@typeagent/config";
 import { TokenProvider } from "./tokenProvider.js";
 import { Storage } from "@typeagent/agent-sdk";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, "../../../../.env") });
+loadConfigSync();
 
 const scopes = [
     "playlist-read-collaborative",

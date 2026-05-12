@@ -41,7 +41,8 @@
     "sharp": "^0.33.5",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "typechat-utils": "workspace:*",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

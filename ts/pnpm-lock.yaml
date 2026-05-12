@@ -150,7 +150,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -169,6 +169,9 @@ importers:
       '@azure/search-documents':
         specifier: 12.1.0
         version: 12.1.0
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -248,6 +251,9 @@ importers:
 
   examples/classify:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -276,6 +282,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -347,6 +356,9 @@ importers:
 
   examples/docuProc:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -451,6 +463,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.1.13)
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       conversation-memory:
         specifier: workspace:*
         version: link:../../packages/memory/conversation
@@ -491,6 +506,9 @@ importers:
       '@elastic/elasticsearch':
         specifier: ^9.3.4
         version: 9.3.4
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -586,6 +604,9 @@ importers:
 
   examples/playground:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -620,6 +641,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       agent-cache:
         specifier: workspace:*
         version: link:../../packages/cache
@@ -675,6 +699,9 @@ importers:
 
   examples/searchActionTest:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -755,6 +782,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -804,6 +834,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -899,6 +932,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -1073,6 +1109,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -1358,6 +1397,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -2326,6 +2368,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -2904,7 +2949,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2929,6 +2974,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3137,6 +3185,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
@@ -3467,6 +3518,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -3991,6 +4045,9 @@ importers:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.3
         version: 2.0.0-beta.3
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -4132,6 +4189,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.91.1
         version: 0.91.1(zod@4.3.6)
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -4706,6 +4766,9 @@ importers:
 
   packages/testLib:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -4759,6 +4822,9 @@ importers:
 
   packages/typeagent:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -4944,6 +5010,9 @@ importers:
 
   packages/utils/webSocketUtils:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -15229,7 +15298,7 @@ snapshots:
 
   '@anthropic-ai/claude-agent-sdk@0.2.105':
     dependencies:
-      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.81.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.29.0
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -18504,7 +18573,7 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod-to-json-schema: 3.25.1(zod@4.1.13)
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
 

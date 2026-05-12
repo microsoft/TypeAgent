@@ -15,23 +15,10 @@
  */
 
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { DefaultAzureCredential } from "@azure/identity";
 
-// Load .env file from the ts directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const envPath = path.resolve(__dirname, "../../.env");
-
-if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
-    console.log(`✓ Loaded .env file from: ${envPath}\n`);
-} else {
-    console.log(`⚠ No .env file found at: ${envPath}`);
-    console.log("  Create a .env file with your service keys.\n");
-}
+loadConfigSync();
 
 // ============================================================================
 // Service Key Definitions

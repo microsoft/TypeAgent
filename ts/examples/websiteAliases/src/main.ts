@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { bingWithGrounding } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -9,9 +9,7 @@ import { pageContentKeywordExtractor } from "./pageContentKeywords.js";
 //import { topNDomainsExtractor } from "./topNsites.js";
 import { searchResultsPhraseGenerator } from "./searchBackedPhraseGeneration.js";
 
-// Load environment variables from .env file
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 const groundingConfig: bingWithGrounding.ApiSettings =
     bingWithGrounding.apiSettingsFromEnv();
