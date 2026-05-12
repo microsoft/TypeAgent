@@ -18,7 +18,7 @@ export class TaskRegistry {
             throw new Error(`Task "${task.name}" is already registered.`);
         }
         try {
-            this.ajv.compile(task.inputSchema as object);
+            this.ajv.compile(task.inputSchema);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             throw new Error(
@@ -26,7 +26,7 @@ export class TaskRegistry {
             );
         }
         try {
-            this.ajv.compile(task.outputSchema as object);
+            this.ajv.compile(task.outputSchema);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             throw new Error(

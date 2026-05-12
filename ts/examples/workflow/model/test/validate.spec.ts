@@ -33,8 +33,8 @@ function makeMinimalIR(overrides?: Partial<WorkflowIR>): WorkflowIR {
 function makeTask(name: string): TaskDefinition {
     return {
         name,
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
+        inputSchema: {},
+        outputSchema: {},
         execute: async () => ({ kind: "ok" as const, output: {} }),
     };
 }
@@ -702,6 +702,251 @@ describe("validateWorkflowIR", () => {
         expect(
             result.errors.some((e) =>
                 e.message.includes("cannot be meaningfully coerced"),
+            ),
+        ).toBe(true);
+    });
+
+    // ---- Node-vs-task schema compatibility ----
+
+    function makeTypedTask(
+        name: string,
+        inputSchema: Record<string, unknown>,
+        outputSchema: Record<string, unknown>,
+    ): TaskDefinition {
+        return {
+            name,
+            inputSchema,
+            outputSchema,
+            execute: async () => ({ kind: "ok" as const, output: {} }),
+        };
+    }
+
+    it("accepts node that refines a top-schema output property", () => {
+        // Task produces { value: {} } (top type); node narrows to object
+        const task = makeTypedTask(
+            "gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            { type: "object", required: ["value"], properties: { value: {} } },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: {
+                            value: {
+                                type: "object",
+                                required: ["name"],
+                                properties: { name: { type: "string" } },
+                            },
+                        },
+                    },
+                    inputs: { prompt: "hello" },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects node that declares output property task does not produce", () => {
+        const task = makeTypedTask(
+            "gen",
+            { type: "object" },
+            {
+                type: "object",
+                required: ["text"],
+                properties: { text: { type: "string" } },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["text", "extra"],
+                        properties: {
+                            text: { type: "string" },
+                            extra: { type: "integer" },
+                        },
+                    },
+                    inputs: {},
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes('"extra"'))).toBe(
+            true,
+        );
+        expect(
+            result.errors.some((e) => e.message.includes("does not produce")),
+        ).toBe(true);
+    });
+
+    it("rejects node that drops a task-required output property", () => {
+        const task = makeTypedTask(
+            "gen",
+            { type: "object" },
+            {
+                type: "object",
+                required: ["a", "b"],
+                properties: {
+                    a: { type: "string" },
+                    b: { type: "integer" },
+                },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["a"],
+                        properties: { a: { type: "string" } },
+                    },
+                    inputs: {},
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) =>
+                e.message.includes('requires output "b"'),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects node that narrows output type incompatibly", () => {
+        const task = makeTypedTask(
+            "gen",
+            { type: "object" },
+            {
+                type: "object",
+                required: ["value"],
+                properties: { value: { type: "string" } },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: { value: { type: "integer" } },
+                    },
+                    inputs: {},
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("integer") &&
+                    e.message.includes("string"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects node that drops a task-required input property", () => {
+        const task = makeTypedTask(
+            "gen",
+            {
+                type: "object",
+                required: ["prompt", "endpoint"],
+                properties: {
+                    prompt: { type: "string" },
+                    endpoint: { type: "string" },
+                },
+            },
+            { type: "object" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: { prompt: "hello" },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) =>
+                e.message.includes('requires input "endpoint"'),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects node with incompatible input type", () => {
+        const task = makeTypedTask(
+            "gen",
+            {
+                type: "object",
+                required: ["count"],
+                properties: { count: { type: "integer" } },
+            },
+            { type: "object" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["count"],
+                        properties: { count: { type: "string" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: { count: "five" },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("string") &&
+                    e.message.includes("integer"),
             ),
         ).toBe(true);
     });

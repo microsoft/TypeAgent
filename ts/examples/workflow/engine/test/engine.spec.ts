@@ -5167,13 +5167,14 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     producer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "bool.toLabel",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["value", "ifTrue", "ifFalse"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                value: { type: "boolean" },
+                                ifTrue: { type: "string" },
+                                ifFalse: { type: "string" },
                             },
                         },
                         outputSchema: {
@@ -5181,7 +5182,11 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["label"],
                             properties: { label: { type: "string" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: {
+                            value: true as Template,
+                            ifTrue: "yes" as Template,
+                            ifFalse: "no" as Template,
+                        },
                         next: "consumer",
                         bind: "data",
                     },
@@ -5216,7 +5221,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "final" } as Template,
             };
 
-            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
             expect(validation.errors[0].message).toContain("type mismatch");
@@ -5737,6 +5742,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
                             properties: {
                                 stdout: { type: "string" },
                                 stderr: { type: "string" },
@@ -5817,6 +5823,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
                             properties: {
                                 stdout: { type: "string" },
                                 stderr: { type: "string" },
@@ -5863,6 +5870,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["body", "status"],
                             properties: {
                                 body: { type: "string" },
                                 status: { type: "integer" },
@@ -5911,6 +5919,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["body", "status"],
                             properties: {
                                 body: { type: "string" },
                                 status: { type: "integer" },

@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
+import dotenv from "dotenv";
 import {
     WorkflowIR,
     TaskPolicy,
@@ -20,11 +21,13 @@ import {
 } from "workflow-engine";
 
 const usage = `Usage:
-  workflow run <file.json> [--input <json>] [--dry-run | --allow-all]   Run a workflow
-  workflow validate <file.json>                                        Validate a workflow
-  workflow list-tasks                                                  List registered tasks
+  workflow run <file.json> [--input <json>] [--env <file>] [--dry-run | --allow-all]   Run a workflow
+  workflow validate <file.json>                                                        Validate a workflow
+  workflow list-tasks                                                                  List registered tasks
 
 Options:
+  --env <file>  Load environment variables from the given dotenv file before
+                running. Can be specified multiple times.
   --dry-run     Deny all side-effecting tasks (shell, network, file, LLM)
                 without prompting. Useful for testing workflow structure.
   --allow-all   Allow all tasks without prompting. Use for scripted/CI runs
@@ -226,10 +229,27 @@ function cmdListTasks(): void {
 const args = process.argv.slice(2);
 const command = args[0];
 
+/** Collect all --env <file> arguments and load them in order. */
+function loadEnvFiles(argv: string[]): void {
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === "--env" && i + 1 < argv.length) {
+            const envPath = resolve(argv[i + 1]);
+            const result = dotenv.config({ path: envPath });
+            if (result.error) {
+                fail(
+                    `Failed to load env file ${envPath}: ${result.error.message}`,
+                );
+            }
+            console.error(`[env] Loaded ${envPath}`);
+        }
+    }
+}
+
 switch (command) {
     case "run": {
         const file = args[1];
         if (!file) fail(usage);
+        loadEnvFiles(args);
         const inputIdx = args.indexOf("--input");
         const inputJson = inputIdx >= 0 ? args[inputIdx + 1] : undefined;
         const mode = args.includes("--dry-run")

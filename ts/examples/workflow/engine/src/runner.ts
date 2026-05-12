@@ -10,6 +10,7 @@ import {
     Template,
     TaskNode,
     LoopNode,
+    JSONSchema,
     TaskContext,
     TaskConstraints,
     TaskResult,
@@ -237,7 +238,7 @@ export class WorkflowEngine {
      * Keyed by JSON.stringify of the schema to handle structurally
      * identical schemas from parsed JSON (no reference identity).
      */
-    private getValidator(schema: Record<string, unknown>) {
+    private getValidator(schema: JSONSchema) {
         const key = JSON.stringify(schema);
         let v = this.validatorCache.get(key);
         if (!v) {
@@ -578,6 +579,9 @@ export class WorkflowEngine {
                 scopePath: [...scopePath],
                 signal: taskSignal,
                 ...(constraints ? { constraints } : {}),
+                ...(node.outputSchema
+                    ? { outputSchema: node.outputSchema }
+                    : {}),
             };
 
             let result: TaskResult;

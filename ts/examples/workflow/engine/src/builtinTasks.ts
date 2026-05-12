@@ -296,6 +296,76 @@ export const llmGenerate: TaskDefinition<
     },
 };
 
+export const llmGenerateJson: TaskDefinition<
+    { prompt: string; endpoint?: string },
+    { value: unknown }
+> = {
+    name: "llm.generateJson",
+    sideEffects: true,
+    inputSchema: {
+        type: "object",
+        required: ["prompt"],
+        properties: {
+            prompt: { type: "string" },
+            endpoint: { type: "string" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: {} },
+    },
+    async execute(input, ctx) {
+        ctx?.signal?.throwIfAborted();
+        let model;
+        try {
+            model = openai.createJsonChatModel(input.endpoint);
+        } catch (err) {
+            return {
+                kind: "fail",
+                error: {
+                    message: err instanceof Error ? err.message : String(err),
+                },
+            };
+        }
+        // Derive structured output schema from the node's outputSchema if
+        // it declares a "value" property with a non-opaque schema.
+        const valueSchema = ctx.outputSchema?.properties?.value;
+        const jsonSchema =
+            valueSchema &&
+            typeof valueSchema !== "boolean" &&
+            Object.keys(valueSchema).length > 0
+                ? {
+                      name: "response",
+                      strict: true as const,
+                      schema: valueSchema as Record<string, unknown>,
+                  }
+                : undefined;
+        const result = await model.complete(
+            input.prompt,
+            undefined,
+            jsonSchema,
+        );
+        if (!result.success) {
+            return {
+                kind: "fail",
+                error: { message: result.message },
+            };
+        }
+        try {
+            const value = JSON.parse(result.data);
+            return { kind: "ok", output: { value } };
+        } catch (parseErr) {
+            return {
+                kind: "fail",
+                error: {
+                    message: `Failed to parse LLM JSON response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+                },
+            };
+        }
+    },
+};
+
 // ---- Utility tasks ----
 
 export const textTemplate: TaskDefinition<
@@ -647,6 +717,7 @@ export const allBuiltinTasks: TaskDefinition[] = [
     boolToLabel,
     shellExec,
     llmGenerate,
+    llmGenerateJson,
     httpGet,
     fileRead,
     fileWrite,

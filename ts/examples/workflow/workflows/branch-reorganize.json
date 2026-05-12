@@ -1,0 +1,761 @@
+{
+  "kind": "workflow",
+  "name": "branch-reorganize",
+  "version": "1",
+  "description": "Analyze changes in a feature branch against a base branch, reorganize into separate buildable/testable commits on new branches suitable for independent PRs, then create a validation branch merging all new branches to verify the combined diff matches the original.",
+  "inputSchema": {
+    "type": "object",
+    "required": ["repoPath", "featureBranch"],
+    "properties": {
+      "repoPath": {
+        "type": "string",
+        "description": "Absolute path to the git repo."
+      },
+      "featureBranch": {
+        "type": "string",
+        "description": "The feature branch containing all changes to reorganize."
+      },
+      "baseBranch": {
+        "type": "string",
+        "description": "The base branch to diff against (default: main)."
+      },
+      "branchPrefix": {
+        "type": "string",
+        "description": "Prefix for new branch names (default: reorg/)."
+      },
+      "buildCommand": {
+        "type": "string",
+        "description": "Command to verify each branch builds (default: pnpm run build)."
+      },
+      "testCommand": {
+        "type": "string",
+        "description": "Command to verify each branch passes tests (default: pnpm run test:local)."
+      }
+    }
+  },
+  "outputSchema": {
+    "type": "object",
+    "required": ["plan", "branches", "validationBranch", "validated"],
+    "properties": {
+      "plan": {
+        "type": "object",
+        "description": "The LLM-generated reorganization plan."
+      },
+      "branches": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "List of created branch names."
+      },
+      "validationBranch": {
+        "type": "string",
+        "description": "Name of the validation merge branch."
+      },
+      "validated": {
+        "type": "string",
+        "description": "MATCH or MISMATCH indicating whether the validation diff matches the original."
+      }
+    }
+  },
+  "constants": {
+    "analysisPrompt": {
+      "schema": { "type": "string" },
+      "value": "You are an expert software engineer reorganizing a feature branch into clean, independently-reviewable PRs.\n\nGiven the following information about changes in a feature branch:\n- Changed files list\n- Full diff\n\nAnalyze the changes and produce a JSON reorganization plan. Each group becomes a separate branch/PR.\n\nRules:\n1. Each group MUST be independently buildable and pass tests when applied on top of the base branch (plus any dependencies).\n2. Groups should be ordered so later groups may depend on earlier ones (sequential dependency), OR be fully independent.\n3. Every changed file must appear in exactly one group.\n4. Group by logical concern: e.g., refactoring, new feature, bug fix, config changes, test additions.\n5. Prefer smaller, focused groups over large ones.\n6. If a group depends on another, list it in dependsOn. The branch for a dependent group will be based on the merge of its dependencies rather than just the base branch.\n\nRespond with ONLY valid JSON in this exact format (no markdown fencing):\n{\n  \"groups\": [\n    {\n      \"name\": \"short-kebab-case-name\",\n      \"description\": \"What this group does\",\n      \"files\": [\"path/to/file1.ts\", \"path/to/file2.ts\"],\n      \"dependsOn\": [],\n      \"commitMessage\": \"type(scope): description\"\n    }\n  ]\n}\n\nThe dependsOn array lists names of groups that must be merged before this one. Empty means fully independent.\n\nChanged files:\n{{files}}\n\nFull diff:\n{{diff}}"
+    }
+  },
+  "nodes": {
+    "getFullDiff": {
+      "kind": "task",
+      "task": "shell.exec",
+      "inputSchema": {
+        "type": "object",
+        "required": ["command"],
+        "properties": {
+          "command": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "cwd": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["stdout", "stderr", "exitCode"],
+        "properties": {
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "exitCode": { "type": "integer" }
+        }
+      },
+      "inputs": {
+        "command": "git",
+        "args": ["diff", "main...HEAD"],
+        "cwd": { "$from": "input", "name": "repoPath" }
+      },
+      "next": "getFileList",
+      "bind": "fullDiff"
+    },
+    "getFileList": {
+      "kind": "task",
+      "task": "shell.exec",
+      "inputSchema": {
+        "type": "object",
+        "required": ["command"],
+        "properties": {
+          "command": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "cwd": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["stdout", "stderr", "exitCode"],
+        "properties": {
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "exitCode": { "type": "integer" }
+        }
+      },
+      "inputs": {
+        "command": "git",
+        "args": ["diff", "--name-status", "main...HEAD"],
+        "cwd": { "$from": "input", "name": "repoPath" }
+      },
+      "next": "buildAnalysisPrompt",
+      "bind": "fileList"
+    },
+    "buildAnalysisPrompt": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": {
+        "template": "{{analysisPrompt}}",
+        "vars": {
+          "analysisPrompt": { "$from": "constant", "name": "analysisPrompt" },
+          "files": { "$from": "scope", "name": "fileList", "path": ["stdout"] },
+          "diff": { "$from": "scope", "name": "fullDiff", "path": ["stdout"] }
+        }
+      },
+      "next": "analyzeDiff",
+      "bind": "analysisInput"
+    },
+    "analyzeDiff": {
+      "kind": "task",
+      "task": "llm.generateJson",
+      "inputSchema": {
+        "type": "object",
+        "required": ["prompt"],
+        "properties": {
+          "prompt": { "type": "string" },
+          "endpoint": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "object",
+            "required": ["groups"],
+            "properties": {
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "files", "commitMessage"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "files": { "type": "array", "items": { "type": "string" } },
+                    "dependsOn": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "commitMessage": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "inputs": {
+        "prompt": {
+          "$from": "scope",
+          "name": "analysisInput",
+          "path": ["text"]
+        },
+        "endpoint": "GPT_4_O_MINI"
+      },
+      "next": "createBranchesLoop",
+      "bind": "analysisResult"
+    },
+    "createBranchesLoop": {
+      "kind": "loop",
+      "inputs": {
+        "groups": {
+          "$from": "scope",
+          "name": "analysisResult",
+          "path": ["value", "groups"]
+        },
+        "repoPath": { "$from": "input", "name": "repoPath" },
+        "featureBranch": { "$from": "input", "name": "featureBranch" }
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["groups", "repoPath", "featureBranch"],
+        "properties": {
+          "groups": { "type": "array" },
+          "repoPath": { "type": "string" },
+          "featureBranch": { "type": "string" }
+        }
+      },
+      "state": {
+        "i": { "schema": { "type": "integer" }, "initial": 0 },
+        "branchNames": { "schema": { "type": "array" }, "initial": [] }
+      },
+      "body": {
+        "entry": "pickGroup",
+        "nodes": {
+          "pickGroup": {
+            "kind": "task",
+            "task": "list.elementAt",
+            "inputSchema": {
+              "type": "object",
+              "required": ["list", "index"],
+              "properties": {
+                "list": { "type": "array" },
+                "index": { "type": "integer" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["element"],
+              "properties": {
+                "element": {
+                  "type": "object",
+                  "required": ["name", "files", "commitMessage"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "files": { "type": "array", "items": { "type": "string" } },
+                    "dependsOn": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "commitMessage": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "inputs": {
+              "list": { "$from": "input", "name": "groups" },
+              "index": { "$from": "state", "name": "i" }
+            },
+            "next": "joinFiles",
+            "bind": "currentGroup"
+          },
+          "joinFiles": {
+            "kind": "task",
+            "task": "string.join",
+            "inputSchema": {
+              "type": "object",
+              "required": ["list", "delimiter"],
+              "properties": {
+                "list": { "type": "array", "items": { "type": "string" } },
+                "delimiter": { "type": "string" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["text"],
+              "properties": { "text": { "type": "string" } }
+            },
+            "inputs": {
+              "list": {
+                "$from": "scope",
+                "name": "currentGroup",
+                "path": ["element", "files"]
+              },
+              "delimiter": " "
+            },
+            "next": "buildBranchScript",
+            "bind": "fileListJoined"
+          },
+          "buildBranchScript": {
+            "kind": "task",
+            "task": "text.template",
+            "inputSchema": {
+              "type": "object",
+              "required": ["template", "vars"],
+              "properties": {
+                "template": { "type": "string" },
+                "vars": { "type": "object" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["text"],
+              "properties": { "text": { "type": "string" } }
+            },
+            "inputs": {
+              "template": "set -e\ngit checkout -b \"reorg/{{name}}\" main\ngit checkout \"{{featureBranch}}\" -- {{files}}\ngit add .\ngit commit -m \"{{commitMessage}}\"",
+              "vars": {
+                "name": {
+                  "$from": "scope",
+                  "name": "currentGroup",
+                  "path": ["element", "name"]
+                },
+                "featureBranch": { "$from": "input", "name": "featureBranch" },
+                "files": {
+                  "$from": "scope",
+                  "name": "fileListJoined",
+                  "path": ["text"]
+                },
+                "commitMessage": {
+                  "$from": "scope",
+                  "name": "currentGroup",
+                  "path": ["element", "commitMessage"]
+                }
+              }
+            },
+            "next": "execBranchScript",
+            "bind": "branchScript"
+          },
+          "execBranchScript": {
+            "kind": "task",
+            "task": "shell.exec",
+            "inputSchema": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": { "type": "string" },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "cwd": { "type": "string" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["stdout", "stderr", "exitCode"],
+              "properties": {
+                "stdout": { "type": "string" },
+                "stderr": { "type": "string" },
+                "exitCode": { "type": "integer" }
+              }
+            },
+            "inputs": {
+              "command": "bash",
+              "args": [
+                "-c",
+                { "$from": "scope", "name": "branchScript", "path": ["text"] }
+              ],
+              "cwd": { "$from": "input", "name": "repoPath" }
+            },
+            "next": "runBuild",
+            "bind": "branchCreated"
+          },
+          "runBuild": {
+            "kind": "task",
+            "task": "shell.exec",
+            "inputSchema": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": { "type": "string" },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "cwd": { "type": "string" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["stdout", "stderr", "exitCode"],
+              "properties": {
+                "stdout": { "type": "string" },
+                "stderr": { "type": "string" },
+                "exitCode": { "type": "integer" }
+              }
+            },
+            "inputs": {
+              "command": "bash",
+              "args": ["-c", "pnpm run build"],
+              "cwd": { "$from": "input", "name": "repoPath" }
+            },
+            "next": "runTests",
+            "bind": "buildResult"
+          },
+          "runTests": {
+            "kind": "task",
+            "task": "shell.exec",
+            "inputSchema": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": { "type": "string" },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "cwd": { "type": "string" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["stdout", "stderr", "exitCode"],
+              "properties": {
+                "stdout": { "type": "string" },
+                "stderr": { "type": "string" },
+                "exitCode": { "type": "integer" }
+              }
+            },
+            "inputs": {
+              "command": "bash",
+              "args": ["-c", "pnpm run test:local"],
+              "cwd": { "$from": "input", "name": "repoPath" }
+            },
+            "next": "buildBranchNameStr",
+            "bind": "testResult"
+          },
+          "buildBranchNameStr": {
+            "kind": "task",
+            "task": "text.template",
+            "inputSchema": {
+              "type": "object",
+              "required": ["template", "vars"],
+              "properties": {
+                "template": { "type": "string" },
+                "vars": { "type": "object" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["text"],
+              "properties": { "text": { "type": "string" } }
+            },
+            "inputs": {
+              "template": "reorg/{{name}}",
+              "vars": {
+                "name": {
+                  "$from": "scope",
+                  "name": "currentGroup",
+                  "path": ["element", "name"]
+                }
+              }
+            },
+            "next": "appendBranchName",
+            "bind": "branchNameStr"
+          },
+          "appendBranchName": {
+            "kind": "task",
+            "task": "list.append",
+            "inputSchema": {
+              "type": "object",
+              "required": ["list", "item"],
+              "properties": {
+                "list": { "type": "array" },
+                "item": {}
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["list"],
+              "properties": { "list": { "type": "array" } }
+            },
+            "inputs": {
+              "list": { "$from": "state", "name": "branchNames" },
+              "item": {
+                "$from": "scope",
+                "name": "branchNameStr",
+                "path": ["text"]
+              }
+            },
+            "next": "returnToBase",
+            "bind": "updatedBranches"
+          },
+          "returnToBase": {
+            "kind": "task",
+            "task": "shell.exec",
+            "inputSchema": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": { "type": "string" },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "cwd": { "type": "string" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["stdout", "stderr", "exitCode"],
+              "properties": {
+                "stdout": { "type": "string" },
+                "stderr": { "type": "string" },
+                "exitCode": { "type": "integer" }
+              }
+            },
+            "inputs": {
+              "command": "git",
+              "args": ["checkout", "main"],
+              "cwd": { "$from": "input", "name": "repoPath" }
+            },
+            "next": "stepIdx",
+            "bind": "returnedToBase"
+          },
+          "stepIdx": {
+            "kind": "task",
+            "task": "int.add",
+            "inputSchema": {
+              "type": "object",
+              "required": ["a", "b"],
+              "properties": {
+                "a": { "type": "integer" },
+                "b": { "type": "integer" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["result"],
+              "properties": { "result": { "type": "integer" } }
+            },
+            "inputs": {
+              "a": { "$from": "state", "name": "i" },
+              "b": 1
+            },
+            "next": "computeGroupCount",
+            "bind": "nextIdx"
+          },
+          "computeGroupCount": {
+            "kind": "task",
+            "task": "list.length",
+            "inputSchema": {
+              "type": "object",
+              "required": ["list"],
+              "properties": { "list": { "type": "array" } }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["length"],
+              "properties": { "length": { "type": "integer" } }
+            },
+            "inputs": {
+              "list": { "$from": "input", "name": "groups" }
+            },
+            "next": "checkMore",
+            "bind": "groupCount"
+          },
+          "checkMore": {
+            "kind": "task",
+            "task": "int.lessThan",
+            "inputSchema": {
+              "type": "object",
+              "required": ["a", "b"],
+              "properties": {
+                "a": { "type": "integer" },
+                "b": { "type": "integer" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["result"],
+              "properties": { "result": { "type": "boolean" } }
+            },
+            "inputs": {
+              "a": { "$from": "scope", "name": "nextIdx", "path": ["result"] },
+              "b": {
+                "$from": "scope",
+                "name": "groupCount",
+                "path": ["length"]
+              }
+            },
+            "next": "loopDecision",
+            "bind": "hasMore"
+          },
+          "loopDecision": {
+            "kind": "branch",
+            "selector": {
+              "$from": "scope",
+              "name": "hasMore",
+              "path": ["result"]
+            },
+            "selectorSchema": { "type": "boolean" },
+            "cases": { "true": "@iterate", "false": "@exit" },
+            "default": "@exit"
+          }
+        }
+      },
+      "iterateState": {
+        "i": { "$from": "scope", "name": "nextIdx", "path": ["result"] },
+        "branchNames": {
+          "$from": "scope",
+          "name": "updatedBranches",
+          "path": ["list"]
+        }
+      },
+      "output": {
+        "$from": "scope",
+        "name": "updatedBranches",
+        "path": ["list"]
+      },
+      "outputSchema": { "type": "array", "items": { "type": "string" } },
+      "maxIterations": 50,
+      "next": "joinBranchNames",
+      "bind": "createdBranches"
+    },
+    "joinBranchNames": {
+      "kind": "task",
+      "task": "string.join",
+      "inputSchema": {
+        "type": "object",
+        "required": ["list", "delimiter"],
+        "properties": {
+          "list": { "type": "array", "items": { "type": "string" } },
+          "delimiter": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": {
+        "list": { "$from": "scope", "name": "createdBranches" },
+        "delimiter": " "
+      },
+      "next": "buildMergeScript",
+      "bind": "branchNamesJoined"
+    },
+    "buildMergeScript": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": {
+        "template": "set -e\ngit checkout -b reorg/validation-merge main\nfor branch in {{branches}}; do\n  git merge --no-edit \"$branch\"\ndone",
+        "vars": {
+          "branches": {
+            "$from": "scope",
+            "name": "branchNamesJoined",
+            "path": ["text"]
+          }
+        }
+      },
+      "next": "execMergeScript",
+      "bind": "mergeScript"
+    },
+    "execMergeScript": {
+      "kind": "task",
+      "task": "shell.exec",
+      "inputSchema": {
+        "type": "object",
+        "required": ["command"],
+        "properties": {
+          "command": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "cwd": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["stdout", "stderr", "exitCode"],
+        "properties": {
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "exitCode": { "type": "integer" }
+        }
+      },
+      "inputs": {
+        "command": "bash",
+        "args": [
+          "-c",
+          { "$from": "scope", "name": "mergeScript", "path": ["text"] }
+        ],
+        "cwd": { "$from": "input", "name": "repoPath" }
+      },
+      "next": "buildValidationScript",
+      "bind": "mergeResult"
+    },
+    "buildValidationScript": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": {
+        "template": "set -e\nORIGINAL=$(git diff main...{{featureBranch}} | sha256sum | cut -d' ' -f1)\nVALIDATION=$(git diff main...reorg/validation-merge | sha256sum | cut -d' ' -f1)\nif [ \"$ORIGINAL\" = \"$VALIDATION\" ]; then\n  echo MATCH\nelse\n  echo MISMATCH\n  echo \"Original SHA: $ORIGINAL\"\n  echo \"Validation SHA: $VALIDATION\"\nfi",
+        "vars": {
+          "featureBranch": { "$from": "input", "name": "featureBranch" }
+        }
+      },
+      "next": "execValidation",
+      "bind": "validationScript"
+    },
+    "execValidation": {
+      "kind": "task",
+      "task": "shell.exec",
+      "inputSchema": {
+        "type": "object",
+        "required": ["command"],
+        "properties": {
+          "command": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "cwd": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["stdout", "stderr", "exitCode"],
+        "properties": {
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "exitCode": { "type": "integer" }
+        }
+      },
+      "inputs": {
+        "command": "bash",
+        "args": [
+          "-c",
+          { "$from": "scope", "name": "validationScript", "path": ["text"] }
+        ],
+        "cwd": { "$from": "input", "name": "repoPath" }
+      },
+      "bind": "validationResult"
+    }
+  },
+  "entry": "getFullDiff",
+  "output": {
+    "plan": { "$from": "scope", "name": "analysisResult", "path": ["value"] },
+    "branches": { "$from": "scope", "name": "createdBranches" },
+    "validationBranch": "reorg/validation-merge",
+    "validated": {
+      "$from": "scope",
+      "name": "validationResult",
+      "path": ["stdout"]
+    }
+  }
+}

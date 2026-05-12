@@ -76,6 +76,11 @@ function validateScope(
                     path: `${path}.task`,
                     message: `Task "${node.task}" is not registered.`,
                 });
+            } else if (tasks) {
+                const taskDef = tasks.get(node.task);
+                if (taskDef) {
+                    checkNodeTaskSchemas(taskDef, node, path, errors);
+                }
             }
             if (node.next && !nodeIds.has(node.next)) {
                 errors.push({
@@ -228,19 +233,26 @@ function resolveSchemaPath(
     for (const segment of path) {
         if (typeof segment === "number") {
             // Array index: look at items schema
-            if (current.type !== "array" || !current.items) {
+            if (
+                current.type !== "array" ||
+                !current.items ||
+                typeof current.items === "boolean" ||
+                Array.isArray(current.items)
+            ) {
                 return undefined;
             }
-            current = current.items as JSONSchema;
+            current = current.items;
         } else {
             // Object property
-            const props = current.properties as
-                | Record<string, JSONSchema>
-                | undefined;
+            const props = current.properties;
             if (!props || !(segment in props)) {
                 return undefined;
             }
-            current = props[segment];
+            const sub = props[segment];
+            if (typeof sub === "boolean") {
+                return undefined;
+            }
+            current = sub;
         }
     }
     return current;
@@ -289,6 +301,135 @@ function normalizeTypeSet(type: unknown): string[] {
     if (Array.isArray(type)) return type as string[];
     if (typeof type === "string") return [type];
     return [];
+}
+
+/** True when a schema is the top type (empty object: no constraints). */
+function isTopSchema(schema: JSONSchema): boolean {
+    return Object.keys(schema).length === 0;
+}
+
+/**
+ * Validate that a workflow node's inputSchema and outputSchema are
+ * compatible with the registered task definition's schemas.
+ *
+ * Rules:
+ * - Input: the node must declare as required every property the task
+ *   requires. Shared property types must be compatible.
+ * - Output: the node can refine (narrow) the task's output. It must
+ *   keep all task-required properties as required. It may only declare
+ *   properties that the task itself declares. Task properties with
+ *   empty schemas ({}, the top type) accept any refinement.
+ */
+function checkNodeTaskSchemas(
+    taskDef: TaskDefinition,
+    node: { inputSchema: JSONSchema; outputSchema: JSONSchema },
+    path: string,
+    errors: ValidationError[],
+): void {
+    // --- Input: node must satisfy task's requirements ---
+    const taskInputReq = taskDef.inputSchema.required ?? [];
+    const nodeInputReq = node.inputSchema.required ?? [];
+    for (const prop of taskInputReq) {
+        if (!nodeInputReq.includes(prop)) {
+            errors.push({
+                path: `${path}.inputSchema`,
+                message:
+                    `Task requires input "${prop}" but node ` +
+                    `does not declare it as required.`,
+            });
+        }
+    }
+
+    const taskInputProps = taskDef.inputSchema.properties ?? {};
+    const nodeInputProps = node.inputSchema.properties ?? {};
+    for (const [propName, taskPropDef] of Object.entries(taskInputProps)) {
+        if (typeof taskPropDef === "boolean" || isTopSchema(taskPropDef)) {
+            continue;
+        }
+        const nodePropDef = nodeInputProps[propName];
+        if (
+            nodePropDef === undefined ||
+            typeof nodePropDef === "boolean" ||
+            !nodePropDef.type ||
+            !taskPropDef.type
+        ) {
+            continue;
+        }
+        const taskTypes = normalizeTypeSet(taskPropDef.type);
+        const nodeTypes = normalizeTypeSet(nodePropDef.type);
+        const overlap = nodeTypes.some((nt) => taskTypes.includes(nt));
+        if (!overlap) {
+            errors.push({
+                path: `${path}.inputSchema`,
+                message:
+                    `Input property "${propName}": node declares type ` +
+                    `${JSON.stringify(nodePropDef.type)} but task expects ` +
+                    `${JSON.stringify(taskPropDef.type)}.`,
+            });
+        }
+    }
+
+    // --- Output: node can only refine what the task produces ---
+    const taskOutputReq = taskDef.outputSchema.required ?? [];
+    const nodeOutputReq = node.outputSchema.required ?? [];
+    for (const prop of taskOutputReq) {
+        if (!nodeOutputReq.includes(prop)) {
+            errors.push({
+                path: `${path}.outputSchema`,
+                message:
+                    `Task requires output "${prop}" but node ` +
+                    `does not declare it as required.`,
+            });
+        }
+    }
+
+    const taskOutputProps = taskDef.outputSchema.properties ?? {};
+    const nodeOutputProps = node.outputSchema.properties ?? {};
+
+    // Node must not claim output properties the task does not produce,
+    // unless the task's entire outputSchema is unconstrained.
+    if (!isTopSchema(taskDef.outputSchema)) {
+        for (const propName of Object.keys(nodeOutputProps)) {
+            if (!(propName in taskOutputProps)) {
+                errors.push({
+                    path: `${path}.outputSchema`,
+                    message:
+                        `Node declares output property "${propName}" ` +
+                        `but task does not produce it.`,
+                });
+            }
+        }
+    }
+
+    // Type compatibility for output properties (skip top-schema properties).
+    for (const [propName, taskPropDef] of Object.entries(taskOutputProps)) {
+        if (typeof taskPropDef === "boolean" || isTopSchema(taskPropDef)) {
+            continue;
+        }
+        const nodePropDef = nodeOutputProps[propName];
+        if (
+            nodePropDef === undefined ||
+            typeof nodePropDef === "boolean" ||
+            !nodePropDef.type ||
+            !taskPropDef.type
+        ) {
+            continue;
+        }
+        const taskTypes = normalizeTypeSet(taskPropDef.type);
+        const nodeTypes = normalizeTypeSet(nodePropDef.type);
+        // Node output types must be a subset of task types (narrowing).
+        for (const nt of nodeTypes) {
+            if (!taskTypes.includes(nt)) {
+                errors.push({
+                    path: `${path}.outputSchema`,
+                    message:
+                        `Output property "${propName}": node declares ` +
+                        `type "${nt}" but task only produces ` +
+                        `${JSON.stringify(taskPropDef.type)}.`,
+                });
+            }
+        }
+    }
 }
 
 /**
@@ -431,14 +572,12 @@ function validateSchemaCompat(
                 const remainder = ref.templatePath.slice(inputsPrefix.length);
                 // Only check when remainder is a simple property name (no dots)
                 if (!remainder.includes(".") && !remainder.includes("[")) {
-                    const props = consumerInputSchema.properties as
-                        | Record<string, JSONSchema>
-                        | undefined;
+                    const props = consumerInputSchema.properties;
                     if (props && remainder in props) {
-                        consumerType = props[remainder].type as
-                            | string
-                            | string[]
-                            | undefined;
+                        const sub = props[remainder];
+                        if (typeof sub !== "boolean") {
+                            consumerType = sub.type;
+                        }
                     }
                 }
             }
