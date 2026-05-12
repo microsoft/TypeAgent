@@ -280,12 +280,11 @@ describe("trace hook", () => {
         const matched = events.filter(
             (e): e is PartMatchedEvent => e.kind === "partMatched",
         );
-        // Wildcard parts defer capture, so no capturedValue should appear
-        for (const e of matched) {
-            if (e.capturedValue !== undefined) {
-                // If present, it should be for a non-wildcard part
-                expect(e.capturedValue.variable).not.toBe("song");
-            }
-        }
+        // Wildcard parts defer capture, so no partMatched event
+        // should carry capturedValue with variable "song".
+        const wildcardCaptures = matched.filter(
+            (e) => e.capturedValue?.variable === "song",
+        );
+        expect(wildcardCaptures).toHaveLength(0);
     });
 });

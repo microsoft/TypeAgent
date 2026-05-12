@@ -2957,6 +2957,11 @@ export function matchState(state: MatchState, request: string) {
             });
         }
 
+        // Snapshot the values head before the match so we can detect
+        // whether a new value was actually pushed (vs. reading a
+        // stale entry from an ancestor context).
+        const prevValues = trace !== undefined ? state.values : undefined;
+
         switch (part.type) {
             case "string":
                 if (!matchStringPart(request, state, part)) {
@@ -3052,13 +3057,18 @@ export function matchState(state: MatchState, request: string) {
         if (trace !== undefined) {
             // Wildcard parts defer value capture (the extent isn't
             // known until a following part resolves it), so we skip
-            // capturedValue for them.
+            // capturedValue for them.  We also compare against the
+            // pre-match snapshot: if no new value was pushed (e.g.
+            // the rule is not tracking values), we report no capture
+            // rather than reading a stale entry from an ancestor.
             const varName =
                 part.type !== "wildcard"
                     ? (part as { variable?: string }).variable
                     : undefined;
             const captured =
-                varName !== undefined && state.values !== undefined
+                varName !== undefined &&
+                state.values !== undefined &&
+                state.values !== prevValues
                     ? {
                           variable: varName,
                           value: state.values.value,

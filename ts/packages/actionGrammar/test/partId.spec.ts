@@ -204,7 +204,7 @@ describe("partLabels in DebugInfoCollector", () => {
 
         expect(collector.partLabels.size).toBeGreaterThan(0);
         const labels = [...collector.partLabels.values()];
-        expect(labels.some((l) => l === "play")).toBe(true);
+        expect(labels.some((l) => l === '\"play\"')).toBe(true);
     });
 
     it("records labels for variable parts", () => {

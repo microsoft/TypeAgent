@@ -1204,7 +1204,7 @@ function createGrammarRule(
                 const part = createStringPart(
                     expr.value,
                     undefined,
-                    allocPartId(context, expr.pos, expr.value.join(" ")),
+                    allocPartId(context, expr.pos, `"${expr.value.join(" ")}"`),
                 );
                 // TODO: create regexp
                 parts.push(part);

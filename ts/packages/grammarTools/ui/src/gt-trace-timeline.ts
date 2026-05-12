@@ -422,8 +422,9 @@ export class GtTraceTimeline extends LitElement {
      * (not on UI state like collapse/filter), so we memoize them.
      */
     private _derivedTraceData(): DerivedTraceData {
-        if (this._derivedCache?.trace === this._trace) {
-            return this._derivedCache!;
+        const cached = this._derivedCache;
+        if (cached !== undefined && cached.trace === this._trace) {
+            return cached;
         }
         const events = this._trace!.events;
         const n = events.length;
@@ -567,15 +568,12 @@ export class GtTraceTimeline extends LitElement {
                 const input = this._trace?.input ?? "";
                 const start = attemptPos ?? 0;
                 const end = event.endPos;
-                const matchedSpan =
-                    start < end && input
-                        ? (() => {
-                              let text = input.slice(start, end);
-                              if (text.length > 30)
-                                  text = text.slice(0, 29) + "\u2026";
-                              return JSON.stringify(text);
-                          })()
-                        : undefined;
+                let matchedSpan: string | undefined;
+                if (start < end && input) {
+                    let text = input.slice(start, end);
+                    if (text.length > 30) text = text.slice(0, 29) + "\u2026";
+                    matchedSpan = JSON.stringify(text);
+                }
                 const capStr = event.capturedValue
                     ? ` $${event.capturedValue.variable}=${JSON.stringify(event.capturedValue.value)}`
                     : "";
@@ -737,6 +735,9 @@ export class GtTraceTimeline extends LitElement {
                                       )
                                           ? ""
                                           : "active"}"
+                                      aria-pressed=${!this._hiddenKinds.has(
+                                          kind,
+                                      )}
                                       @click=${() => this._toggleKind(kind)}
                                   >
                                       <span style="color: ${EVENT_COLORS[kind]}"
@@ -760,6 +761,7 @@ export class GtTraceTimeline extends LitElement {
                                       value
                                           ? "active"
                                           : ""}"
+                                      aria-pressed=${this._pathFilter === value}
                                       @click=${() => {
                                           this._pathFilter = value;
                                       }}
@@ -905,10 +907,7 @@ export class GtTraceTimeline extends LitElement {
                                               ? html`<tr>
                                                     <td colspan="6">
                                                         <div class="slots">
-                                                            $${(
-                                                                event as PartMatchedEvent
-                                                            ).capturedValue!
-                                                                .variable}
+                                                            ${`$${(event as PartMatchedEvent).capturedValue!.variable}`}
                                                             =
                                                             ${JSON.stringify(
                                                                 (
