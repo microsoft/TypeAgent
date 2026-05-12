@@ -13,13 +13,11 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 ## Architecture
 
 ```
-Shell (Electron)              CLI (Node.js)              Application extensions
-   │  in-process (default)       │  always remote            │  always remote
-   │  OR --connect [port]        │                           │  (vscode-shell, etc.)
-   └──────────────┬──────────────┴───────────────────────────┘
-                  │
-                  │   ws://localhost:8999  (configurable)
-                  │
+Shell (Electron)              CLI (Node.js)
+   │  in-process (default)       │  always remote
+   │  OR WebSocket               │
+   └──────────────┬──────────────┘
+                  │ ws://localhost:${AGENT_SERVER_PORT ?? 8999}
          ┌────────▼────────┐
          │   agentServer   │
          │                 │
@@ -35,16 +33,6 @@ Shell (Electron)              CLI (Node.js)              Application extensions
 ```
 
 Each conversation has its own `SharedDispatcher` instance with isolated chat history, conversation memory, display log, and persist directory. Clients connected to the same conversation share one dispatcher; clients in different conversations are fully isolated.
-
-### Single-instance, well-known port
-
-The agent-server binds a **well-known TCP port** (default `8999`, override via the `AGENT_SERVER_PORT` environment variable or `--port` flag). Clients on the same machine connect to `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` directly.
-
-There is at most one agent-server per data-dir profile: the server takes an exclusive OS-level lock on its instance directory at startup (`lockInstanceDir`), so a second `agent-server` invocation against the same `TYPEAGENT_USER_DATA_DIR` exits with `ERR_INSTANCE_LOCKED`. Workflows that need parallel agent-servers (benchmark workers, integration tests, side-by-side dev profiles) set both a per-worker `TYPEAGENT_USER_DATA_DIR` *and* a per-worker `AGENT_SERVER_PORT`.
-
-To coordinate concurrent client spawns targeting the same port, the client library uses a per-port lockfile in the OS temp dir; only one client wins the spawn race, the others fall through to a TCP probe + connect.
-
-Cross-machine connections are still supported: connect from another host with an explicit URL via `connectAgentServer(url)`.
 
 ### RPC channels per connection
 
@@ -70,33 +58,27 @@ From the `ts/` directory:
 # Build (if not already built)
 pnpm run build agentServer
 
-# Start (binds AGENT_SERVER_PORT, default 8999)
+# Start
 pnpm --filter agent-server start
 
 # Start with a named config (e.g. loads config.test.json)
 pnpm --filter agent-server start -- --config test
 
-# Pin to a specific port (overrides AGENT_SERVER_PORT for this run)
-pnpm --filter agent-server start -- --port 9000
-
-# Stop (sends shutdown via RPC at AGENT_SERVER_PORT, default 8999)
+# Stop (sends shutdown via RPC)
 pnpm --filter agent-server stop
 ```
 
 ### With node directly
 
 ```bash
-# From the repo root — binds AGENT_SERVER_PORT (default 8999)
+# From the repo root
 node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js
 
-# With optional config name and explicit port
-node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js \
-    --config test --port 9000
+# With optional config name
+node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js --config test
 ```
 
-On startup the server logs `Agent server started at ws://localhost:<port>`.
-
-A graceful shutdown (`server stop` / RPC `shutdown`) closes the WebSocket and exits the process. If graceful shutdown fails (e.g. the server hung), kill it via your OS tools (`Stop-Process -Id <pid>` on Windows, `kill -9 <pid>` on POSIX).
+The server listens on `ws://localhost:${AGENT_SERVER_PORT ?? 8999}` and logs `Agent server started at ws://localhost:<port>` when ready. Set `AGENT_SERVER_PORT` (or pass `--port <n>`) to override the default `8999`.
 
 ---
 
@@ -123,9 +105,9 @@ Conversation dispatchers are automatically evicted from memory after 5 minutes w
 ## Connection lifecycle
 
 ```
-Client calls ensureAgentServer({ hidden?, idleTimeout? })
+Client calls ensureAgentServer({ port?, hidden?, idleTimeout? })
   │
-  └─ Is server already listening on ws://localhost:${AGENT_SERVER_PORT ?? 8999}?
+  └─ Is server already listening on ws://localhost:<port>?
       └─ No → spawnAgentServer() — detached child process, survives parent exit
                hidden=true suppresses the terminal/window
 
@@ -138,8 +120,6 @@ Client calls connectAgentServer(url)
   │
   └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
-
-Read-only lookups (e.g. for application extensions like `vscode-shell`, which never spawn their own agentServer) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live agentServer answers.
 
 On disconnect, the server removes all of that connection's conversations from its routing table.
 
@@ -155,7 +135,7 @@ On disconnect, the server removes all of that connection's conversations from it
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ in-process Dispatcher
 ```
 
-**Connected (`--connect [port]`)** — connects to a running agentServer (or auto-spawns one). The port defaults to `AGENT_SERVER_PORT` (then `8999`); pass an explicit port to override.
+**Connected (`--connect <port>`)** — connects to a running agentServer.
 
 ```
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ WebSocket ↔ agentServer
@@ -173,7 +153,7 @@ Terminal ↔ ConsoleClientIO ↔ WebSocket ↔ agentServer
 
 ### `agent-cli connect` (interactive)
 
-`connect` calls `ensureAgentServer({ port, hidden, idleTimeout })` to auto-spawn the server if no live agentServer answers at the configured URL, then calls `connectAgentServer()` and `joinConversation()` directly. Pass `--port <port>` to override `AGENT_SERVER_PORT` for this invocation. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
+`connect` calls `ensureAgentServer({ port, hidden, idleTimeout })` to auto-spawn the server if needed, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
 
 ### `agent-cli run` (non-interactive)
 
@@ -205,7 +185,7 @@ Shell launches → createDispatcher() in-process → no server involved
 ```
 Client → ensureAgentServer({ hidden })
        → server already running → no-op
-Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
+Client → connectAgentServer() → joinConversation() → Dispatcher proxy
 ```
 
 **Shell or CLI — server not yet running**
@@ -214,7 +194,7 @@ Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
 Client → ensureAgentServer({ hidden, idleTimeout })
        → server not found → spawnAgentServer() (hidden or visible window)
        → poll until ready (60 s timeout)
-Client → connectAgentServer(url) → joinConversation() → Dispatcher proxy
+Client → connectAgentServer() → joinConversation() → Dispatcher proxy
 ```
 
 **Headless server**
@@ -243,9 +223,8 @@ Conversation metadata is stored at `~/.typeagent/profiles/dev/conversations/conv
 ## Sub-package details
 
 - [protocol/README.md](protocol/README.md) — channel names, RPC types, conversation types, client-type registry
-- [client/README.md](client/README.md) — connection model, `ensureAgentServer`, `lookupAgentServer`, `connectAgentServer`, smoke driver
-- [server/README.md](server/README.md) — server entry point, well-known port binding, `ConversationManager`, `SharedDispatcher`, routing ClientIO
-- [docs/manual-smoke.md](docs/manual-smoke.md) — manual smoke scenarios (multi-instance, UI flows, idle timeout, etc.) not covered by the automated smoke driver
+- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectConversation`, `stopAgentServer`
+- [server/README.md](server/README.md) — server entry point, `ConversationManager`, `SharedDispatcher`, routing ClientIO
 
 ---
 
