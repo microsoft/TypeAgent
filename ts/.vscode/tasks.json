@@ -55,6 +55,15 @@
         "TypeAgent: Install VS Code Shell extension (local)"
       ],
       "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "command": "npx fluid-build agr-language -t build --dep",
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "label": "build agr-language",
+      "detail": "Build agr-language extension and its dependencies"
     }
   ]
 }

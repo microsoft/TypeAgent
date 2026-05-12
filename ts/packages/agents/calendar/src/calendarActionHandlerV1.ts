@@ -67,7 +67,7 @@ export class CalendarClientLoginCommandHandler
         }
 
         await calendarClient.login((prompt) => {
-            displayStatus(prompt, context);
+            displayStatus(prompt.message, context);
         });
 
         const name = await calendarClient.getUserAsync();

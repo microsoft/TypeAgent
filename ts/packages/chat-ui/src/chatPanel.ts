@@ -457,6 +457,14 @@ export class ChatPanel {
     private userName = "You";
     private userInitial = "U";
     /**
+     * Whether the local user has signed in to a Microsoft / Graph identity
+     * (set via setUserSignedIn after `@calendar login` / `@email login`).
+     * The avatar's click handler reads this at click time and no-ops when
+     * true so signed-in users don't re-trigger the login flow.
+     */
+    private isUserSignedIn = false;
+    private signedInEmail?: string;
+    /**
      * Optional host-driven command-completion controller. Mounted by
      * attachCompletion(); pcState messages are forwarded via applyPcState().
      */
@@ -1062,6 +1070,19 @@ export class ChatPanel {
         const iconDiv = document.createElement("div");
         iconDiv.className = "user-icon";
         iconDiv.textContent = this.userInitial;
+        // Click the user-letter avatar to start a Microsoft sign-in flow.
+        // Routes through the standard send path so it appears in history,
+        // shows in the user's bubble, and the dispatcher handles it like
+        // any typed `@calendar login`. Calendar+email share an MS Graph
+        // identity (single tenant), so one login covers both. The handler
+        // reads isUserSignedIn at click time so the avatar becomes inert
+        // once the user is signed in (without needing to remove listeners
+        // from each historic bubble).
+        this.applyUserIconState(iconDiv);
+        iconDiv.addEventListener("click", () => {
+            if (this.isUserSignedIn) return;
+            this.injectCommand("@calendar login");
+        });
         container.appendChild(iconDiv);
 
         const bodyDiv = document.createElement("div");
@@ -1250,6 +1271,11 @@ export class ChatPanel {
         );
 
         container.setMessage(content, source, appendMode);
+
+        // After the agent's HTML lands in the DOM, lift any embedded
+        // user-signed-in marker into ChatPanel state. The marker is emitted
+        // by the calendar/email login handlers on success.
+        this.extractUserMarker(this.messageDiv);
 
         this.scrollToBottom();
     }
@@ -2105,6 +2131,83 @@ export class ChatPanel {
         } else if (trimmed.length > 0) {
             this.userInitial = trimmed.charAt(0).toUpperCase();
         }
+    }
+
+    /**
+     * Mark the local user as signed in to a Microsoft / Graph identity.
+     * Updates userName/userInitial (so subsequent bubbles show the real
+     * initial), retroactively rewrites every existing user-icon div in the
+     * transcript, and flips isUserSignedIn so the avatar's click handler
+     * stops triggering sign-in. Called after `@calendar login` succeeds —
+     * either by the host directly, or via the embedded HTML marker scanner
+     * in addAgentMessage.
+     */
+    public setUserSignedIn(name: string, email: string) {
+        this.setUserInfo(name);
+        this.isUserSignedIn = true;
+        this.signedInEmail = email;
+        this.refreshAllUserIcons();
+    }
+
+    public setUserSignedOut() {
+        this.isUserSignedIn = false;
+        this.signedInEmail = undefined;
+        // Reset display name/initial back to the default placeholders so
+        // future user bubbles show "U" instead of the previously-signed-in
+        // user's initial. Mirrors what setUserSignedIn does on its own
+        // path (where it overwrites userName/userInitial via setUserInfo).
+        this.userName = "You";
+        this.userInitial = "U";
+        this.refreshAllUserIcons();
+    }
+
+    private applyUserIconState(iconDiv: HTMLElement) {
+        iconDiv.textContent = this.userInitial;
+        if (this.isUserSignedIn) {
+            iconDiv.style.cursor = "default";
+            iconDiv.title = this.signedInEmail
+                ? `Signed in as ${this.userName} <${this.signedInEmail}>`
+                : `Signed in as ${this.userName}`;
+        } else {
+            iconDiv.style.cursor = "pointer";
+            iconDiv.title = "Sign in to Microsoft (calendar + email)";
+        }
+    }
+
+    private refreshAllUserIcons() {
+        const icons =
+            this.messageDiv.querySelectorAll<HTMLElement>(".user-icon");
+        icons.forEach((el) => this.applyUserIconState(el));
+    }
+
+    /**
+     * Look for the hidden user-signed-in / user-signed-out markers that
+     * calendar/email login + logout handlers append to their displays, and
+     * lift them into UI state. The shapes are:
+     *   <span class="typeagent-user-signed-in" data-name="..." data-email="..." hidden></span>
+     *   <span class="typeagent-user-signed-out" hidden></span>
+     * Markers are removed from the DOM after extraction so they don't leak
+     * into subsequent history replays / copy-as-text.
+     */
+    private extractUserMarker(root: HTMLElement) {
+        const signedIn = root.querySelectorAll<HTMLElement>(
+            "span.typeagent-user-signed-in",
+        );
+        signedIn.forEach((el) => {
+            const name = el.getAttribute("data-name");
+            const email = el.getAttribute("data-email");
+            if (name && email) {
+                this.setUserSignedIn(name, email);
+            }
+            el.remove();
+        });
+        const signedOut = root.querySelectorAll<HTMLElement>(
+            "span.typeagent-user-signed-out",
+        );
+        signedOut.forEach((el) => {
+            this.setUserSignedOut();
+            el.remove();
+        });
     }
 
     /**

@@ -17,7 +17,7 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "kp-test": "./dist/testDriver.js"
+    "kp-test": "./bin/kp-test.js"
   },
   "files": [
     "dist",

@@ -32,6 +32,11 @@ export type {
     // Completion
     SeparatorMode,
     AfterWildcard,
+    CompletionDirection,
+    WildcardPolicy,
+    OptionalPolicy,
+    RepeatPolicy,
+    CompletionOptions,
     CompletionGroup,
     CompletionProperty,
     CompletionPreview,
@@ -69,7 +74,12 @@ export {
 
 // Services
 export { loadGrammarFromFile, loadGrammarFromBuffer } from "./loader.js";
-export { getSymbolIndex, offsetToPosition } from "./symbols.js";
+export type { FileLoader } from "action-grammar";
+export {
+    getSymbolIndex,
+    offsetToPosition,
+    symbolAtPosition,
+} from "./symbols.js";
 export { format } from "./format.js";
 export { previewCompletion } from "./completion.js";
 export { traceMatch } from "./trace.js";

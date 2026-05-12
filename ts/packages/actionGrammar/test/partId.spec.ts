@@ -3,6 +3,7 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import type { DebugInfoCollector } from "../src/grammarCompiler.js";
+import { defaultFileLoader } from "../src/defaultFileLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
@@ -12,7 +13,10 @@ function makeCollector(): DebugInfoCollector {
     return {
         partPositions: new Map(),
         rulePositions: new Map(),
-        fileId: "test.agr",
+        partRules: new Map(),
+        partLabels: new Map(),
+        fileContents: new Map(),
+        filePaths: new Map(),
     };
 }
 
@@ -51,9 +55,9 @@ describe("partId assignment", () => {
 
         expect(collector.rulePositions.size).toBeGreaterThan(0);
         // Rule positions should be valid offsets into the source
-        for (const offset of collector.rulePositions.values()) {
-            expect(offset).toBeGreaterThanOrEqual(0);
-            expect(offset).toBeLessThan(source.length);
+        for (const pos of collector.rulePositions.values()) {
+            expect(pos.offset).toBeGreaterThanOrEqual(0);
+            expect(pos.offset).toBeLessThan(source.length);
         }
     });
 
@@ -62,9 +66,9 @@ describe("partId assignment", () => {
         const collector = makeCollector();
         loadGrammarRules("test", source, { debugCollector: collector });
 
-        for (const offset of collector.partPositions.values()) {
-            expect(offset).toBeGreaterThanOrEqual(0);
-            expect(offset).toBeLessThan(source.length);
+        for (const pos of collector.partPositions.values()) {
+            expect(pos.offset).toBeGreaterThanOrEqual(0);
+            expect(pos.offset).toBeLessThan(source.length);
         }
     });
 });
@@ -131,6 +135,110 @@ describe("partId in trace events", () => {
         for (const e of partEvents) {
             if ("part" in e) {
                 expect(validPartIds.has(e.part)).toBe(true);
+            }
+        }
+    });
+});
+
+describe("filePaths in DebugInfoCollector", () => {
+    function getTestFileLoader(grammarFiles: Record<string, string>) {
+        const fileMap = new Map(
+            Object.keys(grammarFiles).map((key) => [
+                defaultFileLoader.resolvePath(key),
+                key,
+            ]),
+        );
+        return {
+            ...defaultFileLoader,
+            readContent: (fullPath: string) => {
+                const fileKey = fileMap.get(fullPath);
+                const content = fileKey ? grammarFiles[fileKey] : undefined;
+                if (content === undefined) {
+                    throw new Error(`File not found: ${fullPath}`);
+                }
+                return content;
+            },
+        };
+    }
+
+    it("records filePaths for single-file grammar", () => {
+        const source = `<Start> = hello -> true;`;
+        const collector = makeCollector();
+        loadGrammarRules("test.agr", source, { debugCollector: collector });
+
+        // fileContents should have the source
+        expect(collector.fileContents.size).toBeGreaterThan(0);
+    });
+
+    it("records filePaths for multi-file grammar with imports", () => {
+        const grammarFiles: Record<string, string> = {
+            "helper.agr": `export <Greeting> = (hello | hi) -> "greeting";`,
+            "main.agr": `
+                import { Greeting } from "./helper.agr";
+                <Start> = $(g:<Greeting>) world -> { g, target: "world" };
+            `,
+        };
+
+        const collector = makeCollector();
+        const loader = getTestFileLoader(grammarFiles);
+        loadGrammarRules("main.agr", loader, { debugCollector: collector });
+
+        // Both files should appear in fileContents
+        expect(collector.fileContents.size).toBeGreaterThanOrEqual(2);
+
+        // filePaths should map displayPath -> resolved full path for each file
+        expect(collector.filePaths.size).toBeGreaterThanOrEqual(2);
+
+        // Each filePaths key should also exist in fileContents
+        for (const displayPath of collector.filePaths.keys()) {
+            expect(collector.fileContents.has(displayPath)).toBe(true);
+        }
+    });
+});
+
+describe("partLabels in DebugInfoCollector", () => {
+    it("records labels for string-literal parts", () => {
+        const source = `<Start> = play -> true;`;
+        const collector = makeCollector();
+        loadGrammarRules("test", source, { debugCollector: collector });
+
+        expect(collector.partLabels.size).toBeGreaterThan(0);
+        const labels = [...collector.partLabels.values()];
+        expect(labels.some((l) => l === '\"play\"')).toBe(true);
+    });
+
+    it("records labels for variable parts", () => {
+        const source = `<Start> = play $(song:string) -> { action: "play", song };`;
+        const collector = makeCollector();
+        loadGrammarRules("test", source, { debugCollector: collector });
+
+        const labels = [...collector.partLabels.values()];
+        expect(labels.some((l) => l.includes("$song"))).toBe(true);
+    });
+
+    it("records labels for rule reference parts", () => {
+        const source = `<Start> = <Action> -> true;
+<Action> = play -> "play";`;
+        const collector = makeCollector();
+        loadGrammarRules("test", source, { debugCollector: collector });
+
+        const labels = [...collector.partLabels.values()];
+        expect(labels.some((l) => l.includes("Action"))).toBe(true);
+    });
+
+    it("every partId has a corresponding label", () => {
+        const source = `<Start> = play $(song:string) by $(artist:string) -> { song, artist };`;
+        const collector = makeCollector();
+        const grammar = loadGrammarRules("test", source, {
+            debugCollector: collector,
+        });
+
+        // Collect all partIds from the grammar
+        for (const rule of grammar.alternatives) {
+            for (const part of rule.parts) {
+                if (part.partId !== undefined) {
+                    expect(collector.partLabels.has(part.partId)).toBe(true);
+                }
             }
         }
     });

@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { loadGrammarFromBuffer, loadGrammarFromFile } from "../src/index.js";
+import {
+    loadGrammarFromBuffer,
+    loadGrammarFromFile,
+    type FileLoader,
+} from "../src/index.js";
+import { defaultFileLoader } from "action-grammar";
 
 describe("loader", () => {
     it("loads a simple grammar from a buffer", () => {
@@ -188,5 +193,86 @@ describe("loader", () => {
         expect(() => loadGrammarFromSnapshot({ grammar: {} })).toThrow(
             /not yet implemented/,
         );
+    });
+});
+
+describe("loadGrammarFromBuffer with FileLoader (imports)", () => {
+    function getTestFileLoader(
+        grammarFiles: Record<string, string>,
+    ): FileLoader {
+        const fileMap = new Map(
+            Object.keys(grammarFiles).map((key) => [
+                defaultFileLoader.resolvePath(key),
+                key,
+            ]),
+        );
+        return {
+            ...defaultFileLoader,
+            readContent: (fullPath: string) => {
+                const fileKey = fileMap.get(fullPath);
+                const content = fileKey ? grammarFiles[fileKey] : undefined;
+                if (content === undefined) {
+                    throw new Error(`File not found: ${fullPath}`);
+                }
+                return content;
+            },
+        };
+    }
+
+    const helperSource = `export <Greeting> = (hello | hi) -> "greeting";`;
+    const mainSource = `
+        import { Greeting } from "./helper.agr";
+        <Start> = $(g:<Greeting>) world -> { g, target: "world" };
+    `;
+
+    it("resolves imports when FileLoader is provided", () => {
+        const loader = getTestFileLoader({
+            "main.agr": mainSource,
+            "helper.agr": helperSource,
+        });
+        const result = loadGrammarFromBuffer("main.agr", mainSource, loader);
+        expect(result.ok).toBe(true);
+    });
+
+    it("includes imported files in LoadedGrammar.files", () => {
+        const loader = getTestFileLoader({
+            "main.agr": mainSource,
+            "helper.agr": helperSource,
+        });
+        const result = loadGrammarFromBuffer("main.agr", mainSource, loader);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const files = result.grammar.files!;
+        expect(files.length).toBeGreaterThanOrEqual(2);
+
+        // Root file should not be marked as imported
+        const root = files.find((f) => !f.imported);
+        expect(root).toBeDefined();
+
+        // Imported file should be marked as imported
+        const imported = files.filter((f) => f.imported);
+        expect(imported.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("populates debugInfo.filePaths for multi-file grammars", () => {
+        const loader = getTestFileLoader({
+            "main.agr": mainSource,
+            "helper.agr": helperSource,
+        });
+        const result = loadGrammarFromBuffer("main.agr", mainSource, loader);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        const dbg = result.grammar.debugInfo;
+        expect(dbg).toBeDefined();
+        expect(dbg!.filePaths.size).toBeGreaterThanOrEqual(2);
+    });
+
+    it("fails gracefully without FileLoader (no import resolution)", () => {
+        // Without a FileLoader, imports cannot be resolved; the grammar
+        // still loads but the imported rules are unresolved (error).
+        const result = loadGrammarFromBuffer("main.agr", mainSource);
+        expect(result.ok).toBe(false);
     });
 });

@@ -49,17 +49,32 @@ export type FileLoader = {
 };
 
 /**
+ * A source position recorded during compilation, tagged with the file
+ * it originated from so multi-file grammars resolve correctly.
+ */
+export type DebugSourcePosition = {
+    offset: number;
+    fileId: string;
+};
+
+/**
  * Mutable collector for debug info gathered during compilation.
  * Passed into the compile pipeline; the compiler populates it
- * with partId-to-source-offset and ruleId-to-source-offset mappings.
+ * with partId-to-source-position and ruleId-to-source-position mappings.
  */
 export type DebugInfoCollector = {
-    /** Maps partId -> source character offset. */
-    partPositions: Map<number, number>;
-    /** Maps ruleId (e.g. "Start") -> source character offset of the definition. */
-    rulePositions: Map<string, number>;
-    /** The file path or id the grammar was loaded from. */
-    fileId: string;
+    /** Maps partId -> source position (offset + file). */
+    partPositions: Map<number, DebugSourcePosition>;
+    /** Maps ruleId (e.g. "Start") -> source position of the definition. */
+    rulePositions: Map<string, DebugSourcePosition>;
+    /** Maps partId -> owning ruleId (from currentDefinition at compile time). */
+    partRules: Map<number, string>;
+    /** Maps partId -> human-readable label (e.g. '"play"', '$title:string', '<Artist>'). */
+    partLabels: Map<number, string>;
+    /** Source texts keyed by fileId (displayPath), for offset-to-line conversion. */
+    fileContents: Map<string, string>;
+    /** Maps fileId (displayPath) -> resolved absolute path on disk. */
+    filePaths: Map<string, string>;
 };
 
 /**
@@ -467,9 +482,21 @@ export function compileGrammar(
     // Propagate debugCollector and share the partId counter with all
     // import contexts so imported rules get unique partIds and their
     // source positions are recorded in the same collector.
+    // Also unify partIdCounters: built-in entity contexts created via
+    // getBuiltInGrammarContext may have their own counter, which would
+    // cause partId collisions if not unified before compilation.
     for (const [, importCtx] of grammarFileMap) {
         if (importCtx !== context) {
             importCtx.debugCollector = debugCollector;
+            importCtx.partIdCounter = context.partIdCounter;
+        }
+    }
+
+    // Register all file contents so buildDebugInfo can resolve per-file offsets.
+    if (debugCollector !== undefined) {
+        for (const [fullPath, ctx] of grammarFileMap) {
+            debugCollector.fileContents.set(ctx.displayPath, ctx.content);
+            debugCollector.filePaths.set(ctx.displayPath, fullPath);
         }
     }
 
@@ -807,10 +834,22 @@ const emptyRecord: ResolvedDefinitionRecord = {
 function allocPartId(
     context: CompileContext,
     sourcePos: number | undefined,
+    label?: string,
 ): number {
     const id = context.partIdCounter.value++;
-    if (context.debugCollector !== undefined && sourcePos !== undefined) {
-        context.debugCollector.partPositions.set(id, sourcePos);
+    if (context.debugCollector !== undefined) {
+        if (sourcePos !== undefined) {
+            context.debugCollector.partPositions.set(id, {
+                offset: sourcePos,
+                fileId: context.displayPath,
+            });
+        }
+        if (context.currentDefinition !== undefined) {
+            context.debugCollector.partRules.set(id, context.currentDefinition);
+        }
+        if (label !== undefined) {
+            context.debugCollector.partLabels.set(id, label);
+        }
     }
     return id;
 }
@@ -894,7 +933,10 @@ function createNamedGrammarRules(
         if (context.debugCollector !== undefined) {
             const firstDef = record.definitions[0];
             if (firstDef.pos !== undefined) {
-                context.debugCollector.rulePositions.set(name, firstDef.pos);
+                context.debugCollector.rulePositions.set(name, {
+                    offset: firstDef.pos,
+                    fileId: context.displayPath,
+                });
             }
         }
 
@@ -1162,7 +1204,7 @@ function createGrammarRule(
                 const part = createStringPart(
                     expr.value,
                     undefined,
-                    allocPartId(context, expr.pos),
+                    allocPartId(context, expr.pos, `"${expr.value.join(" ")}"`),
                 );
                 // TODO: create regexp
                 parts.push(part);
@@ -1199,7 +1241,11 @@ function createGrammarRule(
                             optional: expr.optional,
                             variable: name,
                             name: referencedName,
-                            partId: allocPartId(context, pos),
+                            partId: allocPartId(
+                                context,
+                                pos,
+                                `$${name}:<${referencedName}>`,
+                            ),
                         }),
                     );
                     if (!expr.optional) {
@@ -1218,7 +1264,7 @@ function createGrammarRule(
                         createNumberPart(
                             name,
                             expr.optional,
-                            allocPartId(context, pos),
+                            allocPartId(context, pos, `$${name}:number`),
                         ),
                     );
                     if (!expr.optional) consumedInput();
@@ -1256,7 +1302,11 @@ function createGrammarRule(
                             name,
                             referencedName,
                             expr.optional,
-                            allocPartId(context, pos),
+                            allocPartId(
+                                context,
+                                pos,
+                                `$${name}:${referencedName}`,
+                            ),
                         ),
                     );
                     if (!expr.optional) consumedInput();
@@ -1279,7 +1329,11 @@ function createGrammarRule(
                         createPhraseSetPart(
                             expr.refName.name,
                             undefined,
-                            allocPartId(context, expr.pos),
+                            allocPartId(
+                                context,
+                                expr.pos,
+                                `<${expr.refName.name}>`,
+                            ),
                         ),
                     );
                     // Phrase sets don't produce a captured value on their own.
@@ -1301,7 +1355,11 @@ function createGrammarRule(
                 parts.push(
                     createRulesPart(record.grammarRules, {
                         name: expr.refName.name,
-                        partId: allocPartId(context, expr.pos),
+                        partId: allocPartId(
+                            context,
+                            expr.pos,
+                            `<${expr.refName.name}>`,
+                        ),
                     }),
                 );
                 // RuleRefExpr has no optional modifier; it is always non-optional.
@@ -1327,7 +1385,7 @@ function createGrammarRule(
                     createRulesPart(grammarRules, {
                         optional,
                         repeat,
-                        partId: allocPartId(context, undefined),
+                        partId: allocPartId(context, undefined, "(...)"),
                     }),
                 );
                 if (!optional && !groupNullable) consumedInput();

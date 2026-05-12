@@ -1065,6 +1065,13 @@ export type MatchState = PendingMatchState & {
     // other policy fields.
     debugEnabled: boolean;
 
+    // When true, `state.name` and `namePrefix` are populated with
+    // human-readable rule identifiers.  Set when EITHER debug
+    // logging or tracing is active.  Separated from `debugEnabled`
+    // so that tracing gets rule names without also triggering the
+    // ~20 `debugMatchRaw(...)` logging calls on the hot path.
+    trackNames: boolean;
+
     // When false, `enterRulesAlternation` skips the memo marker
     // push entirely - no failure caching, no success capture, no
     // replay.  See `memoization` on `GrammarMatchOptions`.
@@ -1368,7 +1375,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
             // value, spacingMode) are written from `rule` directly
             // after restoring the shared base.
             restoreSnapshot(state, base);
-            state.name = debugEnabled ? `${frame.namePrefix}[${i}]` : "";
+            state.name = state.trackNames ? `${frame.namePrefix}[${i}]` : "";
             state.parts = rule.parts;
             state.value = rule.value;
             state.spacingMode = rule.spacingMode;
@@ -2778,7 +2785,7 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // would otherwise check (rules.length >= 2, no
     // repeat/optional/variable, member spacingMode matches parent's)
     // are caught at construction time at the offending site.
-    const namePrefix = state.debugEnabled
+    const namePrefix = state.trackNames
         ? part.name
             ? `<${part.name}>`
             : getStateName(state)
@@ -2805,7 +2812,7 @@ function enterTailAlternation(
     namePrefix: string,
 ): void {
     state.leadingSpacingMode = leadingSpacingMode(state);
-    state.name = state.debugEnabled ? getNestedStateName(state, part, 0) : "";
+    state.name = state.trackNames ? getNestedStateName(state, part, 0) : "";
     state.parts = rules[0].parts;
     state.value = rules[0].value;
     state.partIndex = 0;
@@ -2950,6 +2957,11 @@ export function matchState(state: MatchState, request: string) {
             });
         }
 
+        // Snapshot the values head before the match so we can detect
+        // whether a new value was actually pushed (vs. reading a
+        // stale entry from an ancestor context).
+        const prevValues = trace !== undefined ? state.values : undefined;
+
         switch (part.type) {
             case "string":
                 if (!matchStringPart(request, state, part)) {
@@ -3023,7 +3035,7 @@ export function matchState(state: MatchState, request: string) {
                         `expanding ${part.alternatives.length} rules`,
                     );
                 }
-                const namePrefix = debugEnabled
+                const namePrefix = state.trackNames
                     ? part.name
                         ? `<${part.name}>`
                         : getStateName(state)
@@ -3043,6 +3055,25 @@ export function matchState(state: MatchState, request: string) {
             }
         }
         if (trace !== undefined) {
+            // Wildcard parts defer value capture (the extent isn't
+            // known until a following part resolves it), so we skip
+            // capturedValue for them.  We also compare against the
+            // pre-match snapshot: if no new value was pushed (e.g.
+            // the rule is not tracking values), we report no capture
+            // rather than reading a stale entry from an ancestor.
+            const varName =
+                part.type !== "wildcard"
+                    ? (part as { variable?: string }).variable
+                    : undefined;
+            const captured =
+                varName !== undefined &&
+                state.values !== undefined &&
+                state.values !== prevValues
+                    ? {
+                          variable: varName,
+                          value: state.values.value,
+                      }
+                    : undefined;
             trace({
                 seq: state.traceSeq++,
                 inputPos: state.index,
@@ -3050,6 +3081,7 @@ export function matchState(state: MatchState, request: string) {
                 rule: state.name,
                 part: part.partId ?? partIndex,
                 endPos: state.index,
+                capturedValue: captured,
             });
         }
         state.partIndex++;
@@ -3233,7 +3265,7 @@ function enterRulesAlternation(
     // Note: `requireValue` was computed above for the cache key.
 
     // Update the current state to consider the first nested rule.
-    state.name = state.debugEnabled ? `${namePrefix}[0]` : "";
+    state.name = state.trackNames ? `${namePrefix}[0]` : "";
     state.parts = rules[0].parts;
     state.value = rules[0].value;
     state.partIndex = 0;
@@ -3370,7 +3402,7 @@ function enterDispatchPart(
             debugMatch(state, `dispatch: pending-wildcard fallback empty`);
             return false;
         }
-        const namePrefix = state.debugEnabled
+        const namePrefix = state.trackNames
             ? part.name
                 ? `<${part.name}>`
                 : `${getStateName(state)}<dispatch>`
@@ -3444,7 +3476,7 @@ function enterDispatchPart(
         );
     }
 
-    const namePrefix = state.debugEnabled
+    const namePrefix = state.trackNames
         ? part.name
             ? `<${part.name}>`
             : `${getStateName(state)}<dispatch>`
@@ -3495,6 +3527,7 @@ export function initialMatchState(
     // Read the debug flag once from the getter; stored on the state
     // so every downstream function reads a plain boolean field.
     const debugEnabled = debugMatchRaw.enabled;
+    const trackNames = debugEnabled || options?.trace !== undefined;
     const wildcardPolicy = options?.wildcardPolicy ?? "exhaustive";
     const optionalPolicy = options?.optionalPolicy ?? "exhaustive";
     const repeatPolicy = options?.repeatPolicy ?? "exhaustive";
@@ -3562,7 +3595,7 @@ export function initialMatchState(
     }
 
     const state: MatchState = {
-        name: debugEnabled ? `<Start>[0]` : "",
+        name: trackNames ? `<Start>[0]` : "",
         parts: effective[0].parts,
         value: effective[0].value,
         partIndex: 0,
@@ -3583,6 +3616,7 @@ export function initialMatchState(
         optionalPolicy,
         repeatPolicy,
         debugEnabled,
+        trackNames,
         memoization,
         lastReplayBatch: undefined,
         lastReplaySuffixKey: undefined,
@@ -3606,7 +3640,7 @@ export function initialMatchState(
             state,
             forkMatchState(state),
             effective,
-            debugEnabled ? "<Start>" : "",
+            state.trackNames ? "<Start>" : "",
         );
     }
     return state;
