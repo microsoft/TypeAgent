@@ -254,7 +254,11 @@ function corpusEdgesToCandidates(
 // ---------------------------------------------------------------------------
 
 /** Default sample cap (per category, when category data is present). */
-const DEFAULT_SAMPLES_PER_CATEGORY_CAP = 5;
+// Effectively unlimited — every sample flows through. The viz uses
+// progressive disclosure (initial N + "load more") to keep rendered DOM
+// lean while making all samples reachable on demand. Keeping the cap
+// configurable in case anyone wants to clamp it for a specific run.
+const DEFAULT_SAMPLES_PER_CATEGORY_CAP = Number.MAX_SAFE_INTEGER;
 
 function mergeCandidates(
     candidates: Candidate[],

@@ -28,6 +28,10 @@ import type { CommandHandlerContext } from "../context/commandHandlerContext.js"
 import { changeContextConfig } from "../context/commandHandlerContext.js";
 import type { CollisionStrategy } from "../context/session.js";
 import { translateRequest } from "./translateRequest.js";
+import {
+    resolveUserContextFromSchema,
+    type UserContext,
+} from "./userContext.js";
 
 // =============================================================================
 // Types
@@ -77,7 +81,21 @@ export interface TranslationProbeRow {
     outcome: TranslationOutcome;
     elapsedMs: number;
     error?: string | undefined;
+    /** User-environment context attached to this phrase's prompt. Undefined when
+     *  `userContextMode` was "none" or the schema could not be resolved. */
+    userContext?: UserContext | undefined;
 }
+
+/** How userContext is attached to each phrase in the run.
+ *  - `"none"` (default): no userContext is sent — matches pre-experiment behavior.
+ *  - `"expected-schema"`: for each phrase, derive a UserContext from the
+ *    expected schema's top-level app agent (via the manifest description).
+ *    Models the case where the dispatcher knows which app the user is in
+ *    because the user is acting on that app.
+ *  - `"fixed"`: use `fixedUserContext` for every phrase. Models the case
+ *    where the user is in a single fixed app across the whole session
+ *    (e.g., "user is in VSCode") to measure biasing effects. */
+export type UserContextMode = "none" | "expected-schema" | "fixed";
 
 export interface TranslationProbeOpts {
     /** Concurrency for the LLM calls. Default 4 — chat completions are
@@ -95,6 +113,10 @@ export interface TranslationProbeOpts {
      *  resolves to today. Surfacing it for now so future multi-model sweeps
      *  can record provenance. */
     modelLabel?: string;
+    /** Controls how userContext is attached to each phrase. Defaults to `"none"`. */
+    userContextMode?: UserContextMode;
+    /** Used only when `userContextMode === "fixed"`. Ignored otherwise. */
+    fixedUserContext?: UserContext;
 }
 
 export interface TranslationProbeSummary {
@@ -108,6 +130,10 @@ export interface TranslationProbeSummary {
     strategyRestored: CollisionStrategy;
     /** Models that produced phrases in this corpus. */
     corpusModels: string[];
+    /** Mode used to attach userContext to each phrase. */
+    userContextMode: UserContextMode;
+    /** Used only when mode is `"fixed"`. */
+    fixedUserContext?: UserContext;
 }
 
 export interface TranslationProbeFile {
@@ -185,6 +211,7 @@ export async function runTranslationProbe(
 ): Promise<TranslationProbeFile> {
     const concurrency = opts.concurrency ?? 4;
     const targetStrategy: CollisionStrategy = opts.strategy ?? "first-match";
+    const userContextMode: UserContextMode = opts.userContextMode ?? "none";
 
     // Snapshot strategy so we can restore. We only override the
     // `llmSelect.strategy` because that's the one that controls
@@ -200,15 +227,40 @@ export async function runTranslationProbe(
         expectedAction: string;
         phraseText: string;
         phraseSources: TranslationCorpusPhraseSource[];
+        userContext: UserContext | undefined;
     }
+
+    // Pre-resolve userContext per expected schema. For expected-schema mode
+    // we walk the schema -> top-level app agent -> manifest description once
+    // up front; for fixed mode we just reuse the provided context for every
+    // phrase. None mode leaves userContext undefined throughout.
+    const resolveContext = (
+        expectedSchema: string,
+    ): UserContext | undefined => {
+        switch (userContextMode) {
+            case "expected-schema":
+                return resolveUserContextFromSchema(
+                    expectedSchema,
+                    systemContext.agents,
+                );
+            case "fixed":
+                return opts.fixedUserContext;
+            case "none":
+            default:
+                return undefined;
+        }
+    };
+
     const tasks: Task[] = [];
     for (const action of corpus.actions) {
+        const userContext = resolveContext(action.schemaName);
         for (const phrase of action.phrases) {
             tasks.push({
                 expectedSchema: action.schemaName,
                 expectedAction: action.actionName,
                 phraseText: phrase.text,
                 phraseSources: phrase.sources,
+                userContext,
             });
         }
     }
@@ -260,6 +312,8 @@ export async function runTranslationProbe(
                         undefined, // attachments
                         undefined, // streamingActionIndex
                         allSchemas,
+                        undefined, // usageCallback
+                        t.userContext,
                     );
                     const actions = out.requestAction.actions;
                     const elapsedMs = Date.now() - startMs;
@@ -274,6 +328,7 @@ export async function runTranslationProbe(
                             outcome: "ERROR",
                             elapsedMs,
                             error: "translator returned 0 actions",
+                            userContext: t.userContext,
                         };
                     }
                     const first = actions[0]!.action;
@@ -294,6 +349,7 @@ export async function runTranslationProbe(
                             model: opts.modelLabel ?? "default",
                             outcome: "CLARIFY",
                             elapsedMs,
+                            userContext: t.userContext,
                         };
                     }
 
@@ -318,6 +374,7 @@ export async function runTranslationProbe(
                         model: opts.modelLabel ?? "default",
                         outcome,
                         elapsedMs,
+                        userContext: t.userContext,
                     };
                 } catch (err) {
                     return {
@@ -330,6 +387,7 @@ export async function runTranslationProbe(
                         outcome: "ERROR",
                         elapsedMs: Date.now() - startMs,
                         error: err instanceof Error ? err.message : String(err),
+                        userContext: t.userContext,
                     };
                 }
             },
@@ -362,6 +420,10 @@ export async function runTranslationProbe(
                 strategyUsed: targetStrategy,
                 strategyRestored: priorStrategy,
                 corpusModels: [...corpusModels].sort(),
+                userContextMode,
+                ...(userContextMode === "fixed" && opts.fixedUserContext
+                    ? { fixedUserContext: opts.fixedUserContext }
+                    : {}),
             },
             results,
         };

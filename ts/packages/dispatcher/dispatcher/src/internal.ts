@@ -39,6 +39,15 @@ export type {
     TypeAgentTranslator,
     TranslatedAction,
 } from "./translation/agentTranslators.js";
+export type {
+    TranslationOutcome,
+    TranslationProbeFile,
+    TranslationProbeRow,
+    TranslationProbeSummary,
+    UserContextMode,
+} from "./translation/translationProbeRunner.js";
+export type { UserContext } from "./translation/userContext.js";
+export { resolveUserContextFromSchema } from "./translation/userContext.js";
 export { tryGetActionSchema } from "./translation/actionSchemaFileCache.js";
 export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
 export { getAllActionConfigProvider } from "./context/inlineAgentProvider.js";

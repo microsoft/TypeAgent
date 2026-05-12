@@ -55,7 +55,9 @@ import {
 import {
     runTranslationProbe,
     type TranslationCorpus,
+    type UserContextMode,
 } from "../../../translation/translationProbeRunner.js";
+import type { UserContext } from "../../../translation/userContext.js";
 import type { CollisionStrategy } from "../../session.js";
 
 // =============================================================================
@@ -1455,6 +1457,13 @@ const RECOVERY_HTML_PREFIX = `<!doctype html>
     color: var(--muted);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* Progressive-disclosure "load more" link, shared across recovery viz. */
+  .load-more {
+    color: var(--accent); cursor: pointer; text-decoration: underline;
+    font-size: 11px; display: inline-block; margin: 4px 0 0 8px;
+  }
+  .load-more:hover { color: var(--ink); }
+  .more-samples-hidden { display: none; }
 
   /* Rank histogram */
   .rank-hist {
@@ -1872,7 +1881,7 @@ function renderVerdict() {
 function rowDataset() {
     const view = document.getElementById("actionView").value;
     if (view === "agent") {
-        return PAYLOAD.perAgent.map(a => ({
+        return VIEW.perAgent.map(a => ({
             key: a.agent,
             label: a.agent,
             misrouteCount: a.misrouteCount,
@@ -1884,10 +1893,10 @@ function rowDataset() {
             benignPct: a.benignPct,
         }));
     }
-    return PAYLOAD.perAction.map(a => ({
-        key: a.schemaName + "." + a.actionName,
-        label: a.schemaName + "." + a.actionName,
-        misrouteCount: a.misrouteCount,
+    return VIEW.perAction.map(a => ({
+        key: a.action,
+        label: a.action,
+        misrouteCount: a.total,
         sameSchema: a.sameSchema,
         crossInCluster: a.crossInCluster,
         crossOutOfCluster: a.crossOutOfCluster,
@@ -1901,9 +1910,9 @@ const expanded = new Set(); // expanded rows
 
 function phrasesForKey(key, view) {
     if (view === "agent") {
-        return PAYLOAD.phrases.filter(p => p.expected.split(".")[0] === key);
+        return VIEW.phrases.filter(p => p.expected.split(".")[0] === key);
     }
-    return PAYLOAD.phrases.filter(p => p.expected === key);
+    return VIEW.phrases.filter(p => p.expected === key);
 }
 
 function renderActionList() {
@@ -1996,18 +2005,29 @@ function renderActionList() {
                     const br = b.schemaRank < 0 ? 99 : b.schemaRank;
                     return ar - br;
                 });
-                detail.innerHTML = phrases.map(p => {
+                // Progressive disclosure: first N phrases inline, the rest
+                // hidden behind a "load N more" link. The document-level
+                // click handler reveals the hidden block on click.
+                const PHRASES_INITIAL = 20;
+                const renderPhraseRow = (p) => {
                     const bucket = BUCKET_BY_KEY[p.bucket];
-                    // Show schema rank (the runtime-relevant signal). For
-                    // same-schema cases this is always #1; for cross-schema
-                    // cases it tells you where the right schema landed.
                     const rankLabel = p.schemaRank > 0 ? "#" + p.schemaRank : "off";
                     return \`<div class="ph">
                         <div class="rank" style="color:\${bucket.color}" title="\${escapeHtml(bucket.label)}">\${rankLabel}</div>
                         <div class="text" title="\${escapeHtml(p.phrase)}">\${escapeHtml(p.phrase)}</div>
                         <div class="actual" title="top-1: \${escapeHtml(p.actualTop1)}">→ \${escapeHtml(p.actualTop1)}</div>
                     </div>\`;
-                }).join("");
+                };
+                const initial = phrases.slice(0, PHRASES_INITIAL).map(renderPhraseRow).join("");
+                const rest = phrases.slice(PHRASES_INITIAL);
+                if (rest.length === 0) {
+                    detail.innerHTML = initial;
+                } else {
+                    const restHtml = rest.map(renderPhraseRow).join("");
+                    detail.innerHTML = initial +
+                        \`<div class="more-samples-hidden">\${restHtml}</div>\` +
+                        \`<a class="load-more" data-load-more>load \${rest.length} more</a>\`;
+                }
             }
             list.appendChild(detail);
         }
@@ -2015,11 +2035,11 @@ function renderActionList() {
 }
 
 function renderRankHist() {
-    const total = summary.totalMisroutes || 1;
-    const max = Math.max(...PAYLOAD.actionRankHistogram.map(r => r.count), 1);
+    const total = VIEW.summary.totalMisroutes || 1;
+    const max = Math.max(...VIEW.actionRankHistogram.map(r => r.count), 1);
     const wrap = document.getElementById("rankHist");
     wrap.innerHTML = "";
-    for (const r of PAYLOAD.actionRankHistogram) {
+    for (const r of VIEW.actionRankHistogram) {
         const w = (r.count / max) * 100;
         const isOff = r.rank === "off-list";
         const color = isOff
@@ -2044,14 +2064,30 @@ document.getElementById("actionView").addEventListener("change", () => {
 });
 
 function renderAll() {
+    renderStats();
     renderHeadline();
     renderLegend();
     renderVerdict();
     renderActionList();
+    renderRankHist();
 }
 
+renderStyleChips();
 renderAll();
-renderRankHist();
+
+// Document-level "load more" delegate. Click reveals the immediately-
+// preceding hidden .more-samples-hidden block and removes the link.
+document.addEventListener("click", (evt) => {
+    const t = evt.target;
+    if (!t || !t.matches || !t.matches("[data-load-more]")) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    const more = t.previousElementSibling;
+    if (more && more.classList.contains("more-samples-hidden")) {
+        more.classList.remove("more-samples-hidden");
+    }
+    t.remove();
+});
 </script>
 </body>
 </html>`;
@@ -2231,13 +2267,13 @@ function buildVisualizationPayload(
                 samples = [];
                 edgeSamples.set(edgeK, samples);
             }
-            if (samples.length < 5) {
-                samples.push({
-                    phrase: r.phraseText,
-                    model: r.phraseSources?.[0]?.model,
-                    style: phraseStyle,
-                });
-            }
+            // No upstream cap — every phrase ships in the payload; the viz
+            // uses progressive disclosure to keep the rendered DOM lean.
+            samples.push({
+                phrase: r.phraseText,
+                model: r.phraseSources?.[0]?.model,
+                style: phraseStyle,
+            });
             const inCellKey = `${expAction}${SEP}${actAction}`;
             cell.edges.set(inCellKey, (cell.edges.get(inCellKey) ?? 0) + 1);
         }
@@ -2571,6 +2607,12 @@ const VIZ_HTML_PREFIX = `<!doctype html>
   tr.samples td { color: var(--muted); font-size: 12px; background: #11141b; }
   tr.samples ul { margin: 0; padding-left: 18px; }
   tr.samples .style { display: inline-block; color: var(--accent); font-size: 11px; margin-right: 6px; }
+  .load-more {
+    color: var(--accent); cursor: pointer; text-decoration: underline;
+    font-size: 11px; display: inline-block; margin: 4px 0 0 18px;
+  }
+  .load-more:hover { color: var(--ink); }
+  .more-samples-hidden { display: none; }
   .legend-bar { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 8px; }
   .legend-bar .swatch { width: 220px; height: 8px; border-radius: 4px; background: linear-gradient(to right, #1a1f29, #b14f60, #ff5470); }
   /* Collapsible "how to read" panel */
@@ -3117,11 +3159,27 @@ function renderTable() {
         const sampleTr = document.createElement("tr");
         sampleTr.className = "samples";
         sampleTr.style.display = "none";
-        const samplesHtml = (e.samples || []).filter(sampleEnabled).map(s =>
-            \`<li><span class="style">[\${s.model ?? ""} · \${s.style ?? ""}]</span> \${escapeHtml(s.phrase)}</li>\`
-        ).join("");
+        // Progressive disclosure: first 5 samples inline, "load N more" link
+        // for the rest. Hidden block is the immediate previous sibling so the
+        // document-level click handler can reveal it.
+        const SAMPLES_INITIAL = 5;
+        const visibleSamples = (e.samples || []).filter(sampleEnabled);
+        const renderLi = (s) =>
+            \`<li><span class="style">[\${s.model ?? ""} · \${s.style ?? ""}]</span> \${escapeHtml(s.phrase)}</li>\`;
+        let samplesHtml;
+        if (visibleSamples.length === 0) {
+            samplesHtml = "";
+        } else {
+            const initialLis = visibleSamples.slice(0, SAMPLES_INITIAL).map(renderLi).join("");
+            const restLis = visibleSamples.slice(SAMPLES_INITIAL).map(renderLi).join("");
+            const restBlock = visibleSamples.length > SAMPLES_INITIAL
+                ? \`<ul class="more-samples-hidden" style="margin-top:0;">\${restLis}</ul>\` +
+                  \`<a class="load-more" data-load-more>load \${visibleSamples.length - SAMPLES_INITIAL} more</a>\`
+                : "";
+            samplesHtml = \`<ul>\${initialLis}</ul>\${restBlock}\`;
+        }
         const detailHtml = samplesHtml
-            ? \`<ul>\${samplesHtml}</ul>\`
+            ? samplesHtml
             : \`<div style="color:var(--muted);font-style:italic;">No corpus phrases for this edge (similarity-only).</div>\`;
         sampleTr.innerHTML = \`<td colspan="6">\${detailHtml}</td>\`;
         tbody.appendChild(sampleTr);
@@ -3139,6 +3197,21 @@ document.querySelectorAll("#edges th[data-key]").forEach(th => {
 });
 renderStyleChips();
 renderHeatmap(); renderSankey(); renderTable();
+
+// Document-level "load more" delegate for progressive-disclosure sample
+// blocks. Click reveals the immediately-preceding hidden sibling and
+// removes the link.
+document.addEventListener("click", (evt) => {
+    const t = evt.target;
+    if (!t || !t.matches || !t.matches("[data-load-more]")) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    const more = t.previousElementSibling;
+    if (more && more.classList.contains("more-samples-hidden")) {
+        more.classList.remove("more-samples-hidden");
+    }
+    t.remove();
+});
 </script>
 </body>
 </html>`;
@@ -3537,7 +3610,7 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             },
             out: {
                 description:
-                    "Output translation-results JSON path. Default: <workdir>/translation-results.json",
+                    "Output translation-results JSON path. Default: <workdir>/translation-results.json (or translation-results-<suffix>.json when --output-suffix is set).",
                 type: "string",
                 optional: true,
             },
@@ -3565,6 +3638,24 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
                 type: "string",
                 optional: true,
             },
+            "user-context-mode": {
+                description:
+                    "How userContext is attached per phrase: 'none' (baseline, no injection), 'expected-schema' (derive from each phrase's expected schema via manifest), 'fixed' (use --user-context-json for every phrase).",
+                type: "string",
+                default: "none",
+            },
+            "user-context-json": {
+                description:
+                    "JSON object parsed as UserContext when --user-context-mode=fixed. E.g. '{\"activeApp\":\"spotify\",\"activeAppDescription\":\"Spotify music agent\"}'.",
+                type: "string",
+                optional: true,
+            },
+            "output-suffix": {
+                description:
+                    "When set and --out is not given, write to <workdir>/translation-results-<suffix>.json so baseline and context runs coexist in one workdir.",
+                type: "string",
+                optional: true,
+            },
             workdir: {
                 description:
                     "Directory for default-named files. Default: <instanceDir>/collisions",
@@ -3588,11 +3679,15 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             workdir,
             DEFAULT_FILES.corpus,
         );
+        const outputSuffix = params.flags["output-suffix"];
+        const defaultOutName = outputSuffix
+            ? `translation-results-${outputSuffix}.json`
+            : "translation-results.json";
         const outPath = defaultPath(
             systemContext,
             params.flags.out,
             workdir,
-            "translation-results.json",
+            defaultOutName,
         );
         if (!fs.existsSync(inPath)) {
             displayWarn(
@@ -3617,6 +3712,56 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             return;
         }
         const maxPhrases = params.flags["max-phrases"];
+
+        // userContext mode + payload validation. Fixed mode requires a
+        // JSON-encoded UserContext; expected-schema and none modes don't.
+        const userContextModeFlag = (params.flags["user-context-mode"] ??
+            "none") as string;
+        const validUserContextModes = new Set<UserContextMode>([
+            "none",
+            "expected-schema",
+            "fixed",
+        ]);
+        if (!validUserContextModes.has(userContextModeFlag as UserContextMode)) {
+            displayWarn(
+                `Unknown --user-context-mode '${userContextModeFlag}'. Expected one of: ${[...validUserContextModes].join(", ")}.`,
+                context,
+            );
+            return;
+        }
+        const userContextMode = userContextModeFlag as UserContextMode;
+        let fixedUserContext: UserContext | undefined;
+        if (userContextMode === "fixed") {
+            const json = params.flags["user-context-json"];
+            if (!json) {
+                displayWarn(
+                    `--user-context-mode=fixed requires --user-context-json '{"activeApp":"...","activeAppDescription":"..."}'.`,
+                    context,
+                );
+                return;
+            }
+            try {
+                const parsed = JSON.parse(json) as UserContext;
+                if (
+                    !parsed ||
+                    typeof parsed !== "object" ||
+                    typeof parsed.activeApp !== "string"
+                ) {
+                    throw new Error(
+                        "UserContext requires a string `activeApp` field.",
+                    );
+                }
+                fixedUserContext = parsed;
+            } catch (e) {
+                displayWarn(
+                    `Failed to parse --user-context-json: ${
+                        e instanceof Error ? e.message : String(e)
+                    }`,
+                    context,
+                );
+                return;
+            }
+        }
 
         ensureDir(path.dirname(outPath));
 
@@ -3649,6 +3794,10 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
                     ...(params.flags["model-label"] !== undefined && {
                         modelLabel: params.flags["model-label"],
                     }),
+                    userContextMode,
+                    ...(fixedUserContext !== undefined && {
+                        fixedUserContext,
+                    }),
                 },
                 (done, total) => {
                     if (done % 10 === 0 || done === total) {
@@ -3677,7 +3826,7 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
                 `</table>` +
                 `<div style="font-family:system-ui,sans-serif;font-size:12px;padding:0 8px 8px;color:#777;">→ <code>${escapeShellHtml(outPath)}</code></div>`;
             const text: string[] = [
-                `Translation probe complete (strategy: ${strategyFlag})`,
+                `Translation probe complete (strategy: ${strategyFlag}, userContext: ${userContextMode})`,
                 `  CLEAN    ${c.CLEAN.toString().padStart(5)} (${pct(c.CLEAN)})`,
                 `  MISROUTE ${c.MISROUTE.toString().padStart(5)} (${pct(c.MISROUTE)})`,
                 `  CLARIFY  ${c.CLARIFY.toString().padStart(5)} (${pct(c.CLARIFY)})`,

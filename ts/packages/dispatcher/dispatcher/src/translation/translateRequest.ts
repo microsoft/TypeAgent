@@ -58,6 +58,7 @@ import {
 } from "./pendingRequest.js";
 import registerDebug from "debug";
 import { ActionConfig } from "./actionConfig.js";
+import type { UserContext } from "./userContext.js";
 import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
@@ -451,6 +452,7 @@ async function translateRequestWithSchema(
     usageCallback: (usage: ai.CompletionUsageStats) => void,
     streamingActionIndex?: number,
     disableOptimize: boolean = false,
+    userContext?: UserContext,
 ): Promise<TranslateStepResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -479,6 +481,7 @@ async function translateRequestWithSchema(
                 context,
                 usageCallback,
                 streamingActionIndex,
+                userContext,
             );
 
             if (!needAllAction(translatedAction, schemaName)) {
@@ -502,6 +505,7 @@ async function translateRequestWithSchema(
         context,
         usageCallback,
         streamingActionIndex,
+        userContext,
     );
 
     return {
@@ -519,6 +523,7 @@ async function translateWithTranslator(
     context: ActionContext<CommandHandlerContext>,
     usageCallback: CompleteUsageStatsCallback,
     streamingActionIndex?: number,
+    userContext?: UserContext,
 ) {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -589,6 +594,7 @@ async function translateWithTranslator(
             onProperty,
             usageCallback,
             systemContext.currentAbortSignal,
+            userContext,
         );
 
         if (!response.success) {
@@ -692,6 +698,7 @@ async function finalizeAction(
     usageCallback: (usage: ai.CompletionUsageStats) => void,
     resultEntityId?: string,
     streamingActionIndex?: number,
+    userContext?: UserContext,
 ): Promise<ExecutableAction | ExecutableAction[]> {
     let currentAction = action;
     let currentTranslator = translator;
@@ -728,6 +735,7 @@ async function finalizeAction(
             usageCallback,
             streamingActionIndex,
             nextSchemaName === currentSchemaName, // If we are retrying the same schema, then disable optimize
+            userContext,
         );
 
         currentAction = result.translatedAction;
@@ -749,6 +757,7 @@ async function finalizeAction(
             attachments,
             context,
             usageCallback,
+            userContext,
         );
     }
 
@@ -790,6 +799,7 @@ async function finalizeMultipleActions(
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     usageCallback: CompleteUsageStatsCallback,
+    userContext?: UserContext,
 ): Promise<ExecutableAction[]> {
     if (attachments !== undefined && attachments.length !== 0) {
         // TODO: What to do with attachments with multiple actions?
@@ -814,6 +824,8 @@ async function finalizeMultipleActions(
             context,
             usageCallback,
             request.resultEntityId,
+            undefined,
+            userContext,
         );
         if (Array.isArray(finalizedActions)) {
             actions.push(...finalizedActions);
@@ -832,6 +844,7 @@ async function translateRequestWithActiveSchemas(
     streamingActionIndex: number | undefined,
     activeSchemas: Set<string>,
     usageCallback: (usage: ai.CompletionUsageStats) => void,
+    userContext?: UserContext,
 ): Promise<ExecutableAction | ExecutableAction[]> {
     const systemContext = context.sessionContext.agentContext;
     const picked = await pickInitialSchema(
@@ -857,6 +870,8 @@ async function translateRequestWithActiveSchemas(
         context,
         usageCallback,
         streamingActionIndex,
+        false,
+        userContext,
     );
 
     const { translatedAction, translator } = result;
@@ -871,6 +886,7 @@ async function translateRequestWithActiveSchemas(
               attachments,
               context,
               usageCallback,
+              userContext,
           )
         : await finalizeAction(
               translatedAction,
@@ -881,6 +897,9 @@ async function translateRequestWithActiveSchemas(
               attachments,
               context,
               usageCallback,
+              undefined,
+              undefined,
+              userContext,
           );
 }
 
@@ -902,6 +921,7 @@ export async function translateRequest(
     streamingActionIndex?: number,
     activeSchemas?: string[],
     usageCallback: (usage: ai.CompletionUsageStats) => void = () => {},
+    userContext?: UserContext,
 ): Promise<TranslationResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -928,6 +948,7 @@ export async function translateRequest(
         streamingActionIndex,
         new Set(activeSchemaNames),
         usageCallback,
+        userContext,
     );
 
     const requestAction = RequestAction.create(

@@ -122,7 +122,9 @@ interface ProbeFileLike {
     results: ProbeResultLike[];
 }
 
-const MAX_SAMPLES_PER_EDGE = 5;
+// No cap — every phrase is captured into the payload. The viz uses
+// progressive disclosure (initial N samples + a "load more" link) to keep
+// the rendered DOM lean while making all samples reachable on demand.
 
 function readMisrouteEdges(corpusPath: string): MisrouteEdge[] {
     const data = JSON.parse(
@@ -177,7 +179,7 @@ function readMisrouteEdges(corpusPath: string): MisrouteEdge[] {
                 (row.countsByStyle.get(style) ?? 0) + 1,
             );
         }
-        if (r.phraseText && row.samples.length < MAX_SAMPLES_PER_EDGE) {
+        if (r.phraseText) {
             row.samples.push({
                 phrase: r.phraseText,
                 model: src?.model,

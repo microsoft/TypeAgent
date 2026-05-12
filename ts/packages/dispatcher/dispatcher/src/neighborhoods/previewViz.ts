@@ -182,13 +182,21 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
      widths are essential here: separate CSS grids don't share auto-sized
      track widths, so each row would otherwise size its own columns
      independently of the header. */
+  /* Column widths are CSS variables on the section so header + rows stay
+     in lock-step and the resize handles can update them live. The last
+     column is 1fr (fills remaining space, no handle on its right edge). */
+  #neighborhoodsSection {
+    --col-0: 32ch;
+    --col-1: 13ch;
+    --col-2: 28ch;
+    --col-3: 11ch;
+    --col-4: 24ch;
+  }
   .nbhd-list-header,
   .nbhd-row {
     display: grid;
-    /* Widened SOURCE column from 12ch -> 20ch so translator badges
-       (🛑N CONFIRMED, ↻N RESCUED, !N NEW_FAILURE) sit alongside the source
-       badge without overflowing into SIZE. */
-    grid-template-columns: 32ch 13ch 20ch 11ch 24ch 1fr;
+    grid-template-columns:
+      var(--col-0) var(--col-1) var(--col-2) var(--col-3) var(--col-4) 1fr;
     align-items: center; gap: 12px;
     padding: 6px 10px;
   }
@@ -198,10 +206,48 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
     border-bottom: 1px solid var(--line);
     margin-bottom: 4px;
   }
+  /* Header cells need overflow control so column content can be ellipsised
+     when the user shrinks a column, and position:relative so the resize
+     handle can absolute-position itself on the right edge. */
+  .nbhd-list-header > div {
+    position: relative;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .nbhd-list-header .sortable { cursor: pointer; user-select: none; }
   .nbhd-list-header .sortable:hover { color: var(--ink); }
   .nbhd-list-header .sortable.active { color: var(--accent); }
   .nbhd-list-header .arrow { font-size: 10px; margin-left: 3px; }
+  /* Drag-resize handles between header cells. Sit on the right edge of
+     each non-last header cell. Slightly wider than the visible separator
+     so the hit area is forgiving. */
+  .nbhd-list-header .resize-handle {
+    position: absolute;
+    top: -6px; bottom: -6px;     /* extend a touch above + below for hit area */
+    right: -6px;                  /* center the handle over the gap */
+    width: 12px;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 3;
+    /* The visible 1px separator line sits in the middle of the handle. */
+    background:
+      linear-gradient(to right,
+        transparent calc(50% - 0.5px),
+        var(--line) calc(50% - 0.5px),
+        var(--line) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px));
+    transition: background 0.08s;
+  }
+  .nbhd-list-header .resize-handle:hover,
+  .nbhd-list-header .resize-handle.dragging {
+    background:
+      linear-gradient(to right,
+        transparent calc(50% - 1px),
+        var(--accent) calc(50% - 1px),
+        var(--accent) calc(50% + 1px),
+        transparent calc(50% + 1px));
+  }
   .nbhd-row {
     border-radius: 4px; cursor: pointer;
     transition: background 0.08s;
@@ -347,6 +393,15 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
   .nbhd-detail .edges .samples .ph .cat.CONFIRMED   { background: #4a1414; color: #ef4444; }
   .nbhd-detail .edges .samples .ph .cat.RESCUED     { background: #14401a; color: #22c55e; }
   .nbhd-detail .edges .samples .ph .cat.NEW_FAILURE { background: #443013; color: #f59e0b; }
+  /* Progressive-disclosure "load more" link. Used wherever a phrase list
+     might be long enough to benefit from initial-N + show-rest. Single
+     document-level click handler reveals the hidden sibling block. */
+  .load-more {
+    color: var(--accent); cursor: pointer; text-decoration: underline;
+    font-size: 11px; display: inline-block; margin: 4px 0 0 0;
+  }
+  .load-more:hover { color: var(--ink); }
+  .more-samples-hidden { display: none; }
   /* Translator summary callout in the headline */
   header .tx-summary {
     margin-top: 6px; padding: 6px 10px;
@@ -566,7 +621,7 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
     </div>
   </details>
 
-  <section>
+  <section id="neighborhoodsSection">
     <h2>Neighborhoods</h2>
     <div class="sub">Rows are sorted by member count (largest first), then by similarity score. Click a row to expand.</div>
     <div class="slider-row">
@@ -606,11 +661,11 @@ const PREVIEW_HTML_PREFIX = `<!doctype html>
       <span id="count" style="color:var(--muted);font-size:12px;"></span>
     </div>
     <div class="nbhd-list-header">
-      <div class="sortable" data-sort="id">id<span class="arrow"></span></div>
-      <div class="sortable" data-sort="kind">kind<span class="arrow"></span></div>
-      <div class="sortable" data-sort="source">source<span class="arrow"></span></div>
-      <div class="sortable" data-sort="size">size<span class="arrow"></span></div>
-      <div class="sortable" data-sort="topOffender">top offender<span class="arrow"></span></div>
+      <div class="sortable" data-sort="id">id<span class="arrow"></span><span class="resize-handle" data-col="0"></span></div>
+      <div class="sortable" data-sort="kind">kind<span class="arrow"></span><span class="resize-handle" data-col="1"></span></div>
+      <div class="sortable" data-sort="source">source<span class="arrow"></span><span class="resize-handle" data-col="2"></span></div>
+      <div class="sortable" data-sort="size">size<span class="arrow"></span><span class="resize-handle" data-col="3"></span></div>
+      <div class="sortable" data-sort="topOffender">top offender<span class="arrow"></span><span class="resize-handle" data-col="4"></span></div>
       <div class="sortable" data-sort="misroutes">meta<span class="arrow"></span></div>
     </div>
     <div class="nbhd-list" id="list"></div>
@@ -1286,7 +1341,8 @@ function render() {
                 if (resc > 0) parts.push(\`<span class="resc">\${resc} rescued</span>\`);
                 return \`<span class="tx-counts">[translator: \${parts.join(" · ")}]</span>\`;
             };
-            const renderSamples = (samples) => (samples || []).filter(sampleEnabled).map(s => {
+            const SAMPLES_INITIAL = 5;
+            const renderOnePhrase = (s) => {
                 const src = (s.model || s.style)
                     ? \`<span class="src">[\${escapeHtml([s.model, s.style].filter(Boolean).join(" · "))}]</span>\`
                     : "";
@@ -1294,7 +1350,21 @@ function render() {
                     ? \`<span class="cat \${escapeHtml(s.category)}">\${escapeHtml(s.category)}</span>\`
                     : "";
                 return \`<div class="ph">\${cat}\${src}\${escapeHtml(s.phrase)}</div>\`;
-            }).join("");
+            };
+            // Progressive disclosure: render first N inline; if more samples
+            // exist, hide them under a "load more (K)" link. The document-
+            // level click handler at boot reveals the sibling block.
+            const renderSamples = (samples) => {
+                const enabled = (samples || []).filter(sampleEnabled);
+                if (enabled.length === 0) return "";
+                const initial = enabled.slice(0, SAMPLES_INITIAL).map(renderOnePhrase).join("");
+                const rest = enabled.slice(SAMPLES_INITIAL);
+                if (rest.length === 0) return initial;
+                const restHtml = rest.map(renderOnePhrase).join("");
+                return initial +
+                    \`<div class="more-samples-hidden">\${restHtml}</div>\` +
+                    \`<a class="load-more" data-load-more>load \${rest.length} more</a>\`;
+            };
             const edgeHtml = (n.evidence.misrouteEdges || [])
                 .filter(e => edgeCount(e) > 0 || edgeTxConfirmed(e) > 0 || edgeTxRescued(e) > 0)
                 .slice(0, 12)
@@ -1904,13 +1974,23 @@ function renderBundling() {
         }
         const totalPhrases = groups.reduce((n, g) => n + g.phrases.length, 0);
         let html = banner + \`<h4>\${totalPhrases} phrase(s) involving <span class="target-name">\${escapeHtml(focusName)}</span></h4>\`;
+        const PHRASES_INITIAL_PER_GROUP = 5;
+        const phraseRow = (p) => {
+            const src = (p.model || p.style)
+                ? \`<span class="src">[\${escapeHtml([p.model, p.style].filter(Boolean).join(" · "))}]</span>\`
+                : "";
+            return \`<div class="ph">\${src}\${escapeHtml(p.phrase)}</div>\`;
+        };
         for (const g of groups) {
             html += \`<div class="group"><div class="group-head">\${g.count}× \${escapeHtml(g.edgeLabel)}</div>\`;
-            for (const p of g.phrases) {
-                const src = (p.model || p.style)
-                    ? \`<span class="src">[\${escapeHtml([p.model, p.style].filter(Boolean).join(" · "))}]</span>\`
-                    : "";
-                html += \`<div class="ph">\${src}\${escapeHtml(p.phrase)}</div>\`;
+            const initial = g.phrases.slice(0, PHRASES_INITIAL_PER_GROUP);
+            const rest = g.phrases.slice(PHRASES_INITIAL_PER_GROUP);
+            for (const p of initial) html += phraseRow(p);
+            if (rest.length > 0) {
+                html += \`<div class="more-samples-hidden">\` +
+                    rest.map(phraseRow).join("") +
+                    \`</div>\`;
+                html += \`<a class="load-more" data-load-more>load \${rest.length} more</a>\`;
             }
             html += \`</div>\`;
         }
@@ -2552,14 +2632,77 @@ window.addEventListener("resize", () => {
     }, 150);
 });
 
+// Document-level "load more" delegate. When the user clicks a [load-more]
+// link, we reveal the immediately-preceding sibling (the hidden
+// .more-samples-hidden block) and remove the link itself. Works
+// everywhere progressive disclosure is rendered without any per-render
+// listener wiring.
+document.addEventListener("click", (evt) => {
+    const t = evt.target;
+    if (!t || !t.matches || !t.matches("[data-load-more]")) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    const more = t.previousElementSibling;
+    if (more && more.classList.contains("more-samples-hidden")) {
+        more.classList.remove("more-samples-hidden");
+    }
+    t.remove();
+});
+
 // Wire column-header clicks for sorting. Handlers persist (the header DOM
-// is static), so we only need to attach once at boot.
+// is static), so we only need to attach once at boot. We check that the
+// click target wasn't the resize-handle (handle owns its own pointer
+// events; sort should only fire on text/arrow).
 document.querySelectorAll(".nbhd-list-header .sortable").forEach(el => {
-    el.addEventListener("click", () => {
+    el.addEventListener("click", (evt) => {
+        if (evt.target && evt.target.classList && evt.target.classList.contains("resize-handle")) return;
         const k = el.getAttribute("data-sort");
         if (k) setColSort(k);
     });
 });
+
+// Wire column-resize drag handles. Each handle owns the right edge of one
+// header cell; on drag, it updates the corresponding --col-N CSS variable
+// on #neighborhoodsSection. Both header AND rows pick up the new width
+// via their shared grid-template-columns rule.
+(function setupColResize() {
+    const section = document.getElementById("neighborhoodsSection");
+    if (!section) return;
+    document.querySelectorAll(".nbhd-list-header .resize-handle").forEach(h => {
+        const colIdx = h.getAttribute("data-col");
+        const varName = "--col-" + colIdx;
+        h.addEventListener("pointerdown", (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            const startX = evt.clientX;
+            const cellEl = h.parentElement;
+            const startW = cellEl.getBoundingClientRect().width;
+            h.classList.add("dragging");
+            // Capture pointer events so the drag continues even when the
+            // cursor leaves the handle / window briefly.
+            try { h.setPointerCapture(evt.pointerId); } catch (_) {}
+            function onMove(e) {
+                const dx = e.clientX - startX;
+                // 40px floor so users can't accidentally hide a column.
+                const newW = Math.max(40, startW + dx);
+                section.style.setProperty(varName, newW + "px");
+            }
+            function onUp(e) {
+                h.classList.remove("dragging");
+                try { h.releasePointerCapture(evt.pointerId); } catch (_) {}
+                h.removeEventListener("pointermove", onMove);
+                h.removeEventListener("pointerup", onUp);
+                document.removeEventListener("pointermove", onMove);
+                document.removeEventListener("pointerup", onUp);
+            }
+            h.addEventListener("pointermove", onMove);
+            h.addEventListener("pointerup", onUp);
+            // Belt + suspenders: also listen on document in case capture drops.
+            document.addEventListener("pointermove", onMove);
+            document.addEventListener("pointerup", onUp);
+        });
+    });
+})();
 
 renderStyleChips();
 updateColHeaderArrows();

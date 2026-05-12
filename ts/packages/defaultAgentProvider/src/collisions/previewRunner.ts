@@ -106,6 +106,13 @@ async function main() {
         process.stderr.write(`\nRunning: ${vizCmd}\n\n`);
         await dispatcher.processCommand(vizCmd);
         process.stderr.write("\ncorpus visualize done.\n");
+
+        // And the recovery viz (visualize-recovery).
+        const recCmd = `@collision corpus visualize-recovery --workdir "${args.workdir}"`;
+        process.stderr.write(`\nRunning: ${recCmd}\n\n`);
+        await dispatcher.processCommand(recCmd);
+        process.stderr.write("\ncorpus visualize-recovery done.\n");
+
         process.stderr.write("\nAll done.\n");
     } finally {
         await dispatcher.close();
