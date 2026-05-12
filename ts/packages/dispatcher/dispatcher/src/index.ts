@@ -4,6 +4,11 @@
 export { createDispatcher } from "./dispatcher.js";
 export { IndexManager } from "./context/indexManager.js";
 export type { DispatcherOptions } from "./context/commandHandlerContext.js";
+export { PortRegistrar } from "./context/portRegistrar.js";
+export type {
+    Allocation as PortAllocation,
+    RegistrationId as PortRegistrationId,
+} from "./context/portRegistrar.js";
 export type {
     AppAgentProvider,
     AppAgentInstaller,

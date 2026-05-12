@@ -67,6 +67,44 @@ export const DefaultUserIdentity: UserIdentity = {
 
 export const AgentServerChannelName = "agent-server";
 
+/**
+ * Channel name for the port-discovery RPC endpoint hosted by agent-server.
+ * External clients (browser extension, VS Code extension, CLI) open this
+ * channel to look up which port a given app-agent + role is currently bound
+ * to. The dispatcher's `PortRegistrar` is the source of truth.
+ */
+export const DiscoveryChannelName = "discovery";
+
+/**
+ * Default TCP port the agent-server listens on. Centralized here so every
+ * client that defaults to "the local agent-server" stays in sync if we ever
+ * change it. Override via `--port`/`AGENT_SERVER_PORT` on the server side
+ * and via the `port` argument on the client side.
+ */
+export const AGENT_SERVER_DEFAULT_PORT = 8999;
+
+/** Convenience: the matching default WebSocket URL. */
+export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_PORT}`;
+
+/**
+ * RPC surface for the discovery channel. Read-only on purpose: clients can
+ * ask "where is agent X's role Y?" but cannot mutate the registrar — only
+ * agents themselves (in-process, via SessionContext.registerPort) can do
+ * that.
+ */
+export type DiscoveryInvokeFunctions = {
+    /**
+     * Look up the port currently registered for `(agentName, role)`.
+     * Returns `null` (not undefined) so the JSON-RPC response is always a
+     * defined value; callers should treat null as "no allocation found,
+     * try again later" rather than a hard error.
+     */
+    lookupPort: (param: {
+        agentName: string;
+        role: string;
+    }) => Promise<{ port: number | null }>;
+};
+
 /** Build the dispatcher channel name for a given conversation. */
 export function getDispatcherChannelName(conversationId: string): string {
     return `dispatcher:${conversationId}`;
