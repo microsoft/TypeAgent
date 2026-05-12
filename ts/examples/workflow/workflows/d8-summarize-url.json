@@ -158,7 +158,7 @@
           "path": ["result"]
         }
       },
-      "output": { "$from": "scope", "name": "fetchResult", "path": ["body"] },
+      "output": { "$from": "scope", "name": "fetchResult", "path": ["body"], "optional": true },
       "outputSchema": { "type": "string" },
       "maxIterations": 3,
       "next": "buildPrompt",

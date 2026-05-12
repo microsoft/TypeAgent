@@ -217,6 +217,11 @@ export interface RunOptions {
      * - allowedHosts: if set, only these hostnames are permitted in http.get
      */
     constraints?: TaskConstraints;
+    /**
+     * Skip structural validation before running. Use only in tests that
+     * intentionally exercise invalid IRs for error-path coverage.
+     */
+    skipValidation?: boolean;
 }
 
 export interface RunResult {
@@ -284,16 +289,20 @@ export class WorkflowEngine {
                 : rawTimeout;
 
         // Validate
-        const validation = validateWorkflowIR(ir, this.registry.all());
-        if (!validation.valid) {
-            const msgs = validation.errors.map(
-                (e) => `${e.path}: ${e.message}`,
-            );
-            return {
-                runId: "",
-                success: false,
-                error: { message: `Validation failed:\n${msgs.join("\n")}` },
-            };
+        if (!options?.skipValidation) {
+            const validation = validateWorkflowIR(ir, this.registry.all());
+            if (!validation.valid) {
+                const msgs = validation.errors.map(
+                    (e) => `${e.path}: ${e.message}`,
+                );
+                return {
+                    runId: "",
+                    success: false,
+                    error: {
+                        message: `Validation failed:\n${msgs.join("\n")}`,
+                    },
+                };
+            }
         }
 
         const runId = `run-${randomUUID()}`;

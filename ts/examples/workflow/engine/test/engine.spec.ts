@@ -3064,7 +3064,9 @@ describe("WorkflowEngine (IR v1)", () => {
                                 },
                             },
                         },
-                        iterateState: {},
+                        iterateState: {
+                            i: { $from: "state", name: "i" } as Template,
+                        },
                         output: null as Template,
                         outputSchema: { type: "null" },
                         maxIterations: 1,
@@ -4333,7 +4335,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { result: { type: "integer" } },
                         },
                         inputs: { a: 1 as Template, b: 2 as Template },
-                        bind: "answer",
+                        bind: "firstAnswer",
                         next: "second",
                     },
                     second: {
@@ -6013,7 +6015,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 } as Template,
             };
 
-            const result = await eng.run(ir, { input: {} });
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
             expect(result.success).toBe(false);
             // Should report the *original* error, not "unresolved reference"
             expect(result.error?.message).toContain("the original problem");
@@ -6158,7 +6163,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 } as Template,
             };
 
-            const result = await eng.run(ir, { input: {} });
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
             expect(result.success).toBe(false);
             expect(result.error?.nodeId).toBe("doWork");
         });

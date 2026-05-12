@@ -74,7 +74,929 @@ export function validateWorkflowIR(
         }
     }
 
+    // CFG-based passes: acyclicity, onError rules, termination,
+    // scope closure, dominator analysis, state soundness, output binding.
+    validateCFGPasses(ir, errors);
+
     return { valid: errors.length === 0, errors };
+}
+
+// ---- CFG data structure ----
+
+interface ScopeCFG {
+    /** nodeId -> set of successor nodeIds (excluding sentinels) */
+    edges: Map<string, Set<string>>;
+    entry: string;
+    /** nodes with no successors (task with no next, or all successors are sentinels) */
+    terminals: Set<string>;
+    /** nodes whose next/case target is a sentinel */
+    sentinelTargets: Map<string, Set<"@iterate" | "@exit">>;
+}
+
+/**
+ * Build a CFG for a scope. Control-flow edges include next, onError,
+ * and branch cases/default. Sentinels (@iterate, @exit) are tracked
+ * separately rather than as graph nodes.
+ */
+function buildScopeCFG(
+    nodes: Record<string, WorkflowNode>,
+    entry: string,
+): ScopeCFG {
+    const edges = new Map<string, Set<string>>();
+    const sentinelTargets = new Map<string, Set<"@iterate" | "@exit">>();
+
+    for (const [id, node] of Object.entries(nodes)) {
+        const succs = new Set<string>();
+        edges.set(id, succs);
+
+        if (node.kind === "task") {
+            if (node.next) {
+                if (node.next === "@iterate" || node.next === "@exit") {
+                    let st = sentinelTargets.get(id);
+                    if (!st) {
+                        st = new Set();
+                        sentinelTargets.set(id, st);
+                    }
+                    st.add(node.next);
+                } else {
+                    succs.add(node.next);
+                }
+            }
+            if (node.onError) {
+                succs.add(node.onError);
+            }
+        } else if (node.kind === "branch") {
+            for (const target of Object.values(node.cases)) {
+                if (target === "@iterate" || target === "@exit") {
+                    let st = sentinelTargets.get(id);
+                    if (!st) {
+                        st = new Set();
+                        sentinelTargets.set(id, st);
+                    }
+                    st.add(target);
+                } else {
+                    succs.add(target);
+                }
+            }
+            if (node.default === "@iterate" || node.default === "@exit") {
+                let st = sentinelTargets.get(id);
+                if (!st) {
+                    st = new Set();
+                    sentinelTargets.set(id, st);
+                }
+                st.add(node.default);
+            } else {
+                succs.add(node.default);
+            }
+        } else if (node.kind === "loop") {
+            if (node.next) {
+                succs.add(node.next);
+            }
+            if (node.onError) {
+                succs.add(node.onError);
+            }
+        }
+    }
+
+    // Terminals: nodes with no non-sentinel successors
+    const terminals = new Set<string>();
+    for (const [id, succs] of edges) {
+        if (succs.size === 0) {
+            terminals.add(id);
+        }
+    }
+
+    return { edges, entry, terminals, sentinelTargets };
+}
+
+// ---- Pass 10: Acyclicity ----
+
+/**
+ * Detect cycles in a scope CFG using DFS with three-color marking.
+ * Returns the set of node IDs involved in cycles (empty if acyclic).
+ */
+function detectCycles(cfg: ScopeCFG): string[][] {
+    const WHITE = 0,
+        GRAY = 1,
+        BLACK = 2;
+    const color = new Map<string, number>();
+    for (const id of cfg.edges.keys()) {
+        color.set(id, WHITE);
+    }
+
+    const cycles: string[][] = [];
+    const stack: string[] = [];
+
+    function dfs(u: string): void {
+        color.set(u, GRAY);
+        stack.push(u);
+        const succs = cfg.edges.get(u);
+        if (succs) {
+            for (const v of succs) {
+                const c = color.get(v);
+                if (c === GRAY) {
+                    // Back edge: extract cycle from stack
+                    const idx = stack.indexOf(v);
+                    cycles.push(stack.slice(idx));
+                } else if (c === WHITE) {
+                    dfs(v);
+                }
+            }
+        }
+        stack.pop();
+        color.set(u, BLACK);
+    }
+
+    // Start from entry, then visit any unreached nodes
+    if (color.has(cfg.entry)) {
+        dfs(cfg.entry);
+    }
+    for (const id of cfg.edges.keys()) {
+        if (color.get(id) === WHITE) {
+            dfs(id);
+        }
+    }
+
+    return cycles;
+}
+
+// ---- Pass 9: Termination ----
+
+/**
+ * Check that every node can reach a terminal (top-level) or a sentinel
+ * (loop body). Uses reverse reachability from terminals/sentinel nodes.
+ */
+function checkTermination(cfg: ScopeCFG, insideLoop: boolean): Set<string> {
+    // Collect "exit" nodes: terminals for top-level, sentinel targets for bodies
+    const exitNodes = new Set<string>();
+    if (insideLoop) {
+        for (const id of cfg.sentinelTargets.keys()) {
+            exitNodes.add(id);
+        }
+        // Also include terminals (nodes with no next) as they can still
+        // be valid in a loop body if they're onError recovery nodes
+        // that don't continue.
+        // Actually, in a loop body, every path must reach a sentinel.
+        // Terminals without sentinels are dead ends.
+    } else {
+        for (const id of cfg.terminals) {
+            exitNodes.add(id);
+        }
+    }
+
+    // Build reverse graph
+    const reverseEdges = new Map<string, Set<string>>();
+    for (const id of cfg.edges.keys()) {
+        reverseEdges.set(id, new Set());
+    }
+    for (const [u, succs] of cfg.edges) {
+        for (const v of succs) {
+            reverseEdges.get(v)?.add(u);
+        }
+    }
+
+    // BFS backwards from exit nodes
+    const reached = new Set<string>();
+    const queue = [...exitNodes];
+    for (const id of queue) {
+        if (reached.has(id)) continue;
+        reached.add(id);
+        const preds = reverseEdges.get(id);
+        if (preds) {
+            for (const p of preds) {
+                if (!reached.has(p)) queue.push(p);
+            }
+        }
+    }
+
+    // Unreachable nodes
+    const unreachable = new Set<string>();
+    for (const id of cfg.edges.keys()) {
+        if (!reached.has(id)) {
+            unreachable.add(id);
+        }
+    }
+    return unreachable;
+}
+
+// ---- Pass 6: Dominator analysis ----
+
+/**
+ * Compute immediate dominators for an acyclic CFG using reverse postorder.
+ * Returns a map from nodeId to its immediate dominator nodeId.
+ * The entry node maps to itself.
+ */
+function computeImmediateDominators(cfg: ScopeCFG): Map<string, string> {
+    // Compute reverse postorder via DFS from entry
+    const rpo: string[] = [];
+    const visited = new Set<string>();
+    function dfs(u: string): void {
+        visited.add(u);
+        const succs = cfg.edges.get(u);
+        if (succs) {
+            for (const v of succs) {
+                if (!visited.has(v)) dfs(v);
+            }
+        }
+        rpo.push(u);
+    }
+    dfs(cfg.entry);
+    rpo.reverse();
+
+    // Map node -> rpo index for O(1) lookup
+    const rpoIndex = new Map<string, number>();
+    for (let i = 0; i < rpo.length; i++) {
+        rpoIndex.set(rpo[i], i);
+    }
+
+    // Build predecessor map (only for reachable nodes)
+    const preds = new Map<string, string[]>();
+    for (const id of rpo) {
+        preds.set(id, []);
+    }
+    for (const [u, succs] of cfg.edges) {
+        if (!rpoIndex.has(u)) continue;
+        for (const v of succs) {
+            if (rpoIndex.has(v)) {
+                preds.get(v)!.push(u);
+            }
+        }
+    }
+
+    // Cooper/Harvey/Kennedy iterative dominator algorithm
+    const idom = new Map<string, string>();
+    idom.set(cfg.entry, cfg.entry);
+
+    function intersect(b1: string, b2: string): string {
+        let f1 = rpoIndex.get(b1)!;
+        let f2 = rpoIndex.get(b2)!;
+        while (f1 !== f2) {
+            while (f1 > f2) {
+                b1 = idom.get(b1)!;
+                f1 = rpoIndex.get(b1)!;
+            }
+            while (f2 > f1) {
+                b2 = idom.get(b2)!;
+                f2 = rpoIndex.get(b2)!;
+            }
+        }
+        return b1;
+    }
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const b of rpo) {
+            if (b === cfg.entry) continue;
+            const bPreds = preds.get(b)!;
+            // Pick first processed predecessor
+            let newIdom: string | undefined;
+            for (const p of bPreds) {
+                if (idom.has(p)) {
+                    newIdom = p;
+                    break;
+                }
+            }
+            if (newIdom === undefined) continue;
+            for (const p of bPreds) {
+                if (p === newIdom) continue;
+                if (idom.has(p)) {
+                    newIdom = intersect(p, newIdom);
+                }
+            }
+            if (idom.get(b) !== newIdom) {
+                idom.set(b, newIdom);
+                changed = true;
+            }
+        }
+    }
+
+    return idom;
+}
+
+/**
+ * Check whether node `a` dominates node `b` (a is on every path from
+ * entry to b). Uses the idom tree.
+ */
+function dominates(
+    a: string,
+    b: string,
+    idom: Map<string, string>,
+    entry: string,
+): boolean {
+    let cur = b;
+    while (cur !== entry) {
+        if (cur === a) return true;
+        const parent = idom.get(cur);
+        if (!parent || parent === cur) break;
+        cur = parent;
+    }
+    return cur === a;
+}
+
+/**
+ * Collect all nodes dominated by `a` (including `a` itself).
+ */
+function dominatedSet(a: string, idom: Map<string, string>): Set<string> {
+    const result = new Set<string>();
+    // Build children map from idom
+    const children = new Map<string, string[]>();
+    for (const [node, parent] of idom) {
+        if (node === parent) continue; // entry
+        let ch = children.get(parent);
+        if (!ch) {
+            ch = [];
+            children.set(parent, ch);
+        }
+        ch.push(node);
+    }
+    const stack = [a];
+    while (stack.length > 0) {
+        const n = stack.pop()!;
+        result.add(n);
+        const ch = children.get(n);
+        if (ch) stack.push(...ch);
+    }
+    return result;
+}
+
+/**
+ * Build the set of nodes on the "success side" vs "error side" of an
+ * onError split. Used for phi soundness: binders on opposite sides are
+ * mutually exclusive.
+ */
+interface OnErrorSplit {
+    trigger: string;
+    successSide: Set<string>; // nodes dominated via next
+    errorSide: Set<string>; // nodes dominated via onError
+}
+
+function buildOnErrorSplits(
+    nodes: Record<string, WorkflowNode>,
+    cfg: ScopeCFG,
+    idom: Map<string, string>,
+): OnErrorSplit[] {
+    const splits: OnErrorSplit[] = [];
+    for (const [id, node] of Object.entries(nodes)) {
+        if ((node.kind === "task" || node.kind === "loop") && node.onError) {
+            const errorTarget = node.onError;
+            const errorSide = dominatedSet(errorTarget, idom);
+            // Success side: nodes dominated by the next target (if any),
+            // excluding nodes on the error side.
+            let successSide = new Set<string>();
+            const nextTarget = node.kind === "task" ? node.next : node.next;
+            if (
+                nextTarget &&
+                nextTarget !== "@iterate" &&
+                nextTarget !== "@exit"
+            ) {
+                successSide = dominatedSet(nextTarget, idom);
+            }
+            // The trigger node itself is on the success side: its binding
+            // is only produced when it completes without error.
+            successSide.add(id);
+            splits.push({ trigger: id, successSide, errorSide });
+        }
+    }
+    return splits;
+}
+
+/**
+ * Check whether two nodes are on mutually exclusive sides of an onError
+ * split (one on success side, one on error side of the same trigger).
+ */
+function areMutuallyExclusive(
+    a: string,
+    b: string,
+    splits: OnErrorSplit[],
+): boolean {
+    for (const split of splits) {
+        if (
+            (split.successSide.has(a) && split.errorSide.has(b)) ||
+            (split.successSide.has(b) && split.errorSide.has(a))
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Check whether a binding is covered at a given node (consumer or terminal).
+ *
+ * A binding is covered if:
+ * (a) A single binder dominates the target and is not excluded by an onError
+ *     split (binder on success side, target on error side), OR
+ * (b) Binders on BOTH sides of an onError split exist for this name, the
+ *     trigger dominates the target, and the target is not on either side of
+ *     that specific split (meaning it's downstream of the merge point).
+ *     This is "joint coverage" across mutually exclusive paths.
+ */
+function isBindingCoveredAtNode(
+    binderList: string[],
+    targetId: string,
+    idom: Map<string, string>,
+    cfg: ScopeCFG,
+    splits: OnErrorSplit[],
+): boolean {
+    // (a) Direct coverage: a single binder dominates target without
+    // being on the wrong side of an onError split.
+    const directlyCovered = binderList.some((b) => {
+        if (!dominates(b, targetId, idom, cfg.entry)) return false;
+        for (const split of splits) {
+            if (split.successSide.has(b) && split.errorSide.has(targetId)) {
+                return false;
+            }
+        }
+        return true;
+    });
+    if (directlyCovered) return true;
+
+    // (b) Joint coverage: for some onError split, binders exist on both
+    // sides, and the trigger dominates the target. This means every path
+    // from entry through the trigger to the target passes through a binder
+    // on one side or the other.
+    for (const split of splits) {
+        const hasSuccessBinder = binderList.some((b) =>
+            split.successSide.has(b),
+        );
+        const hasErrorBinder = binderList.some((b) =>
+            split.errorSide.has(b),
+        );
+        if (
+            hasSuccessBinder &&
+            hasErrorBinder &&
+            dominates(split.trigger, targetId, idom, cfg.entry)
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Run the dominator-based checks for a scope:
+ * - Coverage (6b): every $from scope ref is covered on all paths
+ * - Phi soundness (6a): no two binders of the same name on the same path
+ */
+function checkDominance(
+    nodes: Record<string, WorkflowNode>,
+    cfg: ScopeCFG,
+    idom: Map<string, string>,
+    prefix: string,
+    errors: ValidationError[],
+    outputTemplate?: Template,
+    outputPrefix?: string,
+): void {
+    const splits = buildOnErrorSplits(nodes, cfg, idom);
+
+    // Build binder sets: name -> list of nodeIds that bind that name
+    const binders = new Map<string, string[]>();
+    for (const [id, node] of Object.entries(nodes)) {
+        if ((node.kind === "task" || node.kind === "loop") && node.bind) {
+            let list = binders.get(node.bind);
+            if (!list) {
+                list = [];
+                binders.set(node.bind, list);
+            }
+            list.push(id);
+        }
+    }
+
+    // Phi soundness (6a): for names with multiple binders, verify they
+    // are on mutually exclusive paths (no binder dominates another binder
+    // of the same name, unless they're on opposite sides of an onError split).
+    for (const [name, binderList] of binders) {
+        if (binderList.length < 2) continue;
+        for (let i = 0; i < binderList.length; i++) {
+            for (let j = i + 1; j < binderList.length; j++) {
+                const a = binderList[i];
+                const b = binderList[j];
+                if (areMutuallyExclusive(a, b, splits)) continue;
+                if (
+                    dominates(a, b, idom, cfg.entry) ||
+                    dominates(b, a, idom, cfg.entry)
+                ) {
+                    errors.push({
+                        path: `${prefix}`,
+                        message:
+                            `Bind name "${name}": nodes "${a}" and "${b}" both ` +
+                            `bind this name and one dominates the other. ` +
+                            `Duplicate binders must be on mutually exclusive paths ` +
+                            `(e.g. opposite sides of a branch or onError split).`,
+                    });
+                }
+            }
+        }
+    }
+
+    // Coverage (6b): for each $from scope ref in node inputs, check that
+    // at least one binder dominates the consumer on every path.
+    for (const [id, node] of Object.entries(nodes)) {
+        let inputs: Record<string, Template> | undefined;
+        if (node.kind === "task") inputs = node.inputs;
+        else if (node.kind === "loop") inputs = node.inputs;
+        if (!inputs) continue;
+
+        const refs = collectScopeRefs(inputs, `${prefix}.${id}.inputs`);
+        for (const ref of refs) {
+            const binderList = binders.get(ref.name);
+            if (!binderList || binderList.length === 0) continue; // caught by name resolution
+            const covered = isBindingCoveredAtNode(
+                binderList,
+                id,
+                idom,
+                cfg,
+                splits,
+            );
+            if (!covered && !ref.optional) {
+                errors.push({
+                    path: ref.templatePath,
+                    message:
+                        `$from "scope", name "${ref.name}": no binder of ` +
+                        `"${ref.name}" dominates node "${id}" on every path ` +
+                        `from entry. The binding may not be available when ` +
+                        `this node executes. Mark the reference as optional ` +
+                        `or restructure so a binder always runs first.`,
+                });
+            }
+        }
+    }
+
+    // Output template coverage: check that output refs are covered on
+    // all paths to any terminal.
+    if (outputTemplate && outputPrefix) {
+        const outputRefs = collectScopeRefs(outputTemplate, outputPrefix);
+        for (const ref of outputRefs) {
+            const binderList = binders.get(ref.name);
+            if (!binderList || binderList.length === 0) continue;
+            // The output is evaluated after the scope reaches a terminal.
+            // Every path from entry to a terminal must pass through a binder.
+            // We check: for each terminal, at least one binder dominates it.
+            for (const terminal of cfg.terminals) {
+                // Skip terminals not reachable from entry
+                if (!idom.has(terminal)) continue;
+                const terminalCovered = isBindingCoveredAtNode(
+                    binderList,
+                    terminal,
+                    idom,
+                    cfg,
+                    splits,
+                );
+                if (!terminalCovered && !ref.optional) {
+                    errors.push({
+                        path: ref.templatePath,
+                        message:
+                            `$from "scope", name "${ref.name}": not covered ` +
+                            `on the path through terminal "${terminal}". ` +
+                            `No binder of "${ref.name}" dominates that path. ` +
+                            `The output may reference an unbound name when ` +
+                            `that path executes.`,
+                    });
+                }
+            }
+        }
+    }
+}
+
+// ---- Orchestrate CFG-based passes ----
+
+function validateCFGPasses(ir: WorkflowIR, errors: ValidationError[]): void {
+    validateScopeCFG(
+        ir.nodes,
+        ir.entry,
+        "nodes",
+        errors,
+        false,
+        ir.output,
+        "output",
+    );
+}
+
+function validateScopeCFG(
+    nodes: Record<string, WorkflowNode>,
+    entry: string,
+    prefix: string,
+    errors: ValidationError[],
+    insideLoop: boolean,
+    outputTemplate?: Template,
+    outputPrefix?: string,
+    skipTermination?: boolean,
+): void {
+    // Don't run CFG passes if entry doesn't exist (already caught)
+    if (!(entry in nodes)) return;
+
+    const cfg = buildScopeCFG(nodes, entry);
+
+    // Pass 10: Acyclicity
+    const cycles = detectCycles(cfg);
+    for (const cycle of cycles) {
+        errors.push({
+            path: prefix,
+            message:
+                `Cycle detected: ${cycle.join(" -> ")} -> ${cycle[0]}. ` +
+                `Intra-scope cycles are not allowed; use a loop construct ` +
+                `with @iterate instead.`,
+        });
+    }
+    // If cycles exist, skip passes that depend on acyclicity
+    if (cycles.length > 0) return;
+
+    // Pass 4 (completion): onError structural rules
+    validateOnErrorRules(nodes, entry, prefix, errors);
+
+    // Pass 5: Scope closure (loop bodies only)
+    // Checked within the loop body recursion below.
+
+    // Pass 9: Termination
+    if (!skipTermination) {
+        const unreachable = checkTermination(cfg, insideLoop);
+        for (const id of unreachable) {
+            errors.push({
+                path: `${prefix}.${id}`,
+                message: insideLoop
+                    ? `Node "${id}" cannot reach any sentinel (@iterate or @exit).`
+                    : `Node "${id}" cannot reach a terminal node.`,
+            });
+        }
+    }
+
+    // Pass 6: Dominator analysis
+    const idom = computeImmediateDominators(cfg);
+    checkDominance(
+        nodes,
+        cfg,
+        idom,
+        prefix,
+        errors,
+        outputTemplate,
+        outputPrefix,
+    );
+
+    // Recurse into loop body scopes
+    for (const [id, node] of Object.entries(nodes)) {
+        if (node.kind === "loop" && node.body.entry in node.body.nodes) {
+            const bodyPrefix = `${prefix}.${id}.body.nodes`;
+
+            // Pass 5: Scope closure
+            checkScopeClosure(node, id, bodyPrefix, prefix, nodes, errors);
+
+            // Pass 11: State soundness
+            checkStateSoundness(node, id, `${prefix}.${id}`, errors);
+
+            validateScopeCFG(
+                node.body.nodes,
+                node.body.entry,
+                bodyPrefix,
+                errors,
+                true,
+                node.output,
+                `${prefix}.${id}.output`,
+                !!node.onError, // skip body termination check when loop has onError
+            );
+        }
+    }
+}
+
+// ---- Pass 4 (completion): onError structural rules ----
+
+function validateOnErrorRules(
+    nodes: Record<string, WorkflowNode>,
+    entry: string,
+    prefix: string,
+    errors: ValidationError[],
+): void {
+    // Collect onError targets and normal targets
+    const onErrorTargetToTrigger = new Map<string, string>();
+    const normalTargets = new Set<string>();
+    normalTargets.add(entry);
+
+    for (const [id, node] of Object.entries(nodes)) {
+        if (node.kind === "task") {
+            if (node.next) normalTargets.add(node.next);
+            if (node.onError) {
+                const existing = onErrorTargetToTrigger.get(node.onError);
+                if (existing) {
+                    // Rule 2: single trigger
+                    errors.push({
+                        path: `${prefix}.${id}.onError`,
+                        message:
+                            `Recovery node "${node.onError}" is targeted by ` +
+                            `both "${existing}" and "${id}". A recovery ` +
+                            `target must have exactly one trigger in v1.`,
+                    });
+                } else {
+                    onErrorTargetToTrigger.set(node.onError, id);
+                }
+            }
+        } else if (node.kind === "branch") {
+            for (const target of Object.values(node.cases)) {
+                if (target !== "@iterate" && target !== "@exit") {
+                    normalTargets.add(target);
+                }
+            }
+            if (node.default !== "@iterate" && node.default !== "@exit") {
+                normalTargets.add(node.default);
+            }
+        } else if (node.kind === "loop") {
+            if (node.next) normalTargets.add(node.next);
+            if (node.onError) {
+                const existing = onErrorTargetToTrigger.get(node.onError);
+                if (existing) {
+                    errors.push({
+                        path: `${prefix}.${id}.onError`,
+                        message:
+                            `Recovery node "${node.onError}" is targeted by ` +
+                            `both "${existing}" and "${id}". A recovery ` +
+                            `target must have exactly one trigger in v1.`,
+                    });
+                } else {
+                    onErrorTargetToTrigger.set(node.onError, id);
+                }
+            }
+        }
+    }
+
+    for (const [target, trigger] of onErrorTargetToTrigger) {
+        const targetNode = nodes[target];
+        if (!targetNode) continue; // existence already checked elsewhere
+
+        // Rule 1: exclusive path
+        if (normalTargets.has(target)) {
+            errors.push({
+                path: `${prefix}.${trigger}.onError`,
+                message:
+                    `Recovery node "${target}" is also reachable via ` +
+                    `a normal path (next, branch case/default, or entry). ` +
+                    `Recovery targets must only be reachable via onError.`,
+            });
+        }
+
+        // Rule 3: no recursive recovery
+        if (
+            (targetNode.kind === "task" || targetNode.kind === "loop") &&
+            targetNode.onError
+        ) {
+            errors.push({
+                path: `${prefix}.${target}.onError`,
+                message:
+                    `Recovery node "${target}" must not itself declare ` +
+                    `onError. Recursive recovery chains are not ` +
+                    `allowed in v1.`,
+            });
+        }
+
+        // Rule 4: recovery target must be a task
+        if (targetNode.kind !== "task") {
+            errors.push({
+                path: `${prefix}.${trigger}.onError`,
+                message:
+                    `Recovery target "${target}" must be a task node ` +
+                    `(got "${targetNode.kind}").`,
+            });
+        }
+    }
+}
+
+// ---- Pass 5: Scope closure ----
+
+function checkScopeClosure(
+    loopNode: {
+        body: { nodes: Record<string, WorkflowNode> };
+        inputs: Record<string, Template>;
+    },
+    loopId: string,
+    bodyPrefix: string,
+    outerPrefix: string,
+    outerNodes: Record<string, WorkflowNode>,
+    errors: ValidationError[],
+): void {
+    const bodyBindings = buildBindingMap(loopNode.body.nodes);
+    // Also include names available via $from: "input" and $from: "state"
+    // (those are legal cross-scope references). We only check $from: "scope".
+
+    for (const [id, node] of Object.entries(loopNode.body.nodes)) {
+        let inputs: Record<string, Template> | undefined;
+        if (node.kind === "task") inputs = node.inputs;
+        else if (node.kind === "loop") inputs = node.inputs;
+        if (!inputs) continue;
+
+        const refs = collectScopeRefs(inputs, `${bodyPrefix}.${id}.inputs`);
+        for (const ref of refs) {
+            if (!bodyBindings.has(ref.name)) {
+                // Check if this name exists in the outer scope
+                const outerBindings = buildBindingMap(outerNodes);
+                if (outerBindings.has(ref.name)) {
+                    errors.push({
+                        path: ref.templatePath,
+                        message:
+                            `$from "scope", name "${ref.name}": references ` +
+                            `outer-scope binding. Loop body nodes cannot ` +
+                            `reach outer-scope bindings via $from "scope". ` +
+                            `Pass the value through the loop's inputs instead.`,
+                    });
+                }
+            }
+        }
+    }
+}
+
+// ---- Pass 11: State soundness ----
+
+function checkStateSoundness(
+    loopNode: {
+        state: Record<string, { schema: JSONSchema; initial: Template }>;
+        iterateState: Record<string, Template>;
+        body: { nodes: Record<string, WorkflowNode> };
+    },
+    loopId: string,
+    prefix: string,
+    errors: ValidationError[],
+): void {
+    const stateNames = new Set(Object.keys(loopNode.state));
+    const iterateNames = new Set(Object.keys(loopNode.iterateState));
+
+    // Every state var must have a corresponding iterateState entry
+    for (const name of stateNames) {
+        if (!iterateNames.has(name)) {
+            errors.push({
+                path: `${prefix}.iterateState`,
+                message:
+                    `State variable "${name}" is declared but has no ` +
+                    `corresponding entry in iterateState.`,
+            });
+        }
+    }
+
+    // Every iterateState entry must correspond to a declared state var
+    for (const name of iterateNames) {
+        if (!stateNames.has(name)) {
+            errors.push({
+                path: `${prefix}.iterateState.${name}`,
+                message:
+                    `iterateState entry "${name}" has no corresponding ` +
+                    `state variable declaration.`,
+            });
+        }
+    }
+
+    // Check $from: "state" refs in body nodes reference declared state vars
+    for (const [id, node] of Object.entries(loopNode.body.nodes)) {
+        let inputs: Record<string, Template> | undefined;
+        if (node.kind === "task") inputs = node.inputs;
+        else if (node.kind === "loop") inputs = node.inputs;
+        if (!inputs) continue;
+
+        const stateRefs = collectStateRefs(
+            inputs,
+            `${prefix}.body.nodes.${id}.inputs`,
+        );
+        for (const ref of stateRefs) {
+            if (!stateNames.has(ref.name)) {
+                errors.push({
+                    path: ref.templatePath,
+                    message:
+                        `$from "state", name "${ref.name}": no state ` +
+                        `variable "${ref.name}" is declared on this loop.`,
+                });
+            }
+        }
+    }
+}
+
+/**
+ * Walk a template and collect all $from: "state" references.
+ */
+function collectStateRefs(
+    template: Template,
+    templatePath: string,
+): { name: string; templatePath: string }[] {
+    if (template === null || template === undefined) return [];
+    if (typeof template !== "object") return [];
+    if (Array.isArray(template)) {
+        const refs: { name: string; templatePath: string }[] = [];
+        for (let i = 0; i < template.length; i++) {
+            refs.push(
+                ...collectStateRefs(template[i], `${templatePath}[${i}]`),
+            );
+        }
+        return refs;
+    }
+
+    const obj = template as Record<string, unknown>;
+    if (obj["$from"] === "state") {
+        return [{ name: obj["name"] as string, templatePath }];
+    }
+    if ("$literal" in obj) return [];
+
+    const refs: { name: string; templatePath: string }[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+        refs.push(
+            ...collectStateRefs(value as Template, `${templatePath}.${key}`),
+        );
+    }
+    return refs;
 }
 
 function validateScope(
@@ -111,11 +1033,20 @@ function validateScope(
                     checkNodeTaskSchemas(taskDef, node, path, errors);
                 }
             }
-            if (node.next && !nodeIds.has(node.next)) {
-                errors.push({
-                    path: `${path}.next`,
-                    message: `Target "${node.next}" does not exist.`,
-                });
+            if (node.next) {
+                if (node.next === "@iterate" || node.next === "@exit") {
+                    if (!insideLoop) {
+                        errors.push({
+                            path: `${path}.next`,
+                            message: `Sentinel "${node.next}" is only valid inside a loop body.`,
+                        });
+                    }
+                } else if (!nodeIds.has(node.next)) {
+                    errors.push({
+                        path: `${path}.next`,
+                        message: `Target "${node.next}" does not exist.`,
+                    });
+                }
             }
             if (node.onError && !nodeIds.has(node.onError)) {
                 errors.push({
@@ -204,6 +1135,12 @@ function validateScope(
                 errors.push({
                     path: `${path}.next`,
                     message: `Target "${node.next}" does not exist.`,
+                });
+            }
+            if (node.onError && !nodeIds.has(node.onError)) {
+                errors.push({
+                    path: `${path}.onError`,
+                    message: `Error target "${node.onError}" does not exist.`,
                 });
             }
         }
