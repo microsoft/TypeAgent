@@ -102,6 +102,7 @@ function makeCollector(fileId: string, text: string): DebugInfoCollector {
         partPositions: new Map(),
         rulePositions: new Map(),
         partRules: new Map(),
+        partLabels: new Map(),
         fileContents: new Map([[fileId, text]]),
         filePaths: new Map(),
     };
@@ -373,6 +374,7 @@ function buildDebugInfo(collector: DebugInfoCollector): GrammarDebugInfo {
         rules,
         parts,
         partRules: collector.partRules,
+        partLabels: collector.partLabels,
         filePaths: collector.filePaths,
     };
 }
