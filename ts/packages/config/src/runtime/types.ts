@@ -160,6 +160,11 @@ export interface AwsStorageConfig {
     readonly secretAccessKey: string;
 }
 
+export interface ElasticConfig {
+    readonly apiKey: string;
+    readonly uri: string;
+}
+
 export interface DatabaseConfig {
     readonly cosmosDbConnectionString?: string | undefined;
     readonly mongoDbConnectionString?: string | undefined;
@@ -169,6 +174,7 @@ export interface StorageConfig {
     readonly azure?: AzureStorageConfig | undefined;
     readonly aws?: AwsStorageConfig | undefined;
     readonly database?: DatabaseConfig | undefined;
+    readonly elastic?: ElasticConfig | undefined;
 }
 
 export interface VaultConfig {
@@ -202,6 +208,13 @@ export interface AzureFoundryConfig {
     readonly httpEndpointLogicAppConnectionId?: string | undefined;
 }
 
+export interface ReasoningConfig {
+    /** Reasoning-loop timeout in milliseconds (0 = disabled). */
+    readonly timeoutMs?: number | undefined;
+    /** Override the default Copilot reasoning model. */
+    readonly copilotModel?: string | undefined;
+}
+
 /** Root typed configuration. */
 export interface Config {
     readonly azureOpenAI: AzureOpenAIConfig;
@@ -215,6 +228,7 @@ export interface Config {
     readonly storage: StorageConfig;
     readonly vault?: VaultConfig | undefined;
     readonly azureFoundry?: AzureFoundryConfig | undefined;
+    readonly reasoning?: ReasoningConfig | undefined;
     /**
      * Untyped passthrough: any flat `KEY=value` pair that wasn't
      * recognized by the typed schema lives here. This is what makes

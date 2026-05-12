@@ -155,6 +155,7 @@ export function buildConfig(flat: FlatEnv): Config {
     const storage = buildStorage(remaining);
     const vault = buildVault(remaining);
     const azureFoundry = buildAzureFoundry(remaining);
+    const reasoning = buildReasoning(remaining);
 
     return {
         azureOpenAI,
@@ -168,6 +169,7 @@ export function buildConfig(flat: FlatEnv): Config {
         storage,
         vault,
         ...(azureFoundry ? { azureFoundry } : {}),
+        ...(reasoning ? { reasoning } : {}),
         extra: new Map(remaining),
     };
 }
@@ -689,10 +691,18 @@ function buildStorage(flat: Map<string, string>) {
               }
             : undefined;
 
+    const elasticApiKey = popString(flat, "ELASTIC_API_KEY");
+    const elasticUri = popString(flat, "ELASTIC_URI");
+    const elastic =
+        elasticApiKey && elasticUri
+            ? { apiKey: elasticApiKey, uri: elasticUri }
+            : undefined;
+
     return {
         ...(azure ? { azure } : {}),
         ...(aws ? { aws } : {}),
         ...(database ? { database } : {}),
+        ...(elastic ? { elastic } : {}),
     };
 }
 
@@ -758,6 +768,18 @@ function buildAzureFoundry(flat: Map<string, string>) {
         ...(httpEndpointLogicAppConnectionId !== undefined
             ? { httpEndpointLogicAppConnectionId }
             : {}),
+    };
+}
+
+function buildReasoning(flat: Map<string, string>) {
+    const timeoutRaw = popString(flat, "TYPEAGENT_REASONING_TIMEOUT_MS");
+    const copilotModel = popString(flat, "COPILOT_REASONING_MODEL");
+    if (timeoutRaw === undefined && copilotModel === undefined) return undefined;
+    const timeoutMs =
+        timeoutRaw !== undefined ? parseInt(timeoutRaw, 10) : undefined;
+    return {
+        ...(Number.isFinite(timeoutMs) ? { timeoutMs } : {}),
+        ...(copilotModel !== undefined ? { copilotModel } : {}),
     };
 }
 

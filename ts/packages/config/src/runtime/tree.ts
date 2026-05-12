@@ -343,6 +343,12 @@ export function configToTree(config: Config): ConfigTree {
                 config.storage.database.mongoDbConnectionString;
         storage.database = db;
     }
+    if (config.storage.elastic) {
+        storage.elastic = {
+            apiKey: config.storage.elastic.apiKey,
+            uri: config.storage.elastic.uri,
+        };
+    }
     if (Object.keys(storage).length > 0) tree.storage = storage;
 
     if (config.vault?.shared) {
@@ -370,6 +376,15 @@ export function configToTree(config: Config): ConfigTree {
         if (Object.keys(af).length > 0) tree.azureFoundry = af;
     }
 
+    if (config.reasoning) {
+        const r: ConfigTree = {};
+        if (config.reasoning.timeoutMs !== undefined)
+            r.timeoutMs = config.reasoning.timeoutMs;
+        if (config.reasoning.copilotModel !== undefined)
+            r.copilotModel = config.reasoning.copilotModel;
+        if (Object.keys(r).length > 0) tree.reasoning = r;
+    }
+
     return tree;
 }
 
@@ -389,6 +404,7 @@ const TYPED_SECTION_KEYS = new Set([
     "storage",
     "vault",
     "azureFoundry",
+    "reasoning",
 ]);
 
 export function isTypedSectionKey(key: string): boolean {
@@ -633,6 +649,10 @@ function emitOpenAI(node: unknown, out: FlatEnv): void {
     if (o.local !== undefined) {
         const lo = asObject(o.local, "openAI.local");
         emitOpenAIVariant(lo, out, "_LOCAL", "openAI.local");
+        // Emit OLLAMA_ENDPOINT alias so consumers reading that legacy
+        // env var pick up the openAI.local endpoint automatically.
+        if (lo.endpoint !== undefined)
+            out.OLLAMA_ENDPOINT = asString(lo.endpoint, "openAI.local.endpoint");
     }
 }
 
@@ -802,6 +822,16 @@ function emitStorage(node: unknown, out: FlatEnv): void {
                 "storage.database.mongoDbConnectionString",
             );
     }
+    if (s.elastic !== undefined) {
+        const e = asObject(s.elastic, "storage.elastic");
+        if (e.apiKey !== undefined)
+            out.ELASTIC_API_KEY = asString(
+                e.apiKey,
+                "storage.elastic.apiKey",
+            );
+        if (e.uri !== undefined)
+            out.ELASTIC_URI = asString(e.uri, "storage.elastic.uri");
+    }
 }
 
 function emitVault(node: unknown, out: FlatEnv): void {
@@ -841,6 +871,19 @@ function emitAzureFoundry(node: unknown, out: FlatEnv): void {
         if (f[yamlKey] !== undefined)
             out[envKey] = asString(f[yamlKey], `azureFoundry.${yamlKey}`);
     }
+}
+
+function emitReasoning(node: unknown, out: FlatEnv): void {
+    const r = asObject(node, "reasoning");
+    if (r.timeoutMs !== undefined)
+        out.TYPEAGENT_REASONING_TIMEOUT_MS = String(
+            asNumber(r.timeoutMs, "reasoning.timeoutMs"),
+        );
+    if (r.copilotModel !== undefined)
+        out.COPILOT_REASONING_MODEL = asString(
+            r.copilotModel,
+            "reasoning.copilotModel",
+        );
 }
 
 /**
@@ -884,6 +927,9 @@ export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
             break;
         case "azureFoundry":
             emitAzureFoundry(node, out);
+            break;
+        case "reasoning":
+            emitReasoning(node, out);
             break;
         default:
             throw new Error(`Not a typed section: '${key}'.`);
