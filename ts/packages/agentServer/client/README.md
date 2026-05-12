@@ -1,6 +1,6 @@
 # agent-server-client
 
-Client library for connecting to a running agentServer, used by the Shell, the CLI, and IDE/editor extensions (e.g. `vscode-shell`).
+Client library for connecting to a running agentServer, used by the Shell, the CLI, and application extensions (e.g. `vscode-shell`).
 
 ## Connection model
 
@@ -35,7 +35,7 @@ const connection = await connectAgentServer(url);
 
 ### `lookupAgentServer()` — recommended
 
-Read-only lookup: returns `{port, url}` if an agent-server is reachable at the configured URL, `undefined` otherwise. Never spawns. Use this from IDE/editor extensions (e.g. `vscode-shell`) that should not auto-start an agent-server.
+Read-only lookup: returns `{port, url}` if an agent-server is reachable at the configured URL, `undefined` otherwise. Never spawns. Use this from application extensions (e.g. `vscode-shell`) that should not auto-start an agent-server.
 
 ```typescript
 const handle = await lookupAgentServer();

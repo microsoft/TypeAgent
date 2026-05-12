@@ -13,7 +13,7 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 ## Architecture
 
 ```
-Shell (Electron)              CLI (Node.js)              IDE / editor extensions
+Shell (Electron)              CLI (Node.js)              Application extensions
    │  in-process (default)       │  always remote            │  always remote
    │  OR --connect               │                           │  (vscode-shell, etc.)
    └──────────────┬──────────────┴───────────────────────────┘
@@ -141,7 +141,7 @@ Client calls connectAgentServer(url)
   └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
 
-Read-only lookups (e.g. for IDE/editor extensions like `vscode-shell`, which never spawn their own agentServer) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live agentServer answers.
+Read-only lookups (e.g. for application extensions like `vscode-shell`, which never spawn their own agentServer) use `lookupAgentServer()` — same TCP probe, returns `undefined` instead of spawning when no live agentServer answers.
 
 On disconnect, the server removes all of that connection's conversations from its routing table.
 
