@@ -61,6 +61,19 @@ export interface PartMatchedEvent extends BaseEvent {
     readonly part: PartId;
     /** End offset of the matched span in the input. */
     readonly endPos: number;
+    /**
+     * Variable name and captured value, if this part captures a variable.
+     * `value` is the raw `MatchedValue` produced by the part (e.g. a number
+     * for number parts, a joined string for string parts).  Not emitted for
+     * wildcard parts (their value is deferred until a following part resolves
+     * the extent) or when the enclosing rule is not tracking values.
+     */
+    readonly capturedValue?:
+        | {
+              readonly variable: string;
+              readonly value: unknown;
+          }
+        | undefined;
 }
 
 export interface PartFailedEvent extends BaseEvent {

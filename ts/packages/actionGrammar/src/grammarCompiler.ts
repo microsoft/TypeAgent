@@ -69,6 +69,8 @@ export type DebugInfoCollector = {
     rulePositions: Map<string, DebugSourcePosition>;
     /** Maps partId -> owning ruleId (from currentDefinition at compile time). */
     partRules: Map<number, string>;
+    /** Maps partId -> human-readable label (e.g. '"play"', '$title:string', '<Artist>'). */
+    partLabels: Map<number, string>;
     /** Source texts keyed by fileId (displayPath), for offset-to-line conversion. */
     fileContents: Map<string, string>;
     /** Maps fileId (displayPath) -> resolved absolute path on disk. */
@@ -832,15 +834,21 @@ const emptyRecord: ResolvedDefinitionRecord = {
 function allocPartId(
     context: CompileContext,
     sourcePos: number | undefined,
+    label?: string,
 ): number {
     const id = context.partIdCounter.value++;
-    if (context.debugCollector !== undefined && sourcePos !== undefined) {
-        context.debugCollector.partPositions.set(id, {
-            offset: sourcePos,
-            fileId: context.displayPath,
-        });
+    if (context.debugCollector !== undefined) {
+        if (sourcePos !== undefined) {
+            context.debugCollector.partPositions.set(id, {
+                offset: sourcePos,
+                fileId: context.displayPath,
+            });
+        }
         if (context.currentDefinition !== undefined) {
             context.debugCollector.partRules.set(id, context.currentDefinition);
+        }
+        if (label !== undefined) {
+            context.debugCollector.partLabels.set(id, label);
         }
     }
     return id;
@@ -1196,7 +1204,7 @@ function createGrammarRule(
                 const part = createStringPart(
                     expr.value,
                     undefined,
-                    allocPartId(context, expr.pos),
+                    allocPartId(context, expr.pos, `"${expr.value.join(" ")}"`),
                 );
                 // TODO: create regexp
                 parts.push(part);
@@ -1233,7 +1241,11 @@ function createGrammarRule(
                             optional: expr.optional,
                             variable: name,
                             name: referencedName,
-                            partId: allocPartId(context, pos),
+                            partId: allocPartId(
+                                context,
+                                pos,
+                                `$${name}:<${referencedName}>`,
+                            ),
                         }),
                     );
                     if (!expr.optional) {
@@ -1252,7 +1264,7 @@ function createGrammarRule(
                         createNumberPart(
                             name,
                             expr.optional,
-                            allocPartId(context, pos),
+                            allocPartId(context, pos, `$${name}:number`),
                         ),
                     );
                     if (!expr.optional) consumedInput();
@@ -1290,7 +1302,11 @@ function createGrammarRule(
                             name,
                             referencedName,
                             expr.optional,
-                            allocPartId(context, pos),
+                            allocPartId(
+                                context,
+                                pos,
+                                `$${name}:${referencedName}`,
+                            ),
                         ),
                     );
                     if (!expr.optional) consumedInput();
@@ -1313,7 +1329,11 @@ function createGrammarRule(
                         createPhraseSetPart(
                             expr.refName.name,
                             undefined,
-                            allocPartId(context, expr.pos),
+                            allocPartId(
+                                context,
+                                expr.pos,
+                                `<${expr.refName.name}>`,
+                            ),
                         ),
                     );
                     // Phrase sets don't produce a captured value on their own.
@@ -1335,7 +1355,11 @@ function createGrammarRule(
                 parts.push(
                     createRulesPart(record.grammarRules, {
                         name: expr.refName.name,
-                        partId: allocPartId(context, expr.pos),
+                        partId: allocPartId(
+                            context,
+                            expr.pos,
+                            `<${expr.refName.name}>`,
+                        ),
                     }),
                 );
                 // RuleRefExpr has no optional modifier; it is always non-optional.
@@ -1361,7 +1385,7 @@ function createGrammarRule(
                     createRulesPart(grammarRules, {
                         optional,
                         repeat,
-                        partId: allocPartId(context, undefined),
+                        partId: allocPartId(context, undefined, "(...)"),
                     }),
                 );
                 if (!optional && !groupNullable) consumedInput();

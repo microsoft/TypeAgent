@@ -65,6 +65,8 @@ export interface GrammarDebugInfo {
     readonly parts: ReadonlyMap<PartId, SourceLocation>;
     /** Maps partId -> owning ruleId (recorded at compile time). */
     readonly partRules: ReadonlyMap<PartId, RuleId>;
+    /** Maps partId -> human-readable label (e.g. '"play"', '$title:string', '<Artist>'). */
+    readonly partLabels: ReadonlyMap<PartId, string>;
     /** Maps fileId (displayPath) -> resolved absolute path on disk. */
     readonly filePaths: ReadonlyMap<string, string>;
 }
@@ -176,6 +178,8 @@ export interface MatchTrace {
     readonly input: string;
     readonly events: readonly TraceEvent[];
     readonly result: "matched" | "noMatch";
+    /** The produced value from the first match result, if any. */
+    readonly matchValue?: unknown;
 }
 
 // ---------------------------------------------------------------------------

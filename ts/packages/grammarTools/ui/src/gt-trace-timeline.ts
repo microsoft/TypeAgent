@@ -33,6 +33,15 @@ const EVENT_ICONS: Record<string, string> = {
     backtrack: "\u21A9",
 };
 
+const EVENT_LABELS: Record<string, string> = {
+    ruleEntered: "enter",
+    ruleExited: "exit",
+    partAttempted: "try",
+    partMatched: "match",
+    partFailed: "fail",
+    backtrack: "back",
+};
+
 const EVENT_COLORS: Record<string, string> = {
     ruleEntered: "var(--vscode-editorInfo-foreground, #3794ff)",
     ruleExited: "var(--vscode-editorInfo-foreground, #3794ff)",
@@ -41,6 +50,14 @@ const EVENT_COLORS: Record<string, string> = {
     partFailed: "var(--vscode-errorForeground, #f48771)",
     backtrack: "var(--vscode-editorWarning-foreground, #cca700)",
 };
+
+interface DerivedTraceData {
+    trace: MatchTrace;
+    depths: number[];
+    groupSize: number[];
+    attemptPosForEvent: number[];
+    onSuccessPath: Set<number>;
+}
 
 /**
  * Step-by-step match trace table.
@@ -107,6 +124,12 @@ export class GtTraceTimeline extends LitElement {
                 background: var(--vscode-badge-background, #4d4d4d);
                 color: var(--vscode-badge-foreground, #ffffff);
             }
+            .filter-separator {
+                width: 1px;
+                align-self: stretch;
+                background: var(--vscode-panel-border, #80808059);
+                margin: 2px 4px;
+            }
 
             .input-display {
                 padding: 6px 8px;
@@ -153,6 +176,42 @@ export class GtTraceTimeline extends LitElement {
                     --vscode-list-activeSelectionBackground,
                     #094771
                 );
+            }
+            tr.row-matched:not(.selected):not(:hover) td {
+                background: rgba(78, 201, 176, 0.06);
+            }
+            tr.row-matched:not(.selected):not(:hover) td:first-child {
+                border-left: 3px solid rgba(78, 201, 176, 0.5);
+            }
+            tr.row-failed:not(.selected):not(:hover) td {
+                background: rgba(244, 135, 113, 0.06);
+            }
+            tr.row-failed:not(.selected):not(:hover) td:first-child {
+                border-left: 3px solid rgba(244, 135, 113, 0.5);
+            }
+            tr.row-backtrack:not(.selected):not(:hover) td {
+                background: rgba(204, 167, 0, 0.04);
+            }
+            tr.row-backtrack:not(.selected):not(:hover) td:first-child {
+                border-left: 3px solid rgba(204, 167, 0, 0.5);
+            }
+            .matched-text {
+                font-family: var(
+                    --gt-mono-font-family,
+                    var(--vscode-editor-font-family, monospace)
+                );
+                font-size: 0.9em;
+                color: #4ec9b0;
+                max-width: 20em;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                display: inline-block;
+                vertical-align: bottom;
+            }
+            .part-label {
+                color: var(--vscode-descriptionForeground, #9d9d9d);
+                font-size: 0.9em;
             }
             .event-icon {
                 font-weight: bold;
@@ -242,6 +301,9 @@ export class GtTraceTimeline extends LitElement {
     @state()
     private _repeatPolicy: RepeatPolicy = "exhaustive";
 
+    @state()
+    private _pathFilter: "all" | "success" | "failure" = "all";
+
     private _initialized = false;
 
     override connectedCallback(): void {
@@ -311,9 +373,60 @@ export class GtTraceTimeline extends LitElement {
         index: number;
         depth: number;
         groupSize: number; // >0 for ruleEntered with children
+        attemptPos?: number; // inputPos from preceding partAttempted
     }> {
         if (!this._trace) return [];
+        const derived = this._derivedTraceData();
+        const { depths, groupSize, attemptPosForEvent, onSuccessPath } =
+            derived;
         const events = this._trace.events;
+        const n = events.length;
+
+        // Build the hidden set from collapsed groups.
+        const hidden = new Set<number>();
+        for (const gi of this._collapsedGroups) {
+            const d = depths[gi];
+            for (let j = gi + 1; j < n && depths[j] > d; j++) {
+                hidden.add(j);
+            }
+        }
+
+        return events
+            .map((event, index) => ({
+                event,
+                index,
+                depth: depths[index],
+                groupSize: groupSize[index],
+                attemptPos: attemptPosForEvent[index],
+            }))
+            .filter(
+                ({ event, index }) =>
+                    !hidden.has(index) &&
+                    !this._hiddenKinds.has(event.kind as EventKindFilter) &&
+                    (this._pathFilter === "all" ||
+                        (this._pathFilter === "success"
+                            ? onSuccessPath.has(index)
+                            : !onSuccessPath.has(index))),
+            );
+    }
+
+    /**
+     * Cache key and result for _derivedTraceData(). Recomputed only when
+     * the trace object identity changes.
+     */
+    private _derivedCache?: DerivedTraceData;
+
+    /**
+     * Pre-compute per-event depth, group size, attempt positions, and
+     * success path membership. These depend only on the trace events
+     * (not on UI state like collapse/filter), so we memoize them.
+     */
+    private _derivedTraceData(): DerivedTraceData {
+        const cached = this._derivedCache;
+        if (cached !== undefined && cached.trace === this._trace) {
+            return cached;
+        }
+        const events = this._trace!.events;
         const n = events.length;
 
         // Compute depth for every event.  ruleEntered carries an
@@ -344,35 +457,87 @@ export class GtTraceTimeline extends LitElement {
             }
         }
 
-        // Build the hidden set from collapsed groups.
-        const hidden = new Set<number>();
-        for (const gi of this._collapsedGroups) {
-            const d = depths[gi];
-            for (let j = gi + 1; j < n && depths[j] > d; j++) {
-                hidden.add(j);
+        // Track the inputPos from the most recent partAttempted per part,
+        // so partMatched/partFailed rows can show the attempt start position.
+        const attemptPositions: Map<number, number> = new Map();
+        const attemptPosForEvent: number[] = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "partAttempted") {
+                attemptPositions.set(e.part, e.inputPos);
+            } else if (e.kind === "partMatched" || e.kind === "partFailed") {
+                attemptPosForEvent[i] = attemptPositions.get(e.part) ?? 0;
             }
         }
 
-        return events
-            .map((event, index) => ({
-                event,
-                index,
-                depth: depths[index],
-                groupSize: groupSize[index],
-            }))
-            .filter(
-                ({ event, index }) =>
-                    !hidden.has(index) &&
-                    !this._hiddenKinds.has(event.kind as EventKindFilter),
-            );
+        // Compute success path membership.
+        // Success path: only events that directly contribute to the final
+        // match result. ruleEntered only if its ruleExited is "matched";
+        // partAttempted only if followed by partMatched (not partFailed).
+        // Backtracks are never on the success path.
+        const onSuccessPath = new Set<number>();
+
+        // Pair ruleEntered <-> ruleExited using a stack.
+        const ruleEntryStack: number[] = [];
+        const ruleEntryFor: number[] = new Array(n).fill(-1);
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "ruleEntered") {
+                ruleEntryStack.push(i);
+            } else if (e.kind === "ruleExited") {
+                const entryIdx = ruleEntryStack.pop();
+                if (entryIdx !== undefined) {
+                    ruleEntryFor[i] = entryIdx;
+                }
+            }
+        }
+
+        // Pair partAttempted <-> partMatched/partFailed.
+        const lastAttemptIdx: Map<number, number> = new Map();
+        const attemptFor: number[] = new Array(n).fill(-1);
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "partAttempted") {
+                lastAttemptIdx.set(e.part, i);
+            } else if (e.kind === "partMatched" || e.kind === "partFailed") {
+                const ai = lastAttemptIdx.get(e.part);
+                if (ai !== undefined) {
+                    attemptFor[i] = ai;
+                }
+            }
+        }
+
+        // Mark success: matched rules and their entries, matched
+        // parts and their attempts.
+        for (let i = 0; i < n; i++) {
+            const e = events[i];
+            if (e.kind === "ruleExited" && e.result === "matched") {
+                onSuccessPath.add(i);
+                const entry = ruleEntryFor[i];
+                if (entry >= 0) onSuccessPath.add(entry);
+            } else if (e.kind === "partMatched") {
+                onSuccessPath.add(i);
+                const attempt = attemptFor[i];
+                if (attempt >= 0) onSuccessPath.add(attempt);
+            }
+        }
+
+        this._derivedCache = {
+            trace: this._trace!,
+            depths,
+            groupSize,
+            attemptPosForEvent,
+            onSuccessPath,
+        };
+        return this._derivedCache;
     }
 
     private _highlightRange(): { start: number; end: number } | undefined {
         if (!this._trace || this._hoveredRow < 0) return undefined;
         const event = this._trace.events[this._hoveredRow];
         if (!event) return undefined;
-        const start = (event as { inputPos?: number }).inputPos ?? 0;
-        const end = (event as { endPos?: number }).endPos ?? start;
+        const start = "inputPos" in event ? event.inputPos : 0;
+        const end = "endPos" in event ? event.endPos : start;
         return { start, end };
     }
 
@@ -390,14 +555,38 @@ export class GtTraceTimeline extends LitElement {
         </div>`;
     }
 
-    private _eventDetail(event: TraceEvent): string {
+    private _eventDetail(
+        event: TraceEvent,
+        attemptPos?: number,
+    ): string | ReturnType<typeof html> {
         switch (event.kind) {
             case "ruleEntered":
                 return `depth ${event.depth}`;
             case "ruleExited":
-                return `result: ${event.result}`;
-            case "partMatched":
-                return `-> pos ${event.endPos}`;
+                return event.result;
+            case "partMatched": {
+                const input = this._trace?.input ?? "";
+                const start = attemptPos ?? 0;
+                const end = event.endPos;
+                let matchedSpan: string | undefined;
+                if (start < end && input) {
+                    let text = input.slice(start, end);
+                    if (text.length > 30) text = text.slice(0, 29) + "\u2026";
+                    matchedSpan = JSON.stringify(text);
+                }
+                const capStr = event.capturedValue
+                    ? ` $${event.capturedValue.variable}=${JSON.stringify(event.capturedValue.value)}`
+                    : "";
+                if (matchedSpan) {
+                    return html`<span class="matched-text">${matchedSpan}</span
+                        >${capStr
+                            ? html`<span class="part-label">${capStr}</span>`
+                            : nothing}`;
+                }
+                return capStr
+                    ? html`<span class="part-label">${capStr}</span>`
+                    : "";
+            }
             case "partAttempted":
                 return event.partKind;
             default:
@@ -546,12 +735,38 @@ export class GtTraceTimeline extends LitElement {
                                       )
                                           ? ""
                                           : "active"}"
+                                      aria-pressed=${!this._hiddenKinds.has(
+                                          kind,
+                                      )}
                                       @click=${() => this._toggleKind(kind)}
                                   >
                                       <span style="color: ${EVENT_COLORS[kind]}"
                                           >${EVENT_ICONS[kind]}</span
                                       >
                                       ${kind}
+                                  </button>
+                              `,
+                          )}
+                          <span class="filter-separator"></span>
+                          ${(
+                              [
+                                  ["all", "All"],
+                                  ["success", "\u2713 Success path"],
+                                  ["failure", "\u2717 Failure path"],
+                              ] as const
+                          ).map(
+                              ([value, label]) => html`
+                                  <button
+                                      class="filter-btn ${this._pathFilter ===
+                                      value
+                                          ? "active"
+                                          : ""}"
+                                      aria-pressed=${this._pathFilter === value}
+                                      @click=${() => {
+                                          this._pathFilter = value;
+                                      }}
+                                  >
+                                      ${label}
                                   </button>
                               `,
                           )}
@@ -562,6 +777,7 @@ export class GtTraceTimeline extends LitElement {
                               <tr>
                                   <th>#</th>
                                   <th>Rule</th>
+                                  <th>Part</th>
                                   <th>Event</th>
                                   <th>Input Pos</th>
                                   <th>Detail</th>
@@ -569,23 +785,52 @@ export class GtTraceTimeline extends LitElement {
                           </thead>
                           <tbody>
                               ${visible.map(
-                                  ({ event, index, depth, groupSize }) => {
+                                  ({
+                                      event,
+                                      index,
+                                      depth,
+                                      groupSize,
+                                      attemptPos,
+                                  }) => {
+                                      const isPartEvent =
+                                          event.kind === "partAttempted" ||
+                                          event.kind === "partMatched" ||
+                                          event.kind === "partFailed";
+                                      const partLabel = isPartEvent
+                                          ? this.grammar?.debugInfo?.partLabels.get(
+                                                (event as { part: number })
+                                                    .part,
+                                            )
+                                          : undefined;
                                       const ruleName =
                                           event.kind !== "backtrack"
                                               ? event.rule
                                               : undefined;
                                       const hasSlots =
                                           event.kind === "partMatched" &&
-                                          "slots" in event;
+                                          event.capturedValue !== undefined;
                                       const isGroup = groupSize > 0;
                                       const collapsed =
                                           this._collapsedGroups.has(index);
+                                      const rowClass = [
+                                          this._selectedRow === index
+                                              ? "selected"
+                                              : "",
+                                          event.kind === "partMatched"
+                                              ? "row-matched"
+                                              : "",
+                                          event.kind === "partFailed"
+                                              ? "row-failed"
+                                              : "",
+                                          event.kind === "backtrack"
+                                              ? "row-backtrack"
+                                              : "",
+                                      ]
+                                          .filter(Boolean)
+                                          .join(" ");
                                       return html`
                                           <tr
-                                              class="${this._selectedRow ===
-                                              index
-                                                  ? "selected"
-                                                  : ""}"
+                                              class="${rowClass}"
                                               @mouseenter=${() => {
                                                   this._hoveredRow = index;
                                               }}
@@ -631,6 +876,7 @@ export class GtTraceTimeline extends LitElement {
                                                         >`
                                                       : nothing}
                                               </td>
+                                              <td>${partLabel ?? ""}</td>
                                               <td>
                                                   <span
                                                       class="event-icon"
@@ -641,25 +887,33 @@ export class GtTraceTimeline extends LitElement {
                                                           event.kind
                                                       ]}</span
                                                   >
-                                                  ${event.kind}
+                                                  ${EVENT_LABELS[event.kind] ??
+                                                  event.kind}
                                               </td>
-                                              <td>${event.inputPos}</td>
                                               <td>
-                                                  ${this._eventDetail(event)}
+                                                  ${event.kind === "partMatched"
+                                                      ? `${attemptPos ?? 0}..${event.endPos}`
+                                                      : event.inputPos}
+                                              </td>
+                                              <td>
+                                                  ${this._eventDetail(
+                                                      event,
+                                                      attemptPos,
+                                                  )}
                                               </td>
                                           </tr>
                                           ${hasSlots &&
                                           this._expandedRows.has(index)
                                               ? html`<tr>
-                                                    <td colspan="5">
+                                                    <td colspan="6">
                                                         <div class="slots">
-                                                            slots:
+                                                            ${`$${(event as PartMatchedEvent).capturedValue!.variable}`}
+                                                            =
                                                             ${JSON.stringify(
                                                                 (
-                                                                    event as PartMatchedEvent & {
-                                                                        slots: unknown;
-                                                                    }
-                                                                ).slots,
+                                                                    event as PartMatchedEvent
+                                                                ).capturedValue!
+                                                                    .value,
                                                             )}
                                                         </div>
                                                     </td>
@@ -682,6 +936,16 @@ export class GtTraceTimeline extends LitElement {
                           ).length}
                           backtracks, result:
                           <strong>${this._trace.result}</strong>
+                          ${this._trace.matchValue !== undefined
+                              ? html`, value:
+                                    <code
+                                        >${JSON.stringify(
+                                            this._trace.matchValue,
+                                            null,
+                                            2,
+                                        )}</code
+                                    >`
+                              : nothing}
                       </div>
                   `
                 : !this._loading && !this._error
