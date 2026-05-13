@@ -63,19 +63,44 @@ function makeStubContext(agentContext: any): StubContext {
 
 describe("code agent shared server + per-session registration", () => {
     const agent = instantiate();
+    // Track all sessions created during a test so afterEach can defensively
+    // tear down anything a test left enabled (e.g., on assertion failure
+    // before the test's own try/finally cleanup runs). Without this, a
+    // surviving shared server contaminates later tests.
+    const liveSessions = new Set<StubContext>();
 
     async function newSession(): Promise<StubContext> {
         const agentContext = await agent.initializeAgentContext!();
-        return makeStubContext(agentContext);
+        const ctx = makeStubContext(agentContext);
+        liveSessions.add(ctx);
+        return ctx;
     }
 
     afterEach(async () => {
-        // Defensive: if a test left the shared server up, calling
-        // updateAgentContext(false, ...) on a synthetic session won't
-        // close it (refcount stays positive). Reach into the module's
-        // close path by exhausting any sessions via the public API —
-        // but since we control all stubs in each test, the per-test
-        // cleanup handles it. Leaving this hook as a placeholder.
+        // Disable any session still enabled from the test body, then drop
+        // it from the live set. updateAgentContext(false, ...) is idempotent
+        // and refcount-safe, so it's fine to call on sessions whose
+        // try/finally already ran.
+        for (const ctx of liveSessions) {
+            try {
+                await agent.updateAgentContext!(
+                    false,
+                    ctx.sessionContext,
+                    "code",
+                );
+            } catch {
+                // Best-effort cleanup; swallow so other sessions still tear down.
+            }
+        }
+        liveSessions.clear();
+        // Sanity: the shared server should now be down. If a test left it up
+        // for a reason we don't model, surface it loudly so we don't silently
+        // leak across tests.
+        if (getSharedCodePort() !== undefined) {
+            throw new Error(
+                "shared WebSocket server still bound after afterEach cleanup",
+            );
+        }
     });
 
     test("enable on a fresh session binds the shared server and registers under (code, default)", async () => {

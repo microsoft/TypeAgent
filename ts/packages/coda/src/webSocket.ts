@@ -53,30 +53,39 @@ export async function createWebSocket(
     channel: string,
     role: string,
     clientId?: string,
-) {
-    return new Promise<WebSocket | undefined>(async (resolve) => {
+): Promise<WebSocket | undefined> {
+    let endpoint: string;
+    try {
         const base = await resolveCodeEndpoint();
-        if (!base) {
-            resolve(undefined);
-            return;
-        }
-        let endpoint = `${base}?channel=${channel}&role=${role}`;
+        if (!base) return undefined;
+        endpoint = `${base}?channel=${channel}&role=${role}`;
         if (clientId) {
             endpoint += `&clientId=${clientId}`;
         }
-
-        const webSocket = new WebSocket(endpoint);
-
-        webSocket.onopen = (event: object) => {
+    } catch (error) {
+        console.error("Error resolving code agent endpoint:", error);
+        return undefined;
+    }
+    return new Promise<WebSocket | undefined>((resolve) => {
+        let webSocket: WebSocket;
+        try {
+            webSocket = new WebSocket(endpoint);
+        } catch (error) {
+            // e.g. invalid URL from CODE_WEBSOCKET_HOST override.
+            console.error("Error constructing WebSocket:", error);
+            resolve(undefined);
+            return;
+        }
+        webSocket.onopen = () => {
             console.log("websocket open");
             resolve(webSocket);
         };
-        webSocket.onmessage = (event: object) => {};
-        webSocket.onclose = (event: object) => {
+        webSocket.onmessage = () => {};
+        webSocket.onclose = () => {
             console.log("websocket connection closed");
             resolve(undefined);
         };
-        webSocket.onerror = (event: object) => {
+        webSocket.onerror = () => {
             console.error("websocket error");
             resolve(undefined);
         };
