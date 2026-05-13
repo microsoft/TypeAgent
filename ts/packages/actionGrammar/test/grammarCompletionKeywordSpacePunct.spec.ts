@@ -1158,7 +1158,6 @@ describeForEachCompletion(
                     ],
                 });
             });
-
         });
 
         // ================================================================
@@ -1479,7 +1478,6 @@ describeForEachCompletion(
                     properties: [],
                 });
             });
-
         });
 
         describe("spacing=optional with punctuation keyword completion", () => {
@@ -1499,7 +1497,6 @@ describeForEachCompletion(
                     properties: [],
                 });
             });
-
         });
 
         describe("spacing=none with punctuation keyword completion", () => {
@@ -1534,7 +1531,6 @@ describeForEachCompletion(
                     properties: [],
                 });
             });
-
         });
 
         // ================================================================
@@ -1573,7 +1569,6 @@ describeForEachCompletion(
                     properties: [],
                 });
             });
-
         });
 
         // ================================================================
@@ -1918,7 +1913,6 @@ describeForEachCompletion(
                     properties: [],
                 });
             });
-
         });
 
         // ================================================================
@@ -2374,7 +2368,6 @@ describeForEachCompletion(
                     properties: [],
                 });
             });
-
         });
 
         // ================================================================
