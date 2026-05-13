@@ -44,8 +44,8 @@ const debug = registerDebug("typeagent:code");
 // `sessionContextId`, so the PortRegistrar's `closeSessionContext` backstop
 // auto-releases per-session entries and `lookup("code")` keeps returning the
 // shared port as long as ≥1 session has it enabled. `CODE_WEBSOCKET_PORT`
-// remains an explicit override (useful for back-compat with installed Coda
-// extensions that dial 8082).
+// remains an explicit override (useful for pinning the port when debugging
+// or when an external client expects a known address).
 let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
 let sharedStartingPromise: Promise<CodeAgentWebSocketServer> | undefined;
 let sharedClosingPromise: Promise<void> | undefined;
@@ -151,9 +151,9 @@ async function checkCodeReadiness(
 }
 
 // Bind hint for the shared server. Returns the explicit override if
-// CODE_WEBSOCKET_PORT is set (handy for back-compat with installed Coda
-// extensions that still dial 8082); otherwise 0 so the OS picks a free
-// port and the registrar/discovery channel publishes it.
+// CODE_WEBSOCKET_PORT is set (useful for pinning the port when debugging);
+// otherwise 0 so the OS picks a free port and the registrar/discovery
+// channel publishes it.
 function getCodeBindPort(): number {
     const raw = process.env["CODE_WEBSOCKET_PORT"];
     if (raw === undefined) return 0;

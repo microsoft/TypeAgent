@@ -12,22 +12,17 @@ export type WebSocketMessage = {
     body: any;
 };
 
-// Back-compat fallback: pre-port-registrar versions of this extension
-// dialed `ws://localhost:8082` directly. We still honor that target if
-// the discovery channel is unreachable (agentServer not running, or an
-// older agentServer without the discovery channel) so users running
-// against an old agent server aren't broken on update.
-const CODE_AGENT_FALLBACK_HOST = "ws://localhost:8082";
-
-// One-shot resolution of the code agent's WebSocket endpoint. Tries the
-// agent-server's discovery channel first, falls back to the legacy
-// hardcoded host. Honors:
+// One-shot resolution of the code agent's WebSocket endpoint via the
+// agent-server's discovery channel. Returns undefined if the endpoint
+// can't be resolved (discovery unreachable, or `code` agent not yet
+// enabled in any session) — the caller's reconnect loop will retry.
+// Honors:
 //   - `CODE_WEBSOCKET_HOST` env: explicit override; if set, skips
 //     discovery and dials the given URL directly.
 //   - `AGENT_SERVER_URL` env: where to reach the agent-server's
 //     discovery WS (defaults to ws://localhost:8999, the
 //     AGENT_SERVER_DEFAULT_URL constant).
-async function resolveCodeEndpoint(): Promise<string> {
+async function resolveCodeEndpoint(): Promise<string | undefined> {
     const explicit = process.env["CODE_WEBSOCKET_HOST"];
     if (explicit) return explicit;
 
@@ -40,22 +35,18 @@ async function resolveCodeEndpoint(): Promise<string> {
     if (result.kind === "not-registered") {
         // Agent server is running but the `code` agent isn't enabled
         // (no one has activated the `code` schema in any session yet).
-        // The reconnect loop will re-discover periodically, so this
-        // is a transient state — log and fall back to the legacy host
-        // for a still-non-zero chance the user happens to be running
-        // an old agent server too.
+        // Transient — the reconnect loop will re-discover periodically.
         console.log(
-            "code agent not yet registered with agent-server; will retry. Falling back to legacy 8082 in case of pre-discovery agent server.",
+            "code agent not yet registered with agent-server; will retry.",
         );
-        return CODE_AGENT_FALLBACK_HOST;
+        return undefined;
     }
-    // Discovery unreachable (agentServer down or pre-discovery
-    // version). Fall back to the legacy host so users with an old
-    // server keep working.
+    // Discovery unreachable (agentServer not running). Reconnect loop
+    // will retry.
     console.log(
-        `Discovery channel unreachable (${result.error.message}). Falling back to legacy ${CODE_AGENT_FALLBACK_HOST}.`,
+        `Discovery channel unreachable (${result.error.message}); will retry.`,
     );
-    return CODE_AGENT_FALLBACK_HOST;
+    return undefined;
 }
 
 export async function createWebSocket(
@@ -65,9 +56,13 @@ export async function createWebSocket(
 ) {
     return new Promise<WebSocket | undefined>(async (resolve) => {
         const base = await resolveCodeEndpoint();
+        if (!base) {
+            resolve(undefined);
+            return;
+        }
         let endpoint = `${base}?channel=${channel}&role=${role}`;
         if (clientId) {
-            endpoint += `clientId=${clientId}`;
+            endpoint += `&clientId=${clientId}`;
         }
 
         const webSocket = new WebSocket(endpoint);
