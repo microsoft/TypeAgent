@@ -27,3 +27,6 @@ tools/scripts/pools.inventory.json
 # Holds local endpoints, deployment names, and (in Phase 1) secrets.
 # Never commit.
 config.local.yaml
+
+# Legacy .env files — deprecated, will stop working September 2026.
+.env
