@@ -513,6 +513,18 @@ function createAzureOpenAIChatModel(
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
 
+    // Normalize max_tokens → max_completion_tokens.  Newer models (GPT-5,
+    // o3, o4, GPT-4.1, etc.) reject the legacy `max_tokens` parameter.
+    // Promote it unconditionally — all supported models accept the new name.
+    if (
+        completionSettings.max_tokens !== undefined &&
+        completionSettings.max_completion_tokens === undefined
+    ) {
+        completionSettings.max_completion_tokens =
+            completionSettings.max_tokens;
+    }
+    delete completionSettings.max_tokens;
+
     const disableResponseFormat =
         !settings.supportsResponseFormat &&
         completionSettings.response_format !== undefined;

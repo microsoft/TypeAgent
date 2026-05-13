@@ -11,6 +11,11 @@ import { CompletionUsageStats } from "./openai.js";
 export type CompletionSettings = {
     n?: number;
     temperature?: number;
+    /**
+     * @deprecated Use `max_completion_tokens` instead.  The runtime
+     * auto-promotes this to `max_completion_tokens` before sending the
+     * request, but new code should set `max_completion_tokens` directly.
+     */
     max_tokens?: number;
     response_format?: { type: "json_object" };
     // Use fixed seed parameter to improve determinism
@@ -18,7 +23,6 @@ export type CompletionSettings = {
     seed?: number;
     top_p?: number;
 
-    // GPT-5 specific settings
     max_completion_tokens?: number;
     reasoning_effort?: "minimal" | "low" | "medium" | "high";
     verbosity?: "low" | "medium" | "high";
