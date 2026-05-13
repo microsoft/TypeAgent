@@ -1107,7 +1107,10 @@ function validateScope(
             }
         } else if (node.kind === "branch") {
             // §3.6: Branch nodes must not declare bind.
-            if ((node as unknown as Record<string, unknown>)["bind"] !== undefined) {
+            if (
+                (node as unknown as Record<string, unknown>)["bind"] !==
+                undefined
+            ) {
                 errors.push({
                     path: `${path}.bind`,
                     message: `Branch nodes must not declare "bind". Branches produce no output.`,
@@ -1548,8 +1551,7 @@ function isStructuralSubtype(
             return consumerVariants
                 ? consumerVariants.some(
                       (cv) =>
-                          typeof cv !== "boolean" &&
-                          isStructuralSubtype(v, cv),
+                          typeof cv !== "boolean" && isStructuralSubtype(v, cv),
                   )
                 : isStructuralSubtype(v, consumer);
         });
@@ -2101,7 +2103,11 @@ function validateScopeTemplates(
             }
         }
         if (node.kind === "branch") {
-            checkReservedTemplateKeys(node.selector, `${path}.selector`, errors);
+            checkReservedTemplateKeys(
+                node.selector,
+                `${path}.selector`,
+                errors,
+            );
         }
         if (node.kind === "loop") {
             checkReservedTemplateKeys(node.output, `${path}.output`, errors);
@@ -2112,7 +2118,11 @@ function validateScopeTemplates(
                     errors,
                 );
             }
-            validateScopeTemplates(node.body.nodes, `${path}.body.nodes`, errors);
+            validateScopeTemplates(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                errors,
+            );
         }
     }
 }

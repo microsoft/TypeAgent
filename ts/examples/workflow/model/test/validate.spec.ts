@@ -2911,9 +2911,9 @@ describe("validateWorkflowIR", () => {
             (ir as any).version = "2";
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some((e) => e.message.includes('"1"')),
-            ).toBe(true);
+            expect(result.errors.some((e) => e.message.includes('"1"'))).toBe(
+                true,
+            );
         });
 
         it("rejects IR with missing version", () => {
@@ -3217,7 +3217,11 @@ describe("validateWorkflowIR", () => {
                         },
                         outputSchema: { type: "object" },
                         inputs: {
-                            x: { $from: "scope", name: "data", path: ["value"] },
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
                         },
                         bind: "out",
                     },
@@ -3262,7 +3266,11 @@ describe("validateWorkflowIR", () => {
                         },
                         outputSchema: { type: "object" },
                         inputs: {
-                            x: { $from: "scope", name: "data", path: ["value"] },
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
                         },
                         bind: "out",
                     },
@@ -3310,7 +3318,11 @@ describe("validateWorkflowIR", () => {
                         },
                         outputSchema: { type: "object" },
                         inputs: {
-                            x: { $from: "scope", name: "data", path: ["value"] },
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
                         },
                         bind: "out",
                     },
@@ -3355,7 +3367,11 @@ describe("validateWorkflowIR", () => {
                         },
                         outputSchema: { type: "object" },
                         inputs: {
-                            x: { $from: "scope", name: "data", path: ["value"] },
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
                         },
                         bind: "out",
                     },
@@ -3424,7 +3440,11 @@ describe("validateWorkflowIR", () => {
                         },
                         outputSchema: { type: "object" },
                         inputs: {
-                            x: { $from: "scope", name: "data", path: ["value"] },
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
                         },
                         bind: "out",
                     },
