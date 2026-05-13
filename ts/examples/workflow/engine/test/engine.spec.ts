@@ -206,11 +206,7 @@ function makeA4IR(): WorkflowIR {
                 maxCommits: { type: "integer", minimum: 1 },
             },
         },
-        outputSchema: {
-            type: "object",
-            required: ["brief"],
-            properties: { brief: { type: "string" } },
-        },
+        outputSchema: { type: "string" },
         constants: {
             one: { schema: { type: "integer" }, value: 1 },
         },
@@ -2782,7 +2778,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badLoopState",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -3064,7 +3060,9 @@ describe("WorkflowEngine (IR v1)", () => {
                                 },
                             },
                         },
-                        iterateState: {},
+                        iterateState: {
+                            i: { $from: "state", name: "i" } as Template,
+                        },
                         output: null as Template,
                         outputSchema: { type: "null" },
                         maxIterations: 1,
@@ -3769,7 +3767,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "loopAbortTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -3859,7 +3857,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "maxIterTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -3947,7 +3945,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "loopConstantTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 constants: {
                     step: {
                         schema: { type: "integer" },
@@ -4333,7 +4331,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { result: { type: "integer" } },
                         },
                         inputs: { a: 1 as Template, b: 2 as Template },
-                        bind: "answer",
+                        bind: "firstAnswer",
                         next: "second",
                     },
                     second: {
@@ -5167,13 +5165,14 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     producer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "bool.toLabel",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["value", "ifTrue", "ifFalse"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                value: { type: "boolean" },
+                                ifTrue: { type: "string" },
+                                ifFalse: { type: "string" },
                             },
                         },
                         outputSchema: {
@@ -5181,7 +5180,11 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["label"],
                             properties: { label: { type: "string" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: {
+                            value: true as Template,
+                            ifTrue: "yes" as Template,
+                            ifFalse: "no" as Template,
+                        },
                         next: "consumer",
                         bind: "data",
                     },
@@ -5216,7 +5219,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "final" } as Template,
             };
 
-            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
             expect(validation.errors[0].message).toContain("type mismatch");
@@ -5230,7 +5233,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "noSentinel",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     loop: {
                         kind: "loop",
@@ -5329,8 +5332,8 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("unresolved");
             expect(result.error?.message).toContain("doesNotExist");
+            expect(result.error?.message).toContain("no node");
         });
     });
 
@@ -5737,6 +5740,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
                             properties: {
                                 stdout: { type: "string" },
                                 stderr: { type: "string" },
@@ -5817,6 +5821,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
                             properties: {
                                 stdout: { type: "string" },
                                 stderr: { type: "string" },
@@ -5863,6 +5868,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["body", "status"],
                             properties: {
                                 body: { type: "string" },
                                 status: { type: "integer" },
@@ -5911,6 +5917,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         outputSchema: {
                             type: "object",
+                            required: ["body", "status"],
                             properties: {
                                 body: { type: "string" },
                                 status: { type: "integer" },
@@ -5936,6 +5943,228 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.error?.message).toContain(
                 "not in the allowed hosts list",
             );
+        });
+    });
+
+    describe("onError cleanup-then-fail", () => {
+        it("reports original error when cleanup path leaves output unresolvable", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "the original problem" },
+                    };
+                },
+            };
+            const cleanupTask: TaskDefinition = {
+                name: "test.cleanup",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: { cleaned: true } };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                cleanupTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            // step fails -> cleanup runs (binds "cleanupResult")
+            // but output references "happyResult" which was never bound
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "cleanupFail",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "cleanup",
+                        bind: "happyResult",
+                    },
+                    cleanup: {
+                        kind: "task",
+                        task: "test.cleanup",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "cleanupResult",
+                    },
+                },
+                entry: "step",
+                output: {
+                    $from: "scope",
+                    name: "happyResult",
+                } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            // Should report the *original* error, not "unresolved reference"
+            expect(result.error?.message).toContain("the original problem");
+        });
+
+        it("succeeds when onError handler produces a valid output", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "step failed" },
+                    };
+                },
+            };
+            const recoverTask: TaskDefinition = {
+                name: "test.recover",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return {
+                        kind: "ok" as const,
+                        output: {
+                            fallback: true,
+                            reason: input.error?.message,
+                        },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                recoverTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            // step fails -> recover runs and binds "result"
+            // output references "result", which IS bound by the recovery node
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "recoverSuccess",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "recover",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.recover",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect((result.output as any).fallback).toBe(true);
+            expect((result.output as any).reason).toBe("step failed");
+        });
+
+        it("reports original error with nodeId from the failing task", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "boom" },
+                    };
+                },
+            };
+            const noopTask: TaskDefinition = {
+                name: "test.noop",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: {} };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                noopTask,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "nodeIdCheck",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    doWork: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "cleanup",
+                        bind: "workOutput",
+                    },
+                    cleanup: {
+                        kind: "task",
+                        task: "test.noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "cleanedUp",
+                    },
+                },
+                entry: "doWork",
+                output: {
+                    $from: "scope",
+                    name: "workOutput",
+                } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.nodeId).toBe("doWork");
         });
     });
 });

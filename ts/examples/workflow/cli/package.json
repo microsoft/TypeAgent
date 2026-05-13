@@ -26,6 +26,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "workflow-engine": "workspace:*",
     "workflow-model": "workspace:*"
   },

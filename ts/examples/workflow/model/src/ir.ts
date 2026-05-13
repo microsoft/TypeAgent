@@ -8,8 +8,10 @@
  * document (parsed JSON), validates it structurally, then executes it.
  */
 
-/** Permissive JSON Schema type (passed directly to ajv). */
-export type JSONSchema = Record<string, unknown>;
+import type { JSONSchema7 } from "json-schema";
+
+/** JSON Schema Draft 7 type, re-exported from @types/json-schema. */
+export type JSONSchema = JSONSchema7;
 
 /**
  * Template: any JSON value the engine evaluates recursively.
@@ -38,6 +40,7 @@ export interface TaskNode {
     next?: string;
     onError?: string;
     bind?: string;
+    timeoutMs?: number;
 }
 
 export interface BranchNode {
@@ -69,6 +72,7 @@ export interface LoopNode {
     next?: string;
     onError?: string;
     bind?: string;
+    timeoutMs?: number;
 }
 
 export type WorkflowNode = TaskNode | BranchNode | LoopNode;

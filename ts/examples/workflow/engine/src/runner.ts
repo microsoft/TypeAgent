@@ -3,13 +3,13 @@
 
 import { randomUUID } from "node:crypto";
 import Debug from "debug";
-import AjvModule from "ajv";
 import {
     WorkflowIR,
     WorkflowNode,
     Template,
     TaskNode,
     LoopNode,
+    JSONSchema,
     TaskContext,
     TaskConstraints,
     TaskResult,
@@ -20,10 +20,9 @@ import {
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
+import { createAjv } from "./ajv.js";
 
 const debug = Debug("typeagent:workflow:engine");
-
-const AjvConstructor = (AjvModule as any).default ?? AjvModule;
 
 // ---- Scope context ----
 
@@ -170,7 +169,12 @@ class TaskFailure extends Error {
 // ---- Scope exit ----
 
 type ScopeExit =
-    | { kind: "terminal" }
+    | {
+          kind: "terminal";
+          errorHandled?:
+              | { message: string; nodeId: string | undefined }
+              | undefined;
+      }
     | { kind: "sentinel"; sentinel: "@iterate" | "@exit" };
 
 // ---- Public types ----
@@ -211,6 +215,11 @@ export interface RunOptions {
      * - allowedHosts: if set, only these hostnames are permitted in http.get
      */
     constraints?: TaskConstraints;
+    /**
+     * Skip structural validation before running. Use only in tests that
+     * intentionally exercise invalid IRs for error-path coverage.
+     */
+    skipValidation?: boolean;
 }
 
 export interface RunResult {
@@ -224,7 +233,7 @@ export interface RunResult {
 
 export class WorkflowEngine {
     private listeners: WorkflowEventListener[] = [];
-    private ajv = new AjvConstructor({ strict: false });
+    private ajv = createAjv();
     private validatorCache = new Map<
         string,
         ReturnType<typeof this.ajv.compile>
@@ -237,7 +246,7 @@ export class WorkflowEngine {
      * Keyed by JSON.stringify of the schema to handle structurally
      * identical schemas from parsed JSON (no reference identity).
      */
-    private getValidator(schema: Record<string, unknown>) {
+    private getValidator(schema: JSONSchema) {
         const key = JSON.stringify(schema);
         let v = this.validatorCache.get(key);
         if (!v) {
@@ -278,16 +287,20 @@ export class WorkflowEngine {
                 : rawTimeout;
 
         // Validate
-        const validation = validateWorkflowIR(ir, this.registry.all());
-        if (!validation.valid) {
-            const msgs = validation.errors.map(
-                (e) => `${e.path}: ${e.message}`,
-            );
-            return {
-                runId: "",
-                success: false,
-                error: { message: `Validation failed:\n${msgs.join("\n")}` },
-            };
+        if (!options?.skipValidation) {
+            const validation = validateWorkflowIR(ir, this.registry.all());
+            if (!validation.valid) {
+                const msgs = validation.errors.map(
+                    (e) => `${e.path}: ${e.message}`,
+                );
+                return {
+                    runId: "",
+                    success: false,
+                    error: {
+                        message: `Validation failed:\n${msgs.join("\n")}`,
+                    },
+                };
+            }
         }
 
         const runId = `run-${randomUUID()}`;
@@ -345,7 +358,7 @@ export class WorkflowEngine {
         });
 
         try {
-            await this.executeScope(
+            const exit = await this.executeScope(
                 ir.nodes,
                 ir.entry,
                 scope,
@@ -358,7 +371,34 @@ export class WorkflowEngine {
                 constraints,
             );
 
-            const output = resolveTemplate(ir.output, scope);
+            let output: unknown;
+            try {
+                output = resolveTemplate(ir.output, scope);
+            } catch (resolveErr) {
+                // Output resolution failed. If we went through an error
+                // recovery path (e.g. cleanup), report the original error
+                // instead of the confusing "unresolved reference" message.
+                if (exit.kind === "terminal" && exit.errorHandled) {
+                    const { message, nodeId } = exit.errorHandled;
+                    debug(
+                        "run %s failed (error handled, output unresolvable): %s",
+                        runId,
+                        message,
+                    );
+                    this.emit({
+                        type: "runFailed",
+                        runId,
+                        error: { message },
+                        timestamp: Date.now(),
+                    });
+                    return {
+                        runId,
+                        success: false,
+                        error: { message, nodeId },
+                    };
+                }
+                throw resolveErr;
+            }
 
             debug("run %s completed", runId);
 
@@ -400,6 +440,11 @@ export class WorkflowEngine {
         let currentId: string | undefined = entryId;
         let pendingError:
             | { error: Record<string, unknown>; trigger: unknown }
+            | undefined;
+        // Track the first error that was handled via onError so the caller
+        // knows this scope completed through an error-recovery path.
+        let handledError:
+            | { message: string; nodeId: string | undefined }
             | undefined;
 
         while (currentId) {
@@ -443,6 +488,12 @@ export class WorkflowEngine {
                         signal,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
                         },
                         policy,
                         approve,
@@ -482,6 +533,12 @@ export class WorkflowEngine {
                         signal,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
                         },
                         policy,
                         approve,
@@ -492,7 +549,9 @@ export class WorkflowEngine {
             }
         }
 
-        return { kind: "terminal" };
+        return handledError
+            ? { kind: "terminal", errorHandled: handledError }
+            : { kind: "terminal" };
     }
 
     private async executeTask(
@@ -555,9 +614,11 @@ export class WorkflowEngine {
             debug("task %s (%s) executing", nodeId, node.task);
 
             // Build per-task signal with optional timeout.
+            // Node-level timeoutMs overrides the global default.
+            const effectiveTimeout = node.timeoutMs ?? taskTimeoutMs;
             let taskSignal = signal;
             let taskAbortController: AbortController | undefined;
-            if (taskTimeoutMs !== undefined) {
+            if (effectiveTimeout !== undefined) {
                 taskAbortController = new AbortController();
                 // Propagate parent signal
                 if (signal.aborted) {
@@ -578,31 +639,42 @@ export class WorkflowEngine {
                 scopePath: [...scopePath],
                 signal: taskSignal,
                 ...(constraints ? { constraints } : {}),
+                ...(node.outputSchema
+                    ? { outputSchema: node.outputSchema }
+                    : {}),
             };
 
             let result: TaskResult;
-            if (taskTimeoutMs !== undefined) {
-                let timeoutId: ReturnType<typeof setTimeout>;
-                let completed = false;
-                const timeout = new Promise<never>((_, reject) => {
-                    timeoutId = setTimeout(() => {
-                        if (!completed) {
-                            taskAbortController!.abort("Task timed out");
-                            reject(
-                                new EngineError(
-                                    `Task "${node.task}" at "${nodeId}" timed out after ${taskTimeoutMs}ms`,
-                                ),
-                            );
-                        }
-                    }, taskTimeoutMs);
+            if (effectiveTimeout !== undefined) {
+                const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
+                const onParentAbort = () =>
+                    taskAbortController!.abort(signal.reason);
+                const onTimeoutAbort = () =>
+                    taskAbortController!.abort("Task timed out");
+                signal.addEventListener("abort", onParentAbort, {
+                    once: true,
                 });
-                result = await Promise.race([
-                    task.execute(resolvedInput, ctx).then((r) => {
-                        completed = true;
-                        return r;
-                    }),
-                    timeout,
-                ]).finally(() => clearTimeout(timeoutId));
+                timeoutSignal.addEventListener("abort", onTimeoutAbort, {
+                    once: true,
+                });
+                try {
+                    result = await task.execute(resolvedInput, ctx);
+                } catch (e) {
+                    if (timeoutSignal.aborted) {
+                        throw new EngineError(
+                            `Task "${node.task}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
+                        );
+                    }
+                    throw e;
+                } finally {
+                    signal.removeEventListener("abort", onParentAbort);
+                    timeoutSignal.removeEventListener("abort", onTimeoutAbort);
+                }
+                if (timeoutSignal.aborted) {
+                    throw new EngineError(
+                        `Task "${node.task}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
+                    );
+                }
             } else {
                 result = await task.execute(resolvedInput, ctx);
             }

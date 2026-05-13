@@ -77,16 +77,9 @@
             "inputs": {
               "url": { "$from": "input", "name": "url" }
             },
-            "next": "fetchSucceeded",
+            "next": "@exit",
             "onError": "incrementAttempt",
             "bind": "fetchResult"
-          },
-          "fetchSucceeded": {
-            "kind": "branch",
-            "selector": "done",
-            "selectorSchema": { "enum": ["done"] },
-            "cases": { "done": "@exit" },
-            "default": "@exit"
           },
           "incrementAttempt": {
             "kind": "task",
@@ -158,7 +151,12 @@
           "path": ["result"]
         }
       },
-      "output": { "$from": "scope", "name": "fetchResult", "path": ["body"] },
+      "output": {
+        "$from": "scope",
+        "name": "fetchResult",
+        "path": ["body"],
+        "optional": true
+      },
       "outputSchema": { "type": "string" },
       "maxIterations": 3,
       "next": "buildPrompt",
