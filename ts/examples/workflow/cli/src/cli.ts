@@ -236,11 +236,13 @@ function loadEnvFiles(argv: string[]): void {
             const envPath = resolve(argv[i + 1]);
             const result = dotenv.config({ path: envPath });
             if (result.error) {
+                // fail() calls process.exit and never returns.
                 fail(
                     `Failed to load env file ${envPath}: ${result.error.message}`,
                 );
+            } else {
+                console.error(`[env] Loaded ${envPath}`);
             }
-            console.error(`[env] Loaded ${envPath}`);
         }
     }
 }

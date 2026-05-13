@@ -3,6 +3,9 @@
 
 import {
     WorkflowIR,
+    TaskNode,
+    LoopNode,
+    BranchNode,
     TaskDefinition,
     validateWorkflowIR,
 } from "../src/index.js";
@@ -26,6 +29,55 @@ function makeMinimalIR(overrides?: Partial<WorkflowIR>): WorkflowIR {
             },
         },
         output: { $from: "scope", name: "out" },
+        ...overrides,
+    };
+}
+
+/** Build a task node with sensible defaults. */
+function makeTaskNode(overrides?: Partial<TaskNode>): TaskNode {
+    return {
+        kind: "task",
+        task: "noop",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        inputs: {},
+        ...overrides,
+    };
+}
+
+/**
+ * Build a loop node with a single-counter state and a branch body that
+ * exits/iterates. Override any field via `overrides`; override the body
+ * entry or nodes via `bodyOverrides`.
+ */
+function makeLoopNode(
+    overrides?: Partial<LoopNode>,
+    bodyOverrides?: Partial<LoopNode["body"]>,
+): LoopNode {
+    return {
+        kind: "loop",
+        inputs: {},
+        inputSchema: { type: "object" },
+        state: {
+            i: { schema: { type: "integer" }, initial: 0 },
+        },
+        body: {
+            entry: "decide",
+            nodes: {
+                decide: {
+                    kind: "branch",
+                    selector: true,
+                    selectorSchema: { type: "boolean" },
+                    cases: { true: "@exit", false: "@iterate" },
+                    default: "@iterate",
+                } as BranchNode,
+            },
+            ...bodyOverrides,
+        },
+        iterateState: { i: { $from: "state", name: "i" } },
+        output: { $from: "state", name: "i" },
+        outputSchema: { type: "integer" },
+        maxIterations: 10,
         ...overrides,
     };
 }
@@ -70,15 +122,10 @@ describe("validateWorkflowIR", () => {
     it("rejects broken next target", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "task",
-                    task: "noop",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    inputs: {},
+                start: makeTaskNode({
                     next: "nowhere",
                     bind: "out",
-                },
+                }),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -96,15 +143,10 @@ describe("validateWorkflowIR", () => {
     it("rejects broken onError target", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "task",
-                    task: "noop",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    inputs: {},
+                start: makeTaskNode({
                     onError: "ghost",
                     bind: "out",
-                },
+                }),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -153,34 +195,15 @@ describe("validateWorkflowIR", () => {
     it("rejects loop with missing body entry", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "loop",
-                    inputs: {},
-                    inputSchema: { type: "object" },
-                    state: {
-                        i: {
-                            schema: { type: "integer" },
-                            initial: 0,
-                        },
-                    },
-                    body: {
+                start: makeLoopNode(
+                    { bind: "out" },
+                    {
                         entry: "missing",
                         nodes: {
-                            step: {
-                                kind: "task",
-                                task: "noop",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                            },
+                            step: makeTaskNode(),
                         },
                     },
-                    iterateState: { i: { $from: "state", name: "i" } },
-                    output: { $from: "state", name: "i" },
-                    outputSchema: { type: "integer" },
-                    maxIterations: 10,
-                    bind: "out",
-                } as any,
+                ),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -193,35 +216,15 @@ describe("validateWorkflowIR", () => {
     it("rejects loop body node with broken next target", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "loop",
-                    inputs: {},
-                    inputSchema: { type: "object" },
-                    state: {
-                        i: {
-                            schema: { type: "integer" },
-                            initial: 0,
-                        },
-                    },
-                    body: {
+                start: makeLoopNode(
+                    { bind: "out" },
+                    {
                         entry: "step",
                         nodes: {
-                            step: {
-                                kind: "task",
-                                task: "noop",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                                next: "ghost",
-                            },
+                            step: makeTaskNode({ next: "ghost" }),
                         },
                     },
-                    iterateState: { i: { $from: "state", name: "i" } },
-                    output: { $from: "state", name: "i" },
-                    outputSchema: { type: "integer" },
-                    maxIterations: 10,
-                    bind: "out",
-                } as any,
+                ),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -234,37 +237,7 @@ describe("validateWorkflowIR", () => {
     it("allows sentinel @iterate and @exit inside loop body branch", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "loop",
-                    inputs: {},
-                    inputSchema: { type: "object" },
-                    state: {
-                        i: {
-                            schema: { type: "integer" },
-                            initial: 0,
-                        },
-                    },
-                    body: {
-                        entry: "decide",
-                        nodes: {
-                            decide: {
-                                kind: "branch",
-                                selector: true,
-                                selectorSchema: { type: "boolean" },
-                                cases: {
-                                    true: "@exit",
-                                    false: "@iterate",
-                                },
-                                default: "@iterate",
-                            } as any,
-                        },
-                    },
-                    iterateState: { i: { $from: "state", name: "i" } },
-                    output: { $from: "state", name: "i" },
-                    outputSchema: { type: "integer" },
-                    maxIterations: 10,
-                    bind: "out",
-                } as any,
+                start: makeLoopNode({ bind: "out" }),
             },
             outputSchema: { type: "integer" },
         });
@@ -294,17 +267,9 @@ describe("validateWorkflowIR", () => {
     it("rejects loop next pointing to non-existent node", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "loop",
-                    inputs: {},
-                    inputSchema: { type: "object" },
-                    state: {
-                        i: {
-                            schema: { type: "integer" },
-                            initial: 0,
-                        },
-                    },
-                    body: {
+                start: makeLoopNode(
+                    { next: "nowhere", bind: "out" },
+                    {
                         entry: "step",
                         nodes: {
                             step: {
@@ -313,16 +278,10 @@ describe("validateWorkflowIR", () => {
                                 selectorSchema: { type: "boolean" },
                                 cases: { true: "@exit" },
                                 default: "@iterate",
-                            } as any,
+                            } as BranchNode,
                         },
                     },
-                    iterateState: { i: { $from: "state", name: "i" } },
-                    output: { $from: "state", name: "i" },
-                    outputSchema: { type: "integer" },
-                    maxIterations: 10,
-                    next: "nowhere",
-                    bind: "out",
-                } as any,
+                ),
             },
         });
         const result = validateWorkflowIR(ir);
@@ -360,15 +319,10 @@ describe("validateWorkflowIR", () => {
     it("includes path in error messages", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "task",
-                    task: "noop",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    inputs: {},
+                start: makeTaskNode({
                     next: "ghost",
                     bind: "out",
-                },
+                }),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -379,34 +333,15 @@ describe("validateWorkflowIR", () => {
     it("rejects loop body without sentinel when no onError", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "loop",
-                    inputs: {},
-                    inputSchema: { type: "object" },
-                    state: {
-                        i: {
-                            schema: { type: "integer" },
-                            initial: 0,
-                        },
-                    },
-                    body: {
+                start: makeLoopNode(
+                    { bind: "out" },
+                    {
                         entry: "step",
                         nodes: {
-                            step: {
-                                kind: "task",
-                                task: "noop",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                            },
+                            step: makeTaskNode(),
                         },
                     },
-                    iterateState: { i: { $from: "state", name: "i" } },
-                    output: { $from: "state", name: "i" },
-                    outputSchema: { type: "integer" },
-                    maxIterations: 10,
-                    bind: "out",
-                } as any,
+                ),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -419,43 +354,21 @@ describe("validateWorkflowIR", () => {
     it("allows loop body without sentinel when onError is set", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: {
-                    kind: "loop",
-                    inputs: {},
-                    inputSchema: { type: "object" },
-                    state: {
-                        i: {
-                            schema: { type: "integer" },
-                            initial: 0,
-                        },
+                start: makeLoopNode(
+                    {
+                        output: null,
+                        outputSchema: { type: "null" },
+                        onError: "recover",
+                        bind: "out",
                     },
-                    body: {
+                    {
                         entry: "step",
                         nodes: {
-                            step: {
-                                kind: "task",
-                                task: "noop",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                            },
+                            step: makeTaskNode(),
                         },
                     },
-                    iterateState: { i: { $from: "state", name: "i" } },
-                    output: null,
-                    outputSchema: { type: "null" },
-                    maxIterations: 10,
-                    onError: "recover",
-                    bind: "out",
-                } as any,
-                recover: {
-                    kind: "task",
-                    task: "noop",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    inputs: {},
-                    bind: "out",
-                },
+                ),
+                recover: makeTaskNode({ bind: "out" }),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));

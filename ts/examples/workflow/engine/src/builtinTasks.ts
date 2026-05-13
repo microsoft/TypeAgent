@@ -46,6 +46,11 @@ function sealObjects(schema: JSONSchema): JSONSchema {
     ) {
         copy.items = sealObjects(copy.items);
     }
+    for (const kw of ["oneOf", "anyOf", "allOf"] as const) {
+        if (Array.isArray(copy[kw])) {
+            copy[kw] = (copy[kw] as JSONSchema[]).map(sealObjects);
+        }
+    }
     return copy;
 }
 

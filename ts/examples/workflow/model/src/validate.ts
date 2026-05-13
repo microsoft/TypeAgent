@@ -205,35 +205,47 @@ function detectCycles(cfg: ScopeCFG): string[][] {
     }
 
     const cycles: string[][] = [];
-    const stack: string[] = [];
 
-    function dfs(u: string): void {
-        color.set(u, GRAY);
-        stack.push(u);
-        const succs = cfg.edges.get(u);
-        if (succs) {
-            for (const v of succs) {
+    function dfsIterative(start: string): void {
+        const stack: { node: string; iter: IterableIterator<string> }[] = [];
+        const path: string[] = [];
+
+        color.set(start, GRAY);
+        path.push(start);
+        const startSuccs = cfg.edges.get(start) ?? new Set<string>();
+        stack.push({ node: start, iter: startSuccs.values() });
+
+        while (stack.length > 0) {
+            const frame = stack[stack.length - 1];
+            const next = frame.iter.next();
+            if (next.done) {
+                color.set(frame.node, BLACK);
+                path.pop();
+                stack.pop();
+            } else {
+                const v = next.value;
                 const c = color.get(v);
                 if (c === GRAY) {
-                    // Back edge: extract cycle from stack
-                    const idx = stack.indexOf(v);
-                    cycles.push(stack.slice(idx));
+                    // Back edge: extract cycle from path
+                    const idx = path.indexOf(v);
+                    cycles.push(path.slice(idx));
                 } else if (c === WHITE) {
-                    dfs(v);
+                    color.set(v, GRAY);
+                    path.push(v);
+                    const vSuccs = cfg.edges.get(v) ?? new Set<string>();
+                    stack.push({ node: v, iter: vSuccs.values() });
                 }
             }
         }
-        stack.pop();
-        color.set(u, BLACK);
     }
 
     // Start from entry, then visit any unreached nodes
     if (color.has(cfg.entry)) {
-        dfs(cfg.entry);
+        dfsIterative(cfg.entry);
     }
     for (const id of cfg.edges.keys()) {
         if (color.get(id) === WHITE) {
-            dfs(id);
+            dfsIterative(id);
         }
     }
 
@@ -307,20 +319,30 @@ function checkTermination(cfg: ScopeCFG, insideLoop: boolean): Set<string> {
  * The entry node maps to itself.
  */
 function computeImmediateDominators(cfg: ScopeCFG): Map<string, string> {
-    // Compute reverse postorder via DFS from entry
+    // Compute reverse postorder via iterative DFS from entry
     const rpo: string[] = [];
     const visited = new Set<string>();
-    function dfs(u: string): void {
-        visited.add(u);
-        const succs = cfg.edges.get(u);
-        if (succs) {
-            for (const v of succs) {
-                if (!visited.has(v)) dfs(v);
+    {
+        const stack: {
+            node: string;
+            iter: IterableIterator<string>;
+        }[] = [];
+        visited.add(cfg.entry);
+        const entrySuccs = cfg.edges.get(cfg.entry) ?? new Set<string>();
+        stack.push({ node: cfg.entry, iter: entrySuccs.values() });
+        while (stack.length > 0) {
+            const frame = stack[stack.length - 1];
+            const next = frame.iter.next();
+            if (next.done) {
+                rpo.push(frame.node);
+                stack.pop();
+            } else if (!visited.has(next.value)) {
+                visited.add(next.value);
+                const vSuccs = cfg.edges.get(next.value) ?? new Set<string>();
+                stack.push({ node: next.value, iter: vSuccs.values() });
             }
         }
-        rpo.push(u);
     }
-    dfs(cfg.entry);
     rpo.reverse();
 
     // Map node -> rpo index for O(1) lookup
@@ -464,7 +486,7 @@ function buildOnErrorSplits(
             // Success side: nodes dominated by the next target (if any),
             // excluding nodes on the error side.
             let successSide = new Set<string>();
-            const nextTarget = node.kind === "task" ? node.next : node.next;
+            const nextTarget = node.next;
             if (
                 nextTarget &&
                 nextTarget !== "@iterate" &&
@@ -540,9 +562,7 @@ function isBindingCoveredAtNode(
         const hasSuccessBinder = binderList.some((b) =>
             split.successSide.has(b),
         );
-        const hasErrorBinder = binderList.some((b) =>
-            split.errorSide.has(b),
-        );
+        const hasErrorBinder = binderList.some((b) => split.errorSide.has(b));
         if (
             hasSuccessBinder &&
             hasErrorBinder &&
@@ -898,6 +918,7 @@ function checkScopeClosure(
     errors: ValidationError[],
 ): void {
     const bodyBindings = buildBindingMap(loopNode.body.nodes);
+    const outerBindings = buildBindingMap(outerNodes);
     // Also include names available via $from: "input" and $from: "state"
     // (those are legal cross-scope references). We only check $from: "scope".
 
@@ -911,7 +932,6 @@ function checkScopeClosure(
         for (const ref of refs) {
             if (!bodyBindings.has(ref.name)) {
                 // Check if this name exists in the outer scope
-                const outerBindings = buildBindingMap(outerNodes);
                 if (outerBindings.has(ref.name)) {
                     errors.push({
                         path: ref.templatePath,
@@ -985,6 +1005,7 @@ function checkStateSoundness(
             inputs,
             `${prefix}.body.nodes.${id}.inputs`,
         );
+        const inputsPrefix = `${prefix}.body.nodes.${id}.inputs.`;
         for (const ref of stateRefs) {
             if (!stateNames.has(ref.name)) {
                 errors.push({
@@ -997,18 +1018,12 @@ function checkStateSoundness(
                 // Type-compatibility: check the state variable's schema
                 // type against the consumer's expected type at this position.
                 const stateSchema = loopNode.state[ref.name].schema;
-                const inputKey = ref.templatePath.split(".").pop()!;
-                const consumerPropDef =
-                    inputSchema.properties?.[inputKey];
-                const consumerPropSchema =
-                    consumerPropDef !== undefined &&
-                    typeof consumerPropDef !== "boolean"
-                        ? consumerPropDef
-                        : undefined;
-                if (
-                    stateSchema.type &&
-                    consumerPropSchema?.type
-                ) {
+                const consumerPropSchema = resolveConsumerPropertySchema(
+                    ref.templatePath,
+                    inputsPrefix,
+                    inputSchema,
+                );
+                if (stateSchema.type && consumerPropSchema?.type) {
                     const stateTypes = normalizeTypeSet(stateSchema.type);
                     const consumerTypes = normalizeTypeSet(
                         consumerPropSchema.type,
@@ -1342,6 +1357,54 @@ function isTopSchema(schema: JSONSchema): boolean {
     return Object.keys(schema).length === 0;
 }
 
+/**
+ * Property-order-independent JSON stringification for schema comparison.
+ * Object keys are sorted recursively so structurally identical schemas
+ * produce the same string regardless of key insertion order.
+ */
+function canonicalStringify(value: unknown): string {
+    if (value === null || typeof value !== "object") {
+        return JSON.stringify(value);
+    }
+    if (Array.isArray(value)) {
+        return "[" + value.map(canonicalStringify).join(",") + "]";
+    }
+    const sorted = Object.keys(value as Record<string, unknown>).sort();
+    return (
+        "{" +
+        sorted
+            .map(
+                (k) =>
+                    JSON.stringify(k) +
+                    ":" +
+                    canonicalStringify((value as Record<string, unknown>)[k]),
+            )
+            .join(",") +
+        "}"
+    );
+}
+
+/**
+ * Look up the consumer's expected schema for an input field given a
+ * template path. Returns undefined for nested paths (containing "." or
+ * "[" after the inputs prefix) since those can't be directly mapped to
+ * an inputSchema property.
+ */
+function resolveConsumerPropertySchema(
+    templatePath: string,
+    inputsPrefix: string,
+    inputSchema: JSONSchema,
+): JSONSchema | undefined {
+    if (!templatePath.startsWith(inputsPrefix)) return undefined;
+    const fieldName = templatePath.slice(inputsPrefix.length);
+    if (!fieldName || fieldName.includes(".") || fieldName.includes("[")) {
+        return undefined;
+    }
+    const propDef = inputSchema.properties?.[fieldName];
+    if (!propDef || typeof propDef === "boolean") return undefined;
+    return propDef;
+}
+
 // ---- Pass 7: Type compatibility ----
 
 /** Context for resolving template types within a scope. */
@@ -1365,9 +1428,9 @@ function jsonValueToSchema(value: unknown): JSONSchema {
     if (Array.isArray(value)) {
         if (value.length === 0) return { type: "array" };
         const elemSchemas = value.map(jsonValueToSchema);
-        const firstJson = JSON.stringify(elemSchemas[0]);
+        const firstKey = canonicalStringify(elemSchemas[0]);
         const allSame = elemSchemas.every(
-            (s) => JSON.stringify(s) === firstJson,
+            (s) => canonicalStringify(s) === firstKey,
         );
         return allSame
             ? { type: "array", items: elemSchemas[0] }
@@ -1376,9 +1439,7 @@ function jsonValueToSchema(value: unknown): JSONSchema {
     if (typeof value === "object") {
         const properties: Record<string, JSONSchema> = {};
         const required: string[] = [];
-        for (const [k, v] of Object.entries(
-            value as Record<string, unknown>,
-        )) {
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
             properties[k] = jsonValueToSchema(v);
             required.push(k);
         }
@@ -1412,9 +1473,9 @@ function resolveTemplateType(
             .map((e) => resolveTemplateType(e, ctx))
             .filter((s): s is JSONSchema => s !== undefined);
         if (elemSchemas.length === 0) return { type: "array" };
-        const firstJson = JSON.stringify(elemSchemas[0]);
+        const firstKey = canonicalStringify(elemSchemas[0]);
         const allSame = elemSchemas.every(
-            (s) => JSON.stringify(s) === firstJson,
+            (s) => canonicalStringify(s) === firstKey,
         );
         return allSame
             ? { type: "array", items: elemSchemas[0] }
@@ -1597,16 +1658,10 @@ function validateTypeCompatibility(
             const inputs = node.inputs;
             const inputProps = node.inputSchema.properties ?? {};
             for (const [fieldName, templateValue] of Object.entries(inputs)) {
-                const resolved = resolveTemplateType(
-                    templateValue,
-                    ctx,
-                );
+                const resolved = resolveTemplateType(templateValue, ctx);
                 if (!resolved) continue;
                 const consumerPropDef = inputProps[fieldName];
-                if (
-                    !consumerPropDef ||
-                    typeof consumerPropDef === "boolean"
-                ) {
+                if (!consumerPropDef || typeof consumerPropDef === "boolean") {
                     continue;
                 }
                 if (!isStructuralSubtype(resolved, consumerPropDef)) {
@@ -1640,9 +1695,7 @@ function validateTypeCompatibility(
 
             // Check cases keys against selectorSchema enum
             if (node.selectorSchema.enum) {
-                const validKeys = new Set(
-                    node.selectorSchema.enum.map(String),
-                );
+                const validKeys = new Set(node.selectorSchema.enum.map(String));
                 for (const caseKey of Object.keys(node.cases)) {
                     if (!validKeys.has(caseKey)) {
                         errors.push({
@@ -1685,15 +1738,9 @@ function validateTypeCompatibility(
                     node.output,
                     bodyCtx,
                 );
-                if (
-                    outputResolved &&
-                    !isTopSchema(node.outputSchema)
-                ) {
+                if (outputResolved && !isTopSchema(node.outputSchema)) {
                     if (
-                        !isStructuralSubtype(
-                            outputResolved,
-                            node.outputSchema,
-                        )
+                        !isStructuralSubtype(outputResolved, node.outputSchema)
                     ) {
                         errors.push({
                             path: `${path}.output`,
@@ -1775,9 +1822,7 @@ function checkPhiMergeTypes(
                 if (!binderSchema) continue;
 
                 // Apply path projection if present
-                const refPath = obj["path"] as
-                    | (string | number)[]
-                    | undefined;
+                const refPath = obj["path"] as (string | number)[] | undefined;
                 const projected =
                     refPath && refPath.length > 0
                         ? resolveSchemaPath(binderSchema, refPath)
@@ -2000,6 +2045,7 @@ function validateSchemaCompat(
             inputs = node.inputs;
 
             // Also check iterateState and output templates.
+            const bodyBindings = buildBindingMap(node.body.nodes);
             for (const [stateName, stateTemplate] of Object.entries(
                 node.iterateState,
             )) {
@@ -2009,7 +2055,6 @@ function validateSchemaCompat(
                 );
                 for (const ref of stateRefs) {
                     // iterateState refs resolve in the body scope
-                    const bodyBindings = buildBindingMap(node.body.nodes);
                     const producerSchema = bodyBindings.get(ref.name);
                     if (!producerSchema) continue;
                     const err = checkSchemaCompat(
@@ -2026,7 +2071,6 @@ function validateSchemaCompat(
             const outputRefs = collectScopeRefs(node.output, `${path}.output`);
             for (const ref of outputRefs) {
                 // output refs resolve in the body scope
-                const bodyBindings = buildBindingMap(node.body.nodes);
                 const producerSchema = bodyBindings.get(ref.name);
                 if (!producerSchema) continue;
                 const err = checkSchemaCompat(
@@ -2049,6 +2093,7 @@ function validateSchemaCompat(
                 ? node.inputSchema
                 : undefined;
 
+        const inputsPrefix = `${path}.inputs.`;
         const refs = collectScopeRefs(inputs, `${path}.inputs`);
         for (const ref of refs) {
             const producerSchema = bindings.get(ref.name);
@@ -2063,29 +2108,13 @@ function validateSchemaCompat(
                 }
                 continue;
             }
-            // Extract consumer expected type from inputSchema.
-            // Only for direct (non-nested) input properties where the
-            // entire value is a scope ref (e.g., inputs.a = { $from: ... }).
-            // Nested refs like inputs.vars.diff can't be checked because
-            // the consumer schema is for "vars" (object), not "vars.diff".
-            let consumerType: string | string[] | undefined;
-            const inputsPrefix = `${path}.inputs.`;
-            if (
-                consumerInputSchema &&
-                ref.templatePath.startsWith(inputsPrefix)
-            ) {
-                const remainder = ref.templatePath.slice(inputsPrefix.length);
-                // Only check when remainder is a simple property name (no dots)
-                if (!remainder.includes(".") && !remainder.includes("[")) {
-                    const props = consumerInputSchema.properties;
-                    if (props && remainder in props) {
-                        const sub = props[remainder];
-                        if (typeof sub !== "boolean") {
-                            consumerType = sub.type;
-                        }
-                    }
-                }
-            }
+            const consumerType = consumerInputSchema
+                ? resolveConsumerPropertySchema(
+                      ref.templatePath,
+                      inputsPrefix,
+                      consumerInputSchema,
+                  )?.type
+                : undefined;
             const err = checkSchemaCompat(
                 producerSchema,
                 ref.path,
