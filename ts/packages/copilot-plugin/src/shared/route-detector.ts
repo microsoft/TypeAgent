@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Shared question/action detection logic.
  * Used by both direct and MCP-redirect hooks.

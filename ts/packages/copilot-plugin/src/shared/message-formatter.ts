@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Shared display message formatting for TypeAgent responses.
  * Filters transient status messages and formats for markdown rendering.
