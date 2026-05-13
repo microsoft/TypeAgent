@@ -10,10 +10,11 @@
 import { WorkflowIR, validateWorkflowIR } from "workflow-model";
 import { lex } from "./lexer.js";
 import { Parser } from "./parser.js";
+import { TypeChecker } from "./typeChecker.js";
 import { Emitter, TaskSchemaInfo } from "./emitter.js";
 
 export interface CompileError {
-    phase: "lex" | "parse" | "emit" | "validate";
+    phase: "lex" | "parse" | "typecheck" | "emit" | "validate";
     message: string;
     line: number;
     col: number;
@@ -62,6 +63,21 @@ export function compile(
         });
     }
     if (!ast || parseErrors.length > 0) {
+        return { errors };
+    }
+
+    // Type check
+    const checker = new TypeChecker(taskSchemas);
+    const typeErrors = checker.check(ast);
+    for (const e of typeErrors) {
+        errors.push({
+            phase: "typecheck",
+            message: e.message,
+            line: e.line,
+            col: e.col,
+        });
+    }
+    if (typeErrors.length > 0) {
         return { errors };
     }
 
