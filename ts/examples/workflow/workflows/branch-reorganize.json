@@ -2,7 +2,7 @@
   "kind": "workflow",
   "name": "branch-reorganize",
   "version": "1",
-  "description": "Analyze changes in a feature branch against a base branch, reorganize into separate buildable/testable commits on new branches suitable for independent PRs, then create a validation branch merging all new branches to verify the combined diff matches the original. NOTE: The LLM is asked to produce dependsOn arrays for ordering hints, but the workflow currently creates all branches from baseBranch. Dependency-aware branching (topo-sort + merge-based bases) is not yet implemented.",
+  "description": "Analyze changes in a feature branch against a base branch, reorganize into separate buildable/testable commits on new branches suitable for independent PRs, then create a validation branch merging all new branches to verify the combined diff matches the original. Groups with dependsOn are created by first merging their dependency branches, so they contain the prerequisite changes.",
   "inputSchema": {
     "type": "object",
     "required": [
@@ -42,7 +42,7 @@
   },
   "outputSchema": {
     "type": "object",
-    "required": ["plan", "branches", "validationBranch", "validated"],
+    "required": [],
     "properties": {
       "plan": {
         "type": "object",
@@ -66,7 +66,7 @@
   "constants": {
     "analysisPrompt": {
       "schema": { "type": "string" },
-      "value": "You are an expert software engineer reorganizing a feature branch into clean, independently-reviewable PRs.\n\nGiven the following information about changes in a feature branch:\n- Changed files list\n- Full diff\n\nAnalyze the changes and produce a JSON reorganization plan. Each group becomes a separate branch/PR.\n\nRules:\n1. Each group MUST be independently buildable and pass tests when applied on top of the base branch (plus any dependencies).\n2. Groups should be ordered so later groups may depend on earlier ones (sequential dependency), OR be fully independent.\n3. Every changed file must appear in exactly one group.\n4. Group by logical concern: e.g., refactoring, new feature, bug fix, config changes, test additions.\n5. Prefer smaller, focused groups over large ones.\n6. If a group depends on another, list it in dependsOn. The branch for a dependent group will be based on the merge of its dependencies rather than just the base branch.\n\nRespond with ONLY valid JSON in this exact format (no markdown fencing):\n{\n  \"groups\": [\n    {\n      \"name\": \"short-kebab-case-name\",\n      \"description\": \"What this group does\",\n      \"files\": [\"path/to/file1.ts\", \"path/to/file2.ts\"],\n      \"dependsOn\": [],\n      \"commitMessage\": \"type(scope): description\"\n    }\n  ]\n}\n\nThe dependsOn array lists names of groups that must be merged before this one. Empty means fully independent.\n\nChanged files:\n{{files}}\n\nFull diff:\n{{diff}}"
+      "value": "You are an expert software engineer reorganizing a feature branch into clean, independently-reviewable PRs.\n\nGiven the following information about changes in a feature branch:\n- Changed files list\n- Full diff\n\nAnalyze the changes and produce a JSON reorganization plan. Each group becomes a separate branch/PR.\n\nRules:\n1. Each group MUST be independently buildable and pass tests when applied on top of the base branch (plus any dependencies).\n2. The groups array MUST be in topological order: if group B depends on group A, A must appear before B in the array.\n3. Every changed file must appear in exactly one group.\n4. Group by logical concern: e.g., refactoring, new feature, bug fix, config changes, test additions.\n5. Prefer smaller, focused groups over large ones.\n6. If a group depends on another, list it in dependsOn. The branch for a dependent group will be created by first merging its dependency branches, so it will contain those changes.\n7. dependsOn references must only refer to groups that appear earlier in the array.\n\nRespond with ONLY valid JSON in this exact format (no markdown fencing):\n{\n  \"groups\": [\n    {\n      \"name\": \"short-kebab-case-name\",\n      \"description\": \"What this group does\",\n      \"files\": [\"path/to/file1.ts\", \"path/to/file2.ts\"],\n      \"dependsOn\": [],\n      \"commitMessage\": \"type(scope): description\"\n    }\n  ]\n}\n\nThe dependsOn array lists names of groups that must be merged before this one. Empty means the branch is created directly from the base branch.\n\nChanged files:\n{{files}}\n\nFull diff:\n{{diff}}"
     }
   },
   "nodes": {
@@ -266,8 +266,27 @@
       },
       "timeoutMs": 120000,
       "next": "createBranchesLoop",
-      "onError": "buildCleanupScript",
+      "onError": "cleanupFromAnalysis",
       "bind": "analysisResult"
+    },
+    "cleanupFromAnalysis": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": { "template": "", "vars": {} },
+      "next": "buildCleanupScript"
     },
     "createBranchesLoop": {
       "kind": "loop",
@@ -374,8 +393,35 @@
               },
               "delimiter": "\n"
             },
-            "next": "buildBranchScript",
+            "next": "joinDeps",
             "bind": "fileListJoined"
+          },
+          "joinDeps": {
+            "kind": "task",
+            "task": "string.join",
+            "inputSchema": {
+              "type": "object",
+              "required": ["list", "delimiter"],
+              "properties": {
+                "list": { "type": "array", "items": { "type": "string" } },
+                "delimiter": { "type": "string" }
+              }
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["text"],
+              "properties": { "text": { "type": "string" } }
+            },
+            "inputs": {
+              "list": {
+                "$from": "scope",
+                "name": "currentGroup",
+                "path": ["element", "dependsOn"]
+              },
+              "delimiter": " "
+            },
+            "next": "buildBranchScript",
+            "bind": "depsJoined"
           },
           "buildBranchScript": {
             "kind": "task",
@@ -394,7 +440,7 @@
               "properties": { "text": { "type": "string" } }
             },
             "inputs": {
-              "template": "set -e\ngit checkout -b \"{{branchPrefix}}{{name}}\" \"{{baseBranch}}\"\nwhile IFS= read -r f; do\n  [ -n \"$f\" ] && git checkout \"{{featureBranch}}\" -- \"$f\"\ndone <<'FILELIST'\n{{files}}\nFILELIST\ngit add .\ngit commit -m \"{{commitMessage}}\"",
+              "template": "set -e\nBRANCH_NAME=\"{{branchPrefix}}{{name}}\"\nDEPS=\"{{deps}}\"\nif [ -n \"$DEPS\" ]; then\n  git checkout -b \"$BRANCH_NAME\" \"{{baseBranch}}\"\n  for dep in $DEPS; do\n    git merge --no-edit \"{{branchPrefix}}$dep\"\n  done\nelse\n  git checkout -b \"$BRANCH_NAME\" \"{{baseBranch}}\"\nfi\nwhile IFS= read -r f; do\n  [ -n \"$f\" ] && git checkout \"{{featureBranch}}\" -- \"$f\"\ndone <<'FILELIST'\n{{files}}\nFILELIST\ngit add .\ngit commit -m \"{{commitMessage}}\"",
               "vars": {
                 "name": {
                   "$from": "scope",
@@ -404,6 +450,11 @@
                 "featureBranch": { "$from": "input", "name": "featureBranch" },
                 "baseBranch": { "$from": "input", "name": "baseBranch" },
                 "branchPrefix": { "$from": "input", "name": "branchPrefix" },
+                "deps": {
+                  "$from": "scope",
+                  "name": "depsJoined",
+                  "path": ["text"]
+                },
                 "files": {
                   "$from": "scope",
                   "name": "fileListJoined",
@@ -695,8 +746,27 @@
       "outputSchema": { "type": "array", "items": { "type": "string" } },
       "maxIterations": 50,
       "next": "joinBranchNames",
-      "onError": "buildCleanupScript",
+      "onError": "cleanupFromLoop",
       "bind": "createdBranches"
+    },
+    "cleanupFromLoop": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": { "template": "", "vars": {} },
+      "next": "buildCleanupScript"
     },
     "joinBranchNames": {
       "kind": "task",
@@ -782,7 +852,7 @@
         "cwd": { "$from": "input", "name": "repoPath" }
       },
       "next": "buildValBranchName",
-      "onError": "buildCleanupScript",
+      "onError": "cleanupFromMerge",
       "bind": "mergeResult"
     },
     "buildValBranchName": {
@@ -866,8 +936,46 @@
         ],
         "cwd": { "$from": "input", "name": "repoPath" }
       },
-      "onError": "buildCleanupScript",
+      "onError": "cleanupFromValidation",
       "bind": "validationResult"
+    },
+    "cleanupFromMerge": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": { "template": "", "vars": {} },
+      "next": "buildCleanupScript"
+    },
+    "cleanupFromValidation": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": { "template": "", "vars": {} },
+      "next": "buildCleanupScript"
     },
     "buildCleanupScript": {
       "kind": "task",
@@ -932,17 +1040,28 @@
   },
   "entry": "recordBranch",
   "output": {
-    "plan": { "$from": "scope", "name": "analysisResult", "path": ["value"] },
-    "branches": { "$from": "scope", "name": "createdBranches" },
+    "plan": {
+      "$from": "scope",
+      "name": "analysisResult",
+      "path": ["value"],
+      "optional": true
+    },
+    "branches": {
+      "$from": "scope",
+      "name": "createdBranches",
+      "optional": true
+    },
     "validationBranch": {
       "$from": "scope",
       "name": "valBranchName",
-      "path": ["text"]
+      "path": ["text"],
+      "optional": true
     },
     "validated": {
       "$from": "scope",
       "name": "validationResult",
-      "path": ["stdout"]
+      "path": ["stdout"],
+      "optional": true
     }
   }
 }
