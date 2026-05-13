@@ -29,7 +29,7 @@ const sharedPatterns = (config.env.sharedPatterns ?? []).map(
 );
 let paramSharedVault = undefined;
 let paramPrivateVault = undefined;
-let paramCommit = false;
+let paramCommit = true;
 let paramVerbose = false;
 let paramFormat = undefined; // "yaml" | "dotenv" | undefined (auto-detect)
 
@@ -435,17 +435,82 @@ function getVaultNames(dotEnv) {
 }
 
 async function pushSecrets() {
+    const format = resolveFormat();
+
+    // YAML mode: push the whole file as a single secret
+    if (format === "yaml") {
+        return pushYamlConfig();
+    }
+
+    // Legacy dotenv mode: push individual secrets
+    console.log(
+        chalk.yellow(
+            "[DEPRECATED] Pushing individual .env secrets. Use YAML format instead.\n" +
+            "  Run without --dotenv to push config.local.yaml as a single secret.\n",
+        ),
+    );
+    return pushDotenvSecrets();
+}
+
+/**
+ * Push config.local.yaml as a single secret to Key Vault.
+ */
+async function pushYamlConfig() {
+    if (!fs.existsSync(yamlPath)) {
+        console.error(
+            chalk.red(`${yamlPath} not found. Nothing to push.`),
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    const keyVaultClient = await timed("az login check", () =>
+        getKeyVaultClient(),
+    );
+    const vaultName = paramSharedVault ?? config.vault.shared;
+    const secretName = config.vault.configSecret ?? "typeagent-config";
+    const yamlContent = await fs.promises.readFile(yamlPath, "utf8");
+
+    console.log(
+        `Pushing ${chalk.cyanBright(yamlPath)} as '${chalk.cyanBright(secretName)}' to ${chalk.cyanBright(vaultName)} key vault.`,
+    );
+
+    if (!paramCommit) {
+        console.log(
+            `\n[dry-run] Would write secret '${secretName}' to vault '${vaultName}'.\n` +
+            `Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
+        );
+        return;
+    }
+
+    try {
+        await keyVaultClient.writeSecret(vaultName, secretName, yamlContent);
+        console.log(
+            chalk.green(`\nSecret '${secretName}' updated in vault '${vaultName}'.`),
+        );
+    } catch (e) {
+        console.error(
+            chalk.red(`Failed to write '${secretName}': ${e.message}`),
+        );
+        process.exitCode = 1;
+    }
+}
+
+/**
+ * Legacy path: push individual secrets from .env to Key Vault.
+ */
+async function pushDotenvSecrets() {
     const { entries, format, path: cfgPath } = await readConfig();
     const dotEnv = entries;
     const keyVaultClient = await getKeyVaultClient();
     const vaultNames = getVaultNames(new Map(dotEnv));
     const sharedSecrets = new Map(
-        await getSecrets(keyVaultClient, vaultNames.shared, true),
+        (await getSecrets(keyVaultClient, vaultNames.shared, true)).results,
     );
     const privateSecrets = new Map(
         vaultNames.private
-            ? await getSecrets(keyVaultClient, vaultNames.private, false)
-            : undefined,
+            ? (await getSecrets(keyVaultClient, vaultNames.private, false)).results
+            : [],
     );
 
     console.log(`Pushing secrets from ${chalk.cyanBright(cfgPath)} (${format}) to key vault.`);
@@ -573,15 +638,92 @@ async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
 async function pullSecrets() {
     const overallStart = Date.now();
     const format = resolveFormat();
-    const cfgPath = format === "yaml" ? yamlPath : dotenvPath;
-    const readLabel = format === "yaml" ? "readYamlConfig" : "readDotenv";
-    const readFn = format === "yaml" ? readYamlConfig : readDotenv;
-    const dotEnv = new Map(await timed(readLabel, () => readFn()));
+
+    // YAML mode: pull the single consolidated config secret directly
+    if (format === "yaml") {
+        return pullYamlConfig(overallStart);
+    }
+
+    // Legacy dotenv mode: pull individual secrets
+    console.log(
+        chalk.yellow(
+            "[DEPRECATED] Pulling individual .env secrets. Use YAML format instead (default for new installs).\n" +
+            "  Run without --dotenv to get config.local.yaml.\n",
+        ),
+    );
+    return pullDotenvSecrets(overallStart);
+}
+
+/**
+ * Pull the single typeagent-config YAML secret from Key Vault and write
+ * it directly as config.local.yaml.
+ */
+async function pullYamlConfig(overallStart) {
+    const keyVaultClient = await timed("az login check", () =>
+        getKeyVaultClient(),
+    );
+    const vaultName = paramSharedVault ?? config.vault.shared;
+    const secretName = config.vault.configSecret ?? "typeagent-config";
+
+    console.log(
+        `Pulling ${chalk.cyanBright(secretName)} from ${chalk.cyanBright(vaultName)} key vault...`,
+    );
+
+    let secretValue;
+    try {
+        const response = await keyVaultClient.readSecret(vaultName, secretName);
+        secretValue = response.value;
+    } catch (e) {
+        console.error(
+            chalk.red(
+                `Failed to read '${secretName}' from vault '${vaultName}': ${e.message}`,
+            ),
+        );
+        console.log(
+            chalk.yellow(
+                `\nHint: Make sure the '${secretName}' secret exists in the vault.\n` +
+                `  To push your local config: npm run getKeys -- push --yaml --commit`,
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    if (!secretValue) {
+        console.error(
+            chalk.red(`Secret '${secretName}' is empty in vault '${vaultName}'.`),
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    vlog(`pull total elapsed: ${Date.now() - overallStart}ms`);
+
+    if (!paramCommit) {
+        console.log(
+            `\n[dry-run] Would write ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.\n` +
+            `Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
+        );
+        return;
+    }
+
+    await fs.promises.writeFile(yamlPath, secretValue, "utf8");
+    console.log(
+        `\nWritten ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.`,
+    );
+}
+
+/**
+ * Legacy path: pull individual secrets and assemble into a .env file.
+ */
+async function pullDotenvSecrets(overallStart) {
+    const cfgPath = dotenvPath;
+    const dotEnv = new Map(await timed("readDotenv", () => readDotenv()));
     const keyVaultClient = await timed("az login check", () =>
         getKeyVaultClient(),
     );
     const vaultNames = getVaultNames(dotEnv);
-    console.log(`Pulling secrets to ${chalk.cyanBright(cfgPath)} (${format})`);
+    console.log(`Pulling secrets to ${chalk.cyanBright(cfgPath)} (dotenv)`);
     const sharedResult = await timed(
         `pullSecretsFromVault(shared=${vaultNames.shared})`,
         () =>
@@ -660,7 +802,7 @@ async function pullSecrets() {
     }
     if (!paramCommit) {
         console.log(
-            `\n[dry-run] ${updated} value(s) would be updated in ${chalk.cyanBright(cfgPath)}. Re-run with ${chalk.yellowBright("--commit")} to write.`,
+            `\n[dry-run] ${updated} value(s) would be updated in ${chalk.cyanBright(cfgPath)}. Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
         );
         return;
     }
@@ -668,16 +810,12 @@ async function pullSecrets() {
         `\n${updated} values updated.\nWriting '${chalk.cyanBright(cfgPath)}'.`,
     );
 
-    if (format === "yaml") {
-        await writeYamlConfig(dotEnv);
-    } else {
-        await fs.promises.writeFile(
-            dotenvPath,
-            [...dotEnv.entries()]
-                .map(([key, value]) => (key ? `${key}=${value}` : ""))
-                .join("\n"),
-        );
-    }
+    await fs.promises.writeFile(
+        cfgPath,
+        [...dotEnv.entries()]
+            .map(([key, value]) => (key ? `${key}=${value}` : ""))
+            .join("\n"),
+    );
 }
 
 function printHelp() {
@@ -688,24 +826,32 @@ ${chalk.bold("Usage:")}
   node getKeys.mjs [command] [options]
 
 ${chalk.bold("Commands:")}
-  pull        Pull secrets from Key Vault to local config (default)
-  push        Push local config secrets to Key Vault
+  pull        Pull config from Key Vault to local file (default)
+  push        Push local config to Key Vault
   help        Show this help message
 
 ${chalk.bold("Options:")}
-  --yaml      Force YAML format (config.local.yaml)
-  --dotenv    Force .env format (legacy)
+  --yaml      Force YAML format (config.local.yaml) — pulls/pushes a single secret
+  --dotenv    Force legacy .env format — pulls/pushes individual secrets (deprecated)
   --vault     Shared vault name (default: aisystems)
   --private   Private vault name
-  --commit    Write changes (default is dry-run)
-  --dry-run   Preview changes without writing (default)
+  --commit    Write changes (default)
+  --dry-run   Preview changes without writing
   --verbose   Show detailed timing info
 
 ${chalk.bold("Format auto-detection:")}
   If neither --yaml nor --dotenv is specified, the tool auto-detects:
     1. If config.local.yaml exists → use YAML
-    2. If .env exists → use .env
-    3. Otherwise → create config.local.yaml (YAML is the new default)
+    2. If .env exists → use .env (with deprecation warning)
+    3. Otherwise → use YAML (default for new installs)
+
+${chalk.bold("YAML mode (default):")}
+  pull: Downloads the '${config.vault.configSecret}' secret as config.local.yaml
+  push: Uploads config.local.yaml as the '${config.vault.configSecret}' secret
+
+${chalk.bold("Legacy .env mode (--dotenv):")}
+  pull: Enumerates individual secrets and assembles .env file
+  push: Pushes individual key=value pairs as separate secrets
 `);
 }
 
@@ -741,7 +887,6 @@ const commands = ["push", "pull", "help"];
         }
 
         if (arg === "--dry-run") {
-            // Explicit no-op; dry-run is the default.
             paramCommit = false;
             continue;
         }

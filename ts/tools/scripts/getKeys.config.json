@@ -81,6 +81,7 @@
     ]
   },
   "vault": {
-    "shared": "aisystems"
+    "shared": "aisystems",
+    "configSecret": "typeagent-config"
   }
 }
