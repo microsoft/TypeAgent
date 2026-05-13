@@ -9,6 +9,7 @@ import {
     connectDispatcher,
     type DispatcherHandle,
 } from "./dispatcherConnection.js";
+import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
 
 let chatPanel: ChatPanel;
 let dispatcherHandle: DispatcherHandle | undefined;
@@ -125,7 +126,7 @@ function setConnectionStatus(connected: boolean) {
         }, 3000);
     } else {
         banner.textContent =
-            "Not connected — ensure agent-server is running on ws://localhost:8999";
+            `Not connected — ensure agent-server is running on ${AGENT_SERVER_DEFAULT_URL}`;
         banner.className = "connection-banner";
         banner.style.display = "";
         chatPanel.setEnabled(false);

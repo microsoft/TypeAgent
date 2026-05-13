@@ -61,6 +61,7 @@ import {
     getAppAgentStateSettings,
     SetStateResult,
 } from "./appAgentManager.js";
+import { IPortRegistrar, PortRegistrar } from "./portRegistrar.js";
 import {
     AppAgentInstaller,
     AppAgentProvider,
@@ -129,6 +130,7 @@ export function ensureCommandResult(
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
+    readonly portRegistrar: IPortRegistrar;
     readonly agentInstaller: AppAgentInstaller | undefined;
     session: Session;
 
@@ -267,6 +269,16 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     // Agent port assignments
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
+
+    /**
+     * Optional pre-built {@link PortRegistrar} the host (e.g. agentServer)
+     * shares across all dispatchers in the process so external clients can
+     * discover any agent's port regardless of which conversation it's
+     * loaded into. If omitted, each dispatcher creates its own
+     * process-private registrar — the right default for standalone
+     * hosts (shell, CLI) that don't expose external discovery.
+     */
+    portRegistrar?: IPortRegistrar;
 
     // Indexing service discovery
     indexingServiceRegistry?: IndexingServiceRegistry; // registry for indexing service discovery
@@ -574,14 +586,17 @@ export async function initializeCommandHandlerContext(
         if (embeddingCacheDir) {
             ensureDirectory(embeddingCacheDir);
         }
+        const portRegistrar = options?.portRegistrar ?? new PortRegistrar();
         const agents = new AppAgentManager(
             cacheDir,
+            portRegistrar,
             options?.allowSharedLocalView,
             options?.agentInitOptions,
         );
         const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
             agents,
+            portRegistrar,
             agentInstaller: options?.agentInstaller,
             session,
             persistDir,

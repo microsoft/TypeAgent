@@ -5,7 +5,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { connectDispatcher } from "@typeagent/agent-server-client";
+import {
+    connectDispatcher,
+    AGENT_SERVER_DEFAULT_URL,
+} from "@typeagent/agent-server-client";
 import type {
     AgentSchemaInfo,
     ClientIO,
@@ -338,7 +341,7 @@ export class CommandServer {
         this.agentServerUrl =
             agentServerUrl ??
             process.env.AGENT_SERVER_URL ??
-            "ws://localhost:8999";
+            AGENT_SERVER_DEFAULT_URL;
 
         this.logger.log(`CommandServer initializing.`);
         this.logger.log(`TypeAgent server URL: ${this.agentServerUrl}`);
