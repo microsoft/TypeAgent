@@ -20,6 +20,7 @@
 
 import type { ConfigTree, FlatEnv } from "../types.js";
 import { regionFromUrl, regionToEnvSuffix } from "./regions.js";
+import { buildConfig } from "./build.js";
 import {
     AuthMode,
     Config,
@@ -409,6 +410,14 @@ const TYPED_SECTION_KEYS = new Set([
 
 export function isTypedSectionKey(key: string): boolean {
     return TYPED_SECTION_KEYS.has(key);
+}
+
+/**
+ * Convenience wrapper: flat env vars → YAML-friendly tree.
+ * Combines `buildConfig` and `configToTree` in one call.
+ */
+export function envToYamlTree(flat: FlatEnv): ConfigTree {
+    return configToTree(buildConfig(flat));
 }
 
 function asObject(node: unknown, where: string): Record<string, unknown> {

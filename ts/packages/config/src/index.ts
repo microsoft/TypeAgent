@@ -73,6 +73,7 @@ export {
     applyToProcessEnv,
     type EnvOutput,
 } from "./runtime/shim.js";
+export { envToYamlTree } from "./runtime/tree.js";
 export {
     loadRuntimeConfigSync,
     type LoadRuntimeConfigOptions,
