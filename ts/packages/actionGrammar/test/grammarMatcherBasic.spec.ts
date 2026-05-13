@@ -173,12 +173,12 @@ describeForEachMatcher("Grammar Matcher - Basic", (testMatchGrammar) => {
             expect(testMatchGrammar(grammar, "+0b0101")).toStrictEqual([]);
         });
 
-        it("number variable - minus octal", () => {
+        it("number variable - minus hex", () => {
             const g = `<Start> = $(x:number) -> x;`;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(testMatchGrammar(grammar, "-0x123")).toStrictEqual([]);
         });
-        it("number variable - plus octal", () => {
+        it("number variable - plus hex", () => {
             const g = `<Start> = $(x:number) -> x;`;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(testMatchGrammar(grammar, "+0x123")).toStrictEqual([]);
