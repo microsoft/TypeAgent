@@ -515,23 +515,42 @@ async function testSpeechSDK(): Promise<TestResult> {
     }
 
     try {
-        // Test token endpoint
-        const tokenEndpoint =
+        const isIdentity = key === "identity";
+
+        // Build the token issuing URL
+        const baseUrl =
             endpoint ||
-            `https://${region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
+            `https://${region}.api.cognitive.microsoft.com`;
+        const tokenEndpoint = baseUrl.endsWith("/")
+            ? `${baseUrl}sts/v1.0/issuetoken`
+            : `${baseUrl}/sts/v1.0/issuetoken`;
+
+        const headers: Record<string, string> = {
+            "Content-Type": "application/x-www-form-urlencoded",
+        };
+
+        if (isIdentity) {
+            // Use Azure Identity (DefaultAzureCredential via az CLI)
+            const { execSync } = await import("child_process");
+            const token = execSync(
+                'az account get-access-token --resource "https://cognitiveservices.azure.com/" --query accessToken -o tsv',
+                { encoding: "utf-8" },
+            ).trim();
+            headers["Authorization"] = `Bearer ${token}`;
+        } else {
+            headers["Ocp-Apim-Subscription-Key"] = key;
+        }
+
         const response = await fetch(tokenEndpoint, {
             method: "POST",
-            headers: {
-                "Ocp-Apim-Subscription-Key": key,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
+            headers,
         });
 
         if (response.ok) {
             return {
                 success: true,
                 message: "Successfully authenticated with Speech SDK",
-                details: `Region: ${region}`,
+                details: `Region: ${region}, Auth: ${isIdentity ? "identity" : "key"}`,
             };
         } else {
             return {
