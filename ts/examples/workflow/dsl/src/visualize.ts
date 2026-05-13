@@ -285,8 +285,14 @@ function nodeColor(kind: string): string {
             return "#e8f5e9";
         case "return":
             return "#fce4ec";
-        case "assign":
+        case "operator":
             return "#fff8e1";
+        case "branch":
+            return "#e0f7fa";
+        case "error":
+            return "#ffebee";
+        case "workflowCall":
+            return "#fce4ec";
         default:
             return "#f5f5f5";
     }
@@ -306,8 +312,14 @@ function nodeBorder(kind: string): string {
             return "#2e7d32";
         case "return":
             return "#c62828";
-        case "assign":
+        case "operator":
             return "#f9a825";
+        case "error":
+            return "#b71c1c";
+        case "branch":
+            return "#00838f";
+        case "workflowCall":
+            return "#ad1457";
         default:
             return "#616161";
     }
@@ -315,18 +327,26 @@ function nodeBorder(kind: string): string {
 
 function groupColor(kind: string): { fill: string; stroke: string } {
     switch (kind) {
-        case "for":
-            return { fill: "#e8eaf6", stroke: "#3f51b5" };
-        case "while":
-            return { fill: "#ede7f6", stroke: "#673ab7" };
-        case "try":
-            return { fill: "#e0f7fa", stroke: "#00838f" };
-        case "catch":
+        case "retry":
             return { fill: "#fff3e0", stroke: "#ef6c00" };
+        case "map":
+            return { fill: "#e8eaf6", stroke: "#3f51b5" };
+        case "filter":
+            return { fill: "#ede7f6", stroke: "#673ab7" };
+        case "parallel":
+            return { fill: "#e0f7fa", stroke: "#00838f" };
+        case "parallelMap":
+            return { fill: "#e0f2f1", stroke: "#00695c" };
         case "if-then":
             return { fill: "#e8f5e9", stroke: "#2e7d32" };
         case "if-else":
             return { fill: "#fce4ec", stroke: "#c62828" };
+        case "switch":
+            return { fill: "#f3e5f5", stroke: "#6a1b9a" };
+        case "switch-case":
+            return { fill: "#f3e5f5", stroke: "#8e24aa" };
+        case "switch-default":
+            return { fill: "#fce4ec", stroke: "#ad1457" };
         default:
             return { fill: "#fafafa", stroke: "#9e9e9e" };
     }
@@ -350,7 +370,7 @@ function generateHtml(
     // Draw groups (back to front)
     for (const g of layout.groups) {
         const colors = groupColor(g.kind);
-        svg += `  <rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="8" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.5" stroke-dasharray="${g.kind === "catch" ? "6,3" : "none"}" opacity="0.6" />\n`;
+        svg += `  <rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="8" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.5" stroke-dasharray="${g.kind === "retry" ? "6,3" : "none"}" opacity="0.6" />\n`;
         svg += `  <text x="${g.x + 10}" y="${g.y + 18}" font-size="12" font-weight="600" fill="${colors.stroke}" font-family="system-ui, sans-serif">${escapeHtml(g.label)}</text>\n`;
     }
 
@@ -414,7 +434,10 @@ ${svg}</svg>
   <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("template")};border-color:${nodeBorder("template")}"></div>Template</div>
   <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("constant")};border-color:${nodeBorder("constant")}"></div>Constant</div>
   <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("return")};border-color:${nodeBorder("return")}"></div>Return</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("assign")};border-color:${nodeBorder("assign")}"></div>Assignment</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("operator")};border-color:${nodeBorder("operator")}"></div>Operator</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("branch")};border-color:${nodeBorder("branch")}"></div>Branch</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("error")};border-color:${nodeBorder("error")}"></div>Error</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:${nodeColor("workflowCall")};border-color:${nodeBorder("workflowCall")}"></div>Workflow call</div>
 </div>
 <details style="margin-top: 16px;">
   <summary style="cursor: pointer; font-size: 13px; color: #666;">Graph model (JSON)</summary>

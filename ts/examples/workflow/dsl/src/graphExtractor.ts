@@ -1,15 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// @ts-nocheck -- TODO: Phase 4 will rewrite this file for v2 AST
 /**
- * Extracts a visual graph model from a workflow DSL AST.
+ * Extracts a visual graph model from a workflow DSL v2 AST.
  *
  * The graph model is a simplified representation suitable for layout
  * and rendering by a visual editor. It captures:
- *   - Nodes: task calls, parameters, constants, return
+ *   - Nodes: task calls, workflow calls, parameters, constants, return,
+ *     operators, throw
  *   - Edges: data flow (variable references between nodes)
- *   - Groups: control flow blocks (for, while, try/catch, if/else)
+ *   - Groups: control flow blocks (retry, map, filter, parallel,
+ *     parallelMap, if/else, switch, ternary)
  */
 
 import {
@@ -17,15 +18,19 @@ import {
     Statement,
     Expr,
     TaskCallExpr,
+    WorkflowCallExpr,
     TemplateLiteralExpr,
-    ForOfStatement,
-    WhileStatement,
-    IfStatement,
-    TryStatement,
-    LetStatement,
     ConstStatement,
-    AssignmentStatement,
+    DestructuringConst,
+    IfStatement,
+    SwitchStatement,
     ReturnStatement,
+    ThrowStatement,
+    RetryNode,
+    MapNode,
+    FilterNode,
+    ParallelNode,
+    ParallelMapNode,
 } from "./ast.js";
 
 // ---- Graph model types ----
@@ -46,9 +51,18 @@ export interface ParamNode {
 
 export interface GraphNode {
     id: string;
-    kind: "task" | "template" | "literal" | "constant" | "return" | "assign";
+    kind:
+        | "task"
+        | "workflowCall"
+        | "template"
+        | "literal"
+        | "constant"
+        | "return"
+        | "operator"
+        | "error"
+        | "branch";
     label: string;
-    /** Task type (e.g., "http.get", "llm.generate") */
+    /** Task type (e.g., "web.fetch", "text.summarize") */
     taskType?: string | undefined;
     /** The variable name this node binds to */
     bindName?: string | undefined;
@@ -65,12 +79,16 @@ export interface GraphEdge {
 }
 
 export type GroupKind =
-    | "for"
-    | "while"
-    | "try"
-    | "catch"
+    | "retry"
+    | "map"
+    | "filter"
+    | "parallel"
+    | "parallelMap"
     | "if-then"
-    | "if-else";
+    | "if-else"
+    | "switch"
+    | "switch-case"
+    | "switch-default";
 
 export interface GraphGroup {
     id: string;
@@ -135,47 +153,37 @@ class GraphExtractor {
         groupId: string | undefined,
     ): void {
         switch (stmt.kind) {
-            case "LetStatement":
-                this.extractLet(stmt, groupId);
-                break;
             case "ConstStatement":
                 this.extractConst(stmt, groupId);
                 break;
-            case "AssignmentStatement":
-                this.extractAssignment(stmt, groupId);
-                break;
-            case "ForOfStatement":
-                this.extractForOf(stmt, groupId);
-                break;
-            case "WhileStatement":
-                this.extractWhile(stmt, groupId);
+            case "DestructuringConst":
+                this.extractDestructuring(stmt, groupId);
                 break;
             case "IfStatement":
                 this.extractIf(stmt, groupId);
                 break;
-            case "TryStatement":
-                this.extractTry(stmt, groupId);
+            case "SwitchStatement":
+                this.extractSwitch(stmt, groupId);
+                break;
+            case "ThrowStatement":
+                this.extractThrow(stmt, groupId);
                 break;
             case "ReturnStatement":
                 this.extractReturn(stmt, groupId);
                 break;
             case "BreakStatement":
-            case "ContinueStatement":
-                // Control flow markers - shown as annotations, not nodes
-                break;
-            case "MatchStatement":
-                // Not yet visualized
                 break;
         }
     }
 
-    private extractLet(stmt: LetStatement, groupId: string | undefined): void {
-        if (!stmt.value) {
-            // Uninitialized declaration - no visual node needed
-            return;
-        }
+    // ---- Statement extraction ----
 
+    private extractConst(
+        stmt: ConstStatement,
+        groupId: string | undefined,
+    ): void {
         const expr = stmt.value;
+
         if (expr.kind === "TaskCallExpr") {
             const nodeId = this.freshNodeId("task");
             this.nodes.push({
@@ -189,6 +197,20 @@ class GraphExtractor {
             });
             this.bindings.set(stmt.name, nodeId);
             this.extractTaskCallEdges(expr, nodeId);
+            if (groupId) this.addToGroup(groupId, nodeId);
+        } else if (expr.kind === "WorkflowCallExpr") {
+            const nodeId = this.freshNodeId("call");
+            this.nodes.push({
+                id: nodeId,
+                kind: "workflowCall",
+                label: `${stmt.name} = ${expr.name}(...)`,
+                taskType: expr.name,
+                bindName: stmt.name,
+                groupId,
+                line: stmt.loc.line,
+            });
+            this.bindings.set(stmt.name, nodeId);
+            this.extractWorkflowCallEdges(expr, nodeId);
             if (groupId) this.addToGroup(groupId, nodeId);
         } else if (expr.kind === "TemplateLiteralExpr") {
             const nodeId = this.freshNodeId("tmpl");
@@ -205,10 +227,10 @@ class GraphExtractor {
             this.extractTemplateLiteralEdges(expr, nodeId);
             if (groupId) this.addToGroup(groupId, nodeId);
         } else if (this.isLiteral(expr)) {
-            const nodeId = this.freshNodeId("lit");
+            const nodeId = this.freshNodeId("const");
             this.nodes.push({
                 id: nodeId,
-                kind: "literal",
+                kind: "constant",
                 label: `${stmt.name} = ${this.exprSummary(expr)}`,
                 bindName: stmt.name,
                 groupId,
@@ -216,100 +238,31 @@ class GraphExtractor {
             });
             this.bindings.set(stmt.name, nodeId);
             if (groupId) this.addToGroup(groupId, nodeId);
+        } else {
+            // Complex expression (binary, built-in, etc.)
+            const nodeId = this.extractExprAsNode(expr, groupId);
+            if (nodeId) {
+                this.bindings.set(stmt.name, nodeId);
+            }
         }
     }
 
-    private extractConst(
-        stmt: ConstStatement,
+    private extractDestructuring(
+        stmt: DestructuringConst,
         groupId: string | undefined,
     ): void {
-        const nodeId = this.freshNodeId("const");
-        this.nodes.push({
-            id: nodeId,
-            kind: "constant",
-            label: `${stmt.name} = ${this.exprSummary(stmt.value)}`,
-            bindName: stmt.name,
-            groupId,
-            line: stmt.loc.line,
-        });
-        this.bindings.set(stmt.name, nodeId);
-        if (groupId) this.addToGroup(groupId, nodeId);
-    }
-
-    private extractAssignment(
-        stmt: AssignmentStatement,
-        groupId: string | undefined,
-    ): void {
-        if (stmt.value.kind === "TaskCallExpr") {
-            const nodeId = this.freshNodeId("task");
-            this.nodes.push({
-                id: nodeId,
-                kind: "assign",
-                label: `${stmt.name} =`,
-                taskType: stmt.value.task,
-                bindName: stmt.name,
-                groupId,
-                line: stmt.loc.line,
-            });
-            // Update binding to point to this node
-            this.bindings.set(stmt.name, nodeId);
-            this.extractTaskCallEdges(stmt.value, nodeId);
-            if (groupId) this.addToGroup(groupId, nodeId);
-        } else if (stmt.value.kind === "DottedNameExpr") {
-            // Simple assignment like `pageContent = fetchResult.body`
-            const nodeId = this.freshNodeId("assign");
-            this.nodes.push({
-                id: nodeId,
-                kind: "assign",
-                label: `${stmt.name} = ${stmt.value.segments.join(".")}`,
-                bindName: stmt.name,
-                groupId,
-                line: stmt.loc.line,
-            });
-            this.bindings.set(stmt.name, nodeId);
-            this.addEdgesFromExpr(stmt.value, nodeId);
-            if (groupId) this.addToGroup(groupId, nodeId);
+        // If the value is a simple name reference, resolve the binding.
+        // Otherwise extract as a node.
+        let sourceId: string | undefined;
+        if (stmt.value.kind === "DottedNameExpr") {
+            sourceId = this.bindings.get(stmt.value.segments[0]);
+        } else {
+            sourceId = this.extractExprAsNode(stmt.value, groupId);
         }
-    }
-
-    private extractForOf(
-        stmt: ForOfStatement,
-        parentGroupId: string | undefined,
-    ): void {
-        const gid = this.freshGroupId("for");
-        this.groups.push({
-            id: gid,
-            kind: "for",
-            label: `for (${stmt.variable} of ${this.exprSummary(stmt.iterable)})`,
-            parentId: parentGroupId,
-            children: [],
-        });
-        if (parentGroupId) this.addToGroup(parentGroupId, gid);
-
-        // The iterable is an edge into the group
-        this.addEdgesFromExpr(stmt.iterable, gid);
-
-        for (const s of stmt.body) {
-            this.extractStatement(s, gid);
-        }
-    }
-
-    private extractWhile(
-        stmt: WhileStatement,
-        parentGroupId: string | undefined,
-    ): void {
-        const gid = this.freshGroupId("while");
-        this.groups.push({
-            id: gid,
-            kind: "while",
-            label: `while (${this.exprSummary(stmt.condition)})`,
-            parentId: parentGroupId,
-            children: [],
-        });
-        if (parentGroupId) this.addToGroup(parentGroupId, gid);
-
-        for (const s of stmt.body) {
-            this.extractStatement(s, gid);
+        if (sourceId) {
+            for (const name of stmt.names) {
+                this.bindings.set(name, sourceId);
+            }
         }
     }
 
@@ -317,7 +270,6 @@ class GraphExtractor {
         stmt: IfStatement,
         parentGroupId: string | undefined,
     ): void {
-        // Then branch
         const thenGid = this.freshGroupId("if_then");
         this.groups.push({
             id: thenGid,
@@ -333,7 +285,6 @@ class GraphExtractor {
             this.extractStatement(s, thenGid);
         }
 
-        // Else branch
         if (stmt.else_) {
             const elseGid = this.freshGroupId("if_else");
             this.groups.push({
@@ -351,43 +302,79 @@ class GraphExtractor {
         }
     }
 
-    private extractTry(
-        stmt: TryStatement,
+    private extractSwitch(
+        stmt: SwitchStatement,
         parentGroupId: string | undefined,
     ): void {
-        const tryGid = this.freshGroupId("try");
+        const switchGid = this.freshGroupId("switch");
         this.groups.push({
-            id: tryGid,
-            kind: "try",
-            label: "try",
+            id: switchGid,
+            kind: "switch",
+            label: `switch (${this.exprSummary(stmt.discriminant)})`,
             parentId: parentGroupId,
             children: [],
         });
-        if (parentGroupId) this.addToGroup(parentGroupId, tryGid);
+        if (parentGroupId) this.addToGroup(parentGroupId, switchGid);
+        this.addEdgesFromExpr(stmt.discriminant, switchGid);
 
-        for (const s of stmt.tryBody) {
-            this.extractStatement(s, tryGid);
+        for (let i = 0; i < stmt.arms.length; i++) {
+            const arm = stmt.arms[i];
+            const caseGid = this.freshGroupId("case");
+            this.groups.push({
+                id: caseGid,
+                kind: "switch-case",
+                label: `case ${this.exprSummary(arm.value)}`,
+                parentId: switchGid,
+                children: [],
+            });
+            this.addToGroup(switchGid, caseGid);
+
+            for (const s of arm.body) {
+                this.extractStatement(s, caseGid);
+            }
         }
 
-        const catchGid = this.freshGroupId("catch");
-        this.groups.push({
-            id: catchGid,
-            kind: "catch",
-            label: "catch",
-            parentId: parentGroupId,
-            children: [],
+        if (stmt.default_) {
+            const defGid = this.freshGroupId("default");
+            this.groups.push({
+                id: defGid,
+                kind: "switch-default",
+                label: "default",
+                parentId: switchGid,
+                children: [],
+            });
+            this.addToGroup(switchGid, defGid);
+
+            for (const s of stmt.default_) {
+                this.extractStatement(s, defGid);
+            }
+        }
+    }
+
+    private extractThrow(
+        stmt: ThrowStatement,
+        groupId: string | undefined,
+    ): void {
+        const nodeId = this.freshNodeId("error");
+        this.nodes.push({
+            id: nodeId,
+            kind: "error",
+            label: `throw ${this.exprSummary(stmt.value)}`,
+            groupId,
+            line: stmt.loc.line,
         });
-        if (parentGroupId) this.addToGroup(parentGroupId, catchGid);
-
-        for (const s of stmt.catchBody) {
-            this.extractStatement(s, catchGid);
-        }
+        this.addEdgesFromExpr(stmt.value, nodeId);
+        if (groupId) this.addToGroup(groupId, nodeId);
     }
 
     private extractReturn(
         stmt: ReturnStatement,
         groupId: string | undefined,
     ): void {
+        // If the return value is a built-in node or complex expression,
+        // extract it first, then edge from it to the return node.
+        const valueId = this.extractExprAsNode(stmt.value, groupId);
+
         const nodeId = this.freshNodeId("return");
         this.nodes.push({
             id: nodeId,
@@ -396,8 +383,226 @@ class GraphExtractor {
             groupId,
             line: stmt.loc.line,
         });
-        this.addEdgesFromExpr(stmt.value, nodeId);
+        if (valueId) {
+            this.edges.push({ from: valueId, to: nodeId });
+        } else {
+            this.addEdgesFromExpr(stmt.value, nodeId);
+        }
         if (groupId) this.addToGroup(groupId, nodeId);
+    }
+
+    // ---- Expression extraction ----
+
+    /**
+     * Extract an expression that should be represented as a graph node.
+     * Returns the node ID, or undefined if no node was created.
+     */
+    private extractExprAsNode(
+        expr: Expr,
+        groupId: string | undefined,
+    ): string | undefined {
+        switch (expr.kind) {
+            case "TaskCallExpr": {
+                const nodeId = this.freshNodeId("task");
+                this.nodes.push({
+                    id: nodeId,
+                    kind: "task",
+                    label: expr.task,
+                    taskType: expr.task,
+                    groupId,
+                    line: expr.loc.line,
+                });
+                this.extractTaskCallEdges(expr, nodeId);
+                if (groupId) this.addToGroup(groupId, nodeId);
+                return nodeId;
+            }
+            case "WorkflowCallExpr": {
+                const nodeId = this.freshNodeId("call");
+                this.nodes.push({
+                    id: nodeId,
+                    kind: "workflowCall",
+                    label: `${expr.name}(...)`,
+                    taskType: expr.name,
+                    groupId,
+                    line: expr.loc.line,
+                });
+                this.extractWorkflowCallEdges(expr, nodeId);
+                if (groupId) this.addToGroup(groupId, nodeId);
+                return nodeId;
+            }
+            case "BinaryExpr": {
+                const nodeId = this.freshNodeId("op");
+                this.nodes.push({
+                    id: nodeId,
+                    kind: "operator",
+                    label: expr.op,
+                    groupId,
+                    line: expr.loc.line,
+                });
+                this.addEdgesFromExpr(expr.left, nodeId, "left");
+                this.addEdgesFromExpr(expr.right, nodeId, "right");
+                if (groupId) this.addToGroup(groupId, nodeId);
+                return nodeId;
+            }
+            case "UnaryExpr": {
+                const nodeId = this.freshNodeId("op");
+                this.nodes.push({
+                    id: nodeId,
+                    kind: "operator",
+                    label: expr.op,
+                    groupId,
+                    line: expr.loc.line,
+                });
+                this.addEdgesFromExpr(expr.operand, nodeId);
+                if (groupId) this.addToGroup(groupId, nodeId);
+                return nodeId;
+            }
+            case "TernaryExpr": {
+                const nodeId = this.freshNodeId("branch");
+                this.nodes.push({
+                    id: nodeId,
+                    kind: "branch",
+                    label: `${this.exprSummary(expr.condition)} ? ... : ...`,
+                    groupId,
+                    line: expr.loc.line,
+                });
+                this.addEdgesFromExpr(expr.condition, nodeId);
+                this.addEdgesFromExpr(expr.consequent, nodeId);
+                this.addEdgesFromExpr(expr.alternate, nodeId);
+                if (groupId) this.addToGroup(groupId, nodeId);
+                return nodeId;
+            }
+            case "RetryNode":
+                return this.extractRetry(expr, groupId);
+            case "MapNode":
+                return this.extractMap(expr, groupId);
+            case "FilterNode":
+                return this.extractFilter(expr, groupId);
+            case "ParallelNode":
+                return this.extractParallel(expr, groupId);
+            case "ParallelMapNode":
+                return this.extractParallelMap(expr, groupId);
+            default:
+                return undefined;
+        }
+    }
+
+    // ---- Built-in node extraction ----
+
+    private extractRetry(
+        expr: RetryNode,
+        parentGroupId: string | undefined,
+    ): string {
+        const gid = this.freshGroupId("retry");
+        this.groups.push({
+            id: gid,
+            kind: "retry",
+            label: `retry(${this.exprSummary(expr.count)})`,
+            parentId: parentGroupId,
+            children: [],
+        });
+        if (parentGroupId) this.addToGroup(parentGroupId, gid);
+
+        for (const s of expr.body) {
+            this.extractStatement(s, gid);
+        }
+
+        if (expr.fallback) {
+            for (const s of expr.fallback.body) {
+                this.extractStatement(s, gid);
+            }
+        }
+
+        return gid;
+    }
+
+    private extractMap(
+        expr: MapNode,
+        parentGroupId: string | undefined,
+    ): string {
+        const gid = this.freshGroupId("map");
+        this.groups.push({
+            id: gid,
+            kind: "map",
+            label: `map(${this.exprSummary(expr.collection)}, ${expr.param})`,
+            parentId: parentGroupId,
+            children: [],
+        });
+        if (parentGroupId) this.addToGroup(parentGroupId, gid);
+        this.addEdgesFromExpr(expr.collection, gid);
+
+        for (const s of expr.body) {
+            this.extractStatement(s, gid);
+        }
+
+        return gid;
+    }
+
+    private extractFilter(
+        expr: FilterNode,
+        parentGroupId: string | undefined,
+    ): string {
+        const gid = this.freshGroupId("filter");
+        this.groups.push({
+            id: gid,
+            kind: "filter",
+            label: `filter(${this.exprSummary(expr.collection)}, ${expr.param})`,
+            parentId: parentGroupId,
+            children: [],
+        });
+        if (parentGroupId) this.addToGroup(parentGroupId, gid);
+        this.addEdgesFromExpr(expr.collection, gid);
+
+        for (const s of expr.body) {
+            this.extractStatement(s, gid);
+        }
+
+        return gid;
+    }
+
+    private extractParallel(
+        expr: ParallelNode,
+        parentGroupId: string | undefined,
+    ): string {
+        const gid = this.freshGroupId("parallel");
+        this.groups.push({
+            id: gid,
+            kind: "parallel",
+            label: `parallel(${expr.bodies.length} branches)`,
+            parentId: parentGroupId,
+            children: [],
+        });
+        if (parentGroupId) this.addToGroup(parentGroupId, gid);
+
+        for (const branch of expr.bodies) {
+            for (const s of branch.body) {
+                this.extractStatement(s, gid);
+            }
+        }
+
+        return gid;
+    }
+
+    private extractParallelMap(
+        expr: ParallelMapNode,
+        parentGroupId: string | undefined,
+    ): string {
+        const gid = this.freshGroupId("parallelMap");
+        this.groups.push({
+            id: gid,
+            kind: "parallelMap",
+            label: `parallelMap(${this.exprSummary(expr.collection)}, ${expr.param})`,
+            parentId: parentGroupId,
+            children: [],
+        });
+        if (parentGroupId) this.addToGroup(parentGroupId, gid);
+        this.addEdgesFromExpr(expr.collection, gid);
+
+        for (const s of expr.body) {
+            this.extractStatement(s, gid);
+        }
+
+        return gid;
     }
 
     // ---- Edge extraction ----
@@ -407,16 +612,26 @@ class GraphExtractor {
         targetNodeId: string,
     ): void {
         for (const arg of expr.args) {
-            const value = arg.kind === "NamedArg" ? arg.value : arg.value;
+            const value = arg.value;
             const label = arg.kind === "NamedArg" ? arg.name : undefined;
             if (value.kind === "ObjectLiteralExpr") {
-                // Unwrap object literal args
                 for (const entry of value.entries) {
                     this.addEdgesFromExpr(entry.value, targetNodeId, entry.key);
                 }
             } else {
                 this.addEdgesFromExpr(value, targetNodeId, label);
             }
+        }
+    }
+
+    private extractWorkflowCallEdges(
+        expr: WorkflowCallExpr,
+        targetNodeId: string,
+    ): void {
+        for (const arg of expr.args) {
+            const value = arg.value;
+            const label = arg.kind === "NamedArg" ? arg.name : undefined;
+            this.addEdgesFromExpr(value, targetNodeId, label);
         }
     }
 
@@ -453,8 +668,20 @@ class GraphExtractor {
                 this.addEdgesFromExpr(el, targetNodeId);
             }
         } else if (expr.kind === "TaskCallExpr") {
-            // Task call used as expression (e.g., in if condition)
             this.extractTaskCallEdges(expr, targetNodeId);
+        } else if (expr.kind === "WorkflowCallExpr") {
+            this.extractWorkflowCallEdges(expr, targetNodeId);
+        } else if (expr.kind === "BinaryExpr") {
+            this.addEdgesFromExpr(expr.left, targetNodeId);
+            this.addEdgesFromExpr(expr.right, targetNodeId);
+        } else if (expr.kind === "UnaryExpr") {
+            this.addEdgesFromExpr(expr.operand, targetNodeId);
+        } else if (expr.kind === "TernaryExpr") {
+            this.addEdgesFromExpr(expr.condition, targetNodeId);
+            this.addEdgesFromExpr(expr.consequent, targetNodeId);
+            this.addEdgesFromExpr(expr.alternate, targetNodeId);
+        } else if (expr.kind === "TemplateLiteralExpr") {
+            this.extractTemplateLiteralEdges(expr, targetNodeId);
         }
     }
 
@@ -473,7 +700,8 @@ class GraphExtractor {
             expr.kind === "StringLiteralExpr" ||
             expr.kind === "BooleanLiteralExpr" ||
             expr.kind === "NullLiteralExpr" ||
-            expr.kind === "ArrayLiteralExpr"
+            expr.kind === "ArrayLiteralExpr" ||
+            expr.kind === "ObjectLiteralExpr"
         );
     }
 
@@ -499,6 +727,24 @@ class GraphExtractor {
                 return `{${expr.entries.map((e) => e.key).join(", ")}}`;
             case "TaskCallExpr":
                 return `${expr.task}(...)`;
+            case "WorkflowCallExpr":
+                return `${expr.name}(...)`;
+            case "BinaryExpr":
+                return `${this.exprSummary(expr.left)} ${expr.op} ${this.exprSummary(expr.right)}`;
+            case "UnaryExpr":
+                return `${expr.op}${this.exprSummary(expr.operand)}`;
+            case "TernaryExpr":
+                return `${this.exprSummary(expr.condition)} ? ...`;
+            case "RetryNode":
+                return `retry(${this.exprSummary(expr.count)}, ...)`;
+            case "MapNode":
+                return `map(...)`;
+            case "FilterNode":
+                return `filter(...)`;
+            case "ParallelNode":
+                return `parallel(...)`;
+            case "ParallelMapNode":
+                return `parallelMap(...)`;
         }
     }
 
