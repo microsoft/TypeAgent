@@ -72,16 +72,11 @@ export function instantiate(): AppAgent {
         setup: (actionContext) => {
             const ctx = (actionContext as ActionContext<CodeActionContext>)
                 .sessionContext.agentContext;
-            // Prefer the actual bound port (set once updateAgentContext has
-            // brought up the shared server); fall back to the static
-            // override for messaging on the first probe.
-            const port =
-                getSharedCodePort() ?? resolveCodePortOverride(process.env);
             return setupCode(
                 actionContext,
                 ctx.choiceManager,
                 () => ctx.webSocketServer?.isConnected() === true,
-                port,
+                getKnownCodePort(),
             );
         },
         handleChoice: async (choiceId, response, context) => {
@@ -146,21 +141,40 @@ async function checkCodeReadiness(
     return evaluateCodeReadiness({
         clientConnected,
         vsCodeCliInstalled,
-        port: getSharedCodePort() ?? resolveCodePortOverride(process.env),
+        port: getKnownCodePort(),
     });
+}
+
+// Returns the port the code agent's WS server is/will be reachable on,
+// for display in readiness/setup messaging. Two phases:
+//   - After bind: `getSharedCodePort()` returns the actual bound port
+//     (OS-assigned by default, or `CODE_WEBSOCKET_PORT` if set; either way,
+//     this is the authoritative answer).
+//   - Before bind: no live port exists, so we fall back to the static
+//     prediction from `CODE_WEBSOCKET_PORT` if set, else `undefined`
+//     (the UI shows "port unknown until bind").
+function getKnownCodePort(): number | undefined {
+    return getSharedCodePort() ?? resolveCodePortOverride(process.env);
 }
 
 // Bind hint for the shared server. Returns the explicit override if
 // CODE_WEBSOCKET_PORT is set (useful for pinning the port when debugging);
 // otherwise 0 so the OS picks a free port and the registrar/discovery
 // channel publishes it.
+//
+// Note: we only validate the *shape* of the env var here (numeric, >= 0).
+// If the caller asks for a specific port and the OS can't bind it
+// (EADDRINUSE), `CodeAgentWebSocketServer.start()` rejects with that error
+// and the schema-enable fails loudly — we deliberately do NOT silently
+// fall back to an OS-assigned port, since the user explicitly asked for
+// a specific one.
 function getCodeBindPort(): number {
     const raw = process.env["CODE_WEBSOCKET_PORT"];
     if (raw === undefined) return 0;
     const n = parseInt(raw, 10);
     if (!Number.isFinite(n) || n < 0) {
         debug(
-            `Ignoring invalid CODE_WEBSOCKET_PORT=${raw}; falling back to OS-assigned port`,
+            `Ignoring malformed CODE_WEBSOCKET_PORT=${raw}; using OS-assigned port instead`,
         );
         return 0;
     }
