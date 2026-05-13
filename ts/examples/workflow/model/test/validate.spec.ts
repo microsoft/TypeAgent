@@ -368,7 +368,17 @@ describe("validateWorkflowIR", () => {
                         },
                     },
                 ),
-                recover: makeTaskNode({ bind: "out" }),
+                recover: makeTaskNode({
+                    inputSchema: {
+                        type: "object",
+                        required: ["error", "trigger"],
+                        properties: {
+                            error: { type: "object" },
+                            trigger: { type: "object" },
+                        },
+                    },
+                    bind: "out",
+                }),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -1909,7 +1919,14 @@ describe("validateWorkflowIR", () => {
                     recover: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "out",
@@ -2273,7 +2290,14 @@ describe("validateWorkflowIR", () => {
                     recover: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "data",
@@ -2717,7 +2741,14 @@ describe("validateWorkflowIR", () => {
                     recovery: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: {
                             type: "object",
                             required: ["x"],
