@@ -56,7 +56,7 @@ export function validateWorkflowIR(
     // bindings. This catches references to names that no node binds.
     if (ir.output) {
         const bindings = buildBindingMap(ir.nodes);
-        const outputRefs = collectScopeRefs(ir.output, "output");
+        const outputRefs = collectTemplateRefs(ir.output, "output", "scope");
         for (const ref of outputRefs) {
             if (!bindings.has(ref.name)) {
                 if (!ref.optional) {
@@ -634,12 +634,13 @@ function checkDominance(
     // Coverage (6b): for each $from scope ref in node inputs, check that
     // at least one binder dominates the consumer on every path.
     for (const [id, node] of Object.entries(nodes)) {
-        let inputs: Record<string, Template> | undefined;
-        if (node.kind === "task") inputs = node.inputs;
-        else if (node.kind === "loop") inputs = node.inputs;
-        if (!inputs) continue;
+        if (node.kind !== "task" && node.kind !== "loop") continue;
 
-        const refs = collectScopeRefs(inputs, `${prefix}.${id}.inputs`);
+        const refs = collectTemplateRefs(
+            node.inputs,
+            `${prefix}.${id}.inputs`,
+            "scope",
+        );
         for (const ref of refs) {
             const binderList = binders.get(ref.name);
             if (!binderList || binderList.length === 0) continue; // caught by name resolution
@@ -667,7 +668,11 @@ function checkDominance(
     // Output template coverage: check that output refs are covered on
     // all paths to any terminal.
     if (outputTemplate && outputPrefix) {
-        const outputRefs = collectScopeRefs(outputTemplate, outputPrefix);
+        const outputRefs = collectTemplateRefs(
+            outputTemplate,
+            outputPrefix,
+            "scope",
+        );
         for (const ref of outputRefs) {
             const binderList = binders.get(ref.name);
             if (!binderList || binderList.length === 0) continue;
@@ -818,12 +823,11 @@ function validateOnErrorRules(
     normalTargets.add(entry);
 
     for (const [id, node] of Object.entries(nodes)) {
-        if (node.kind === "task") {
+        if (node.kind === "task" || node.kind === "loop") {
             if (node.next) normalTargets.add(node.next);
             if (node.onError) {
                 const existing = onErrorTargetToTrigger.get(node.onError);
                 if (existing) {
-                    // Rule 2: single trigger
                     errors.push({
                         path: `${prefix}.${id}.onError`,
                         message:
@@ -843,22 +847,6 @@ function validateOnErrorRules(
             }
             if (node.default !== "@iterate" && node.default !== "@exit") {
                 normalTargets.add(node.default);
-            }
-        } else if (node.kind === "loop") {
-            if (node.next) normalTargets.add(node.next);
-            if (node.onError) {
-                const existing = onErrorTargetToTrigger.get(node.onError);
-                if (existing) {
-                    errors.push({
-                        path: `${prefix}.${id}.onError`,
-                        message:
-                            `Recovery node "${node.onError}" is targeted by ` +
-                            `both "${existing}" and "${id}". A recovery ` +
-                            `target must have exactly one trigger in v1.`,
-                    });
-                } else {
-                    onErrorTargetToTrigger.set(node.onError, id);
-                }
             }
         }
     }
@@ -923,12 +911,13 @@ function checkScopeClosure(
     // (those are legal cross-scope references). We only check $from: "scope".
 
     for (const [id, node] of Object.entries(loopNode.body.nodes)) {
-        let inputs: Record<string, Template> | undefined;
-        if (node.kind === "task") inputs = node.inputs;
-        else if (node.kind === "loop") inputs = node.inputs;
-        if (!inputs) continue;
+        if (node.kind !== "task" && node.kind !== "loop") continue;
 
-        const refs = collectScopeRefs(inputs, `${bodyPrefix}.${id}.inputs`);
+        const refs = collectTemplateRefs(
+            node.inputs,
+            `${bodyPrefix}.${id}.inputs`,
+            "scope",
+        );
         for (const ref of refs) {
             if (!bodyBindings.has(ref.name)) {
                 // Check if this name exists in the outer scope
@@ -990,20 +979,12 @@ function checkStateSoundness(
     // and that the state variable's schema type is compatible with the
     // consumer's expected type at that input position.
     for (const [id, node] of Object.entries(loopNode.body.nodes)) {
-        let inputs: Record<string, Template> | undefined;
-        let inputSchema: JSONSchema | undefined;
-        if (node.kind === "task") {
-            inputs = node.inputs;
-            inputSchema = node.inputSchema;
-        } else if (node.kind === "loop") {
-            inputs = node.inputs;
-            inputSchema = node.inputSchema;
-        }
-        if (!inputs) continue;
+        if (node.kind !== "task" && node.kind !== "loop") continue;
 
-        const stateRefs = collectStateRefs(
-            inputs,
+        const stateRefs = collectTemplateRefs(
+            node.inputs,
             `${prefix}.body.nodes.${id}.inputs`,
+            "state",
         );
         const inputsPrefix = `${prefix}.body.nodes.${id}.inputs.`;
         for (const ref of stateRefs) {
@@ -1014,14 +995,14 @@ function checkStateSoundness(
                         `$from "state", name "${ref.name}": no state ` +
                         `variable "${ref.name}" is declared on this loop.`,
                 });
-            } else if (inputSchema) {
+            } else {
                 // Type-compatibility: check the state variable's schema
                 // type against the consumer's expected type at this position.
                 const stateSchema = loopNode.state[ref.name].schema;
                 const consumerPropSchema = resolveConsumerPropertySchema(
                     ref.templatePath,
                     inputsPrefix,
-                    inputSchema,
+                    node.inputSchema,
                 );
                 if (stateSchema.type && consumerPropSchema?.type) {
                     const stateTypes = normalizeTypeSet(stateSchema.type);
@@ -1046,40 +1027,6 @@ function checkStateSoundness(
             }
         }
     }
-}
-
-/**
- * Walk a template and collect all $from: "state" references.
- */
-function collectStateRefs(
-    template: Template,
-    templatePath: string,
-): { name: string; templatePath: string }[] {
-    if (template === null || template === undefined) return [];
-    if (typeof template !== "object") return [];
-    if (Array.isArray(template)) {
-        const refs: { name: string; templatePath: string }[] = [];
-        for (let i = 0; i < template.length; i++) {
-            refs.push(
-                ...collectStateRefs(template[i], `${templatePath}[${i}]`),
-            );
-        }
-        return refs;
-    }
-
-    const obj = template as Record<string, unknown>;
-    if (obj["$from"] === "state") {
-        return [{ name: obj["name"] as string, templatePath }];
-    }
-    if ("$literal" in obj) return [];
-
-    const refs: { name: string; templatePath: string }[] = [];
-    for (const [key, value] of Object.entries(obj)) {
-        refs.push(
-            ...collectStateRefs(value as Template, `${templatePath}.${key}`),
-        );
-    }
-    return refs;
 }
 
 function validateScope(
@@ -1261,9 +1208,7 @@ function buildBindingMap(
 ): Map<string, JSONSchema> {
     const map = new Map<string, JSONSchema>();
     for (const node of Object.values(nodes)) {
-        if (node.kind === "task" && node.bind) {
-            map.set(node.bind, node.outputSchema);
-        } else if (node.kind === "loop" && node.bind) {
+        if ((node.kind === "task" || node.kind === "loop") && node.bind) {
             map.set(node.bind, node.outputSchema);
         }
     }
@@ -1976,33 +1921,43 @@ function checkNodeTaskSchemas(
 }
 
 /**
- * Walk a template and collect all $from: "scope" references.
+ * A reference extracted from a template expression (e.g. $from: "scope"
+ * or $from: "state").
  */
-interface ScopeRef {
+interface TemplateRef {
     name: string;
     path: (string | number)[] | undefined;
     optional: boolean;
     templatePath: string;
 }
 
-function collectScopeRefs(
+/**
+ * Walk a template and collect all $from references matching the given
+ * namespace (e.g. "scope", "state", "input", "constant").
+ */
+function collectTemplateRefs(
     template: Template,
     templatePath: string,
-): ScopeRef[] {
+    fromValue: string,
+): TemplateRef[] {
     if (template === null || template === undefined) return [];
     if (typeof template !== "object") return [];
     if (Array.isArray(template)) {
-        const refs: ScopeRef[] = [];
+        const refs: TemplateRef[] = [];
         for (let i = 0; i < template.length; i++) {
             refs.push(
-                ...collectScopeRefs(template[i], `${templatePath}[${i}]`),
+                ...collectTemplateRefs(
+                    template[i],
+                    `${templatePath}[${i}]`,
+                    fromValue,
+                ),
             );
         }
         return refs;
     }
 
     const obj = template as Record<string, unknown>;
-    if (obj["$from"] === "scope") {
+    if (obj["$from"] === fromValue) {
         return [
             {
                 name: obj["name"] as string,
@@ -2014,13 +1969,42 @@ function collectScopeRefs(
     }
     if ("$literal" in obj) return [];
 
-    const refs: ScopeRef[] = [];
+    const refs: TemplateRef[] = [];
     for (const [key, value] of Object.entries(obj)) {
         refs.push(
-            ...collectScopeRefs(value as Template, `${templatePath}.${key}`),
+            ...collectTemplateRefs(
+                value as Template,
+                `${templatePath}.${key}`,
+                fromValue,
+            ),
         );
     }
     return refs;
+}
+
+/**
+ * Check scope refs in a template against a binding map, pushing
+ * schema compatibility errors.
+ */
+function checkScopeRefsAgainstBindings(
+    template: Template,
+    templatePath: string,
+    bindings: Map<string, JSONSchema>,
+    errors: ValidationError[],
+): void {
+    const refs = collectTemplateRefs(template, templatePath, "scope");
+    for (const ref of refs) {
+        const producerSchema = bindings.get(ref.name);
+        if (!producerSchema) continue;
+        const err = checkSchemaCompat(
+            producerSchema,
+            ref.path,
+            `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+        );
+        if (err) {
+            errors.push({ path: ref.templatePath, message: err });
+        }
+    }
 }
 
 /**
@@ -2037,64 +2021,37 @@ function validateSchemaCompat(
 
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
-        let inputs: Record<string, Template> | undefined;
 
-        if (node.kind === "task") {
-            inputs = node.inputs;
-        } else if (node.kind === "loop") {
-            inputs = node.inputs;
-
-            // Also check iterateState and output templates.
+        // For loop nodes, check iterateState and output templates
+        // against body-scope bindings.
+        if (node.kind === "loop") {
             const bodyBindings = buildBindingMap(node.body.nodes);
             for (const [stateName, stateTemplate] of Object.entries(
                 node.iterateState,
             )) {
-                const stateRefs = collectScopeRefs(
+                checkScopeRefsAgainstBindings(
                     stateTemplate,
                     `${path}.iterateState.${stateName}`,
+                    bodyBindings,
+                    errors,
                 );
-                for (const ref of stateRefs) {
-                    // iterateState refs resolve in the body scope
-                    const producerSchema = bodyBindings.get(ref.name);
-                    if (!producerSchema) continue;
-                    const err = checkSchemaCompat(
-                        producerSchema,
-                        ref.path,
-                        `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-                    );
-                    if (err) {
-                        errors.push({ path: ref.templatePath, message: err });
-                    }
-                }
             }
-
-            const outputRefs = collectScopeRefs(node.output, `${path}.output`);
-            for (const ref of outputRefs) {
-                // output refs resolve in the body scope
-                const producerSchema = bodyBindings.get(ref.name);
-                if (!producerSchema) continue;
-                const err = checkSchemaCompat(
-                    producerSchema,
-                    ref.path,
-                    `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-                );
-                if (err) {
-                    errors.push({ path: ref.templatePath, message: err });
-                }
-            }
+            checkScopeRefsAgainstBindings(
+                node.output,
+                `${path}.output`,
+                bodyBindings,
+                errors,
+            );
         }
 
-        if (!inputs) continue;
-
-        // Resolve consumer types from the node's inputSchema for
-        // type compatibility checking on direct input properties.
-        const consumerInputSchema =
-            node.kind === "task" || node.kind === "loop"
-                ? node.inputSchema
-                : undefined;
+        if (node.kind !== "task" && node.kind !== "loop") continue;
 
         const inputsPrefix = `${path}.inputs.`;
-        const refs = collectScopeRefs(inputs, `${path}.inputs`);
+        const refs = collectTemplateRefs(
+            node.inputs,
+            `${path}.inputs`,
+            "scope",
+        );
         for (const ref of refs) {
             const producerSchema = bindings.get(ref.name);
             if (!producerSchema) {
@@ -2108,13 +2065,11 @@ function validateSchemaCompat(
                 }
                 continue;
             }
-            const consumerType = consumerInputSchema
-                ? resolveConsumerPropertySchema(
-                      ref.templatePath,
-                      inputsPrefix,
-                      consumerInputSchema,
-                  )?.type
-                : undefined;
+            const consumerType = resolveConsumerPropertySchema(
+                ref.templatePath,
+                inputsPrefix,
+                node.inputSchema,
+            )?.type;
             const err = checkSchemaCompat(
                 producerSchema,
                 ref.path,
