@@ -1,6 +1,6 @@
 # Workflow DSL v2
 
-Status: **Design (planned).** Evolves v1 based on visual editor analysis.
+Status: **Implemented.** All phases complete (lexer, parser, type checker, emitter, graph extractor).
 
 Compile target: [ir-v1.md](../ir/ir-v1.md) + [ir-v2.md](../ir/ir-v2.md) (new node kinds: `fork`, `forkMap`).
 Design rationale: [dsl-comparison.md](dsl-comparison.md) (Option E selected).

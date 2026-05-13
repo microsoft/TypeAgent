@@ -975,10 +975,17 @@ export class Emitter {
             }
         }
 
+        // Capture outer-scope references used in retry body
+        const outer = this.captureOuterRefs(bodyScope, new Set<string>());
+
         const loopNode: LoopNode = {
             kind: "loop",
-            inputs: {},
-            inputSchema: { type: "object", properties: {} },
+            inputs: { ...outer.inputs },
+            inputSchema: {
+                type: "object",
+                required: [...outer.required],
+                properties: { ...outer.properties },
+            },
             state,
             body: {
                 entry: bodyScope.nodeOrder[0] ?? "",
@@ -1009,7 +1016,9 @@ export class Emitter {
         // Build body scope: param is the loop element
         const bodyScope = this.childScope(scope);
         // Element access via list.elementAt
-        const pickId = this.freshId(`pick_${expr.param}`);
+        // Use param name as both node ID and bind so $from:"scope" refs
+        // match what the validator resolves via buildBindingMap (keyed on bind).
+        const pickId = expr.param;
         bodyScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
@@ -1026,7 +1035,7 @@ export class Emitter {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
             },
-            bind: expr.param,
+            bind: pickId,
         };
         bodyScope.nodeOrder.push(pickId);
         bodyScope.bindings.set(expr.param, { kind: "node", nodeId: pickId });
@@ -1141,13 +1150,19 @@ export class Emitter {
             results: { schema: { type: "array" }, initial: [] as Template[] },
         };
 
+        // Capture outer-scope references used in body and promote to loop inputs
+        const outer = this.captureOuterRefs(
+            bodyScope,
+            new Set(["items"]),
+        );
+
         const loopNode: LoopNode = {
             kind: "loop",
-            inputs: { items: collectionTemplate },
+            inputs: { items: collectionTemplate, ...outer.inputs },
             inputSchema: {
                 type: "object",
-                required: ["items"],
-                properties: { items: { type: "array" } },
+                required: ["items", ...outer.required],
+                properties: { items: { type: "array" }, ...outer.properties },
             },
             state,
             body: {
@@ -1181,8 +1196,8 @@ export class Emitter {
 
         const bodyScope = this.childScope(scope);
 
-        // Pick element
-        const pickId = this.freshId(`pick_${expr.param}`);
+        // Pick element - use param name as node ID to match bind
+        const pickId = expr.param;
         bodyScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
@@ -1199,7 +1214,7 @@ export class Emitter {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
             },
-            bind: expr.param,
+            bind: pickId,
         };
         bodyScope.nodeOrder.push(pickId);
         bodyScope.bindings.set(expr.param, { kind: "node", nodeId: pickId });
@@ -1355,13 +1370,19 @@ export class Emitter {
             results: { schema: { type: "array" }, initial: [] as Template[] },
         };
 
+        // Capture outer-scope references used in body
+        const outer = this.captureOuterRefs(
+            bodyScope,
+            new Set(["items"]),
+        );
+
         const loopNode: LoopNode = {
             kind: "loop",
-            inputs: { items: collectionTemplate },
+            inputs: { items: collectionTemplate, ...outer.inputs },
             inputSchema: {
                 type: "object",
-                required: ["items"],
-                properties: { items: { type: "array" } },
+                required: ["items", ...outer.required],
+                properties: { items: { type: "array" }, ...outer.properties },
             },
             state,
             body: {
@@ -1457,6 +1478,12 @@ export class Emitter {
             }
         }
 
+        // Capture outer-scope references used in body
+        const outer = this.captureOuterRefs(
+            bodyScope,
+            new Set([expr.param]),
+        );
+
         const forkMapNode: ForkMapNode = {
             kind: "forkMap",
             collection: collectionTemplate,
@@ -1466,6 +1493,9 @@ export class Emitter {
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
             },
+            ...(Object.keys(outer.inputs).length > 0
+                ? { inputs: outer.inputs }
+                : {}),
             outputSchema: { type: "array" },
             ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
             bind: forkMapId,
@@ -1600,6 +1630,75 @@ export class Emitter {
     }
 
     // ---- Scope helpers ----
+
+    /**
+     * Scan all nodes in bodyScope for `$from: "scope"` references that
+     * point to nodes not in bodyScope. Promote those to loop inputs so
+     * the IR validator accepts them.
+     *
+     * Returns the additional inputs and inputSchema properties to merge
+     * into the loop node.
+     */
+    private captureOuterRefs(
+        bodyScope: ScopeContext,
+        existingInputNames: Set<string>,
+    ): {
+        inputs: Record<string, Template>;
+        properties: Record<string, JSONSchema>;
+        required: string[];
+    } {
+        const bodyNodeIds = new Set(Object.keys(bodyScope.nodes));
+        const captured = new Map<string, Template>();
+
+        const visit = (value: unknown): void => {
+            if (value === null || value === undefined) return;
+            if (typeof value !== "object") return;
+            if (Array.isArray(value)) {
+                for (const el of value) visit(el);
+                return;
+            }
+            const obj = value as Record<string, unknown>;
+            if (
+                obj.$from === "scope" &&
+                typeof obj.name === "string" &&
+                !bodyNodeIds.has(obj.name) &&
+                !existingInputNames.has(obj.name)
+            ) {
+                // This is an outer-scope reference: rewrite to input ref
+                const outerName = obj.name as string;
+                if (!captured.has(outerName)) {
+                    // Find the original template by looking it up in parent
+                    const parentRef = {
+                        $from: "scope",
+                        name: outerName,
+                        ...(obj.path ? { path: obj.path } : {}),
+                    } as unknown as Template;
+                    captured.set(outerName, parentRef);
+                }
+                // Rewrite in-place to reference the loop input
+                obj.$from = "input";
+            } else {
+                for (const val of Object.values(obj)) {
+                    visit(val);
+                }
+            }
+        };
+
+        for (const node of Object.values(bodyScope.nodes)) {
+            visit(node);
+        }
+
+        const inputs: Record<string, Template> = {};
+        const properties: Record<string, JSONSchema> = {};
+        const required: string[] = [];
+        for (const [name, tmpl] of captured) {
+            inputs[name] = tmpl;
+            properties[name] = {};
+            required.push(name);
+        }
+
+        return { inputs, properties, required };
+    }
 
     private childScope(parent: ScopeContext): ScopeContext {
         return {

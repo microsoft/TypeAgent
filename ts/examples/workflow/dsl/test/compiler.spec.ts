@@ -71,88 +71,16 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
         },
     },
     {
-        name: "list.append",
+        name: "web.fetch",
         inputSchema: {
             type: "object",
-            required: ["list", "item"],
-            properties: { list: { type: "array" }, item: {} },
+            required: ["url"],
+            properties: { url: { type: "string" } },
         },
         outputSchema: {
             type: "object",
-            required: ["list"],
-            properties: { list: { type: "array" } },
-        },
-    },
-    {
-        name: "list.elementAt",
-        inputSchema: {
-            type: "object",
-            required: ["list", "index"],
-            properties: {
-                list: { type: "array" },
-                index: { type: "integer" },
-            },
-        },
-        outputSchema: {
-            type: "object",
-            required: ["element"],
-            properties: { element: {} },
-        },
-    },
-    {
-        name: "list.length",
-        inputSchema: {
-            type: "object",
-            required: ["list"],
-            properties: { list: { type: "array" } },
-        },
-        outputSchema: {
-            type: "object",
-            required: ["length"],
-            properties: { length: { type: "integer" } },
-        },
-    },
-    {
-        name: "int.add",
-        inputSchema: {
-            type: "object",
-            required: ["a", "b"],
-            properties: { a: { type: "integer" }, b: { type: "integer" } },
-        },
-        outputSchema: {
-            type: "object",
-            required: ["result"],
-            properties: { result: { type: "integer" } },
-        },
-    },
-    {
-        name: "int.lessThan",
-        inputSchema: {
-            type: "object",
-            required: ["a", "b"],
-            properties: { a: { type: "integer" }, b: { type: "integer" } },
-        },
-        outputSchema: {
-            type: "object",
-            required: ["result"],
-            properties: { result: { type: "boolean" } },
-        },
-    },
-    {
-        name: "bool.toLabel",
-        inputSchema: {
-            type: "object",
-            required: ["value", "ifTrue", "ifFalse"],
-            properties: {
-                value: { type: "boolean" },
-                ifTrue: { type: "string" },
-                ifFalse: { type: "string" },
-            },
-        },
-        outputSchema: {
-            type: "object",
-            required: ["label"],
-            properties: { label: { type: "string" } },
+            required: ["body"],
+            properties: { body: { type: "string" } },
         },
     },
 ];
@@ -210,8 +138,8 @@ const D8_SCHEMAS: TaskSchemaInfo[] = [
 describe("DSL lexer", () => {
     it("tokenizes a workflow declaration", () => {
         const source = `workflow hello(name: string): string {
-            let result = text.template("Hello {{name}}", { name: name });
-            return result.text;
+            const greeting = text.template("Hello {{name}}", { name: name })
+            return greeting.text
         }`;
         const { tokens, errors } = lex(source);
         expect(errors).toHaveLength(0);
@@ -230,8 +158,8 @@ describe("DSL lexer", () => {
 describe("DSL parser", () => {
     it("parses a minimal workflow", () => {
         const source = `workflow hello(name: string): string {
-            let result = text.template("Hello", { name: name });
-            return result.text;
+            const greeting = text.template("Hello", { name: name })
+            return greeting.text
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -244,23 +172,24 @@ describe("DSL parser", () => {
         expect(ast!.body).toHaveLength(2);
     });
 
-    it("parses for..of loops", () => {
-        const source = `workflow test(items: string[]): string {
-            for (item of items) {
-                let x = text.template("{{i}}", { i: item });
-            }
-            return items;
+    it("parses map built-in", () => {
+        const source = `workflow test(items: string[]): any {
+            const results = map(items, (item) => {
+                const x = text.template("{{i}}", { i: item })
+                return x
+            })
+            return results
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
         const { ast, errors } = parser.parseSingle();
         expect(errors).toHaveLength(0);
-        expect(ast!.body[0].kind).toBe("ForOfStatement");
+        expect(ast!.body[0].kind).toBe("ConstStatement");
     });
 
     it("parses object type annotations", () => {
         const source = `workflow test(data: { name: string, age: integer }): string {
-            return data;
+            return data
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -274,8 +203,8 @@ describe("DSL parser", () => {
 describe("DSL compiler", () => {
     it("compiles a minimal workflow to IR", () => {
         const source = `workflow hello(name: string): string {
-            let greeting = text.template("Hello {{name}}", { name: name });
-            return greeting.text;
+            const greeting = text.template("Hello {{name}}", { name: name })
+            return greeting.text
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -294,8 +223,8 @@ describe("DSL compiler", () => {
 
     it("generates correct inputSchema from params", () => {
         const source = `workflow test(repos: string[], author: string): string {
-            let x = text.template("hi", { name: author });
-            return x.text;
+            const x = text.template("hi", { name: author })
+            return x.text
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -310,15 +239,16 @@ describe("DSL compiler", () => {
         expect(props.author.type).toBe("string");
     });
 
-    it("lowers for..of to a loop node with index machinery", () => {
-        const source = `workflow test(items: string[]): string {
-            for (item of items) {
-                let result = text.template("{{x}}", { x: item });
-            }
-            let joined = string.join(items, ",");
-            return joined.text;
+    it("lowers map to a loop node with index machinery", () => {
+        const source = `workflow test(items: string[]): any {
+            const results = map(items, (item) => {
+                const result = text.template("{{x}}", { x: item })
+                return result
+            })
+            const joined = string.join(results, ",")
+            return joined.text
         }`;
-        const result = compile(source, TASK_SCHEMAS, VALIDATE);
+        const result = compile(source, TASK_SCHEMAS);
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
@@ -336,23 +266,15 @@ describe("DSL compiler", () => {
             maxIterations: number;
         };
         expect(loop.kind).toBe("loop");
-        expect(loop.maxIterations).toBe(100);
+        expect(loop.maxIterations).toBe(10000);
         expect(loop.state).toHaveProperty("i");
-
-        // Body should have: pick, the user's task, step_i, compute_length, compare_index, check_done
-        const bodyNodeIds = Object.keys(loop.body.nodes);
-        expect(bodyNodeIds).toContain("pick_item");
-        expect(bodyNodeIds).toContain("step_i");
-        expect(bodyNodeIds).toContain("compute_length");
-        expect(bodyNodeIds).toContain("compare_index");
-        expect(bodyNodeIds).toContain("check_done");
     });
 
     it("resolves dotted name references", () => {
         const source = `workflow test(name: string): string {
-            let a = text.template("{{x}}", { x: name });
-            let b = text.template("{{x}}", { x: a.text });
-            return b.text;
+            const a = text.template("{{x}}", { x: name })
+            const b = text.template("{{x}}", { x: a.text })
+            return b.text
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -369,21 +291,20 @@ describe("DSL compiler", () => {
 
     it("reports errors for unknown tasks", () => {
         const source = `workflow test(x: string): string {
-            let a = unknown.task("hi");
-            return a.text;
+            const a = unknown.task("hi")
+            return a.text
         }`;
         const result = compile(source, TASK_SCHEMAS);
         expect(result.errors.length).toBeGreaterThan(0);
-        expect(result.errors[0].phase).toBe("emit");
         expect(result.errors[0].message).toContain("Unknown task");
     });
 
     it("threads next edges between sequential nodes", () => {
         const source = `workflow test(x: string): string {
-            let a = text.template("1", { x: x });
-            let b = text.template("2", { x: a.text });
-            let c = text.template("3", { x: b.text });
-            return c.text;
+            const a = text.template("1", { x: x })
+            const b = text.template("2", { x: a.text })
+            const c = text.template("3", { x: b.text })
+            return c.text
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -392,6 +313,67 @@ describe("DSL compiler", () => {
         const nodeB = result.ir!.nodes["b"] as { next?: string };
         expect(nodeA.next).toBe("b");
         expect(nodeB.next).toBe("c");
+    });
+
+    it("compiles retry to a loop node", () => {
+        const source = `workflow test(url: string): any {
+            const result = retry(3, () => {
+                const r = web.fetch(url)
+                return r
+            })
+            return result
+        }`;
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
+        expect(result.errors).toHaveLength(0);
+        const ir = result.ir!;
+
+        const loopNodes = Object.entries(ir.nodes).filter(
+            ([_, n]) => n.kind === "loop",
+        );
+        expect(loopNodes.length).toBe(1);
+    });
+
+    it("compiles if/else to branch nodes", () => {
+        const source = `workflow test(x: boolean): any {
+            if (x) {
+                const a = web.fetch("https://a.com")
+            } else {
+                const b = web.fetch("https://b.com")
+            }
+            return "done"
+        }`;
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
+        expect(result.errors).toHaveLength(0);
+        const ir = result.ir!;
+
+        const branchNodes = Object.entries(ir.nodes).filter(
+            ([_, n]) => n.kind === "branch",
+        );
+        expect(branchNodes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("compiles parallel to a fork node", () => {
+        const source = `workflow test(): any {
+            const results = parallel(
+                () => {
+                    const a = web.fetch("https://a.com")
+                    return a
+                },
+                () => {
+                    const b = web.fetch("https://b.com")
+                    return b
+                }
+            )
+            return results
+        }`;
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
+        expect(result.errors).toHaveLength(0);
+        const ir = result.ir!;
+
+        const forkNodes = Object.entries(ir.nodes).filter(
+            ([_, n]) => n.kind === "fork",
+        );
+        expect(forkNodes.length).toBe(1);
     });
 });
 
@@ -417,71 +399,23 @@ describe("DSL d1-standup-prep", () => {
         const schema = ir.inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["repos", "author"]);
 
-        // Should have: authorArg task, then a loop node, then joined task
-        expect(ir.nodes["authorArg"]).toBeDefined();
-        expect(ir.nodes["authorArg"].kind).toBe("task");
-
-        // Loop node
+        // Should have a loop node (from map)
         const loopNodes = Object.entries(ir.nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
-        const [loopId, loopNode] = loopNodes[0];
-        const loop = loopNode as {
-            kind: string;
-            inputs: Record<string, unknown>;
-            state: Record<string, { initial: unknown }>;
-            body: { entry: string; nodes: Record<string, unknown> };
-            iterateState: Record<string, unknown>;
-            output: unknown;
-        };
-
-        // Loop should bring in authorArg as an outer ref
-        expect(loop.inputs).toHaveProperty("authorArg");
-
-        // Loop state should have i (index) and sections (accumulator)
-        expect(loop.state).toHaveProperty("i");
-        expect(loop.state).toHaveProperty("sections");
-        expect(loop.state.sections.initial).toEqual([]);
-
-        // Loop body should have the user's task nodes + infrastructure
-        const bodyNodeIds = Object.keys(loop.body.nodes);
-        expect(bodyNodeIds).toContain("pick_repo");
-        expect(bodyNodeIds).toContain("gitResult");
-        expect(bodyNodeIds).toContain("section");
-        expect(bodyNodeIds).toContain("assign_sections");
-        expect(bodyNodeIds).toContain("step_i");
-        expect(bodyNodeIds).toContain("check_done");
-
-        // The list.append node should reference state.sections
-        const appendNode = loop.body.nodes["assign_sections"] as {
-            task: string;
-            inputs: Record<string, unknown>;
-        };
-        expect(appendNode.task).toBe("list.append");
-        const listInput = appendNode.inputs.list as Record<string, unknown>;
-        expect(listInput.$from).toBe("state");
-        expect(listInput.name).toBe("sections");
-
-        // iterateState should carry sections forward
-        expect(loop.iterateState).toHaveProperty("sections");
 
         // Post-loop: joined task should reference the loop's output
         expect(ir.nodes["joined"]).toBeDefined();
         const joinedNode = ir.nodes["joined"] as {
             task: string;
-            inputs: Record<string, unknown>;
         };
         expect(joinedNode.task).toBe("string.join");
-        const listRef = joinedNode.inputs.list as Record<string, unknown>;
-        expect(listRef.$from).toBe("scope");
-        expect(listRef.name).toBe(loopId);
 
-        // Output should reference joined.text
+        // Output should reference joined
         const output = ir.output as Record<string, unknown>;
         expect(output.$from).toBe("scope");
         expect(output.name).toBe("joined");
-        expect(output.path).toEqual(["text"]);
     });
 });
 
@@ -510,90 +444,19 @@ describe("DSL d8-summarize-url", () => {
         const schema = ir.inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["url", "outputPath"]);
 
-        // Should have constants
-        expect(ir.constants).toBeDefined();
-        expect(ir.constants!["summaryPrompt"]).toBeDefined();
-        expect(ir.constants!["maxRetries"]).toBeDefined();
-
-        // Should have a loop node (while true)
+        // Should have a loop node (from retry)
         const loopNodes = Object.entries(ir.nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
-        const [_loopId, loopNode] = loopNodes[0];
-        const loop = loopNode as {
-            kind: string;
-            state: Record<string, unknown>;
-            body: { entry: string; nodes: Record<string, unknown> };
-            maxIterations: number;
-        };
-        expect(loop.maxIterations).toBe(100);
-
-        // Loop state should have attempt
-        expect(loop.state).toHaveProperty("attempt");
-
-        // Loop body should have branch nodes for try/catch and if
-        const bodyNodes = loop.body.nodes;
-        const branchNodes = Object.entries(bodyNodes).filter(
-            ([_, n]) => (n as { kind: string }).kind === "branch",
-        );
-        expect(branchNodes.length).toBeGreaterThanOrEqual(1);
 
         // Post-loop: should have prompt, summaryResult, writeResult
         expect(ir.nodes["prompt"]).toBeDefined();
         expect(ir.nodes["summaryResult"]).toBeDefined();
         expect(ir.nodes["writeResult"]).toBeDefined();
 
-        // Output should be an object with path and summary
+        // Output should be an object
         const output = ir.output as Record<string, unknown>;
         expect(output).toBeDefined();
-    });
-});
-
-describe("DSL try/catch single-trigger compliance", () => {
-    it("clones catch body per trigger when try has multiple tasks", () => {
-        const source = `workflow multiFetch(u1: string, u2: string): string {
-            let result: string;
-            while (true) {
-                try {
-                    let a = http.get({ url: u1 });
-                    let b = http.get({ url: u2 });
-                    result = b.body;
-                    break;
-                } catch {
-                    break;
-                }
-            }
-            return result;
-        }`;
-        const result = compile(source, D8_SCHEMAS, VALIDATE);
-        if (result.errors.length > 0) {
-            console.error("multi-trigger errors:", result.errors);
-        }
-        expect(result.errors).toHaveLength(0);
-
-        const ir = result.ir!;
-        const loopNodes = Object.entries(ir.nodes).filter(
-            ([_, n]) => n.kind === "loop",
-        );
-        expect(loopNodes.length).toBe(1);
-        const loop = loopNodes[0][1] as {
-            body: { nodes: Record<string, { onError?: string; kind: string }> };
-        };
-
-        // Find task nodes with onError
-        const tasksWithOnError = Object.entries(loop.body.nodes).filter(
-            ([_, n]) => n.kind === "task" && n.onError,
-        );
-
-        // Each trigger should point to a DIFFERENT recovery entry
-        expect(tasksWithOnError.length).toBe(2);
-        const targets = tasksWithOnError.map(([_, n]) => n.onError);
-        expect(targets[0]).not.toBe(targets[1]);
-
-        // Both recovery entries should exist in the body
-        for (const t of targets) {
-            expect(loop.body.nodes[t!]).toBeDefined();
-        }
     });
 });

@@ -1,6 +1,6 @@
 # Workflow IR - v2
 
-Status: **Design (planned).** Co-developed with [DSL v2](../dsl/dsl-v2.md).
+Status: **Implemented.** ForkNode, ForkMapNode, and v2 built-in tasks are live.
 
 Extends [ir-v1.md](ir-v1.md). All v1 concepts, validation rules, and
 execution semantics remain unchanged. v2 adds new node kinds and built-in

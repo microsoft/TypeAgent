@@ -1,5 +1,7 @@
 # DSL v2 / IR v2 Implementation Plan
 
+Status: **Complete.** All phases implemented and committed.
+
 Implements [dsl-v2.md](dsl/dsl-v2.md) and [ir-v2.md](ir/ir-v2.md).
 Replaces the v1 compiler; engine and model are extended (not replaced).
 

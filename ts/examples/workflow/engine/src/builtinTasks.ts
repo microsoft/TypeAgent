@@ -71,6 +71,9 @@ export const intAdd: TaskDefinition<
         properties: { result: { type: "integer" } },
     },
     async execute(input) {
+        console.warn(
+            "DEPRECATED: int.add is deprecated, use math.add instead",
+        );
         return { kind: "ok", output: { result: input.a + input.b } };
     },
 };
@@ -92,6 +95,9 @@ export const intLessThan: TaskDefinition<
         properties: { result: { type: "boolean" } },
     },
     async execute(input) {
+        console.warn(
+            "DEPRECATED: int.lessThan is deprecated, use compare.lessThan instead",
+        );
         return { kind: "ok", output: { result: input.a < input.b } };
     },
 };
