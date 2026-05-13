@@ -11,6 +11,14 @@ export { lex, TokenKind, Token, LexError } from "./lexer.js";
 export { Parser, ParseError } from "./parser.js";
 export { Emitter, TaskSchemaInfo, EmitError } from "./emitter.js";
 export {
+    extractGraph,
+    GraphModel,
+    GraphNode,
+    GraphEdge,
+    GraphGroup,
+    ParamNode,
+} from "./graphExtractor.js";
+export {
     WorkflowDecl,
     ParamDecl,
     TypeExpr,
