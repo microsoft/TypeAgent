@@ -17,6 +17,7 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           scopePath: string[];
+          iteration?: number;
           timestamp: number;
       }
     | {
@@ -24,6 +25,7 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           scopePath: string[];
+          iteration?: number;
           output: unknown;
           timestamp: number;
       }
@@ -32,6 +34,7 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           scopePath: string[];
+          iteration?: number;
           error: { message: string; data?: unknown };
           timestamp: number;
       }

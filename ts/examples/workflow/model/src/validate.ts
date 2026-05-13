@@ -40,6 +40,13 @@ export function validateWorkflowIR(
         errors.push({ path: "kind", message: `Expected "workflow".` });
     }
 
+    if (ir.version !== "1") {
+        errors.push({
+            path: "version",
+            message: `Expected version "1" (got "${ir.version}").`,
+        });
+    }
+
     if (!(ir.entry in ir.nodes)) {
         errors.push({
             path: "entry",
@@ -84,6 +91,9 @@ export function validateWorkflowIR(
     // CFG-based passes: acyclicity, onError rules, termination,
     // scope closure, dominator analysis, state soundness, output binding.
     validateCFGPasses(ir, errors);
+
+    // Pass: reserved $-key check (§3.4)
+    validateAllTemplates(ir, errors);
 
     // Pass 7: Type compatibility (compositional resolved types).
     validateTypeCompatibility(
@@ -884,6 +894,22 @@ function validateOnErrorRules(
                     `(got "${targetNode.kind}").`,
             });
         }
+
+        // Rule 5: recovery task inputSchema must declare "error" and "trigger" (§3.8)
+        if (targetNode.kind === "task") {
+            const required = targetNode.inputSchema.required ?? [];
+            for (const field of ["error", "trigger"] as const) {
+                if (!required.includes(field)) {
+                    errors.push({
+                        path: `${prefix}.${target}.inputSchema`,
+                        message:
+                            `Recovery task "${target}" must declare "${field}" ` +
+                            `as a required input field. The engine injects ` +
+                            `"error" and "trigger" when dispatching via onError (§3.8).`,
+                    });
+                }
+            }
+        }
     }
 }
 
@@ -1080,6 +1106,13 @@ function validateScope(
                 });
             }
         } else if (node.kind === "branch") {
+            // §3.6: Branch nodes must not declare bind.
+            if ((node as unknown as Record<string, unknown>)["bind"] !== undefined) {
+                errors.push({
+                    path: `${path}.bind`,
+                    message: `Branch nodes must not declare "bind". Branches produce no output.`,
+                });
+            }
             // Validate selectorSchema type: String() coercion at runtime
             // only produces useful results for string, number, and boolean.
             const selectorType = node.selectorSchema?.type;
@@ -1500,6 +1533,50 @@ function isStructuralSubtype(
         // Producer is unconstrained; can't prove it's a subtype of
         // a constrained consumer. Be lenient: skip.
         return true;
+    }
+
+    // Handle union types (anyOf, oneOf) per §4.2:
+    // "P compatible iff every variant of P compatible with some variant of C".
+    const producerVariants = producer.anyOf ?? producer.oneOf;
+    const consumerVariants = consumer.anyOf ?? consumer.oneOf;
+
+    if (producerVariants) {
+        // Every producer variant must be compatible with consumer (or some
+        // consumer variant when consumer is also a union).
+        return producerVariants.every((v) => {
+            if (typeof v === "boolean") return false;
+            return consumerVariants
+                ? consumerVariants.some(
+                      (cv) =>
+                          typeof cv !== "boolean" &&
+                          isStructuralSubtype(v, cv),
+                  )
+                : isStructuralSubtype(v, consumer);
+        });
+    }
+
+    if (consumerVariants) {
+        // Non-union producer: must be compatible with at least one consumer variant.
+        return consumerVariants.some(
+            (v) => typeof v !== "boolean" && isStructuralSubtype(producer, v),
+        );
+    }
+
+    // Handle allOf: intersection semantics.
+    if (producer.allOf) {
+        // Producer satisfies every allOf member simultaneously (intersection).
+        // It is compatible with C when any single member satisfies C, because
+        // the intersection is at least as constrained as that member.
+        return producer.allOf.some(
+            (v) => typeof v !== "boolean" && isStructuralSubtype(v, consumer),
+        );
+    }
+
+    if (consumer.allOf) {
+        // Producer must satisfy every member of consumer's allOf.
+        return consumer.allOf.every(
+            (v) => typeof v !== "boolean" && isStructuralSubtype(producer, v),
+        );
     }
 
     // Type check
@@ -1947,6 +2024,95 @@ function checkNodeTaskSchemas(
                         `${JSON.stringify(taskPropDef.type)}.`,
                 });
             }
+        }
+    }
+}
+
+// ---- Pass: Reserved $-key check (§3.4) ----
+
+const KNOWN_DOLLAR_KEYS = new Set(["$from", "$literal"]);
+
+/**
+ * Walk a template recursively and report any object that contains an
+ * unrecognised $-prefixed key. Per §3.4, only "$from" and "$literal"
+ * are legal; every other $-prefixed key is reserved for future engine use
+ * and MUST be rejected.
+ */
+function checkReservedTemplateKeys(
+    template: Template,
+    templatePath: string,
+    errors: ValidationError[],
+): void {
+    if (template === null || typeof template !== "object") return;
+    if (Array.isArray(template)) {
+        for (let i = 0; i < template.length; i++) {
+            checkReservedTemplateKeys(
+                template[i],
+                `${templatePath}[${i}]`,
+                errors,
+            );
+        }
+        return;
+    }
+    const obj = template as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+        if (key.startsWith("$") && !KNOWN_DOLLAR_KEYS.has(key)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $-prefixed key "${key}" in template. ` +
+                    `Only "$from" and "$literal" are recognized by the engine; ` +
+                    `all other $-prefixed keys are reserved (§3.4).`,
+            });
+            return; // one error per object is sufficient
+        }
+    }
+    // Don't recurse into $from or $literal — they have their own semantics.
+    if ("$from" in obj || "$literal" in obj) return;
+    for (const [, value] of Object.entries(obj)) {
+        checkReservedTemplateKeys(value as Template, templatePath, errors);
+    }
+}
+
+/**
+ * Apply checkReservedTemplateKeys to every template position in the IR:
+ * node inputs, branch selectors, loop outputs, iterateState entries,
+ * and the top-level workflow output.
+ */
+function validateAllTemplates(ir: WorkflowIR, errors: ValidationError[]): void {
+    checkReservedTemplateKeys(ir.output, "output", errors);
+    validateScopeTemplates(ir.nodes, "nodes", errors);
+}
+
+function validateScopeTemplates(
+    nodes: Record<string, WorkflowNode>,
+    prefix: string,
+    errors: ValidationError[],
+): void {
+    for (const [id, node] of Object.entries(nodes)) {
+        const path = `${prefix}.${id}`;
+        if (node.kind === "task" || node.kind === "loop") {
+            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                checkReservedTemplateKeys(
+                    tmpl,
+                    `${path}.inputs.${fieldName}`,
+                    errors,
+                );
+            }
+        }
+        if (node.kind === "branch") {
+            checkReservedTemplateKeys(node.selector, `${path}.selector`, errors);
+        }
+        if (node.kind === "loop") {
+            checkReservedTemplateKeys(node.output, `${path}.output`, errors);
+            for (const [name, tmpl] of Object.entries(node.iterateState)) {
+                checkReservedTemplateKeys(
+                    tmpl,
+                    `${path}.iterateState.${name}`,
+                    errors,
+                );
+            }
+            validateScopeTemplates(node.body.nodes, `${path}.body.nodes`, errors);
         }
     }
 }

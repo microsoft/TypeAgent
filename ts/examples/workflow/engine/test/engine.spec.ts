@@ -261,10 +261,12 @@ function makeA4IR(): WorkflowIR {
                 task: "text.placeholderSection",
                 inputSchema: {
                     type: "object",
-                    required: ["section", "reason"],
+                    required: ["section", "reason", "error", "trigger"],
                     properties: {
                         section: { type: "string" },
                         reason: { type: "string" },
+                        error: { type: "object" },
+                        trigger: { type: "object" },
                     },
                 },
                 outputSchema: {
@@ -343,10 +345,12 @@ function makeA4IR(): WorkflowIR {
                 task: "text.placeholderSection",
                 inputSchema: {
                     type: "object",
-                    required: ["section", "reason"],
+                    required: ["section", "reason", "error", "trigger"],
                     properties: {
                         section: { type: "string" },
                         reason: { type: "string" },
+                        error: { type: "object" },
+                        trigger: { type: "object" },
                     },
                 },
                 outputSchema: {
@@ -486,10 +490,12 @@ function makeA4IR(): WorkflowIR {
                             task: "text.placeholderSection",
                             inputSchema: {
                                 type: "object",
-                                required: ["section", "reason"],
+                                required: ["section", "reason", "error", "trigger"],
                                 properties: {
                                     section: { type: "string" },
                                     reason: { type: "string" },
+                                    error: { type: "object" },
+                                    trigger: { type: "object" },
                                 },
                             },
                             outputSchema: {
@@ -3073,10 +3079,12 @@ describe("WorkflowEngine (IR v1)", () => {
                         task: "int.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["a", "b", "error", "trigger"],
                             properties: {
                                 a: { type: "integer" },
                                 b: { type: "integer" },
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
                         outputSchema: {
@@ -4126,7 +4134,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
@@ -4418,7 +4433,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.failRecovery",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
@@ -5057,7 +5079,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     capture: {
                         kind: "task",
                         task: "test.capture",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
@@ -5128,7 +5157,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     capture: {
                         kind: "task",
                         task: "test.capture",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
@@ -5998,7 +6034,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     cleanup: {
                         kind: "task",
                         task: "test.cleanup",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "cleanupResult",
@@ -6076,7 +6119,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.recover",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
@@ -6146,7 +6196,14 @@ describe("WorkflowEngine (IR v1)", () => {
                     cleanup: {
                         kind: "task",
                         task: "test.noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "cleanedUp",
@@ -6165,6 +6222,177 @@ describe("WorkflowEngine (IR v1)", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.nodeId).toBe("doWork");
+        });
+    });
+
+    // ---- Gap 13: iteration number in loop body events ----
+
+    describe("iteration number in loop body events", () => {
+        it("emits iteration index on nodeStarted/nodeCompleted for loop body tasks", async () => {
+            // Simple loop that runs exactly 3 iterations using a counter.
+            // Each body step is a task that should have `iteration` on its events.
+            const counterTask: TaskDefinition = {
+                name: "test.counter",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["i"],
+                    properties: { i: { type: "integer" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["next"],
+                    properties: { next: { type: "integer" } },
+                },
+                async execute(input: any) {
+                    return { kind: "ok", output: { next: input.i + 1 } };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, counterTask);
+            const eng = new WorkflowEngine(reg);
+            const events = collectEvents(eng);
+
+            const loopIR: WorkflowIR = {
+                kind: "workflow",
+                name: "iterTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            i: { schema: { type: "integer" }, initial: 0 },
+                        },
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "test.counter",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["i"],
+                                        properties: { i: { type: "integer" } },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["next"],
+                                        properties: {
+                                            next: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        i: { $from: "state", name: "i" } as Template,
+                                    },
+                                    next: "check",
+                                    bind: "counted",
+                                },
+                                check: {
+                                    kind: "branch",
+                                    selector: {
+                                        $from: "scope",
+                                        name: "counted",
+                                        path: ["next"],
+                                    } as Template,
+                                    selectorSchema: { type: "integer" },
+                                    // exit when counter reaches 3
+                                    cases: { "3": "@exit" },
+                                    default: "@iterate",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            i: {
+                                $from: "scope",
+                                name: "counted",
+                                path: ["next"],
+                            } as Template,
+                        },
+                        output: { $from: "state", name: "i" } as Template,
+                        outputSchema: { type: "integer" },
+                        maxIterations: 10,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(loopIR, { input: {} });
+            expect(result.success).toBe(true);
+
+            // Only events for the loop body node "step" (inside the loop)
+            // should carry an iteration field.
+            const stepStarted = events.filter(
+                (e) => e.type === "nodeStarted" && (e as any).nodeId === "step",
+            ) as any[];
+
+            // Loop ran 3 iterations (counter 0->1, 1->2, 2->3 then exits)
+            expect(stepStarted).toHaveLength(3);
+
+            // Each nodeStarted for the body should have iteration = 0, 1, 2
+            const iterations = stepStarted.map((e) => e.iteration);
+            expect(iterations).toEqual([0, 1, 2]);
+
+            // nodeCompleted for "step" should also carry iteration
+            const stepCompleted = events.filter(
+                (e) =>
+                    e.type === "nodeCompleted" && (e as any).nodeId === "step",
+            ) as any[];
+            expect(stepCompleted).toHaveLength(3);
+            expect(stepCompleted.map((e) => e.iteration)).toEqual([0, 1, 2]);
+        });
+
+        it("does not emit iteration on top-level (non-loop-body) task events", async () => {
+            const events = collectEvents(engine);
+            const result = await engine.run(makeA4IR(), {
+                input: {
+                    repos: ["r1"],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
+            });
+            expect(result.success).toBe(true);
+
+            // Top-level tasks like fetchCalendar, renderCalendar, compose etc.
+            // should NOT have an iteration field.
+            const topLevelStarted = events.filter(
+                (e) =>
+                    e.type === "nodeStarted" &&
+                    (e as any).nodeId === "fetchCalendar",
+            ) as any[];
+            expect(topLevelStarted).toHaveLength(1);
+            expect(topLevelStarted[0].iteration).toBeUndefined();
+        });
+
+        it("emits iteration on branch nodeStarted/nodeCompleted inside loop body", async () => {
+            // The A4 IR's repoLoop body contains "checkDone" branch.
+            // Events for that branch inside the loop should carry iteration.
+            const events = collectEvents(engine);
+            const result = await engine.run(makeA4IR(), {
+                input: {
+                    repos: ["a", "b"],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
+            });
+            expect(result.success).toBe(true);
+
+            const branchStarted = events.filter(
+                (e) =>
+                    e.type === "nodeStarted" &&
+                    (e as any).nodeId === "checkDone",
+            ) as any[];
+            // One iteration per repo
+            expect(branchStarted).toHaveLength(2);
+            branchStarted.forEach((e) => {
+                expect(e.iteration).toBeDefined();
+                expect(typeof e.iteration).toBe("number");
+            });
         });
     });
 });
