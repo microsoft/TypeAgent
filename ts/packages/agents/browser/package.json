@@ -60,6 +60,7 @@
     "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",

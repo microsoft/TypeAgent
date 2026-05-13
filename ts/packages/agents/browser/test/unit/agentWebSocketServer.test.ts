@@ -3,17 +3,40 @@
 
 jest.mock("ws", () => {
     const connectionHandlers: Function[] = [];
-    const mockWss = {
+    const errorHandlers: Function[] = [];
+    const listeningHandlers: Function[] = [];
+    let lastVerifyClient: any;
+    const mockWss: any = {
         on: jest.fn((event: string, handler: Function) => {
             if (event === "connection") connectionHandlers.push(handler);
+            if (event === "error") errorHandlers.push(handler);
+            if (event === "listening") listeningHandlers.push(handler);
         }),
-        close: jest.fn(),
+        once: jest.fn((event: string, handler: Function) => {
+            if (event === "connection") connectionHandlers.push(handler);
+            if (event === "error") errorHandlers.push(handler);
+            if (event === "listening") listeningHandlers.push(handler);
+        }),
+        removeListener: jest.fn(),
+        close: jest.fn((cb?: () => void) => {
+            if (cb) cb();
+        }),
+        address: jest.fn(() => ({ port: 8081, family: "IPv4", address: "" })),
         _triggerConnection: (ws: any, req: any) => {
             connectionHandlers.forEach((h) => h(ws, req));
         },
+        _triggerListening: () => {
+            listeningHandlers.forEach((h) => h());
+        },
+        _getVerifyClient: () => lastVerifyClient,
     };
     return {
-        WebSocketServer: jest.fn(() => mockWss),
+        WebSocketServer: jest.fn((opts: any) => {
+            lastVerifyClient = opts?.verifyClient;
+            // Auto-fire 'listening' on next tick so start() resolves.
+            setTimeout(() => mockWss._triggerListening(), 0);
+            return mockWss;
+        }),
         WebSocket: { OPEN: 1 },
         __mockWss: mockWss,
     };
@@ -39,6 +62,7 @@ jest.mock("debug", () => {
 });
 
 import { AgentWebSocketServer } from "../../src/agent/agentWebSocketServer.mjs";
+import { isAllowedAgentOrigin } from "../../src/agent/originAllowlist.mjs";
 
 function makeMockSocket() {
     const handlers: Record<string, Function> = {};
@@ -80,14 +104,14 @@ describe("AgentWebSocketServer", () => {
     let server: AgentWebSocketServer;
     let wss: any;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
-        server = new AgentWebSocketServer(8081);
+        server = await AgentWebSocketServer.start(8081);
         wss = getWss();
     });
 
-    afterEach(() => {
-        server.stop();
+    afterEach(async () => {
+        await server.close();
     });
 
     describe("same clientId in different sessions don't collide", () => {
@@ -307,5 +331,89 @@ describe("AgentWebSocketServer", () => {
             );
             expect(socket.close).toHaveBeenCalled();
         });
+    });
+
+    describe("Origin allowlist (verifyClient)", () => {
+        // verifyClient is a synchronous gate the WebSocket server runs on
+        // every upgrade. Anything we reject here never fires `connection`.
+        function verify(origin: string | undefined): {
+            ok: boolean;
+            code?: number;
+        } {
+            const verifyClient = wss._getVerifyClient();
+            let result: { ok: boolean; code?: number } = { ok: false };
+            verifyClient(
+                { origin, req: { headers: { origin } } } as any,
+                (ok: boolean, code?: number) => {
+                    result = { ok, code };
+                },
+            );
+            return result;
+        }
+
+        it("accepts chrome-extension Origin", () => {
+            expect(verify("chrome-extension://abc123")).toEqual({ ok: true });
+        });
+
+        it("accepts localhost http Origin", () => {
+            expect(verify("http://localhost:5173")).toEqual({ ok: true });
+        });
+
+        it("accepts undefined Origin (Node ws clients)", () => {
+            expect(verify(undefined)).toEqual({ ok: true });
+        });
+
+        it("rejects arbitrary web Origin with 403", () => {
+            expect(verify("https://evil.example.com")).toEqual({
+                ok: false,
+                code: 403,
+            });
+        });
+    });
+
+    describe("close() tears down tracked clients", () => {
+        it("closes every client across every session map", async () => {
+            // Fresh server so we can assert close behavior independently
+            // of the suite's afterEach.
+            const local = await AgentWebSocketServer.start(0);
+            local.registerSession("s1", {});
+            local.registerSession("s2", {});
+            const a = connectClient(wss, "ext1", "s1");
+            const b = connectClient(wss, "ext2", "s2");
+            await local.close();
+            expect(a.close).toHaveBeenCalled();
+            expect(b.close).toHaveBeenCalled();
+        });
+    });
+});
+
+describe("isAllowedAgentOrigin", () => {
+    it("returns true for chrome-extension:// origins", () => {
+        expect(isAllowedAgentOrigin("chrome-extension://abc")).toBe(true);
+    });
+    it("returns true for moz-extension:// origins", () => {
+        expect(isAllowedAgentOrigin("moz-extension://xyz")).toBe(true);
+    });
+    it("returns true for localhost http(s) origins", () => {
+        expect(isAllowedAgentOrigin("http://localhost")).toBe(true);
+        expect(isAllowedAgentOrigin("http://localhost:1234")).toBe(true);
+        expect(isAllowedAgentOrigin("https://localhost:5173")).toBe(true);
+        expect(isAllowedAgentOrigin("http://127.0.0.1:8081")).toBe(true);
+    });
+    it("returns true for missing/null Origin", () => {
+        expect(isAllowedAgentOrigin(undefined)).toBe(true);
+        expect(isAllowedAgentOrigin("")).toBe(true);
+        expect(isAllowedAgentOrigin("null")).toBe(true);
+    });
+    it("rejects arbitrary http(s) origins", () => {
+        expect(isAllowedAgentOrigin("https://evil.example.com")).toBe(false);
+        expect(isAllowedAgentOrigin("http://attacker.test:80")).toBe(false);
+    });
+    it("rejects file://, ftp:// and other non-http schemes", () => {
+        expect(isAllowedAgentOrigin("file://localhost/etc/passwd")).toBe(false);
+        expect(isAllowedAgentOrigin("ftp://localhost")).toBe(false);
+    });
+    it("rejects malformed Origin strings", () => {
+        expect(isAllowedAgentOrigin("not a url")).toBe(false);
     });
 });
