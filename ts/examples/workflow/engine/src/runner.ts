@@ -9,6 +9,8 @@ import {
     Template,
     TaskNode,
     LoopNode,
+    ForkNode,
+    ForkMapNode,
     JSONSchema,
     TaskContext,
     TaskConstraints,
@@ -546,6 +548,54 @@ export class WorkflowEngine {
                         constraints,
                     );
                     break;
+
+                case "fork":
+                    currentId = await this.executeFork(
+                        node,
+                        currentId,
+                        scope,
+                        scopePath,
+                        runId,
+                        signal,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
+                        },
+                        policy,
+                        approve,
+                        taskTimeoutMs,
+                        constraints,
+                    );
+                    break;
+
+                case "forkMap":
+                    currentId = await this.executeForkMap(
+                        node,
+                        currentId,
+                        scope,
+                        scopePath,
+                        runId,
+                        signal,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
+                        },
+                        policy,
+                        approve,
+                        taskTimeoutMs,
+                        constraints,
+                    );
+                    break;
             }
         }
 
@@ -917,6 +967,347 @@ export class WorkflowEngine {
             throw err;
         }
     }
+    private async executeFork(
+        node: ForkNode,
+        nodeId: string,
+        outerScope: ScopeContext,
+        scopePath: string[],
+        runId: string,
+        signal: AbortSignal,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
+        taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
+    ): Promise<string | undefined> {
+        const branchNames = Object.keys(node.branches);
+
+        this.emit({
+            type: "nodeStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            timestamp: Date.now(),
+        });
+
+        this.emit({
+            type: "forkStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            branchNames,
+            timestamp: Date.now(),
+        });
+
+        try {
+            const concurrency = node.maxConcurrency ?? branchNames.length;
+            const results: Record<string, unknown> = {};
+
+            // Execute branches with concurrency limiting
+            const executing = new Set<Promise<void>>();
+            const branchQueue = [...branchNames];
+
+            const runBranch = async (bName: string) => {
+                const branch = node.branches[bName];
+                const branchScope: ScopeContext = {
+                    input: outerScope.input,
+                    constants: outerScope.constants,
+                    bindings: new Map(outerScope.bindings),
+                };
+                const branchScopePath = [...scopePath, `${nodeId}.${bName}`];
+                await this.executeScope(
+                    branch.nodes,
+                    branch.entry,
+                    branchScope,
+                    branchScopePath,
+                    runId,
+                    signal,
+                    policy,
+                    approve,
+                    taskTimeoutMs,
+                    constraints,
+                );
+                // Walk the next-chain from entry to find the terminal node
+                const terminalId = findTerminalNode(
+                    branch.nodes,
+                    branch.entry,
+                );
+                const termNode = terminalId
+                    ? branch.nodes[terminalId]
+                    : undefined;
+                if (
+                    termNode &&
+                    (termNode.kind === "task" ||
+                        termNode.kind === "loop" ||
+                        termNode.kind === "fork" ||
+                        termNode.kind === "forkMap") &&
+                    termNode.bind
+                ) {
+                    results[bName] = branchScope.bindings.get(termNode.bind);
+                } else {
+                    // Fallback: collect all new bindings produced by branch
+                    const branchOutput: Record<string, unknown> = {};
+                    for (const [k, v] of branchScope.bindings) {
+                        if (!outerScope.bindings.has(k)) {
+                            branchOutput[k] = v;
+                        }
+                    }
+                    results[bName] =
+                        Object.keys(branchOutput).length === 1
+                            ? Object.values(branchOutput)[0]
+                            : branchOutput;
+                }
+            };
+
+            while (branchQueue.length > 0 || executing.size > 0) {
+                while (branchQueue.length > 0 && executing.size < concurrency) {
+                    const bName = branchQueue.shift()!;
+                    const p = runBranch(bName).then(() => {
+                        executing.delete(p);
+                    });
+                    executing.add(p);
+                }
+                if (executing.size > 0) {
+                    await Promise.race(executing);
+                }
+            }
+
+            if (node.bind) {
+                outerScope.bindings.set(node.bind, results);
+            }
+
+            this.emit({
+                type: "forkCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                output: results,
+                timestamp: Date.now(),
+            });
+
+            this.emit({
+                type: "nodeCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                output: results,
+                timestamp: Date.now(),
+            });
+
+            return node.next;
+        } catch (err) {
+            if (node.onError) {
+                const errorObj = buildErrorObject(
+                    err,
+                    "fork",
+                    nodeId,
+                    scopePath,
+                );
+
+                this.emit({
+                    type: "forkFailed",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    error: { message: errorObj["message"] as string },
+                    timestamp: Date.now(),
+                });
+
+                onErrorDispatch(errorObj, {});
+                return node.onError;
+            }
+            throw err;
+        }
+    }
+
+    private async executeForkMap(
+        node: ForkMapNode,
+        nodeId: string,
+        outerScope: ScopeContext,
+        scopePath: string[],
+        runId: string,
+        signal: AbortSignal,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
+        taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
+    ): Promise<string | undefined> {
+        this.emit({
+            type: "nodeStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            timestamp: Date.now(),
+        });
+
+        try {
+            const collection = resolveTemplate(
+                node.collection,
+                outerScope,
+            ) as unknown[];
+            if (!Array.isArray(collection)) {
+                throw new EngineError(
+                    `forkMap at "${nodeId}": collection did not resolve to an array`,
+                );
+            }
+
+            const maxIter = node.maxIterations ?? collection.length;
+            const items = collection.slice(0, maxIter);
+            const concurrency = node.maxConcurrency ?? items.length;
+            const results: unknown[] = new Array(items.length).fill(null);
+
+            const executing = new Set<Promise<void>>();
+            const indexQueue = items.map((_, i) => i);
+
+            const runItem = async (index: number) => {
+                this.emit({
+                    type: "forkMapIterationStarted",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    index,
+                    timestamp: Date.now(),
+                });
+
+                const itemScope: ScopeContext = {
+                    input: {
+                        ...outerScope.input,
+                        [node.elementParam]: items[index],
+                    },
+                    constants: outerScope.constants,
+                    bindings: new Map(outerScope.bindings),
+                };
+                const itemScopePath = [...scopePath, `${nodeId}[${index}]`];
+                await this.executeScope(
+                    node.body.nodes,
+                    node.body.entry,
+                    itemScope,
+                    itemScopePath,
+                    runId,
+                    signal,
+                    policy,
+                    approve,
+                    taskTimeoutMs,
+                    constraints,
+                );
+
+                // Walk the next-chain from entry to find the terminal node
+                const terminalId = findTerminalNode(
+                    node.body.nodes,
+                    node.body.entry,
+                );
+                const termNode = terminalId
+                    ? node.body.nodes[terminalId]
+                    : undefined;
+                if (
+                    termNode &&
+                    (termNode.kind === "task" ||
+                        termNode.kind === "loop" ||
+                        termNode.kind === "fork" ||
+                        termNode.kind === "forkMap") &&
+                    termNode.bind
+                ) {
+                    results[index] = itemScope.bindings.get(termNode.bind);
+                }
+
+                this.emit({
+                    type: "forkMapIterationCompleted",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    index,
+                    output: results[index],
+                    timestamp: Date.now(),
+                });
+            };
+
+            while (indexQueue.length > 0 || executing.size > 0) {
+                while (indexQueue.length > 0 && executing.size < concurrency) {
+                    const idx = indexQueue.shift()!;
+                    const p = runItem(idx).then(() => {
+                        executing.delete(p);
+                    });
+                    executing.add(p);
+                }
+                if (executing.size > 0) {
+                    await Promise.race(executing);
+                }
+            }
+
+            if (node.bind) {
+                outerScope.bindings.set(node.bind, results);
+            }
+
+            this.emit({
+                type: "nodeCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                output: results,
+                timestamp: Date.now(),
+            });
+
+            return node.next;
+        } catch (err) {
+            if (node.onError) {
+                const errorObj = buildErrorObject(
+                    err,
+                    "forkMap",
+                    nodeId,
+                    scopePath,
+                );
+
+                this.emit({
+                    type: "nodeFailed",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    error: { message: errorObj["message"] as string },
+                    timestamp: Date.now(),
+                });
+
+                onErrorDispatch(errorObj, {});
+                return node.onError;
+            }
+            throw err;
+        }
+    }
+}
+
+/**
+ * Walk the next-chain from entry to find the terminal (last) node in a scope.
+ * Returns the nodeId of the terminal, or undefined if the chain is broken.
+ */
+function findTerminalNode(
+    nodes: Record<string, WorkflowNode>,
+    entry: string,
+): string | undefined {
+    let current: string | undefined = entry;
+    const visited = new Set<string>();
+    while (current && nodes[current]) {
+        if (visited.has(current)) break; // cycle guard
+        visited.add(current);
+        const n: WorkflowNode = nodes[current];
+        let next: string | undefined;
+        if (
+            n.kind === "task" ||
+            n.kind === "loop" ||
+            n.kind === "fork" ||
+            n.kind === "forkMap"
+        ) {
+            next = n.next;
+        }
+        if (!next || !nodes[next]) return current;
+        current = next;
+    }
+    return current;
 }
 
 function buildErrorObject(

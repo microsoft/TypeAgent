@@ -22,6 +22,21 @@ import {
     RunOptions,
     standardLibraryTasks,
     allBuiltinTasks,
+    compareEquals,
+    compareNotEquals,
+    compareGreaterThan,
+    compareLessThan,
+    compareGreaterOrEqual,
+    compareLessOrEqual,
+    boolAnd,
+    boolOr,
+    boolNot,
+    mathAdd,
+    mathSubtract,
+    mathMultiply,
+    mathDivide,
+    mathModulo,
+    errorFail,
 } from "../src/index.js";
 import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -6165,6 +6180,1072 @@ describe("WorkflowEngine (IR v1)", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.nodeId).toBe("doWork");
+        });
+    });
+
+    // ---- v2 built-in tasks ----
+
+    describe("v2 compare tasks", () => {
+        it("compare.equals returns true for equal values", async () => {
+            const result = await compareEquals.execute(
+                { left: 42, right: 42 },
+                {} as any,
+            );
+            expect(result).toEqual({ kind: "ok", output: { result: true } });
+        });
+
+        it("compare.equals returns false for different values", async () => {
+            const result = await compareEquals.execute(
+                { left: 1, right: 2 },
+                {} as any,
+            );
+            expect(result).toEqual({ kind: "ok", output: { result: false } });
+        });
+
+        it("compare.notEquals returns true for different values", async () => {
+            const result = await compareNotEquals.execute(
+                { left: "a", right: "b" },
+                {} as any,
+            );
+            expect(result).toEqual({ kind: "ok", output: { result: true } });
+        });
+
+        it("compare.greaterThan works", async () => {
+            expect(
+                await compareGreaterThan.execute(
+                    { left: 5, right: 3 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: true } });
+            expect(
+                await compareGreaterThan.execute(
+                    { left: 3, right: 5 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: false } });
+        });
+
+        it("compare.lessThan works", async () => {
+            expect(
+                await compareLessThan.execute(
+                    { left: 2, right: 7 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: true } });
+        });
+
+        it("compare.greaterOrEqual works", async () => {
+            expect(
+                await compareGreaterOrEqual.execute(
+                    { left: 5, right: 5 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: true } });
+            expect(
+                await compareGreaterOrEqual.execute(
+                    { left: 4, right: 5 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: false } });
+        });
+
+        it("compare.lessOrEqual works", async () => {
+            expect(
+                await compareLessOrEqual.execute(
+                    { left: 3, right: 3 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: true } });
+            expect(
+                await compareLessOrEqual.execute(
+                    { left: 4, right: 3 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: false } });
+        });
+    });
+
+    describe("v2 bool tasks", () => {
+        it("bool.and returns true only when both true", async () => {
+            expect(
+                await boolAnd.execute(
+                    { left: true, right: true },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: true } });
+            expect(
+                await boolAnd.execute(
+                    { left: true, right: false },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: false } });
+        });
+
+        it("bool.or returns true when either true", async () => {
+            expect(
+                await boolOr.execute(
+                    { left: false, right: true },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: true } });
+            expect(
+                await boolOr.execute(
+                    { left: false, right: false },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: { result: false } });
+        });
+
+        it("bool.not negates", async () => {
+            expect(
+                await boolNot.execute({ value: true }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: false } });
+            expect(
+                await boolNot.execute({ value: false }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: true } });
+        });
+    });
+
+    describe("v2 math tasks", () => {
+        it("math.add adds", async () => {
+            expect(
+                await mathAdd.execute({ left: 3, right: 4 }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: 7 } });
+        });
+
+        it("math.subtract subtracts", async () => {
+            expect(
+                await mathSubtract.execute({ left: 10, right: 3 }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: 7 } });
+        });
+
+        it("math.multiply multiplies", async () => {
+            expect(
+                await mathMultiply.execute({ left: 6, right: 7 }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: 42 } });
+        });
+
+        it("math.divide divides", async () => {
+            expect(
+                await mathDivide.execute({ left: 15, right: 3 }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: 5 } });
+        });
+
+        it("math.divide fails on zero", async () => {
+            const result = await mathDivide.execute(
+                { left: 5, right: 0 },
+                {} as any,
+            );
+            expect(result.kind).toBe("fail");
+        });
+
+        it("math.modulo computes remainder", async () => {
+            expect(
+                await mathModulo.execute({ left: 17, right: 5 }, {} as any),
+            ).toEqual({ kind: "ok", output: { result: 2 } });
+        });
+
+        it("math.modulo fails on zero", async () => {
+            const result = await mathModulo.execute(
+                { left: 5, right: 0 },
+                {} as any,
+            );
+            expect(result.kind).toBe("fail");
+        });
+    });
+
+    describe("v2 error tasks", () => {
+        it("error.fail always fails with string message", async () => {
+            const result = await errorFail.execute(
+                { value: "boom" },
+                {} as any,
+            );
+            expect(result.kind).toBe("fail");
+            if (result.kind === "fail") {
+                expect(result.error?.message).toBe("boom");
+            }
+        });
+
+        it("error.fail serializes non-string values", async () => {
+            const result = await errorFail.execute(
+                { value: { code: 42 } },
+                {} as any,
+            );
+            expect(result.kind).toBe("fail");
+            if (result.kind === "fail") {
+                expect(result.error?.message).toBe('{"code":42}');
+                expect(result.error?.data).toEqual({ code: 42 });
+            }
+        });
+    });
+
+    // ---- Fork execution ----
+
+    describe("fork execution", () => {
+        it("runs two branches concurrently and collects results", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            // Register mock tasks that record call order
+            const callOrder: string[] = [];
+            reg.register({
+                name: "mock.branchA",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["val"],
+                    properties: { val: { type: "string" } },
+                },
+                async execute() {
+                    callOrder.push("A");
+                    return { kind: "ok", output: { val: "resultA" } };
+                },
+            });
+            reg.register({
+                name: "mock.branchB",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["val"],
+                    properties: { val: { type: "string" } },
+                },
+                async execute() {
+                    callOrder.push("B");
+                    return { kind: "ok", output: { val: "resultB" } };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-test",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                entry: "a_step",
+                                nodes: {
+                                    a_step: {
+                                        kind: "task",
+                                        task: "mock.branchA",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            required: ["val"],
+                                            properties: {
+                                                val: { type: "string" },
+                                            },
+                                        },
+                                        inputs: {},
+                                        bind: "aOut",
+                                    },
+                                },
+                            },
+                            b: {
+                                entry: "b_step",
+                                nodes: {
+                                    b_step: {
+                                        kind: "task",
+                                        task: "mock.branchB",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            required: ["val"],
+                                            properties: {
+                                                val: { type: "string" },
+                                            },
+                                        },
+                                        inputs: {},
+                                        bind: "bOut",
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
+                    },
+                },
+                output: { $from: "scope", name: "forkResult" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            expect(callOrder).toContain("A");
+            expect(callOrder).toContain("B");
+            // Output is a keyed object with branch results
+            const out = result.output as Record<string, any>;
+            expect(out.a).toBeDefined();
+            expect(out.b).toBeDefined();
+        });
+
+        it("respects maxConcurrency", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            // Track concurrent execution
+            let maxConcurrent = 0;
+            let currentConcurrent = 0;
+
+            const makeSlowTask = (name: string): TaskDefinition => ({
+                name,
+                sideEffects: false,
+                inputSchema: { type: "object" as const },
+                outputSchema: { type: "object" as const, properties: { v: { type: "number" as const } } },
+                async execute() {
+                    currentConcurrent++;
+                    maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+                    await new Promise((r) => setTimeout(r, 20));
+                    currentConcurrent--;
+                    return { kind: "ok" as const, output: { v: 1 } };
+                },
+            });
+
+            reg.register(makeSlowTask("mock.slow1"));
+            reg.register(makeSlowTask("mock.slow2"));
+            reg.register(makeSlowTask("mock.slow3"));
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-concurrency",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                entry: "s1",
+                                nodes: {
+                                    s1: {
+                                        kind: "task",
+                                        task: "mock.slow1",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "x",
+                                    },
+                                },
+                            },
+                            b: {
+                                entry: "s2",
+                                nodes: {
+                                    s2: {
+                                        kind: "task",
+                                        task: "mock.slow2",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "x",
+                                    },
+                                },
+                            },
+                            c: {
+                                entry: "s3",
+                                nodes: {
+                                    s3: {
+                                        kind: "task",
+                                        task: "mock.slow3",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "x",
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        maxConcurrency: 1,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            // With maxConcurrency=1, no more than 1 branch should run at a time
+            expect(maxConcurrent).toBe(1);
+        });
+
+        it("collects output from terminal node in multi-node branch", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.step1",
+                sideEffects: false,
+                inputSchema: { type: "object" as const },
+                outputSchema: {
+                    type: "object" as const,
+                    required: ["intermediate"],
+                    properties: { intermediate: { type: "number" as const } },
+                },
+                async execute() {
+                    return {
+                        kind: "ok" as const,
+                        output: { intermediate: 10 },
+                    };
+                },
+            });
+            reg.register({
+                name: "mock.step2",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object" as const,
+                    required: ["intermediate"],
+                    properties: { intermediate: { type: "number" as const } },
+                },
+                outputSchema: {
+                    type: "object" as const,
+                    required: ["final"],
+                    properties: { final: { type: "number" as const } },
+                },
+                async execute(input: any) {
+                    return {
+                        kind: "ok" as const,
+                        output: { final: input.intermediate * 2 },
+                    };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-multinode",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                entry: "a1",
+                                nodes: {
+                                    a1: {
+                                        kind: "task",
+                                        task: "mock.step1",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            required: ["intermediate"],
+                                            properties: {
+                                                intermediate: {
+                                                    type: "number",
+                                                },
+                                            },
+                                        },
+                                        inputs: {},
+                                        bind: "mid",
+                                        next: "a2",
+                                    },
+                                    a2: {
+                                        kind: "task",
+                                        task: "mock.step2",
+                                        inputSchema: {
+                                            type: "object",
+                                            required: ["intermediate"],
+                                            properties: {
+                                                intermediate: {
+                                                    type: "number",
+                                                },
+                                            },
+                                        },
+                                        outputSchema: {
+                                            type: "object",
+                                            required: ["final"],
+                                            properties: {
+                                                final: { type: "number" },
+                                            },
+                                        },
+                                        inputs: {
+                                            intermediate: {
+                                                $from: "scope",
+                                                name: "mid",
+                                                path: ["intermediate"],
+                                            },
+                                        },
+                                        bind: "result",
+                                    },
+                                },
+                            },
+                            b: {
+                                entry: "b1",
+                                nodes: {
+                                    b1: {
+                                        kind: "task",
+                                        task: "mock.step1",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            required: ["intermediate"],
+                                            properties: {
+                                                intermediate: {
+                                                    type: "number",
+                                                },
+                                            },
+                                        },
+                                        inputs: {},
+                                        bind: "bOut",
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
+                    },
+                },
+                output: { $from: "scope", name: "forkResult" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            const out = result.output as Record<string, any>;
+            // Branch a: terminal node is a2 (not a1), output should be step2's result
+            expect(out.a).toEqual({ final: 20 });
+            // Branch b: single node, output is step1's result
+            expect(out.b).toEqual({ intermediate: 10 });
+        });
+
+        it("fork onError recovery works when a branch fails", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.failTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "branch failed" },
+                    };
+                },
+            });
+            reg.register({
+                name: "mock.okTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: { v: 1 } };
+                },
+            });
+            reg.register({
+                name: "mock.recovery",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["fallback"],
+                    properties: { fallback: { type: "string" } },
+                },
+                async execute() {
+                    return {
+                        kind: "ok" as const,
+                        output: { fallback: "recovered" },
+                    };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-error",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            good: {
+                                entry: "ok",
+                                nodes: {
+                                    ok: {
+                                        kind: "task",
+                                        task: "mock.okTask",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "ok",
+                                    },
+                                },
+                            },
+                            bad: {
+                                entry: "fail",
+                                nodes: {
+                                    fail: {
+                                        kind: "task",
+                                        task: "mock.failTask",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "fail",
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        onError: "recover",
+                        bind: "forkOut",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "mock.recovery",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["fallback"],
+                            properties: { fallback: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            expect((result.output as any).fallback).toBe("recovered");
+        });
+    });
+
+    // ---- ForkMap execution ----
+
+    describe("forkMap execution", () => {
+        it("maps over a collection and produces ordered array output", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.double",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["n"],
+                    properties: { n: { type: "number" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: { type: "number" } },
+                },
+                async execute(input: any) {
+                    return {
+                        kind: "ok" as const,
+                        output: { result: input.n * 2 },
+                    };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "forkmap-test",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["nums"],
+                    properties: {
+                        nums: { type: "array", items: { type: "number" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "nums" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            entry: "double",
+                            nodes: {
+                                double: {
+                                    kind: "task",
+                                    task: "mock.double",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["n"],
+                                        properties: {
+                                            n: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["result"],
+                                        properties: {
+                                            result: { type: "number" },
+                                        },
+                                    },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "doubled",
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: { nums: [1, 2, 3, 4] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            const out = result.output as any[];
+            expect(out).toHaveLength(4);
+            // Results are ordered
+            expect(out[0]).toEqual({ result: 2 });
+            expect(out[1]).toEqual({ result: 4 });
+            expect(out[2]).toEqual({ result: 6 });
+            expect(out[3]).toEqual({ result: 8 });
+        });
+
+        it("forkMap respects maxConcurrency", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            let maxConcurrent = 0;
+            let currentConcurrent = 0;
+
+            reg.register({
+                name: "mock.slowItem",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    currentConcurrent++;
+                    maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+                    await new Promise((r) => setTimeout(r, 20));
+                    currentConcurrent--;
+                    return { kind: "ok" as const, output: { done: true } };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "forkmap-concurrency",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.slowItem",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        maxConcurrency: 2,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: { items: ["a", "b", "c", "d", "e"] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            expect(maxConcurrent).toBeLessThanOrEqual(2);
+            expect(maxConcurrent).toBeGreaterThanOrEqual(1);
+        });
+
+        it("forkMap respects maxIterations", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            let callCount = 0;
+            reg.register({
+                name: "mock.counter",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    callCount++;
+                    return { kind: "ok" as const, output: { n: callCount } };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "forkmap-maxiter",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "number" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.counter",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        maxIterations: 3,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: { items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            // Only 3 items processed despite 10 in collection
+            expect(callCount).toBe(3);
+            expect((result.output as any[]).length).toBe(3);
+        });
+
+        it("forkMap handles empty collection", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.noop",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: {} };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "forkmap-empty",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.noop",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: { items: [] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual([]);
+        });
+    });
+
+    // ---- Fork events ----
+
+    describe("fork events", () => {
+        it("emits forkStarted and forkCompleted events", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.noop",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: {} };
+                },
+            });
+
+            const events: WorkflowEvent[] = [];
+            const eng = new WorkflowEngine(reg);
+            eng.on((e: WorkflowEvent) => events.push(e));
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-events",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                entry: "a_s",
+                                nodes: {
+                                    a_s: {
+                                        kind: "task",
+                                        task: "mock.noop",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "x",
+                                    },
+                                },
+                            },
+                            b: {
+                                entry: "b_s",
+                                nodes: {
+                                    b_s: {
+                                        kind: "task",
+                                        task: "mock.noop",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { type: "object" },
+                                        inputs: {},
+                                        bind: "y",
+                                    },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+
+            const forkStarted = events.filter(
+                (e) => e.type === "forkStarted",
+            );
+            expect(forkStarted).toHaveLength(1);
+            if (forkStarted[0].type === "forkStarted") {
+                expect(forkStarted[0].branchNames).toEqual(
+                    expect.arrayContaining(["a", "b"]),
+                );
+            }
+
+            const forkCompleted = events.filter(
+                (e) => e.type === "forkCompleted",
+            );
+            expect(forkCompleted).toHaveLength(1);
         });
     });
 });

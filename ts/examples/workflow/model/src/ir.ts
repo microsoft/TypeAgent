@@ -75,7 +75,42 @@ export interface LoopNode {
     timeoutMs?: number;
 }
 
-export type WorkflowNode = TaskNode | BranchNode | LoopNode;
+export interface ForkNode {
+    kind: "fork";
+    branches: Record<
+        string,
+        { entry: string; nodes: Record<string, WorkflowNode> }
+    >;
+    outputSchema: JSONSchema;
+    maxConcurrency?: number;
+    next?: string;
+    onError?: string;
+    bind?: string;
+}
+
+export interface ForkMapNode {
+    kind: "forkMap";
+    collection: Template;
+    collectionSchema: JSONSchema;
+    elementParam: string;
+    body: {
+        entry: string;
+        nodes: Record<string, WorkflowNode>;
+    };
+    outputSchema: JSONSchema;
+    maxIterations?: number;
+    maxConcurrency?: number;
+    next?: string;
+    onError?: string;
+    bind?: string;
+}
+
+export type WorkflowNode =
+    | TaskNode
+    | BranchNode
+    | LoopNode
+    | ForkNode
+    | ForkMapNode;
 
 // ---- Top-level IR ----
 

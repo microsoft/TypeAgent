@@ -8,6 +8,8 @@ export {
     BranchNode,
     LoopStateVar,
     LoopNode,
+    ForkNode,
+    ForkMapNode,
     WorkflowNode,
     ConstantDef,
     WorkflowIR,

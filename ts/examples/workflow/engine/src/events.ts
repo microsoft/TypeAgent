@@ -63,6 +63,47 @@ export type WorkflowEvent =
           runId: string;
           error: { message: string; data?: unknown };
           timestamp: number;
+      }
+    | {
+          type: "forkStarted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          branchNames: string[];
+          timestamp: number;
+      }
+    | {
+          type: "forkCompleted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          output: unknown;
+          timestamp: number;
+      }
+    | {
+          type: "forkFailed";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          error: { message: string; data?: unknown };
+          timestamp: number;
+      }
+    | {
+          type: "forkMapIterationStarted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          index: number;
+          timestamp: number;
+      }
+    | {
+          type: "forkMapIterationCompleted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          index: number;
+          output: unknown;
+          timestamp: number;
       };
 
 export type WorkflowEventListener = (event: WorkflowEvent) => void;

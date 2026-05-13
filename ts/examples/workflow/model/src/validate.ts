@@ -169,6 +169,20 @@ function buildScopeCFG(
             if (node.onError) {
                 succs.add(node.onError);
             }
+        } else if (node.kind === "fork") {
+            if (node.next) {
+                succs.add(node.next);
+            }
+            if (node.onError) {
+                succs.add(node.onError);
+            }
+        } else if (node.kind === "forkMap") {
+            if (node.next) {
+                succs.add(node.next);
+            }
+            if (node.onError) {
+                succs.add(node.onError);
+            }
         }
     }
 
@@ -474,7 +488,13 @@ function buildOnErrorSplits(
 ): OnErrorSplit[] {
     const splits: OnErrorSplit[] = [];
     for (const [id, node] of Object.entries(nodes)) {
-        if ((node.kind === "task" || node.kind === "loop") && node.onError) {
+        if (
+            (node.kind === "task" ||
+                node.kind === "loop" ||
+                node.kind === "fork" ||
+                node.kind === "forkMap") &&
+            node.onError
+        ) {
             const errorTarget = node.onError;
             const errorSide = dominatedSet(errorTarget, idom);
             // Success side: nodes dominated by the next target (if any),
@@ -588,7 +608,13 @@ function checkDominance(
     // Build binder sets: name -> list of nodeIds that bind that name
     const binders = new Map<string, string[]>();
     for (const [id, node] of Object.entries(nodes)) {
-        if ((node.kind === "task" || node.kind === "loop") && node.bind) {
+        if (
+            (node.kind === "task" ||
+                node.kind === "loop" ||
+                node.kind === "fork" ||
+                node.kind === "forkMap") &&
+            node.bind
+        ) {
             let list = binders.get(node.bind);
             if (!list) {
                 list = [];
@@ -800,6 +826,30 @@ function validateScopeCFG(
                 `${prefix}.${id}.output`,
                 !!node.onError, // skip body termination check when loop has onError
             );
+        } else if (node.kind === "fork") {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                if (branch.entry in branch.nodes) {
+                    const branchPrefix = `${prefix}.${id}.branches.${bName}.nodes`;
+                    validateScopeCFG(
+                        branch.nodes,
+                        branch.entry,
+                        branchPrefix,
+                        errors,
+                        false,
+                    );
+                }
+            }
+        } else if (node.kind === "forkMap") {
+            if (node.body.entry in node.body.nodes) {
+                const bodyPrefix = `${prefix}.${id}.body.nodes`;
+                validateScopeCFG(
+                    node.body.nodes,
+                    node.body.entry,
+                    bodyPrefix,
+                    errors,
+                    false,
+                );
+            }
         }
     }
 }
@@ -818,7 +868,12 @@ function validateOnErrorRules(
     normalTargets.add(entry);
 
     for (const [id, node] of Object.entries(nodes)) {
-        if (node.kind === "task" || node.kind === "loop") {
+        if (
+            node.kind === "task" ||
+            node.kind === "loop" ||
+            node.kind === "fork" ||
+            node.kind === "forkMap"
+        ) {
             if (node.next) normalTargets.add(node.next);
             if (node.onError) {
                 const existing = onErrorTargetToTrigger.get(node.onError);
@@ -1178,6 +1233,133 @@ function validateScope(
                     message: `Error target "${node.onError}" does not exist.`,
                 });
             }
+        } else if (node.kind === "fork") {
+            const branchNames = Object.keys(node.branches);
+            if (branchNames.length < 2) {
+                errors.push({
+                    path: `${path}.branches`,
+                    message: `Fork must have at least 2 branches (got ${branchNames.length}).`,
+                });
+            }
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                if (!(branch.entry in branch.nodes)) {
+                    errors.push({
+                        path: `${path}.branches.${bName}.entry`,
+                        message: `Branch entry "${branch.entry}" does not exist.`,
+                    });
+                }
+                validateScope(
+                    branch.nodes,
+                    `${path}.branches.${bName}.nodes`,
+                    tasks,
+                    errors,
+                    false,
+                );
+                validateSchemaCompat(
+                    branch.nodes,
+                    `${path}.branches.${bName}.nodes`,
+                    errors,
+                );
+            }
+            if (
+                node.maxConcurrency !== undefined &&
+                (!Number.isInteger(node.maxConcurrency) ||
+                    node.maxConcurrency < 1)
+            ) {
+                errors.push({
+                    path: `${path}.maxConcurrency`,
+                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
+                });
+            }
+            if (node.next && !nodeIds.has(node.next)) {
+                errors.push({
+                    path: `${path}.next`,
+                    message: `Target "${node.next}" does not exist.`,
+                });
+            }
+            if (node.onError && !nodeIds.has(node.onError)) {
+                errors.push({
+                    path: `${path}.onError`,
+                    message: `Error target "${node.onError}" does not exist.`,
+                });
+            }
+        } else if (node.kind === "forkMap") {
+            if (
+                node.collectionSchema?.type !== "array" &&
+                !(
+                    Array.isArray(node.collectionSchema?.type) &&
+                    (node.collectionSchema.type as string[]).includes("array")
+                )
+            ) {
+                errors.push({
+                    path: `${path}.collectionSchema`,
+                    message: `forkMap collectionSchema must be type "array".`,
+                });
+            }
+            if (!(node.body.entry in node.body.nodes)) {
+                errors.push({
+                    path: `${path}.body.entry`,
+                    message: `Body entry "${node.body.entry}" does not exist.`,
+                });
+            }
+            validateScope(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                tasks,
+                errors,
+                false,
+            );
+            validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
+            // forkMap body must not use $from: "state"
+            for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
+                if (bNode.kind === "task") {
+                    if (templateRefersToState(bNode.inputs)) {
+                        errors.push({
+                            path: `${path}.body.nodes.${bNodeId}.inputs`,
+                            message: `forkMap body nodes must not use $from: "state".`,
+                        });
+                    }
+                } else if (bNode.kind === "loop") {
+                    if (templateRefersToState(bNode.inputs)) {
+                        errors.push({
+                            path: `${path}.body.nodes.${bNodeId}.inputs`,
+                            message: `forkMap body nodes must not use $from: "state".`,
+                        });
+                    }
+                }
+            }
+            if (
+                node.maxConcurrency !== undefined &&
+                (!Number.isInteger(node.maxConcurrency) ||
+                    node.maxConcurrency < 1)
+            ) {
+                errors.push({
+                    path: `${path}.maxConcurrency`,
+                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
+                });
+            }
+            if (
+                node.maxIterations !== undefined &&
+                (!Number.isInteger(node.maxIterations) ||
+                    node.maxIterations < 1)
+            ) {
+                errors.push({
+                    path: `${path}.maxIterations`,
+                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
+                });
+            }
+            if (node.next && !nodeIds.has(node.next)) {
+                errors.push({
+                    path: `${path}.next`,
+                    message: `Target "${node.next}" does not exist.`,
+                });
+            }
+            if (node.onError && !nodeIds.has(node.onError)) {
+                errors.push({
+                    path: `${path}.onError`,
+                    message: `Error target "${node.onError}" does not exist.`,
+                });
+            }
         }
     }
 }
@@ -1203,6 +1385,20 @@ function bodyScopeHasSentinel(nodes: Record<string, WorkflowNode>): boolean {
     return false;
 }
 
+/**
+ * Recursively check whether a template contains any $from: "state" reference.
+ */
+function templateRefersToState(template: Template): boolean {
+    if (template === null || template === undefined) return false;
+    if (typeof template !== "object") return false;
+    if (Array.isArray(template)) {
+        return template.some((t) => templateRefersToState(t));
+    }
+    const obj = template as Record<string, unknown>;
+    if ("$from" in obj && obj["$from"] === "state") return true;
+    return Object.values(obj).some((v) => templateRefersToState(v as Template));
+}
+
 // ---- Static schema compatibility ----
 
 /**
@@ -1213,7 +1409,13 @@ function buildBindingMap(
 ): Map<string, JSONSchema> {
     const map = new Map<string, JSONSchema>();
     for (const node of Object.values(nodes)) {
-        if ((node.kind === "task" || node.kind === "loop") && node.bind) {
+        if (
+            (node.kind === "task" ||
+                node.kind === "loop" ||
+                node.kind === "fork" ||
+                node.kind === "forkMap") &&
+            node.bind
+        ) {
             map.set(node.bind, node.outputSchema);
         }
     }
@@ -1688,14 +1890,6 @@ function validateTypeCompatibility(
 
         // Recurse into loop bodies
         if (node.kind === "loop" && node.body.entry in node.body.nodes) {
-            const bodyBindings = buildBindingMap(node.body.nodes);
-            const bodyCtx: TypeResolutionContext = {
-                bindings: bodyBindings,
-                inputSchema: node.inputSchema,
-                stateVars: node.state,
-                constants,
-            };
-
             validateTypeCompatibility(
                 node.body.nodes,
                 `${path}.body.nodes`,
@@ -1709,6 +1903,13 @@ function validateTypeCompatibility(
             );
 
             // Check loop output template type vs loop outputSchema
+            const bodyBindings = buildBindingMap(node.body.nodes);
+            const bodyCtx: TypeResolutionContext = {
+                bindings: bodyBindings,
+                inputSchema: node.inputSchema,
+                stateVars: node.state,
+                constants,
+            };
             if (node.output && node.outputSchema) {
                 const outputResolved = resolveTemplateType(
                     node.output,
@@ -1729,6 +1930,34 @@ function validateTypeCompatibility(
                     }
                 }
             }
+        }
+
+        // Recurse into fork branches
+        if (node.kind === "fork") {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                if (branch.entry in branch.nodes) {
+                    validateTypeCompatibility(
+                        branch.nodes,
+                        `${path}.branches.${bName}.nodes`,
+                        errors,
+                        scopeInputSchema,
+                        undefined,
+                        constants,
+                    );
+                }
+            }
+        }
+
+        // Recurse into forkMap body
+        if (node.kind === "forkMap" && node.body.entry in node.body.nodes) {
+            validateTypeCompatibility(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                errors,
+                scopeInputSchema,
+                undefined,
+                constants,
+            );
         }
     }
 
@@ -1792,7 +2021,10 @@ function checkPhiMergeTypes(
                 const binderNode = nodes[binderId];
                 if (!binderNode) continue;
                 const binderSchema =
-                    binderNode.kind === "task" || binderNode.kind === "loop"
+                    binderNode.kind === "task" ||
+                    binderNode.kind === "loop" ||
+                    binderNode.kind === "fork" ||
+                    binderNode.kind === "forkMap"
                         ? binderNode.outputSchema
                         : undefined;
                 if (!binderSchema) continue;

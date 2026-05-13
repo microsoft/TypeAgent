@@ -6,6 +6,8 @@ import {
     TaskNode,
     LoopNode,
     BranchNode,
+    ForkNode,
+    ForkMapNode,
     TaskDefinition,
     validateWorkflowIR,
 } from "../src/index.js";
@@ -2893,6 +2895,324 @@ describe("validateWorkflowIR", () => {
                         e.message.includes("not compatible"),
                 ),
             ).toBe(true);
+        });
+    });
+
+    // ---- Fork validation ----
+
+    describe("fork node validation", () => {
+        function makeForkIR(
+            forkOverrides?: Partial<ForkNode>,
+            extraNodes?: Record<string, any>,
+        ): WorkflowIR {
+            return makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                entry: "a_step",
+                                nodes: {
+                                    a_step: makeTaskNode({ bind: "aOut" }),
+                                },
+                            },
+                            b: {
+                                entry: "b_step",
+                                nodes: {
+                                    b_step: makeTaskNode({ bind: "bOut" }),
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "object" },
+                                b: { type: "object" },
+                            },
+                        },
+                        bind: "out",
+                        ...forkOverrides,
+                    } as ForkNode,
+                    ...extraNodes,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+        }
+
+        it("accepts a valid fork with two branches", () => {
+            const result = validateWorkflowIR(makeForkIR(), taskMap("noop"));
+            expect(result.valid).toBe(true);
+            expect(result.errors).toHaveLength(0);
+        });
+
+        it("rejects fork with fewer than 2 branches", () => {
+            const ir = makeForkIR({
+                branches: {
+                    only: {
+                        entry: "s",
+                        nodes: { s: makeTaskNode({ bind: "x" }) },
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("at least 2 branches"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork with invalid maxConcurrency (zero)", () => {
+            const ir = makeForkIR({ maxConcurrency: 0 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("maxConcurrency"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork with non-integer maxConcurrency", () => {
+            const ir = makeForkIR({ maxConcurrency: 1.5 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("maxConcurrency"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts fork with valid maxConcurrency", () => {
+            const ir = makeForkIR({ maxConcurrency: 2 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects fork with missing branch entry", () => {
+            const ir = makeForkIR({
+                branches: {
+                    a: {
+                        entry: "missing",
+                        nodes: { a_step: makeTaskNode({ bind: "x" }) },
+                    },
+                    b: {
+                        entry: "b_step",
+                        nodes: { b_step: makeTaskNode({ bind: "y" }) },
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("does not exist"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork with nonexistent next target", () => {
+            const ir = makeForkIR({ next: "nowhere" });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("next") &&
+                        e.message.includes("nowhere"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork with nonexistent onError target", () => {
+            const ir = makeForkIR({ onError: "nowhere" });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("onError") &&
+                        e.message.includes("nowhere"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts fork with valid next pointing to another node", () => {
+            const ir = makeForkIR(
+                { next: "after" },
+                { after: makeTaskNode({ bind: "afterOut" }) },
+            );
+            ir.output = { $from: "scope", name: "afterOut" };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- ForkMap validation ----
+
+    describe("forkMap node validation", () => {
+        function makeForkMapIR(
+            forkMapOverrides?: Partial<ForkMapNode>,
+            extraNodes?: Record<string, any>,
+        ): WorkflowIR {
+            return makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                        ...forkMapOverrides,
+                    } as ForkMapNode,
+                    ...extraNodes,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                outputSchema: {
+                    type: "array",
+                    items: { type: "object" },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+        }
+
+        it("accepts a valid forkMap", () => {
+            const result = validateWorkflowIR(
+                makeForkMapIR(),
+                taskMap("noop"),
+            );
+            expect(result.valid).toBe(true);
+            expect(result.errors).toHaveLength(0);
+        });
+
+        it("rejects forkMap with non-array collectionSchema", () => {
+            const ir = makeForkMapIR({
+                collectionSchema: { type: "object" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('type "array"'),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap with missing body entry", () => {
+            const ir = makeForkMapIR({
+                body: {
+                    entry: "missing",
+                    nodes: { body_step: makeTaskNode() },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("does not exist"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap body that uses $from: state", () => {
+            const ir = makeForkMapIR({
+                body: {
+                    entry: "body_step",
+                    nodes: {
+                        body_step: makeTaskNode({
+                            inputs: {
+                                val: { $from: "state", name: "counter" },
+                            },
+                            bind: "stepOut",
+                        }),
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('$from: "state"'),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap with invalid maxConcurrency", () => {
+            const ir = makeForkMapIR({ maxConcurrency: 0 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("maxConcurrency"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap with invalid maxIterations", () => {
+            const ir = makeForkMapIR({ maxIterations: -1 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("maxIterations"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts forkMap with valid maxConcurrency and maxIterations", () => {
+            const ir = makeForkMapIR({
+                maxConcurrency: 3,
+                maxIterations: 10,
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects forkMap with nonexistent next target", () => {
+            const ir = makeForkMapIR({ next: "nowhere" });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("next") &&
+                        e.message.includes("nowhere"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts forkMap with valid next target", () => {
+            const ir = makeForkMapIR(
+                { next: "after" },
+                { after: makeTaskNode({ bind: "afterOut" }) },
+            );
+            ir.output = { $from: "scope", name: "afterOut" };
+            ir.outputSchema = { type: "object" };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
         });
     });
 });

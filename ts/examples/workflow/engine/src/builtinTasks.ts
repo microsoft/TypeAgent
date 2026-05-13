@@ -765,9 +765,370 @@ export const standardLibraryTasks: TaskDefinition[] = [
     listAppend,
 ];
 
-/** All builtin tasks: stdlib + IO + utility + legacy. */
+// ---- v2 compare tasks ----
+
+export const compareEquals: TaskDefinition<
+    { left: unknown; right: unknown },
+    { result: boolean }
+> = {
+    name: "compare.equals",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: {}, right: {} },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left === input.right } };
+    },
+};
+
+export const compareNotEquals: TaskDefinition<
+    { left: unknown; right: unknown },
+    { result: boolean }
+> = {
+    name: "compare.notEquals",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: {}, right: {} },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left !== input.right } };
+    },
+};
+
+export const compareGreaterThan: TaskDefinition<
+    { left: number; right: number },
+    { result: boolean }
+> = {
+    name: "compare.greaterThan",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left > input.right } };
+    },
+};
+
+export const compareLessThan: TaskDefinition<
+    { left: number; right: number },
+    { result: boolean }
+> = {
+    name: "compare.lessThan",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left < input.right } };
+    },
+};
+
+export const compareGreaterOrEqual: TaskDefinition<
+    { left: number; right: number },
+    { result: boolean }
+> = {
+    name: "compare.greaterOrEqual",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left >= input.right } };
+    },
+};
+
+export const compareLessOrEqual: TaskDefinition<
+    { left: number; right: number },
+    { result: boolean }
+> = {
+    name: "compare.lessOrEqual",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left <= input.right } };
+    },
+};
+
+// ---- v2 bool tasks ----
+
+export const boolAnd: TaskDefinition<
+    { left: boolean; right: boolean },
+    { result: boolean }
+> = {
+    name: "bool.and",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: {
+            left: { type: "boolean" },
+            right: { type: "boolean" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left && input.right } };
+    },
+};
+
+export const boolOr: TaskDefinition<
+    { left: boolean; right: boolean },
+    { result: boolean }
+> = {
+    name: "bool.or",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: {
+            left: { type: "boolean" },
+            right: { type: "boolean" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left || input.right } };
+    },
+};
+
+export const boolNot: TaskDefinition<{ value: boolean }, { result: boolean }> =
+    {
+        name: "bool.not",
+        sideEffects: false,
+        inputSchema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: { type: "boolean" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["result"],
+            properties: { result: { type: "boolean" } },
+        },
+        async execute(input) {
+            return { kind: "ok", output: { result: !input.value } };
+        },
+    };
+
+// ---- v2 math tasks ----
+
+export const mathAdd: TaskDefinition<
+    { left: number; right: number },
+    { result: number }
+> = {
+    name: "math.add",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "number" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left + input.right } };
+    },
+};
+
+export const mathSubtract: TaskDefinition<
+    { left: number; right: number },
+    { result: number }
+> = {
+    name: "math.subtract",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "number" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left - input.right } };
+    },
+};
+
+export const mathMultiply: TaskDefinition<
+    { left: number; right: number },
+    { result: number }
+> = {
+    name: "math.multiply",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "number" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: input.left * input.right } };
+    },
+};
+
+export const mathDivide: TaskDefinition<
+    { left: number; right: number },
+    { result: number }
+> = {
+    name: "math.divide",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "number" } },
+    },
+    async execute(input) {
+        if (input.right === 0) {
+            return {
+                kind: "fail",
+                error: { message: "Division by zero" },
+            };
+        }
+        return { kind: "ok", output: { result: input.left / input.right } };
+    },
+};
+
+export const mathModulo: TaskDefinition<
+    { left: number; right: number },
+    { result: number }
+> = {
+    name: "math.modulo",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "number" } },
+    },
+    async execute(input) {
+        if (input.right === 0) {
+            return {
+                kind: "fail",
+                error: { message: "Modulo by zero" },
+            };
+        }
+        return { kind: "ok", output: { result: input.left % input.right } };
+    },
+};
+
+// ---- v2 error tasks ----
+
+export const errorFail: TaskDefinition<{ value: unknown }, never> = {
+    name: "error.fail",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: {} },
+    },
+    outputSchema: { type: "object" },
+    async execute(input) {
+        return {
+            kind: "fail",
+            error: {
+                message:
+                    typeof input.value === "string"
+                        ? input.value
+                        : JSON.stringify(input.value),
+                data: input.value,
+            },
+        };
+    },
+};
+
+/** v2 standard-library tasks (compare, bool, math, error, list). */
+export const v2StandardLibraryTasks: TaskDefinition[] = [
+    compareEquals,
+    compareNotEquals,
+    compareGreaterThan,
+    compareLessThan,
+    compareGreaterOrEqual,
+    compareLessOrEqual,
+    boolAnd,
+    boolOr,
+    boolNot,
+    mathAdd,
+    mathSubtract,
+    mathMultiply,
+    mathDivide,
+    mathModulo,
+    errorFail,
+];
+
+/** All builtin tasks: stdlib + v2 stdlib + IO + utility + legacy. */
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
+    ...v2StandardLibraryTasks,
     boolToLabel,
     shellExec,
     llmGenerate,
