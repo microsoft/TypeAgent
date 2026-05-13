@@ -125,6 +125,15 @@ function buildScopeCFG(
     const edges = new Map<string, Set<string>>();
     const sentinelTargets = new Map<string, Set<"@iterate" | "@exit">>();
 
+    function addSentinel(id: string, target: "@iterate" | "@exit"): void {
+        let st = sentinelTargets.get(id);
+        if (!st) {
+            st = new Set();
+            sentinelTargets.set(id, st);
+        }
+        st.add(target);
+    }
+
     for (const [id, node] of Object.entries(nodes)) {
         const succs = new Set<string>();
         edges.set(id, succs);
@@ -132,12 +141,7 @@ function buildScopeCFG(
         if (node.kind === "task") {
             if (node.next) {
                 if (node.next === "@iterate" || node.next === "@exit") {
-                    let st = sentinelTargets.get(id);
-                    if (!st) {
-                        st = new Set();
-                        sentinelTargets.set(id, st);
-                    }
-                    st.add(node.next);
+                    addSentinel(id, node.next);
                 } else {
                     succs.add(node.next);
                 }
@@ -148,23 +152,13 @@ function buildScopeCFG(
         } else if (node.kind === "branch") {
             for (const target of Object.values(node.cases)) {
                 if (target === "@iterate" || target === "@exit") {
-                    let st = sentinelTargets.get(id);
-                    if (!st) {
-                        st = new Set();
-                        sentinelTargets.set(id, st);
-                    }
-                    st.add(target);
+                    addSentinel(id, target);
                 } else {
                     succs.add(target);
                 }
             }
             if (node.default === "@iterate" || node.default === "@exit") {
-                let st = sentinelTargets.get(id);
-                if (!st) {
-                    st = new Set();
-                    sentinelTargets.set(id, st);
-                }
-                st.add(node.default);
+                addSentinel(id, node.default);
             } else {
                 succs.add(node.default);
             }
@@ -750,11 +744,12 @@ function validateScopeCFG(
                 `with @iterate instead.`,
         });
     }
+
+    // Pass 4 (completion): onError structural rules (does not require acyclicity)
+    validateOnErrorRules(nodes, entry, prefix, errors);
+
     // If cycles exist, skip passes that depend on acyclicity
     if (cycles.length > 0) return;
-
-    // Pass 4 (completion): onError structural rules
-    validateOnErrorRules(nodes, entry, prefix, errors);
 
     // Pass 5: Scope closure (loop bodies only)
     // Checked within the loop body recursion below.
@@ -1161,6 +1156,16 @@ function validateScope(
                 });
             }
 
+            if (
+                !Number.isInteger(node.maxIterations) ||
+                node.maxIterations < 1
+            ) {
+                errors.push({
+                    path: `${path}.maxIterations`,
+                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
+                });
+            }
+
             if (node.next && !nodeIds.has(node.next)) {
                 errors.push({
                     path: `${path}.next`,
@@ -1375,7 +1380,7 @@ function jsonValueToSchema(value: unknown): JSONSchema {
         const elemSchemas = value.map(jsonValueToSchema);
         const firstKey = canonicalStringify(elemSchemas[0]);
         const allSame = elemSchemas.every(
-            (s) => canonicalStringify(s) === firstKey,
+            (s) => s === elemSchemas[0] || canonicalStringify(s) === firstKey,
         );
         return allSame
             ? { type: "array", items: elemSchemas[0] }
@@ -1420,7 +1425,7 @@ function resolveTemplateType(
         if (elemSchemas.length === 0) return { type: "array" };
         const firstKey = canonicalStringify(elemSchemas[0]);
         const allSame = elemSchemas.every(
-            (s) => canonicalStringify(s) === firstKey,
+            (s) => s === elemSchemas[0] || canonicalStringify(s) === firstKey,
         );
         return allSame
             ? { type: "array", items: elemSchemas[0] }
@@ -1625,16 +1630,42 @@ function validateTypeCompatibility(
         if (node.kind === "branch") {
             // Check selector template resolved type vs selectorSchema
             const selectorType = resolveTemplateType(node.selector, ctx);
-            if (selectorType && !isTopSchema(node.selectorSchema)) {
-                if (!isStructuralSubtype(selectorType, node.selectorSchema)) {
-                    errors.push({
-                        path: `${path}.selector`,
-                        message:
-                            `Selector resolved type ` +
-                            `${formatSchemaType(selectorType)} is not ` +
-                            `compatible with selectorSchema ` +
-                            `${formatSchemaType(node.selectorSchema)}.`,
-                    });
+            if (selectorType) {
+                // Verify resolved selector is a primitive type
+                if (selectorType.type) {
+                    const resolvedTypes = normalizeTypeSet(selectorType.type);
+                    const nonPrimitive = resolvedTypes.filter(
+                        (t) =>
+                            t !== "string" &&
+                            t !== "number" &&
+                            t !== "integer" &&
+                            t !== "boolean",
+                    );
+                    if (nonPrimitive.length > 0) {
+                        errors.push({
+                            path: `${path}.selector`,
+                            message:
+                                `Selector resolves to ` +
+                                `${formatSchemaType(selectorType)} which ` +
+                                `cannot be meaningfully coerced to a case ` +
+                                `label. Selector must resolve to string, ` +
+                                `number, or boolean.`,
+                        });
+                    }
+                }
+                if (!isTopSchema(node.selectorSchema)) {
+                    if (
+                        !isStructuralSubtype(selectorType, node.selectorSchema)
+                    ) {
+                        errors.push({
+                            path: `${path}.selector`,
+                            message:
+                                `Selector resolved type ` +
+                                `${formatSchemaType(selectorType)} is not ` +
+                                `compatible with selectorSchema ` +
+                                `${formatSchemaType(node.selectorSchema)}.`,
+                        });
+                    }
                 }
             }
 

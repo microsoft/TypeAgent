@@ -1,17 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import AjvModule from "ajv";
 import { TaskDefinition } from "workflow-model";
-
-const AjvConstructor = (AjvModule as any).default ?? AjvModule;
+import { createAjv } from "./ajv.js";
 
 /**
  * In-memory registry for task definitions.
  */
 export class TaskRegistry {
     private tasks = new Map<string, TaskDefinition>();
-    private ajv = new AjvConstructor({ strict: false });
+    private ajv = createAjv();
 
     register(task: TaskDefinition): void {
         if (this.tasks.has(task.name)) {

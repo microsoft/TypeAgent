@@ -3,7 +3,6 @@
 
 import { randomUUID } from "node:crypto";
 import Debug from "debug";
-import AjvModule from "ajv";
 import {
     WorkflowIR,
     WorkflowNode,
@@ -21,10 +20,9 @@ import {
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
+import { createAjv } from "./ajv.js";
 
 const debug = Debug("typeagent:workflow:engine");
-
-const AjvConstructor = (AjvModule as any).default ?? AjvModule;
 
 // ---- Scope context ----
 
@@ -235,7 +233,7 @@ export interface RunResult {
 
 export class WorkflowEngine {
     private listeners: WorkflowEventListener[] = [];
-    private ajv = new AjvConstructor({ strict: false });
+    private ajv = createAjv();
     private validatorCache = new Map<
         string,
         ReturnType<typeof this.ajv.compile>
@@ -648,27 +646,35 @@ export class WorkflowEngine {
 
             let result: TaskResult;
             if (effectiveTimeout !== undefined) {
-                let timeoutId: ReturnType<typeof setTimeout>;
-                let completed = false;
-                const timeout = new Promise<never>((_, reject) => {
-                    timeoutId = setTimeout(() => {
-                        if (!completed) {
-                            taskAbortController!.abort("Task timed out");
-                            reject(
-                                new EngineError(
-                                    `Task "${node.task}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
-                                ),
-                            );
-                        }
-                    }, effectiveTimeout);
+                const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
+                const onParentAbort = () =>
+                    taskAbortController!.abort(signal.reason);
+                const onTimeoutAbort = () =>
+                    taskAbortController!.abort("Task timed out");
+                signal.addEventListener("abort", onParentAbort, {
+                    once: true,
                 });
-                result = await Promise.race([
-                    task.execute(resolvedInput, ctx).then((r) => {
-                        completed = true;
-                        return r;
-                    }),
-                    timeout,
-                ]).finally(() => clearTimeout(timeoutId));
+                timeoutSignal.addEventListener("abort", onTimeoutAbort, {
+                    once: true,
+                });
+                try {
+                    result = await task.execute(resolvedInput, ctx);
+                } catch (e) {
+                    if (timeoutSignal.aborted) {
+                        throw new EngineError(
+                            `Task "${node.task}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
+                        );
+                    }
+                    throw e;
+                } finally {
+                    signal.removeEventListener("abort", onParentAbort);
+                    timeoutSignal.removeEventListener("abort", onTimeoutAbort);
+                }
+                if (timeoutSignal.aborted) {
+                    throw new EngineError(
+                        `Task "${node.task}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
+                    );
+                }
             } else {
                 result = await task.execute(resolvedInput, ctx);
             }

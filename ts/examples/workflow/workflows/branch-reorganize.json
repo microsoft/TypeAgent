@@ -2,10 +2,17 @@
   "kind": "workflow",
   "name": "branch-reorganize",
   "version": "1",
-  "description": "Analyze changes in a feature branch against a base branch, reorganize into separate buildable/testable commits on new branches suitable for independent PRs, then create a validation branch merging all new branches to verify the combined diff matches the original.",
+  "description": "Analyze changes in a feature branch against a base branch, reorganize into separate buildable/testable commits on new branches suitable for independent PRs, then create a validation branch merging all new branches to verify the combined diff matches the original. NOTE: The LLM is asked to produce dependsOn arrays for ordering hints, but the workflow currently creates all branches from baseBranch. Dependency-aware branching (topo-sort + merge-based bases) is not yet implemented.",
   "inputSchema": {
     "type": "object",
-    "required": ["repoPath", "featureBranch"],
+    "required": [
+      "repoPath",
+      "featureBranch",
+      "baseBranch",
+      "branchPrefix",
+      "buildCommand",
+      "testCommand"
+    ],
     "properties": {
       "repoPath": {
         "type": "string",
@@ -89,8 +96,33 @@
         "args": ["rev-parse", "--abbrev-ref", "HEAD"],
         "cwd": { "$from": "input", "name": "repoPath" }
       },
-      "next": "getFullDiff",
+      "next": "buildDiffRange",
       "bind": "originalBranch"
+    },
+    "buildDiffRange": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": {
+        "template": "{{base}}...HEAD",
+        "vars": {
+          "base": { "$from": "input", "name": "baseBranch" }
+        }
+      },
+      "next": "getFullDiff",
+      "bind": "diffRange"
     },
     "getFullDiff": {
       "kind": "task",
@@ -115,7 +147,10 @@
       },
       "inputs": {
         "command": "git",
-        "args": ["diff", "main...HEAD"],
+        "args": [
+          "diff",
+          { "$from": "scope", "name": "diffRange", "path": ["text"] }
+        ],
         "cwd": { "$from": "input", "name": "repoPath" }
       },
       "next": "getFileList",
@@ -144,7 +179,11 @@
       },
       "inputs": {
         "command": "git",
-        "args": ["diff", "--name-status", "main...HEAD"],
+        "args": [
+          "diff",
+          "--name-status",
+          { "$from": "scope", "name": "diffRange", "path": ["text"] }
+        ],
         "cwd": { "$from": "input", "name": "repoPath" }
       },
       "next": "buildAnalysisPrompt",
@@ -239,15 +278,31 @@
           "path": ["value", "groups"]
         },
         "repoPath": { "$from": "input", "name": "repoPath" },
-        "featureBranch": { "$from": "input", "name": "featureBranch" }
+        "featureBranch": { "$from": "input", "name": "featureBranch" },
+        "baseBranch": { "$from": "input", "name": "baseBranch" },
+        "branchPrefix": { "$from": "input", "name": "branchPrefix" },
+        "buildCommand": { "$from": "input", "name": "buildCommand" },
+        "testCommand": { "$from": "input", "name": "testCommand" }
       },
       "inputSchema": {
         "type": "object",
-        "required": ["groups", "repoPath", "featureBranch"],
+        "required": [
+          "groups",
+          "repoPath",
+          "featureBranch",
+          "baseBranch",
+          "branchPrefix",
+          "buildCommand",
+          "testCommand"
+        ],
         "properties": {
           "groups": { "type": "array" },
           "repoPath": { "type": "string" },
-          "featureBranch": { "type": "string" }
+          "featureBranch": { "type": "string" },
+          "baseBranch": { "type": "string" },
+          "branchPrefix": { "type": "string" },
+          "buildCommand": { "type": "string" },
+          "testCommand": { "type": "string" }
         }
       },
       "state": {
@@ -317,7 +372,7 @@
                 "name": "currentGroup",
                 "path": ["element", "files"]
               },
-              "delimiter": " "
+              "delimiter": "\n"
             },
             "next": "buildBranchScript",
             "bind": "fileListJoined"
@@ -339,7 +394,7 @@
               "properties": { "text": { "type": "string" } }
             },
             "inputs": {
-              "template": "set -e\ngit checkout -b \"reorg/{{name}}\" main\ngit checkout \"{{featureBranch}}\" -- {{files}}\ngit add .\ngit commit -m \"{{commitMessage}}\"",
+              "template": "set -e\ngit checkout -b \"{{branchPrefix}}{{name}}\" \"{{baseBranch}}\"\nwhile IFS= read -r f; do\n  [ -n \"$f\" ] && git checkout \"{{featureBranch}}\" -- \"$f\"\ndone <<'FILELIST'\n{{files}}\nFILELIST\ngit add .\ngit commit -m \"{{commitMessage}}\"",
               "vars": {
                 "name": {
                   "$from": "scope",
@@ -347,6 +402,8 @@
                   "path": ["element", "name"]
                 },
                 "featureBranch": { "$from": "input", "name": "featureBranch" },
+                "baseBranch": { "$from": "input", "name": "baseBranch" },
+                "branchPrefix": { "$from": "input", "name": "branchPrefix" },
                 "files": {
                   "$from": "scope",
                   "name": "fileListJoined",
@@ -417,7 +474,7 @@
             },
             "inputs": {
               "command": "bash",
-              "args": ["-c", "pnpm run build"],
+              "args": ["-c", { "$from": "input", "name": "buildCommand" }],
               "cwd": { "$from": "input", "name": "repoPath" }
             },
             "timeoutMs": 600000,
@@ -447,7 +504,7 @@
             },
             "inputs": {
               "command": "bash",
-              "args": ["-c", "pnpm run test:local"],
+              "args": ["-c", { "$from": "input", "name": "testCommand" }],
               "cwd": { "$from": "input", "name": "repoPath" }
             },
             "timeoutMs": 300000,
@@ -471,8 +528,9 @@
               "properties": { "text": { "type": "string" } }
             },
             "inputs": {
-              "template": "reorg/{{name}}",
+              "template": "{{branchPrefix}}{{name}}",
               "vars": {
+                "branchPrefix": { "$from": "input", "name": "branchPrefix" },
                 "name": {
                   "$from": "scope",
                   "name": "currentGroup",
@@ -533,7 +591,7 @@
             },
             "inputs": {
               "command": "git",
-              "args": ["checkout", "main"],
+              "args": ["checkout", { "$from": "input", "name": "baseBranch" }],
               "cwd": { "$from": "input", "name": "repoPath" }
             },
             "next": "stepIdx",
@@ -680,8 +738,10 @@
         "properties": { "text": { "type": "string" } }
       },
       "inputs": {
-        "template": "set -e\ngit checkout -b reorg/validation-merge main\nfor branch in {{branches}}; do\n  git merge --no-edit \"$branch\"\ndone",
+        "template": "set -e\ngit checkout -b {{branchPrefix}}validation-merge \"{{baseBranch}}\"\nfor branch in {{branches}}; do\n  git merge --no-edit \"$branch\"\ndone",
         "vars": {
+          "baseBranch": { "$from": "input", "name": "baseBranch" },
+          "branchPrefix": { "$from": "input", "name": "branchPrefix" },
           "branches": {
             "$from": "scope",
             "name": "branchNamesJoined",
@@ -721,9 +781,34 @@
         ],
         "cwd": { "$from": "input", "name": "repoPath" }
       },
-      "next": "buildValidationScript",
+      "next": "buildValBranchName",
       "onError": "buildCleanupScript",
       "bind": "mergeResult"
+    },
+    "buildValBranchName": {
+      "kind": "task",
+      "task": "text.template",
+      "inputSchema": {
+        "type": "object",
+        "required": ["template", "vars"],
+        "properties": {
+          "template": { "type": "string" },
+          "vars": { "type": "object" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "inputs": {
+        "template": "{{branchPrefix}}validation-merge",
+        "vars": {
+          "branchPrefix": { "$from": "input", "name": "branchPrefix" }
+        }
+      },
+      "next": "buildValidationScript",
+      "bind": "valBranchName"
     },
     "buildValidationScript": {
       "kind": "task",
@@ -742,9 +827,11 @@
         "properties": { "text": { "type": "string" } }
       },
       "inputs": {
-        "template": "set -e\nORIGINAL=$(git diff main...{{featureBranch}} | sha256sum | cut -d' ' -f1)\nVALIDATION=$(git diff main...reorg/validation-merge | sha256sum | cut -d' ' -f1)\nif [ \"$ORIGINAL\" = \"$VALIDATION\" ]; then\n  echo MATCH\nelse\n  echo MISMATCH\n  echo \"Original SHA: $ORIGINAL\"\n  echo \"Validation SHA: $VALIDATION\"\nfi",
+        "template": "set -e\nORIGINAL=$(git diff \"{{baseBranch}}\"...\"{{featureBranch}}\" | sha256sum | cut -d' ' -f1)\nVALIDATION=$(git diff \"{{baseBranch}}\"...\"{{branchPrefix}}validation-merge\" | sha256sum | cut -d' ' -f1)\nif [ \"$ORIGINAL\" = \"$VALIDATION\" ]; then\n  echo MATCH\nelse\n  echo MISMATCH\n  echo \"Original SHA: $ORIGINAL\"\n  echo \"Validation SHA: $VALIDATION\"\nfi",
         "vars": {
-          "featureBranch": { "$from": "input", "name": "featureBranch" }
+          "featureBranch": { "$from": "input", "name": "featureBranch" },
+          "baseBranch": { "$from": "input", "name": "baseBranch" },
+          "branchPrefix": { "$from": "input", "name": "branchPrefix" }
         }
       },
       "next": "execValidation",
@@ -847,7 +934,11 @@
   "output": {
     "plan": { "$from": "scope", "name": "analysisResult", "path": ["value"] },
     "branches": { "$from": "scope", "name": "createdBranches" },
-    "validationBranch": "reorg/validation-merge",
+    "validationBranch": {
+      "$from": "scope",
+      "name": "valBranchName",
+      "path": ["text"]
+    },
     "validated": {
       "$from": "scope",
       "name": "validationResult",

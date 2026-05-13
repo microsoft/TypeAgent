@@ -67,7 +67,14 @@ async function cmdRun(
     mode?: "dry-run" | "allow-all",
 ): Promise<void> {
     const ir = loadIR(file);
-    const input = inputJson ? JSON.parse(inputJson) : {};
+    let input: Record<string, unknown> = {};
+    if (inputJson) {
+        try {
+            input = JSON.parse(inputJson);
+        } catch (e) {
+            fail(`Invalid JSON in --input: ${(e as Error).message}`);
+        }
+    }
     const engine = makeEngine();
 
     engine.on((event) => {
@@ -253,7 +260,13 @@ switch (command) {
         if (!file) fail(usage);
         loadEnvFiles(args);
         const inputIdx = args.indexOf("--input");
-        const inputJson = inputIdx >= 0 ? args[inputIdx + 1] : undefined;
+        let inputJson: string | undefined;
+        if (inputIdx >= 0) {
+            inputJson = args[inputIdx + 1];
+            if (!inputJson || inputJson.startsWith("--")) {
+                fail("--input requires a JSON value argument");
+            }
+        }
         const mode = args.includes("--dry-run")
             ? "dry-run"
             : args.includes("--allow-all")
