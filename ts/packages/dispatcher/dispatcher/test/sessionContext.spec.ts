@@ -92,7 +92,13 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: undefined,
         });
-        const sessionCtx = createSessionContext("myAgent", {}, context, false, "test-session-id");
+        const sessionCtx = createSessionContext(
+            "myAgent",
+            {},
+            context,
+            false,
+            "test-session-id",
+        );
         expect(sessionCtx.instanceStorage).toBeUndefined();
     });
 });
@@ -221,4 +227,3 @@ describe("initializeCommandHandlerContext option validation", () => {
         );
     });
 });
-

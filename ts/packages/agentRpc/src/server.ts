@@ -681,9 +681,7 @@ export function createAgentRpcServer(
             throw new Error("Invalid context param: missing hasSessionStorage");
         }
         if (sessionContextId === undefined) {
-            throw new Error(
-                "Invalid context param: missing sessionContextId",
-            );
+            throw new Error("Invalid context param: missing sessionContextId");
         }
 
         const agentContext =

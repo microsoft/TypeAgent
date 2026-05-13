@@ -354,10 +354,7 @@ export async function createAgentRpcClient(
             regIds.add(regId);
             return { regId };
         },
-        releasePort: async (param: {
-            regId: string;
-            contextId?: number;
-        }) => {
+        releasePort: async (param: { regId: string; contextId?: number }) => {
             const handle = registrationHandles.get(param.regId);
             if (handle !== undefined) {
                 registrationHandles.delete(param.regId);

@@ -58,9 +58,7 @@ describe("PortRegistrar", () => {
 
         test("warns but accepts privileged ports (does not throw)", () => {
             const r = new PortRegistrar();
-            expect(() =>
-                r.register("browser", "ws", 80, SID_A),
-            ).not.toThrow();
+            expect(() => r.register("browser", "ws", 80, SID_A)).not.toThrow();
             expect(r.lookup("browser", "ws")).toBe(80);
         });
 

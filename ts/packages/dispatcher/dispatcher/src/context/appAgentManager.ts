@@ -1421,16 +1421,16 @@ export class AppAgentManager implements ActionConfigProvider {
             let agentContext: unknown | undefined;
             if (appAgent.initializeAgentContext !== undefined) {
                 const options = this.agentInitOptions?.[record.name];
-                let settings: AppAgentInitSettings | undefined =
-                    record.manifest.localView
-                        ? {
-                              // Tell the agent to bind on an OS-assigned
-                              // port; the agent then reports the actual
-                              // port back via sessionContext.setLocalHostPort
-                              // (now: PortRegistrar.register).
-                              localHostPort: 0,
-                          }
-                        : undefined;
+                let settings: AppAgentInitSettings | undefined = record.manifest
+                    .localView
+                    ? {
+                          // Tell the agent to bind on an OS-assigned
+                          // port; the agent then reports the actual
+                          // port back via sessionContext.setLocalHostPort
+                          // (now: PortRegistrar.register).
+                          localHostPort: 0,
+                      }
+                    : undefined;
 
                 if (options !== undefined) {
                     if (settings === undefined) {

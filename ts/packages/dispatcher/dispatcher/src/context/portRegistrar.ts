@@ -116,11 +116,7 @@ export class PortRegistrar {
             );
         }
 
-        const tripleKey = this.makeTripleKey(
-            agentName,
-            role,
-            sessionContextId,
-        );
+        const tripleKey = this.makeTripleKey(agentName, role, sessionContextId);
         const existing = this.tripleIndex.get(tripleKey);
         if (existing !== undefined) {
             const allocation = this.allocations.get(existing);
@@ -219,7 +215,10 @@ export class PortRegistrar {
      * cross-agent `getSharedLocalHostPort` shim, gated by
      * `manifest.sharedLocalView`) layer it on top.
      */
-    public lookup(agentName: string, role: string = DEFAULT_ROLE): number | undefined {
+    public lookup(
+        agentName: string,
+        role: string = DEFAULT_ROLE,
+    ): number | undefined {
         // Walk in insertion order; randomUUID-keyed Map iteration order in
         // V8 is insertion-order-stable, so the last matching entry is the
         // most recent registration.
