@@ -59,6 +59,19 @@ export type DiscoverPortResult =
  * Look up the port currently registered for `(agentName, role)` via
  * the agent-server's discovery WS channel.
  *
+ * **About `role`:** roles are agent-defined free-form strings — the
+ * registrar/discovery layer is intentionally generic and does not know
+ * which role names a given agent advertises. Each agent owns its own
+ * role namespace and SHOULD export role constants for callers to
+ * import (e.g. `code` could export
+ * `CODE_ROLES = { default: "default", debug: "debug" } as const`).
+ * Omit `role` (or pass undefined) to ask for the agent's default role,
+ * which matches what `setLocalHostPort` registered for legacy
+ * single-listener agents. We deliberately keep this as a string rather
+ * than a central enum so adding a new role on one agent doesn't force
+ * a coordinated change across every package, and so this function
+ * doesn't have to import every agent that exposes a port.
+ *
  * Returns a tagged result rather than throwing so callers can distinguish
  * "agent isn't running yet — retry" from "agentServer isn't running —
  * fall back to a hardcoded default for back-compat" without parsing

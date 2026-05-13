@@ -103,13 +103,18 @@ export const AGENT_SERVER_DISCOVERY_NAME = "agent-server";
 export type DiscoveryInvokeFunctions = {
     /**
      * Look up the port currently registered for `(agentName, role)`.
-     * `role` is optional; omit it (or pass undefined) to look up the
-     * default role — matches what `setLocalHostPort` registered for
-     * agents that pre-date the multi-role API.
      *
-     * Special case: `agentName === "agent-server"` returns the
-     * agent-server's own listening port, so clients that bootstrap
-     * from a known port can discover the configured one.
+     * `role` is an agent-defined free-form string — the discovery
+     * protocol does not enumerate valid values; each agent owns its
+     * own role namespace and should publish constants for callers to
+     * import. Omit `role` (or pass undefined) to look up the agent's
+     * default role, which matches what `setLocalHostPort` registered
+     * for agents that pre-date the multi-role API.
+     *
+     * Well-known: `agentName === "agent-server"` returns the
+     * agent-server's own listening port (registered as a regular
+     * allocation under that name), so clients that bootstrap from a
+     * known port can discover the configured one.
      *
      * Returns `null` (not undefined) so the JSON-RPC response is always a
      * defined value; callers should treat null as "no allocation found,

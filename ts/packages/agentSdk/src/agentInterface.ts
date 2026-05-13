@@ -318,9 +318,14 @@ export interface SessionContext<T = unknown> {
      * so other in-process agents and out-of-process clients (Chrome
      * extension, VS Code extension, etc.) can discover it.
      *
-     * `role` is a free-form string scoping the registration within
-     * this agent — e.g. `"ws-bridge"`, `"http-debug"`. Use distinct
-     * roles when an agent exposes multiple listeners.
+     * `role` is a free-form, agent-defined string scoping the
+     * registration within this agent — e.g. `"default"`, `"ws-bridge"`,
+     * `"http-debug"`. Each agent owns its role namespace and should
+     * export role constants for in-process and out-of-process callers
+     * to import; the SDK and discovery layer treat roles as opaque
+     * strings so adding a role to one agent never requires coordinated
+     * changes elsewhere. Use distinct roles when an agent exposes
+     * multiple listeners.
      *
      * Returns a `release()` callback the agent should invoke when the
      * listener is torn down. Forgetting to release is non-fatal — the

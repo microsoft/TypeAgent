@@ -356,13 +356,22 @@ export async function createAgentRpcClient(
         },
         releasePort: async (param: { regId: string; contextId?: number }) => {
             const handle = registrationHandles.get(param.regId);
-            if (handle !== undefined) {
-                registrationHandles.delete(param.regId);
-                if (param.contextId !== undefined) {
-                    regIdsByContext.get(param.contextId)?.delete(param.regId);
-                }
-                handle.release();
+            if (handle === undefined) {
+                return;
             }
+            // Defense-in-depth: only honor releasePort when the calling
+            // context actually owns the regId. Without this, a buggy or
+            // compromised out-of-process agent could pass another
+            // agent's regId and cancel its registration.
+            if (param.contextId !== undefined) {
+                const owned = regIdsByContext.get(param.contextId);
+                if (owned === undefined || !owned.has(param.regId)) {
+                    return;
+                }
+                owned.delete(param.regId);
+            }
+            registrationHandles.delete(param.regId);
+            handle.release();
         },
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);

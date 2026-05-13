@@ -35,6 +35,49 @@ export type Allocation = {
 export const DEFAULT_ROLE = "default";
 
 /**
+ * Synthetic sessionContextId used for system-owned allocations whose
+ * lifetime equals the host process (e.g. the agent-server's own listen
+ * port). Distinguished from real session ids so
+ * {@link IPortRegistrar.releaseAllForSession} (called when a real
+ * conversation session closes) cannot accidentally release them.
+ *
+ * Not a UUID on purpose — the leading colon makes it obviously
+ * non-UUID-shaped if it ever shows up in a log or diagnostic dump.
+ */
+export const SYSTEM_SESSION_CONTEXT_ID = ":system";
+
+/**
+ * Public surface of the in-memory port registry. Consumers should
+ * depend on this interface rather than the concrete {@link PortRegistrar}
+ * class so tests and alternative hosts can substitute their own
+ * implementation.
+ */
+export interface IPortRegistrar {
+    register(
+        agentName: string,
+        role: string,
+        port: number,
+        sessionContextId: string,
+    ): RegistrationId;
+    release(regId: RegistrationId, sessionContextId?: string): void;
+    releaseAllForSession(sessionContextId: string): number;
+    lookup(agentName: string, role?: string): number | undefined;
+    hasActiveAllocations(): boolean;
+    list(): readonly Allocation[];
+}
+
+/**
+ * Well-known agent name under which the agent-server registers its own
+ * listen port. Discovery clients that bootstrap from a known port can
+ * look this up to find the configured agent-server port. Kept here
+ * (not in @typeagent/agent-server-protocol) to avoid a dispatcher →
+ * agent-server-protocol dependency; the agent-server side imports the
+ * matching constant from its protocol package and the two are kept in
+ * sync by tests.
+ */
+export const AGENT_SERVER_REGISTRAR_NAME = "agent-server";
+
+/**
  * In-memory port registry. Agents bind on `port=0`, the OS picks a free
  * port, and the agent registers the resulting port here so other
  * components (and out-of-process clients via the agentServer discovery
@@ -47,31 +90,16 @@ export const DEFAULT_ROLE = "default";
  * Thread-safety: Node single-threaded; the registrar is mutated only on
  * the event-loop thread. No locking required.
  */
-export class PortRegistrar {
+export class PortRegistrar implements IPortRegistrar {
     /** All live allocations, keyed by their opaque registration id. */
     private readonly allocations = new Map<RegistrationId, Allocation>();
 
     /**
      * Index from `(agentName, role, sessionContextId)` triple to its
      * registration id, so re-registration is O(1) and idempotent.
+     * Key is built by {@link keyOf} from an Allocation-shaped object.
      */
     private readonly tripleIndex = new Map<string, RegistrationId>();
-
-    /**
-     * Optional self-port used by the SDK guard to flag agents that
-     * accidentally hard-coded the agentServer's own port. Set by the
-     * agent-server entry point; absent in non-server hosts.
-     */
-    private agentServerPort: number | undefined;
-
-    /** Register the agentServer's own listen port for the SDK guard. */
-    public setAgentServerPort(port: number | undefined): void {
-        this.agentServerPort = port;
-    }
-
-    public getAgentServerPort(): number | undefined {
-        return this.agentServerPort;
-    }
 
     /**
      * Record a port that an agent has just bound. Idempotent on the
@@ -80,8 +108,9 @@ export class PortRegistrar {
      * {@link RegistrationId}.
      *
      * Validates the input but does not throw on suspicious values:
-     * `port < 1024` and `port === agentServerPort` log a warning under
-     * the `typeagent:dispatcher:portRegistrar:warn` debug namespace and
+     * `port < 1024` and a collision with the agent-server's own
+     * registered port log a warning under the
+     * `typeagent:dispatcher:portRegistrar:warn` debug namespace and
      * still register, on the assumption that the agent is already bound
      * and refusing to record the port would just hide the listener from
      * lookups.
@@ -108,15 +137,15 @@ export class PortRegistrar {
             );
         }
         if (
-            this.agentServerPort !== undefined &&
-            port === this.agentServerPort
+            agentName !== AGENT_SERVER_REGISTRAR_NAME &&
+            this.lookup(AGENT_SERVER_REGISTRAR_NAME) === port
         ) {
             debugWarn(
                 `${agentName}/${role} registered the agentServer's own port ${port}; this is almost certainly a hard-coded mistake — pass 0 to bind`,
             );
         }
 
-        const tripleKey = this.makeTripleKey(agentName, role, sessionContextId);
+        const tripleKey = keyOf({ agentName, role, sessionContextId });
         const existing = this.tripleIndex.get(tripleKey);
         if (existing !== undefined) {
             const allocation = this.allocations.get(existing);
@@ -157,20 +186,31 @@ export class PortRegistrar {
     /**
      * Remove a single allocation by its registration id. Idempotent: a
      * release of an unknown id is a no-op.
+     *
+     * If `sessionContextId` is provided, the release only succeeds when
+     * the allocation actually belongs to that session — a defense-in-depth
+     * check so a misbehaving agent can't release another agent's port by
+     * guessing/replaying a regId. Mismatches log under
+     * `typeagent:dispatcher:portRegistrar:warn` and are silently dropped.
+     * Omit `sessionContextId` only from trusted in-process callers (the
+     * registrar's own {@link releaseAllForSession} backstop).
      */
-    public release(regId: RegistrationId): void {
+    public release(regId: RegistrationId, sessionContextId?: string): void {
         const allocation = this.allocations.get(regId);
         if (allocation === undefined) {
             return;
         }
+        if (
+            sessionContextId !== undefined &&
+            allocation.sessionContextId !== sessionContextId
+        ) {
+            debugWarn(
+                `release ignored: regId=${regId} belongs to session ${allocation.sessionContextId}, not ${sessionContextId}`,
+            );
+            return;
+        }
         this.allocations.delete(regId);
-        this.tripleIndex.delete(
-            this.makeTripleKey(
-                allocation.agentName,
-                allocation.role,
-                allocation.sessionContextId,
-            ),
-        );
+        this.tripleIndex.delete(keyOf(allocation));
         debug(
             `release ${allocation.agentName}/${allocation.role} session=${allocation.sessionContextId} port=${allocation.port} regId=${regId}`,
         );
@@ -181,9 +221,17 @@ export class PortRegistrar {
      * `sessionContextId` matches. Called from the dispatcher's
      * `closeSessionContext` finally block.
      *
+     * System-owned allocations (sessionContextId ===
+     * {@link SYSTEM_SESSION_CONTEXT_ID}) are never released here — their
+     * lifetime is tied to the host process, not any one session.
+     *
      * Returns the number of allocations released.
      */
     public releaseAllForSession(sessionContextId: string): number {
+        if (sessionContextId === SYSTEM_SESSION_CONTEXT_ID) {
+            // Defensive: never let a stray call cull system allocations.
+            return 0;
+        }
         const toRelease: RegistrationId[] = [];
         for (const [regId, allocation] of this.allocations) {
             if (allocation.sessionContextId === sessionContextId) {
@@ -191,6 +239,7 @@ export class PortRegistrar {
             }
         }
         for (const regId of toRelease) {
+            // Trusted internal caller: skip the ownership check.
             this.release(regId);
         }
         if (toRelease.length > 0) {
@@ -251,15 +300,19 @@ export class PortRegistrar {
     public list(): readonly Allocation[] {
         return Array.from(this.allocations.values()).map((a) => ({ ...a }));
     }
+}
 
-    private makeTripleKey(
-        agentName: string,
-        role: string,
-        sessionContextId: string,
-    ): string {
-        // Use a delimiter that can't appear in any of the three fields —
-        // agent names and role names are TS identifiers / bare words, and
-        // sessionContextId is a UUID, so `\u0000` is unambiguously safe.
-        return `${agentName}\u0000${role}\u0000${sessionContextId}`;
-    }
+/**
+ * Build the index key for an allocation. Takes an Allocation-shaped
+ * object so callers don't have to remember the field order — and the
+ * compiler enforces that all three identity fields are supplied.
+ *
+ * Uses `\u0000` as the delimiter because agent names and role names are
+ * TS identifiers / bare words, and sessionContextId is a UUID (or the
+ * `:system` literal), so the NUL byte is unambiguously safe.
+ */
+function keyOf(
+    alloc: Pick<Allocation, "agentName" | "role" | "sessionContextId">,
+): string {
+    return `${alloc.agentName}\u0000${alloc.role}\u0000${alloc.sessionContextId}`;
 }

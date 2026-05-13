@@ -202,7 +202,8 @@ export function createSessionContext<T = unknown>(
                 sessionContextId,
             );
             return {
-                release: () => context.portRegistrar.release(regId),
+                release: () =>
+                    context.portRegistrar.release(regId, sessionContextId),
             };
         },
         indexes(type: string): Promise<any[]> {

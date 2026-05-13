@@ -61,7 +61,7 @@ import {
     getAppAgentStateSettings,
     SetStateResult,
 } from "./appAgentManager.js";
-import { PortRegistrar } from "./portRegistrar.js";
+import { IPortRegistrar, PortRegistrar } from "./portRegistrar.js";
 import {
     AppAgentInstaller,
     AppAgentProvider,
@@ -130,7 +130,7 @@ export function ensureCommandResult(
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
-    readonly portRegistrar: PortRegistrar;
+    readonly portRegistrar: IPortRegistrar;
     readonly agentInstaller: AppAgentInstaller | undefined;
     session: Session;
 
@@ -278,7 +278,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * process-private registrar — the right default for standalone
      * hosts (shell, CLI) that don't expose external discovery.
      */
-    portRegistrar?: PortRegistrar;
+    portRegistrar?: IPortRegistrar;
 
     // Indexing service discovery
     indexingServiceRegistry?: IndexingServiceRegistry; // registry for indexing service discovery

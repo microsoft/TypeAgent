@@ -33,7 +33,7 @@ import {
 } from "@typeagent/agent-server-protocol";
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
-import { PortRegistrar } from "agent-dispatcher";
+import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
 import dotenv from "dotenv";
 import {
     writeServerPid,
@@ -450,15 +450,12 @@ async function main() {
             // in-process SessionContext.registerPort.
             const discoveryFunctions: DiscoveryInvokeFunctions = {
                 lookupPort: async ({ agentName, role }) => {
-                    // Well-known: agent-server reports its own listening
-                    // port so clients that bootstrap from a different
-                    // known port can discover the configured one. This
-                    // also keeps agent-server discoverable if its port
-                    // ever becomes dynamic.
-                    if (agentName === AGENT_SERVER_DISCOVERY_NAME) {
-                        const port = portRegistrar.getAgentServerPort();
-                        return { port: port ?? null };
-                    }
+                    // The agent-server's own port is registered as a
+                    // real allocation under AGENT_SERVER_DISCOVERY_NAME
+                    // / DEFAULT_ROLE (see registerSelfPort below), so
+                    // no special-case is needed here — the lookup just
+                    // works for both well-known and agent-defined
+                    // names.
                     const port = portRegistrar.lookup(agentName, role);
                     return { port: port ?? null };
                 },
@@ -471,10 +468,21 @@ async function main() {
         },
     );
 
-    // Tell the registrar which port we're bound to so it can warn agents
-    // that try to register the same one (a foot-gun: agent-server's WS
-    // would silently shadow the agent's listener).
-    portRegistrar.setAgentServerPort(port);
+    // Register the agent-server's own listen port as a regular
+    // allocation under the well-known AGENT_SERVER_DISCOVERY_NAME with
+    // the synthetic SYSTEM_SESSION_CONTEXT_ID. This gives discovery
+    // clients a uniform lookup path (no special-case in the discovery
+    // handler) and lets the registrar's collision guard flag agents
+    // that try to bind the same port via the same code path it uses
+    // for any other allocation. The system sessionContextId protects
+    // the entry from releaseAllForSession when real conversation
+    // sessions close — it lives for the lifetime of the process.
+    portRegistrar.register(
+        AGENT_SERVER_DISCOVERY_NAME,
+        "default",
+        port,
+        SYSTEM_SESSION_CONTEXT_ID,
+    );
 
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);

@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PortRegistrar } from "../src/context/portRegistrar.js";
+import {
+    AGENT_SERVER_REGISTRAR_NAME,
+    DEFAULT_ROLE,
+    PortRegistrar,
+    SYSTEM_SESSION_CONTEXT_ID,
+} from "../src/context/portRegistrar.js";
 
 describe("PortRegistrar", () => {
     const SID_A = "00000000-0000-0000-0000-00000000000a";
@@ -64,11 +69,43 @@ describe("PortRegistrar", () => {
 
         test("warns but accepts the agentServer's own port (does not throw)", () => {
             const r = new PortRegistrar();
-            r.setAgentServerPort(8999);
+            r.register(
+                AGENT_SERVER_REGISTRAR_NAME,
+                DEFAULT_ROLE,
+                8999,
+                SYSTEM_SESSION_CONTEXT_ID,
+            );
             expect(() =>
                 r.register("browser", "ws", 8999, SID_A),
             ).not.toThrow();
             expect(r.lookup("browser", "ws")).toBe(8999);
+        });
+    });
+
+    describe("system allocation", () => {
+        test("agent-server self-port is discoverable via lookup", () => {
+            const r = new PortRegistrar();
+            r.register(
+                AGENT_SERVER_REGISTRAR_NAME,
+                DEFAULT_ROLE,
+                8999,
+                SYSTEM_SESSION_CONTEXT_ID,
+            );
+            expect(r.lookup(AGENT_SERVER_REGISTRAR_NAME)).toBe(8999);
+        });
+
+        test("releaseAllForSession does not release system allocations", () => {
+            const r = new PortRegistrar();
+            r.register(
+                AGENT_SERVER_REGISTRAR_NAME,
+                DEFAULT_ROLE,
+                8999,
+                SYSTEM_SESSION_CONTEXT_ID,
+            );
+            // Even if a buggy caller passes the system id, it must be a
+            // no-op so the agent-server port can't be culled mid-process.
+            expect(r.releaseAllForSession(SYSTEM_SESSION_CONTEXT_ID)).toBe(0);
+            expect(r.lookup(AGENT_SERVER_REGISTRAR_NAME)).toBe(8999);
         });
     });
 
@@ -84,6 +121,15 @@ describe("PortRegistrar", () => {
         test("is idempotent on unknown id", () => {
             const r = new PortRegistrar();
             expect(() => r.release("not-a-real-id")).not.toThrow();
+        });
+
+        test("ownership check: release with mismatched sessionContextId is a no-op", () => {
+            const r = new PortRegistrar();
+            const id = r.register("browser", "ws", 51234, SID_A);
+            r.release(id, SID_B); // wrong owner
+            expect(r.lookup("browser", "ws")).toBe(51234);
+            r.release(id, SID_A); // correct owner
+            expect(r.lookup("browser", "ws")).toBeUndefined();
         });
 
         test("after release, re-register issues a fresh id", () => {

@@ -50,7 +50,7 @@ import {
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
 import {
-    PortRegistrar,
+    IPortRegistrar,
     DEFAULT_ROLE,
     RegistrationId,
 } from "./portRegistrar.js";
@@ -175,7 +175,7 @@ export class AppAgentManager implements ActionConfigProvider {
     >();
     public constructor(
         cacheDir: string | undefined,
-        public readonly portRegistrar: PortRegistrar,
+        public readonly portRegistrar: IPortRegistrar,
         private readonly allowSharedLocalView?: string[],
         private readonly agentInitOptions?: Record<string, unknown>,
     ) {
