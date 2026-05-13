@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * TypeAgent MCP Server for Copilot CLI.
  *
@@ -37,14 +40,19 @@ function toolResult(text: string): CallToolResult {
 
 /**
  * Format a large result for display. Strips markdown formatting and wraps
- * in a code fence so the CLI preserves newlines and structured layout.
+ * in a code fence so the LLM preserves newlines and doesn't summarize.
  */
 function formatLargeResult(response: string): CallToolResult {
     const lines = response.split("\n").length;
     if (lines > 5) {
         // Strip markdown bold (**text**) — doesn't render inside code fences
         const plain = response.replace(/\*\*([^*]+)\*\*/g, "$1");
-        return toolResult("```\n" + plain + "\n```");
+        return toolResult(
+            `[Display the following TypeAgent result verbatim to the user. Do not summarize.]\n\n` +
+                "```\n" +
+                plain +
+                "\n```",
+        );
     }
     return toolResult(response);
 }
@@ -100,8 +108,13 @@ class TypeAgentMcpServer {
                 "IMPORTANT: Always display the FULL output to the user exactly as returned. " +
                 "Do NOT summarize, truncate, or paraphrase the tool result. " +
                 "Present it in a code block if it contains a list or structured data.",
-            { command: z.string().describe("The natural language command to execute, including any special prefixes like 'learn:', 'dev:', 'record:'") },
-            { displayVerbatim: true } as Record<string, unknown>,
+            {
+                command: z
+                    .string()
+                    .describe(
+                        "The natural language command to execute, including any special prefixes like 'learn:', 'dev:', 'record:'",
+                    ),
+            },
             async (params, extra) =>
                 this.processCommand(params.command, extra as ToolExtra),
         );
@@ -130,14 +143,17 @@ class TypeAgentMcpServer {
             async () => this.processCommand("@powershell list"),
         );
 
-
         this.server.tool(
             "typeagent-powershell-import",
             "Import an existing PowerShell (.ps1) script file as a reusable TypeAgent PowerShell flow. " +
                 "The script is analyzed by TypeAgent's PowerShell agent and registered for future natural language invocation. " +
                 "Only .ps1 files are supported. The path can be absolute or relative to the working directory.",
             {
-                filePath: z.string().describe("Absolute or relative path to the .ps1 file to import"),
+                filePath: z
+                    .string()
+                    .describe(
+                        "Absolute or relative path to the .ps1 file to import",
+                    ),
             },
             async (params, extra) => {
                 const command = `@powershell import ${params.filePath}`;
@@ -145,7 +161,6 @@ class TypeAgentMcpServer {
             },
         );
     }
-
 
     /**
      * Send an MCP progress notification if the client provided a progressToken.
@@ -202,7 +217,14 @@ class TypeAgentMcpServer {
                     if (mode === "temporary") {
                         // Temporary messages are status updates — stream as progress only
                         messageCount++;
-                        if (extra) { void this.sendProgress(extra, cleaned, messageCount, 0); }
+                        if (extra) {
+                            void this.sendProgress(
+                                extra,
+                                cleaned,
+                                messageCount,
+                                0,
+                            );
+                        }
                         return;
                     }
 
@@ -224,8 +246,7 @@ class TypeAgentMcpServer {
 
             return toolResult(`Successfully executed: ${command}`);
         } catch (error) {
-            const msg =
-                error instanceof Error ? error.message : String(error);
+            const msg = error instanceof Error ? error.message : String(error);
             log(`processCommand error: ${msg}`);
             return toolResult(`Error executing command: ${msg}`);
         } finally {

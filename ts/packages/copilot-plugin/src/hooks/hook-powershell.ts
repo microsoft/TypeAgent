@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * preToolUse hook for TypeAgent PowerShell integration.
  * When the LLM uses the powershell tool on Windows, injects context
@@ -22,12 +25,24 @@ interface PreToolOutput {
 
 // Dev tool commands that don't benefit from TypeAgent PowerShell flows
 const PASSTHROUGH_COMMANDS = new Set([
-    "node", "npm", "npx", "pnpm", "yarn",
-    "git", "gh",
-    "python", "python3", "pip", "pip3",
-    "docker", "kubectl",
-    "code", "copilot", "copilot-dev",
-    "fnm", "nvm",
+    "node",
+    "npm",
+    "npx",
+    "pnpm",
+    "yarn",
+    "git",
+    "gh",
+    "python",
+    "python3",
+    "pip",
+    "pip3",
+    "docker",
+    "kubectl",
+    "code",
+    "copilot",
+    "copilot-dev",
+    "fnm",
+    "nvm",
 ]);
 
 function isDevToolCommand(command: string): boolean {
@@ -74,7 +89,9 @@ async function main(): Promise<void> {
     if (input.toolName === "powershell") {
         const args = input.toolArgs as { command?: string };
         if (args?.command && !isDevToolCommand(args.command)) {
-            console.error(`[powershell-hook] Injecting TypeAgent PowerShell guidance for: ${args.command.substring(0, 100)}`);
+            console.error(
+                `[powershell-hook] Injecting TypeAgent PowerShell guidance for: ${args.command.substring(0, 100)}`,
+            );
             output = {
                 additionalContext: getPowerShellGuidance(args.command),
             };

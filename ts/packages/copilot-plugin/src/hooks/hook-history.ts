@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * agentStop hook handler for tracking Copilot interactions in TypeAgent history.
  *
@@ -12,7 +15,10 @@
 
 import { readFileSync } from "fs";
 import type { Dispatcher } from "@typeagent/agent-server-client";
-import { createClientIO, connectToTypeAgent } from "../shared/typeagent-client.js";
+import {
+    createClientIO,
+    connectToTypeAgent,
+} from "../shared/typeagent-client.js";
 
 interface TranscriptEvent {
     type: string;
@@ -115,7 +121,11 @@ function extractLastTurn(transcriptPath: string): TurnSummary | undefined {
     for (let i = lastUserIdx - 1; i >= 0 && i >= lastUserIdx - 5; i--) {
         const event = events[i];
         if (event.type === "hook.end") {
-            const output = (event.data as { output?: { handled?: boolean; handledBy?: string } }).output;
+            const output = (
+                event.data as {
+                    output?: { handled?: boolean; handledBy?: string };
+                }
+            ).output;
             if (output?.handled && output?.handledBy === "typeagent") {
                 handledByTypeAgent = true;
                 break;
@@ -143,9 +153,10 @@ async function sendToTypeAgentHistory(turn: TurnSummary): Promise<void> {
         const clientIO = createClientIO({});
         dispatcher = await connectToTypeAgent(clientIO);
 
-        const toolsSummary = turn.toolsUsed.length > 0
-            ? ` [tools: ${turn.toolsUsed.join(", ")}]`
-            : "";
+        const toolsSummary =
+            turn.toolsUsed.length > 0
+                ? ` [tools: ${turn.toolsUsed.join(", ")}]`
+                : "";
 
         const historyMessage = {
             user: turn.userMessage,
@@ -156,7 +167,9 @@ async function sendToTypeAgentHistory(turn: TurnSummary): Promise<void> {
         };
 
         const json = JSON.stringify(historyMessage);
-        console.error(`[agentStop] Inserting history: ${json.substring(0, 200)}`);
+        console.error(
+            `[agentStop] Inserting history: ${json.substring(0, 200)}`,
+        );
 
         await dispatcher.processCommand(`@history insert ${json}`);
 
@@ -201,11 +214,15 @@ export async function handleAgentStop(
 
     const turn = extractLastTurn(input.transcriptPath);
     if (!turn) {
-        console.error("[agentStop] Could not extract last turn from transcript");
+        console.error(
+            "[agentStop] Could not extract last turn from transcript",
+        );
         return {};
     }
 
-    console.error(`[agentStop] Turn: user="${turn.userMessage.substring(0, 80)}" tools=[${turn.toolsUsed.join(",")}] typeagent=${turn.handledByTypeAgent} response="${turn.assistantMessage.substring(0, 80)}"`);
+    console.error(
+        `[agentStop] Turn: user="${turn.userMessage.substring(0, 80)}" tools=[${turn.toolsUsed.join(",")}] typeagent=${turn.handledByTypeAgent} response="${turn.assistantMessage.substring(0, 80)}"`,
+    );
 
     // Skip if TypeAgent already handled this interaction
     if (turn.handledByTypeAgent) {

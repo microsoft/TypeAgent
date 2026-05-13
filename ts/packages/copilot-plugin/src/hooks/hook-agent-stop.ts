@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Standalone entry point for the agentStop hook.
  * Reads input from stdin and delegates to the history handler.
@@ -21,7 +24,9 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
-    console.error(`[agentStop] Hook fired. stopReason=${input.stopReason} transcriptPath=${input.transcriptPath}`);
+    console.error(
+        `[agentStop] Hook fired. stopReason=${input.stopReason} transcriptPath=${input.transcriptPath}`,
+    );
 
     const output = await handleAgentStop(input);
     console.error(`[agentStop] Result: ${JSON.stringify(output)}`);

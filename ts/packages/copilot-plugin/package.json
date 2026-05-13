@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/copilot-plugin",
   "version": "0.0.1",
-  "private": true,
   "description": "TypeAgent integration plugin for GitHub Copilot CLI",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -17,11 +16,11 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "tsc": "tsc -b",
     "register": "node scripts/install-plugin.mjs",
-    "unregister": "copilot plugin uninstall typeagent",
     "test:direct": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=direct node dist/hooks/hook-router.js",
-    "test:mcp-redirect": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=mcp node dist/hooks/hook-router.js"
+    "test:mcp-redirect": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=mcp node dist/hooks/hook-router.js",
+    "tsc": "tsc -b",
+    "unregister": "copilot plugin uninstall typeagent"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

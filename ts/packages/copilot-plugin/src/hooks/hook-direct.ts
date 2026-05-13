@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Scenario A: Direct handling hook.
  * Connects to TypeAgent, processes the command, and returns the response
@@ -5,42 +8,30 @@
  */
 
 import type { Dispatcher } from "@typeagent/agent-server-client";
-import { shouldTryTypeAgent } from "../shared/route-detector.js";
 import { collectMessage } from "../shared/message-formatter.js";
-import { createClientIO, connectToTypeAgent } from "../shared/typeagent-client.js";
-import { emitProgress } from "../shared/hook-progress.js";
+import {
+    createClientIO,
+    connectToTypeAgent,
+} from "../shared/typeagent-client.js";
 import type { HookInput, HookOutput } from "./types.js";
 
 export async function handleDirect(input: HookInput): Promise<HookOutput> {
-    if (!shouldTryTypeAgent(input.prompt)) {
-        return {};
-    }
-
-    emitProgress("Routing to TypeAgent...");
-
+    // In direct mode every user submission goes to TypeAgent first.
+    // If the dispatcher doesn't recognize an action below, we fall through
+    // to the Copilot LLM by returning {}.
     const responseCollector = { messages: [] as string[] };
     const clientIO = createClientIO({
         onSetDisplay: (message) => {
             collectMessage(message, undefined, responseCollector);
         },
         onAppendDisplay: (message, mode) => {
-            if (mode === "temporary") {
-                // Temporary messages are status updates — show as transient progress
-                const text = message?.message;
-                if (typeof text === "string" && text.trim()) {
-                    emitProgress(text.trim());
-                }
-                return;
-            }
             collectMessage(message, mode, responseCollector);
         },
     });
 
     let dispatcher: Dispatcher | null = null;
     try {
-        emitProgress("Connecting to TypeAgent...");
         dispatcher = await connectToTypeAgent(clientIO);
-        emitProgress("Processing command...");
         const result = await dispatcher.processCommand(input.prompt);
 
         if (result?.cancelled) {

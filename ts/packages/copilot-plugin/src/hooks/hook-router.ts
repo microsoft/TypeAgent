@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Hook entry point that routes to the appropriate handler based on configuration.
  *
@@ -73,7 +76,9 @@ function getMode(): Mode {
  * was handled, or undefined if the prompt is not a slash command.
  * Returns a Promise for commands that need async work (e.g., @typeagent run).
  */
-function handleSlashCommand(prompt: string): HookOutput | Promise<HookOutput> | undefined {
+function handleSlashCommand(
+    prompt: string,
+): HookOutput | Promise<HookOutput> | undefined {
     const trimmed = prompt.trim();
     const lower = trimmed.toLowerCase();
 
@@ -81,13 +86,16 @@ function handleSlashCommand(prompt: string): HookOutput | Promise<HookOutput> | 
     const runMatch = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
     if (runMatch) {
         const command = runMatch[1];
-        return handleDirect({ prompt: command, sessionId: "", timestamp: 0, cwd: "" });
+        return handleDirect({
+            prompt: command,
+            sessionId: "",
+            timestamp: 0,
+            cwd: "",
+        });
     }
 
     // @typeagent mode <direct|mcp>
-    const modeMatch = lower.match(
-        /^@typeagent\s+mode(?:\s+(direct|mcp))?\s*$/,
-    );
+    const modeMatch = lower.match(/^@typeagent\s+mode(?:\s+(direct|mcp))?\s*$/);
     if (modeMatch) {
         const newMode = modeMatch[1] as Mode | undefined;
 
@@ -139,7 +147,8 @@ function handleSlashCommand(prompt: string): HookOutput | Promise<HookOutput> | 
 
         return {
             handled: true,
-            responseContent: `TypeAgent PowerShell guidance switched **${setting}**.` +
+            responseContent:
+                `TypeAgent PowerShell guidance switched **${setting}**.` +
                 (setting === "on"
                     ? "  \nPowerShell commands will be guided toward TypeAgent PowerShell for reusability."
                     : "  \nPowerShell commands will execute directly without TypeAgent PowerShell guidance."),
@@ -181,7 +190,12 @@ function handleSlashCommand(prompt: string): HookOutput | Promise<HookOutput> | 
     const catchAll = trimmed.match(/^@typeagent\s+(.+)$/i);
     if (catchAll) {
         const command = catchAll[1];
-        return handleDirect({ prompt: command, sessionId: "", timestamp: 0, cwd: "" });
+        return handleDirect({
+            prompt: command,
+            sessionId: "",
+            timestamp: 0,
+            cwd: "",
+        });
     }
 
     return undefined;

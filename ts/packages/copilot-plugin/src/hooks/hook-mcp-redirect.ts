@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Scenario B: MCP redirect hook.
  * Detects action requests and modifies the prompt to instruct the LLM

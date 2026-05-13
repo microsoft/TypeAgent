@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * postToolUse hook entry point.
  * Tracks non-TypeAgent tool results in TypeAgent history
@@ -5,7 +8,10 @@
  */
 
 import type { Dispatcher } from "@typeagent/agent-server-client";
-import { createClientIO, connectToTypeAgent } from "../shared/typeagent-client.js";
+import {
+    createClientIO,
+    connectToTypeAgent,
+} from "../shared/typeagent-client.js";
 
 interface PostToolInput {
     sessionId: string;
@@ -20,9 +26,7 @@ interface PostToolInput {
 }
 
 // Tools to skip — either internal or already tracked by TypeAgent
-const SKIP_TOOLS = new Set([
-    "report_intent",
-]);
+const SKIP_TOOLS = new Set(["report_intent"]);
 
 async function main(): Promise<void> {
     let inputData = "";
@@ -68,9 +72,10 @@ async function sendToolHistory(input: PostToolInput): Promise<void> {
         const clientIO = createClientIO({});
         dispatcher = await connectToTypeAgent(clientIO);
 
-        const argsStr = typeof input.toolArgs === "string"
-            ? input.toolArgs
-            : JSON.stringify(input.toolArgs);
+        const argsStr =
+            typeof input.toolArgs === "string"
+                ? input.toolArgs
+                : JSON.stringify(input.toolArgs);
 
         const historyMessage = {
             user: `[Copilot tool: ${input.toolName}] ${argsStr.substring(0, 200)}`,

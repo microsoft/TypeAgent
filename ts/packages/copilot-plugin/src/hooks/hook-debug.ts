@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Debug hook — logs whatever input it receives to stderr.
  * Used to verify hooks are firing and inspect their input shape.
@@ -21,7 +24,9 @@ async function main(): Promise<void> {
     }
 
     const type = process.env.HOOK_TYPE ?? "unknown";
-    console.error(`[hook-debug] type=${type} input=${JSON.stringify(input).substring(0, 500)}`);
+    console.error(
+        `[hook-debug] type=${type} input=${JSON.stringify(input).substring(0, 500)}`,
+    );
     console.log("{}");
 }
 

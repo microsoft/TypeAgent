@@ -20,6 +20,7 @@ Ask the user which integration mode they'd like:
 2. **mcp** - Hook redirects to MCP tool, allowing the LLM to call TypeAgent. Adds ~1-2s for LLM overhead but enables streaming and LLM formatting.
 
 Also ask for:
+
 - **TypeAgent host** (default: localhost) - The host where the TypeAgent agent-server is running
 - **TypeAgent port** (default: 8999) - The port for the agent-server
 
@@ -29,14 +30,15 @@ Write the configuration to `${PLUGIN_DATA}/config.json`:
 
 ```json
 {
-    "mode": "direct",
-    "host": "localhost",
-    "port": 8999
+  "mode": "direct",
+  "host": "localhost",
+  "port": 8999
 }
 ```
 
 Tell the user to restart Copilot CLI for changes to take effect.
 They can also override temporarily with environment variables:
+
 - `TYPEAGENT_MODE=mcp` or `TYPEAGENT_MODE=direct`
 - `TYPEAGENT_HOST=hostname`
 - `TYPEAGENT_PORT=port`

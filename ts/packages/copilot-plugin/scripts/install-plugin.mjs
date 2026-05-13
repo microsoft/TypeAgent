@@ -43,7 +43,9 @@ if (
 // Sanity check: built output must exist.
 const distHook = resolve(pluginRoot, "dist", "hooks", "hook-router.js");
 if (!existsSync(distHook)) {
-    warn(`Built output not found at ${distHook}. Run \`pnpm run build\` first.`);
+    warn(
+        `Built output not found at ${distHook}. Run \`pnpm run build\` first.`,
+    );
     process.exit(1);
 }
 

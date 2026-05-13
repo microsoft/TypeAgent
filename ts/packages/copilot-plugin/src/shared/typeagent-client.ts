@@ -35,10 +35,7 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
         setDisplay(message: IAgentMessage): void {
             callbacks.onSetDisplay?.(message);
         },
-        appendDisplay(
-            message: IAgentMessage,
-            mode: DisplayAppendMode,
-        ): void {
+        appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
             callbacks.onAppendDisplay?.(message, mode);
         },
         appendDiagnosticData(): void {},
@@ -71,7 +68,9 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
         requestChoice(): void {},
         takeAction(): void {},
         shutdown(): void {},
-        async question(): Promise<number> { return 0; },
+        async question(): Promise<number> {
+            return 0;
+        },
         requestInteraction(): void {},
         interactionResolved(): void {},
         interactionCancelled(): void {},

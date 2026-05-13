@@ -45,6 +45,12 @@ function extractText(msg: unknown): string | undefined {
  * Collects displayable text from an IAgentMessage, filtering out
  * transient status/info messages that are only useful for live streaming.
  * Converts HTML content to plain text.
+ *
+ * Append-mode semantics (from @typeagent/agent-sdk):
+ *   - "inline":    concatenated to the previous "inline" message (streamed tokens)
+ *   - "block":     separate block (paragraph break before/after)
+ *   - "temporary": transient — skipped here
+ *   - undefined:   treated as a new block (setDisplay)
  */
 export function collectMessage(
     message: IAgentMessage,
@@ -64,9 +70,19 @@ export function collectMessage(
     }
 
     const text = extractText(msg);
-    if (text) {
-        collector.messages.push(toMarkdownBreaks(text));
+    if (!text) return;
+
+    const formatted = toMarkdownBreaks(text);
+
+    // Inline tokens belong to the previous block — concatenate without
+    // adding a paragraph break, so streamed token-by-token responses
+    // render as a single fluid block instead of one word per paragraph.
+    if (mode === "inline" && collector.messages.length > 0) {
+        collector.messages[collector.messages.length - 1] += formatted;
+        return;
     }
+
+    collector.messages.push(formatted);
 }
 
 /**
@@ -75,7 +91,8 @@ export function collectMessage(
  * Used by the MCP server where all messages are relevant.
  */
 export function extractMessageText(message: IAgentMessage): string | undefined {
-    if (typeof message !== "object" || !("message" in message)) return undefined;
+    if (typeof message !== "object" || !("message" in message))
+        return undefined;
     return extractText(message.message);
 }
 
