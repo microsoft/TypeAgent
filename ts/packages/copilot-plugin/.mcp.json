@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "typeagent": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist/mcp/server.js"],
+      "tools": ["*"]
+    }
+  }
+}

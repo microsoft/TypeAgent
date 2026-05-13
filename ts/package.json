@@ -24,6 +24,7 @@
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli run start",
     "cli:dev": "pnpm -C packages/cli run start:dev",
+    "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
