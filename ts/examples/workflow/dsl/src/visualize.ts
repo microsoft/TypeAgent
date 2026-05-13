@@ -23,7 +23,7 @@ function parseWf(filePath: string): GraphModel {
         );
     }
     const parser = new Parser(tokens);
-    const { ast, errors: parseErrors } = parser.parse();
+    const { ast, errors: parseErrors } = parser.parseSingle();
     if (!ast || parseErrors.length > 0) {
         throw new Error(
             `Parse errors: ${parseErrors.map((e) => e.message).join(", ")}`,

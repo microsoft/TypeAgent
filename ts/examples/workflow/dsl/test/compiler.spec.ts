@@ -235,7 +235,7 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parse();
+        const { ast, errors } = parser.parseSingle();
         expect(errors).toHaveLength(0);
         expect(ast).toBeDefined();
         expect(ast!.name).toBe("hello");
@@ -253,7 +253,7 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parse();
+        const { ast, errors } = parser.parseSingle();
         expect(errors).toHaveLength(0);
         expect(ast!.body[0].kind).toBe("ForOfStatement");
     });
@@ -264,7 +264,7 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parse();
+        const { ast, errors } = parser.parseSingle();
         expect(errors).toHaveLength(0);
         const paramType = ast!.params[0].type;
         expect(paramType.kind).toBe("ObjectType");

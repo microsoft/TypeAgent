@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// @ts-nocheck -- TODO: Phase 3 will rewrite this file for v2 AST
 /**
  * Workflow DSL emitter: AST -> WorkflowIR.
  *

@@ -52,7 +52,7 @@ export function compile(
 
     // Parse
     const parser = new Parser(tokens);
-    const { ast, errors: parseErrors } = parser.parse();
+    const { ast, errors: parseErrors } = parser.parseSingle();
     for (const e of parseErrors) {
         errors.push({
             phase: "parse",

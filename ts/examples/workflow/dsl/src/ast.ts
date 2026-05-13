@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL abstract syntax tree types.
+ * Workflow DSL v2 abstract syntax tree types.
  *
  * The AST mirrors the DSL's surface syntax. The emitter (emitter.ts)
  * lowers AST nodes to IR nodes.
@@ -12,6 +12,11 @@ export interface SourceLocation {
     line: number;
     col: number;
     offset: number;
+}
+
+export interface Comment {
+    text: string;
+    pos: SourceLocation;
 }
 
 // ---- Top-level ----
@@ -24,6 +29,7 @@ export interface WorkflowDecl {
     returnType: TypeExpr;
     body: Statement[];
     loc: SourceLocation;
+    leadingComments?: Comment[];
 }
 
 export interface ParamDecl {
@@ -64,25 +70,13 @@ export interface ObjectTypeField {
 // ---- Statements ----
 
 export type Statement =
-    | LetStatement
     | ConstStatement
-    | AssignmentStatement
-    | ForOfStatement
-    | WhileStatement
+    | DestructuringConst
     | IfStatement
-    | MatchStatement
-    | TryStatement
+    | SwitchStatement
+    | ThrowStatement
     | ReturnStatement
-    | BreakStatement
-    | ContinueStatement;
-
-export interface LetStatement {
-    kind: "LetStatement";
-    name: string;
-    typeAnnotation?: TypeExpr | undefined;
-    value?: Expr | undefined;
-    loc: SourceLocation;
-}
+    | BreakStatement;
 
 export interface ConstStatement {
     kind: "ConstStatement";
@@ -90,21 +84,15 @@ export interface ConstStatement {
     typeAnnotation?: TypeExpr | undefined;
     value: Expr;
     loc: SourceLocation;
+    leadingComments?: Comment[];
 }
 
-export interface AssignmentStatement {
-    kind: "AssignmentStatement";
-    name: string;
+export interface DestructuringConst {
+    kind: "DestructuringConst";
+    names: string[];
     value: Expr;
     loc: SourceLocation;
-}
-
-export interface ForOfStatement {
-    kind: "ForOfStatement";
-    variable: string;
-    iterable: Expr;
-    body: Statement[];
-    loc: SourceLocation;
+    leadingComments?: Comment[];
 }
 
 export interface IfStatement {
@@ -113,56 +101,49 @@ export interface IfStatement {
     then: Statement[];
     else_?: Statement[] | undefined;
     loc: SourceLocation;
+    leadingComments?: Comment[];
 }
 
-export interface WhileStatement {
-    kind: "WhileStatement";
-    condition: Expr;
+export interface SwitchStatement {
+    kind: "SwitchStatement";
+    discriminant: Expr;
+    arms: SwitchArm[];
+    default_?: Statement[];
+    loc: SourceLocation;
+    leadingComments?: Comment[];
+}
+
+export interface SwitchArm {
+    value: Expr;
     body: Statement[];
     loc: SourceLocation;
 }
 
-export interface TryStatement {
-    kind: "TryStatement";
-    tryBody: Statement[];
-    catchBody: Statement[];
+export interface ThrowStatement {
+    kind: "ThrowStatement";
+    value: Expr;
     loc: SourceLocation;
-}
-
-export interface BreakStatement {
-    kind: "BreakStatement";
-    loc: SourceLocation;
-}
-
-export interface ContinueStatement {
-    kind: "ContinueStatement";
-    loc: SourceLocation;
-}
-
-export interface MatchStatement {
-    kind: "MatchStatement";
-    selector: Expr;
-    cases: MatchCase[];
-    default_?: Statement[] | undefined;
-    loc: SourceLocation;
-}
-
-export interface MatchCase {
-    pattern: string; // literal string or number
-    body: Statement[];
-    loc: SourceLocation;
+    leadingComments?: Comment[];
 }
 
 export interface ReturnStatement {
     kind: "ReturnStatement";
     value: Expr;
     loc: SourceLocation;
+    leadingComments?: Comment[];
+}
+
+export interface BreakStatement {
+    kind: "BreakStatement";
+    loc: SourceLocation;
+    leadingComments?: Comment[];
 }
 
 // ---- Expressions ----
 
 export type Expr =
     | TaskCallExpr
+    | WorkflowCallExpr
     | DottedNameExpr
     | StringLiteralExpr
     | TemplateLiteralExpr
@@ -170,11 +151,26 @@ export type Expr =
     | BooleanLiteralExpr
     | NullLiteralExpr
     | ArrayLiteralExpr
-    | ObjectLiteralExpr;
+    | ObjectLiteralExpr
+    | BinaryExpr
+    | UnaryExpr
+    | TernaryExpr
+    | RetryNode
+    | MapNode
+    | FilterNode
+    | ParallelNode
+    | ParallelMapNode;
 
 export interface TaskCallExpr {
     kind: "TaskCallExpr";
     task: string; // e.g. "text.template", "shell.exec"
+    args: TaskArg[];
+    loc: SourceLocation;
+}
+
+export interface WorkflowCallExpr {
+    kind: "WorkflowCallExpr";
+    name: string;
     args: TaskArg[];
     loc: SourceLocation;
 }
@@ -245,5 +241,89 @@ export interface ObjectLiteralExpr {
 export interface ObjectEntry {
     key: string;
     value: Expr;
+    loc: SourceLocation;
+}
+
+// ---- Operators ----
+
+export type BinaryOp =
+    | "==="
+    | "!=="
+    | ">"
+    | "<"
+    | ">="
+    | "<="
+    | "&&"
+    | "||"
+    | "+"
+    | "-"
+    | "*"
+    | "/"
+    | "%";
+
+export type UnaryOp = "!" | "-";
+
+export interface BinaryExpr {
+    kind: "BinaryExpr";
+    op: BinaryOp;
+    left: Expr;
+    right: Expr;
+    loc: SourceLocation;
+}
+
+export interface UnaryExpr {
+    kind: "UnaryExpr";
+    op: UnaryOp;
+    operand: Expr;
+    loc: SourceLocation;
+}
+
+export interface TernaryExpr {
+    kind: "TernaryExpr";
+    condition: Expr;
+    consequent: Expr;
+    alternate: Expr;
+    loc: SourceLocation;
+}
+
+// ---- Built-in nodes ----
+
+export interface RetryNode {
+    kind: "RetryNode";
+    count: Expr;
+    body: Statement[];
+    fallback?: { param: string; body: Statement[] };
+    loc: SourceLocation;
+}
+
+export interface MapNode {
+    kind: "MapNode";
+    collection: Expr;
+    param: string;
+    body: Statement[];
+    loc: SourceLocation;
+}
+
+export interface FilterNode {
+    kind: "FilterNode";
+    collection: Expr;
+    param: string;
+    body: Statement[];
+    loc: SourceLocation;
+}
+
+export interface ParallelNode {
+    kind: "ParallelNode";
+    bodies: { body: Statement[] }[];
+    maxConcurrency?: Expr;
+    loc: SourceLocation;
+}
+
+export interface ParallelMapNode {
+    kind: "ParallelMapNode";
+    collection: Expr;
+    param: string;
+    body: Statement[];
+    maxConcurrency?: Expr;
     loc: SourceLocation;
 }

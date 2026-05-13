@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL token types and lexer.
+ * Workflow DSL v2 token types and lexer.
  *
  * The DSL is a TypeScript-like language that compiles to workflow IR JSON.
  * Tokens are position-tracked for source-map generation.
@@ -11,19 +11,15 @@
 export enum TokenKind {
     // Keywords
     Workflow = "workflow",
-    Let = "let",
     Const = "const",
-    For = "for",
-    Of = "of",
     If = "if",
     Else = "else",
-    Match = "match",
-    While = "while",
-    Try = "try",
-    Catch = "catch",
+    Switch = "switch",
+    Case = "case",
+    Default = "default",
     Return = "return",
     Break = "break",
-    Continue = "continue",
+    Throw = "throw",
 
     // Literals
     StringLiteral = "StringLiteral",
@@ -52,12 +48,28 @@ export enum TokenKind {
     Dot = ".",
     Equals = "=",
     Arrow = "=>",
-
-    // Statement terminator
     Semicolon = ";",
-
-    // Type annotations
     QuestionMark = "?",
+
+    // Comparison operators
+    TripleEquals = "===",
+    NotTripleEquals = "!==",
+    GreaterThan = ">",
+    LessThan = "<",
+    GreaterOrEqual = ">=",
+    LessOrEqual = "<=",
+
+    // Logical operators
+    And = "&&",
+    Or = "||",
+    Not = "!",
+
+    // Arithmetic operators
+    Plus = "+",
+    Minus = "-",
+    Star = "*",
+    Slash = "/",
+    Percent = "%",
 
     // End
     EOF = "EOF",
@@ -80,19 +92,15 @@ export interface LexError {
 
 const KEYWORDS = new Map<string, TokenKind>([
     ["workflow", TokenKind.Workflow],
-    ["let", TokenKind.Let],
     ["const", TokenKind.Const],
-    ["for", TokenKind.For],
-    ["of", TokenKind.Of],
     ["if", TokenKind.If],
     ["else", TokenKind.Else],
-    ["match", TokenKind.Match],
-    ["while", TokenKind.While],
-    ["try", TokenKind.Try],
-    ["catch", TokenKind.Catch],
+    ["switch", TokenKind.Switch],
+    ["case", TokenKind.Case],
+    ["default", TokenKind.Default],
     ["return", TokenKind.Return],
     ["break", TokenKind.Break],
-    ["continue", TokenKind.Continue],
+    ["throw", TokenKind.Throw],
     ["true", TokenKind.BooleanLiteral],
     ["false", TokenKind.BooleanLiteral],
     ["null", TokenKind.NullLiteral],
@@ -107,6 +115,11 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
 
     function peek(): string {
         return pos < source.length ? source[pos] : "";
+    }
+
+    function peekAt(offset: number): string {
+        const idx = pos + offset;
+        return idx < source.length ? source[idx] : "";
     }
 
     function advance(): string {
@@ -245,7 +258,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
         }
 
         // Line comments
-        if (ch === "/" && pos + 1 < source.length && source[pos + 1] === "/") {
+        if (ch === "/" && peekAt(1) === "/") {
             while (pos < source.length && source[pos] !== "\n") {
                 advance();
             }
@@ -253,20 +266,26 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
         }
 
         // Block comments
-        if (ch === "/" && pos + 1 < source.length && source[pos + 1] === "*") {
+        if (ch === "/" && peekAt(1) === "*") {
             advance(); // /
             advance(); // *
+            let closed = false;
             while (pos < source.length) {
-                if (
-                    source[pos] === "*" &&
-                    pos + 1 < source.length &&
-                    source[pos + 1] === "/"
-                ) {
+                if (source[pos] === "*" && peekAt(1) === "/") {
                     advance(); // *
                     advance(); // /
+                    closed = true;
                     break;
                 }
                 advance();
+            }
+            if (!closed) {
+                errors.push({
+                    message: "Unterminated block comment",
+                    line: startLine,
+                    col: startCol,
+                    offset: startOffset,
+                });
             }
             continue;
         }
@@ -339,11 +358,13 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
         // Numbers
         if (ch >= "0" && ch <= "9") {
             let num = "";
+            let hasDot = false;
             while (
                 pos < source.length &&
                 ((source[pos] >= "0" && source[pos] <= "9") ||
-                    source[pos] === ".")
+                    (source[pos] === "." && !hasDot))
             ) {
+                if (source[pos] === ".") hasDot = true;
                 num += advance();
             }
             tokens.push(
@@ -356,45 +377,6 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 ),
             );
             continue;
-        }
-
-        // Negative numbers (only when preceded by = or , or [ or ( or :)
-        if (
-            ch === "-" &&
-            pos + 1 < source.length &&
-            source[pos + 1] >= "0" &&
-            source[pos + 1] <= "9"
-        ) {
-            const prevToken =
-                tokens.length > 0 ? tokens[tokens.length - 1] : undefined;
-            if (
-                !prevToken ||
-                prevToken.kind === TokenKind.Equals ||
-                prevToken.kind === TokenKind.Comma ||
-                prevToken.kind === TokenKind.LBracket ||
-                prevToken.kind === TokenKind.LParen ||
-                prevToken.kind === TokenKind.Colon
-            ) {
-                let num = "";
-                num += advance(); // -
-                while (
-                    pos < source.length &&
-                    ((source[pos] >= "0" && source[pos] <= "9") ||
-                        source[pos] === ".")
-                ) {
-                    num += advance();
-                }
-                tokens.push(
-                    token(
-                        TokenKind.NumberLiteral,
-                        num,
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
-                );
-                continue;
-            }
         }
 
         // Identifiers and keywords
@@ -426,109 +408,60 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             continue;
         }
 
-        // Punctuation
+        // Multi-character operators and punctuation
         switch (ch) {
             case "(":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.LParen,
-                        "(",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.LParen, "(", startLine, startCol, startOffset),
                 );
                 continue;
             case ")":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.RParen,
-                        ")",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.RParen, ")", startLine, startCol, startOffset),
                 );
                 continue;
             case "{":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.LBrace,
-                        "{",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.LBrace, "{", startLine, startCol, startOffset),
                 );
                 continue;
             case "}":
                 if (templateDepth > 0) {
-                    // Closing a template interpolation; resume template lexing
-                    advance(); // consume }
+                    advance();
                     templateDepth--;
                     lexTemplateSpan(false);
                     continue;
                 }
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.RBrace,
-                        "}",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.RBrace, "}", startLine, startCol, startOffset),
                 );
                 continue;
             case "[":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.LBracket,
-                        "[",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.LBracket, "[", startLine, startCol, startOffset),
                 );
                 continue;
             case "]":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.RBracket,
-                        "]",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.RBracket, "]", startLine, startCol, startOffset),
                 );
                 continue;
             case ":":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.Colon,
-                        ":",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.Colon, ":", startLine, startCol, startOffset),
                 );
                 continue;
             case ",":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.Comma,
-                        ",",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.Comma, ",", startLine, startCol, startOffset),
                 );
                 continue;
             case ".":
@@ -540,51 +473,182 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             case ";":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.Semicolon,
-                        ";",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.Semicolon, ";", startLine, startCol, startOffset),
                 );
                 continue;
             case "?":
                 advance();
                 tokens.push(
-                    token(
-                        TokenKind.QuestionMark,
-                        "?",
-                        startLine,
-                        startCol,
-                        startOffset,
-                    ),
+                    token(TokenKind.QuestionMark, "?", startLine, startCol, startOffset),
                 );
                 continue;
             case "=":
                 advance();
-                if (peek() === ">") {
+                if (peek() === "=") {
+                    advance();
+                    if (peek() === "=") {
+                        advance();
+                        tokens.push(
+                            token(TokenKind.TripleEquals, "===", startLine, startCol, startOffset),
+                        );
+                    } else {
+                        errors.push({
+                            message: 'Use === instead of == (no implicit coercion)',
+                            line: startLine,
+                            col: startCol,
+                            offset: startOffset,
+                        });
+                    }
+                } else if (peek() === ">") {
                     advance();
                     tokens.push(
-                        token(
-                            TokenKind.Arrow,
-                            "=>",
-                            startLine,
-                            startCol,
-                            startOffset,
-                        ),
+                        token(TokenKind.Arrow, "=>", startLine, startCol, startOffset),
                     );
                 } else {
                     tokens.push(
-                        token(
-                            TokenKind.Equals,
-                            "=",
-                            startLine,
-                            startCol,
-                            startOffset,
-                        ),
+                        token(TokenKind.Equals, "=", startLine, startCol, startOffset),
                     );
                 }
+                continue;
+            case "!":
+                advance();
+                if (peek() === "=") {
+                    advance();
+                    if (peek() === "=") {
+                        advance();
+                        tokens.push(
+                            token(TokenKind.NotTripleEquals, "!==", startLine, startCol, startOffset),
+                        );
+                    } else {
+                        errors.push({
+                            message: 'Use !== instead of != (no implicit coercion)',
+                            line: startLine,
+                            col: startCol,
+                            offset: startOffset,
+                        });
+                    }
+                } else {
+                    tokens.push(
+                        token(TokenKind.Not, "!", startLine, startCol, startOffset),
+                    );
+                }
+                continue;
+            case ">":
+                advance();
+                if (peek() === "=") {
+                    advance();
+                    tokens.push(
+                        token(TokenKind.GreaterOrEqual, ">=", startLine, startCol, startOffset),
+                    );
+                } else {
+                    tokens.push(
+                        token(TokenKind.GreaterThan, ">", startLine, startCol, startOffset),
+                    );
+                }
+                continue;
+            case "<":
+                advance();
+                if (peek() === "=") {
+                    advance();
+                    tokens.push(
+                        token(TokenKind.LessOrEqual, "<=", startLine, startCol, startOffset),
+                    );
+                } else {
+                    tokens.push(
+                        token(TokenKind.LessThan, "<", startLine, startCol, startOffset),
+                    );
+                }
+                continue;
+            case "&":
+                advance();
+                if (peek() === "&") {
+                    advance();
+                    tokens.push(
+                        token(TokenKind.And, "&&", startLine, startCol, startOffset),
+                    );
+                } else {
+                    errors.push({
+                        message: "Unexpected character: &. Did you mean &&?",
+                        line: startLine,
+                        col: startCol,
+                        offset: startOffset,
+                    });
+                }
+                continue;
+            case "|":
+                advance();
+                if (peek() === "|") {
+                    advance();
+                    tokens.push(
+                        token(TokenKind.Or, "||", startLine, startCol, startOffset),
+                    );
+                } else {
+                    errors.push({
+                        message: "Unexpected character: |. Did you mean ||?",
+                        line: startLine,
+                        col: startCol,
+                        offset: startOffset,
+                    });
+                }
+                continue;
+            case "+":
+                advance();
+                tokens.push(
+                    token(TokenKind.Plus, "+", startLine, startCol, startOffset),
+                );
+                continue;
+            case "-":
+                // Negative number: only when preceded by = , [ ( : or an operator
+                if (peekAt(1) >= "0" && peekAt(1) <= "9") {
+                    const prevToken =
+                        tokens.length > 0 ? tokens[tokens.length - 1] : undefined;
+                    if (
+                        !prevToken ||
+                        prevToken.kind === TokenKind.Equals ||
+                        prevToken.kind === TokenKind.Comma ||
+                        prevToken.kind === TokenKind.LBracket ||
+                        prevToken.kind === TokenKind.LParen ||
+                        prevToken.kind === TokenKind.Colon ||
+                        prevToken.kind === TokenKind.Arrow
+                    ) {
+                        let num = "";
+                        num += advance(); // -
+                        while (
+                            pos < source.length &&
+                            ((source[pos] >= "0" && source[pos] <= "9") ||
+                                source[pos] === ".")
+                        ) {
+                            num += advance();
+                        }
+                        tokens.push(
+                            token(TokenKind.NumberLiteral, num, startLine, startCol, startOffset),
+                        );
+                        continue;
+                    }
+                }
+                advance();
+                tokens.push(
+                    token(TokenKind.Minus, "-", startLine, startCol, startOffset),
+                );
+                continue;
+            case "*":
+                advance();
+                tokens.push(
+                    token(TokenKind.Star, "*", startLine, startCol, startOffset),
+                );
+                continue;
+            case "/":
+                // Comments already handled above, this is division
+                advance();
+                tokens.push(
+                    token(TokenKind.Slash, "/", startLine, startCol, startOffset),
+                );
+                continue;
+            case "%":
+                advance();
+                tokens.push(
+                    token(TokenKind.Percent, "%", startLine, startCol, startOffset),
+                );
                 continue;
         }
 
