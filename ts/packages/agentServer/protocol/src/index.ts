@@ -7,6 +7,7 @@ export {
     AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
     AGENT_SERVER_DEFAULT_URL,
+    AGENT_SERVER_DISCOVERY_NAME,
     DiscoveryChannelName,
     DiscoveryInvokeFunctions,
     ConversationInfo,

@@ -87,6 +87,14 @@ export const AGENT_SERVER_DEFAULT_PORT = 8999;
 export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_PORT}`;
 
 /**
+ * Well-known agent name for the agent-server itself. Used by external
+ * clients via `lookupPort` to discover the configured server port when
+ * they bootstrapped from a different known port. The agent-server
+ * special-cases this name in its discovery handler.
+ */
+export const AGENT_SERVER_DISCOVERY_NAME = "agent-server";
+
+/**
  * RPC surface for the discovery channel. Read-only on purpose: clients can
  * ask "where is agent X's role Y?" but cannot mutate the registrar — only
  * agents themselves (in-process, via SessionContext.registerPort) can do
@@ -95,13 +103,21 @@ export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_P
 export type DiscoveryInvokeFunctions = {
     /**
      * Look up the port currently registered for `(agentName, role)`.
+     * `role` is optional; omit it (or pass undefined) to look up the
+     * default role — matches what `setLocalHostPort` registered for
+     * agents that pre-date the multi-role API.
+     *
+     * Special case: `agentName === "agent-server"` returns the
+     * agent-server's own listening port, so clients that bootstrap
+     * from a known port can discover the configured one.
+     *
      * Returns `null` (not undefined) so the JSON-RPC response is always a
      * defined value; callers should treat null as "no allocation found,
      * try again later" rather than a hard error.
      */
     lookupPort: (param: {
         agentName: string;
-        role: string;
+        role?: string;
     }) => Promise<{ port: number | null }>;
 };
 

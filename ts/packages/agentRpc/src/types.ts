@@ -153,7 +153,10 @@ export type AgentContextInvokeFunctions = {
         role: string;
         port: number;
     }) => Promise<{ regId: string }>;
-    releasePort: (param: { regId: string }) => Promise<void>;
+    releasePort: (param: {
+        regId: string;
+        contextId?: number;
+    }) => Promise<void>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
     reloadAgentSchema: (param: { contextId: number }) => Promise<void>;
     popupQuestion: (param: {

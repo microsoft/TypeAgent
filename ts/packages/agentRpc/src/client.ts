@@ -190,6 +190,12 @@ export async function createAgentRpcClient(
     // Tracks port registration handles returned by sessionContext.registerPort
     // so the out-of-process agent can release them via the regId we sent back.
     const registrationHandles = new Map<string, { release: () => void }>();
+    // Reverse index: which regIds belong to which agent context. Lets us
+    // release everything an out-of-process agent registered if it closes
+    // its context without calling releasePort for each one (crash, bug,
+    // forgetful agent). Without this, the agent could leak release closures
+    // for the lifetime of the RPC client.
+    const regIdsByContext = new Map<number, Set<string>>();
     function getContextParam(
         context: SessionContext<ShimContext>,
     ): ContextParams {
@@ -340,12 +346,24 @@ export async function createAgentRpcClient(
             const handle = context.registerPort(param.role, param.port);
             const regId = randomUUID();
             registrationHandles.set(regId, handle);
+            let regIds = regIdsByContext.get(param.contextId);
+            if (regIds === undefined) {
+                regIds = new Set<string>();
+                regIdsByContext.set(param.contextId, regIds);
+            }
+            regIds.add(regId);
             return { regId };
         },
-        releasePort: async (param: { regId: string }) => {
+        releasePort: async (param: {
+            regId: string;
+            contextId?: number;
+        }) => {
             const handle = registrationHandles.get(param.regId);
             if (handle !== undefined) {
                 registrationHandles.delete(param.regId);
+                if (param.contextId !== undefined) {
+                    regIdsByContext.get(param.contextId)?.delete(param.regId);
+                }
                 handle.release();
             }
         },
@@ -769,6 +787,26 @@ export async function createAgentRpcClient(
     const invokeCloseAgentContext = result.closeAgentContext;
     result.closeAgentContext = async (context: SessionContext<ShimContext>) => {
         const result = await invokeCloseAgentContext?.(context);
+        const contextId = contextMap.getId(context);
+        // Backstop: release any port handles the out-of-process agent
+        // failed to release explicitly (crash, bug, or just forgot). Mirrors
+        // the dispatcher-side releaseAllForSession backstop so handles
+        // can't outlive the context they're scoped to.
+        const regIds = regIdsByContext.get(contextId);
+        if (regIds !== undefined) {
+            for (const regId of regIds) {
+                const handle = registrationHandles.get(regId);
+                if (handle !== undefined) {
+                    registrationHandles.delete(regId);
+                    try {
+                        handle.release();
+                    } catch {
+                        // Best-effort cleanup; swallow.
+                    }
+                }
+            }
+            regIdsByContext.delete(contextId);
+        }
         contextMap.close(context);
         // Clean up the options RPC channel once this agent context is closed.
         // Options are agent-scoped (created once per initializeAgentContext call)

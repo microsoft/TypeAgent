@@ -548,7 +548,10 @@ export function createAgentRpcServer(
                     release: () => {
                         void regIdPromise
                             .then((regId) =>
-                                rpc.invoke("releasePort", { regId }),
+                                rpc.invoke("releasePort", {
+                                    regId,
+                                    contextId,
+                                }),
                             )
                             .catch();
                     },

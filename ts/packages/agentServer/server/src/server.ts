@@ -23,6 +23,7 @@ import {
     AgentServerInvokeFunctions,
     AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
+    AGENT_SERVER_DISCOVERY_NAME,
     DiscoveryChannelName,
     DiscoveryInvokeFunctions,
     DispatcherConnectOptions,
@@ -449,6 +450,15 @@ async function main() {
             // in-process SessionContext.registerPort.
             const discoveryFunctions: DiscoveryInvokeFunctions = {
                 lookupPort: async ({ agentName, role }) => {
+                    // Well-known: agent-server reports its own listening
+                    // port so clients that bootstrap from a different
+                    // known port can discover the configured one. This
+                    // also keeps agent-server discoverable if its port
+                    // ever becomes dynamic.
+                    if (agentName === AGENT_SERVER_DISCOVERY_NAME) {
+                        const port = portRegistrar.getAgentServerPort();
+                        return { port: port ?? null };
+                    }
                     const port = portRegistrar.lookup(agentName, role);
                     return { port: port ?? null };
                 },
