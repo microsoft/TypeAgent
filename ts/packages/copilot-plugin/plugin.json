@@ -1,0 +1,12 @@
+{
+    "name": "typeagent",
+    "description": "TypeAgent integration for Copilot CLI - route action requests to TypeAgent agents for calendar, email, music, browser, and other domain-specific actions",
+    "version": "0.0.1",
+    "author": {
+        "name": "Microsoft"
+    },
+    "hooks": "hooks.json",
+    "mcpServers": ".mcp.json",
+    "agents": "agents/",
+    "skills": "skills/"
+}

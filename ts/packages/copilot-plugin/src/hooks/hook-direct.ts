@@ -1,0 +1,78 @@
+/**
+ * Scenario A: Direct handling hook.
+ * Connects to TypeAgent, processes the command, and returns the response
+ * directly — skipping the Copilot LLM entirely.
+ */
+
+import type { Dispatcher } from "@typeagent/agent-server-client";
+import { shouldTryTypeAgent } from "../shared/route-detector.js";
+import { collectMessage } from "../shared/message-formatter.js";
+import { createClientIO, connectToTypeAgent } from "../shared/typeagent-client.js";
+import { emitProgress } from "../shared/hook-progress.js";
+import type { HookInput, HookOutput } from "./types.js";
+
+export async function handleDirect(input: HookInput): Promise<HookOutput> {
+    if (!shouldTryTypeAgent(input.prompt)) {
+        return {};
+    }
+
+    emitProgress("Routing to TypeAgent...");
+
+    const responseCollector = { messages: [] as string[] };
+    const clientIO = createClientIO({
+        onSetDisplay: (message) => {
+            collectMessage(message, undefined, responseCollector);
+        },
+        onAppendDisplay: (message, mode) => {
+            if (mode === "temporary") {
+                // Temporary messages are status updates — show as transient progress
+                const text = message?.message;
+                if (typeof text === "string" && text.trim()) {
+                    emitProgress(text.trim());
+                }
+                return;
+            }
+            collectMessage(message, mode, responseCollector);
+        },
+    });
+
+    let dispatcher: Dispatcher | null = null;
+    try {
+        emitProgress("Connecting to TypeAgent...");
+        dispatcher = await connectToTypeAgent(clientIO);
+        emitProgress("Processing command...");
+        const result = await dispatcher.processCommand(input.prompt);
+
+        if (result?.cancelled) {
+            return {};
+        }
+
+        const hasRecognizedAction = result?.actions?.some(
+            (action) => action.actionName !== "unknown",
+        );
+
+        if (!hasRecognizedAction) {
+            return {};
+        }
+
+        const responseContent =
+            responseCollector.messages.length > 0
+                ? responseCollector.messages.join("\n\n")
+                : result?.lastError
+                  ? `TypeAgent recognized the action but encountered an error: ${result.lastError}`
+                  : "Request processed successfully.";
+
+        return {
+            handled: true,
+            responseContent,
+            handledBy: "typeagent",
+        };
+    } catch (error) {
+        console.error("TypeAgent error:", error);
+        return {};
+    } finally {
+        if (dispatcher) {
+            await dispatcher.close();
+        }
+    }
+}

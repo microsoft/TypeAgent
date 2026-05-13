@@ -1,0 +1,300 @@
+# TypeAgent Plugin for GitHub Copilot CLI
+
+This plugin integrates TypeAgent with the modified `copilot-dev` CLI, enabling action requests (calendar, email, music, browser automation, etc.) to be routed to TypeAgent before the Copilot LLM.
+
+## How It Works
+
+```
+User Input → copilot-dev
+    ↓
+userPromptSubmitted hook (hook-router.js)
+    ↓
+Question word? → Fall through to Copilot LLM
+Action request?
+    ├── direct mode → Connect to TypeAgent ws://localhost:8999
+    │     → Recognized action? → Return response, skip LLM
+    │     → Unknown action? → Fall through to Copilot
+    └── mcp mode → Inject directive, LLM calls typeagent-processCommand tool
+```
+
+The `copilot-dev` CLI has been modified (in `D:\repos\copilot-agent-runtime`) to support `handled`, `responseContent`, and `handledBy` fields in hook output — allowing the hook to skip the agentic loop entirely when TypeAgent handles a request.
+
+---
+
+## Prerequisites
+
+### 1. Node.js 24+
+The modified `copilot-dev` requires Node.js 24+ for `node:sqlite`.
+
+**On Windows** — install via [nvm-windows](https://github.com/coreybutler/nvm-windows) or the [Node.js installer](https://nodejs.org/):
+```powershell
+nvm install 24
+nvm use 24
+node --version  # should show v24.x.x
+```
+
+**In WSL** — via nvm:
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+nvm install 24 && nvm use 24
+```
+
+### 2. TypeAgent Server Running
+The plugin connects to TypeAgent at `ws://localhost:8999` by default.
+
+Start the TypeAgent agent-server from `D:\repos\TypeAgent\ts`:
+```bash
+# In WSL or Windows
+cd D:\repos\TypeAgent\ts
+pnpm run start:server
+```
+
+Or set `TYPEAGENT_PORT` and `TYPEAGENT_HOST` to override the connection.
+
+---
+
+## Building
+
+### Build the Plugin (WSL)
+```bash
+cd /mnt/d/repos/SecretAgents/ts
+pnpm install        # installs workspace deps, syncs TypeAgent credentials
+pnpm run build      # builds all packages including typeagent-plugin
+```
+
+Or build just the plugin:
+```bash
+cd /mnt/d/repos/SecretAgents/ts/packages/typeagent-plugin
+pnpm run build
+```
+
+**Output:** `dist/hooks/hook-router.js` and other hook entry points.
+
+### Build copilot-dev (WSL, for Windows testing)
+
+The modified `copilot-dev` source is at `D:\repos\copilot-agent-runtime`.
+
+**Build in WSL** (builds for all platforms — the Windows binary runs on Windows):
+```bash
+cd /mnt/d/repos/copilot-agent-runtime
+npm install --force   # --force bypasses platform-specific native module errors
+npm run build:mcp-client
+npm run build
+```
+
+**Install globally on Windows** — open PowerShell/CMD in `D:\repos\copilot-agent-runtime`:
+```powershell
+npm install -g .
+copilot-dev --version
+```
+
+---
+
+## Testing on Windows
+
+### Step 1: Verify copilot-dev is Installed
+
+```powershell
+copilot-dev --version
+```
+Expected: `GitHub Copilot CLI 0.0.1.`
+
+### Step 2: Start TypeAgent Server
+
+In a separate terminal (Windows or WSL):
+```bash
+cd D:\repos\TypeAgent\ts
+pnpm run start:server
+```
+
+Wait until you see the server is ready on port 8999.
+
+### Step 3: Launch copilot-dev with the Plugin
+
+```powershell
+copilot-dev --plugin-dir D:\repos\SecretAgents\ts\packages\typeagent-plugin
+```
+
+The `--plugin-dir` flag loads the plugin from a local directory. On first launch it reads `plugin.json`, registers hooks from `hooks.json`, and exposes the MCP server from `.mcp.json`.
+
+### Step 4: Test Routing
+
+**Action requests → TypeAgent:**
+```
+> schedule a meeting with John tomorrow at 2pm
+> send an email to alice@example.com about the project
+> play some jazz music
+> open browser and navigate to github.com
+> list my playlists
+```
+
+**Questions → Copilot LLM (fall-through):**
+```
+> what is the difference between var and let in JavaScript?
+> explain how async/await works
+> how do I configure webpack?
+```
+
+**Plugin commands (no TypeAgent server needed):**
+```
+> @typeagent status
+> @typeagent mode direct
+> @typeagent mode mcp
+> @typeagent powershell on
+> @typeagent run list the playlists
+```
+
+### Step 5: Verify Verification in Copilot CLI
+
+Check that the plugin loaded:
+```
+> /plugin list
+```
+Should show `typeagent` under the plugins section.
+
+---
+
+## Integration Modes
+
+The plugin supports two modes, switchable at runtime:
+
+### Direct Mode (default)
+The hook connects directly to TypeAgent over WebSocket. When TypeAgent recognizes and handles the request, the hook returns `{ handled: true, responseContent: "..." }` — Copilot skips the LLM entirely.
+
+- **Pros:** Fast (~1-3s), no LLM tokens consumed
+- **Cons:** No streaming output, response is returned all at once
+
+### MCP Mode
+The hook injects a directive into the prompt context, instructing the LLM to call the `typeagent-processCommand` MCP tool. TypeAgent's MCP server streams progress notifications to the CLI timeline.
+
+- **Pros:** Streaming output visible during processing, LLM-formatted responses
+- **Cons:** Slower (~3-5s), consumes LLM tokens
+
+**Switch modes:**
+```
+> @typeagent mode direct    # fastest, skips LLM
+> @typeagent mode mcp       # streaming, uses LLM
+```
+
+Or set permanently via environment variable before launching:
+```powershell
+$env:TYPEAGENT_MODE = "mcp"
+copilot-dev --plugin-dir D:\repos\SecretAgents\ts\packages\typeagent-plugin
+```
+
+---
+
+## Configuration
+
+The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Windows) or `~/.typeagent-copilot/config.json` (WSL/Linux).
+
+```json
+{
+    "mode": "direct",
+    "powershell": {
+        "enabled": true
+    }
+}
+```
+
+**Environment variable overrides** (take precedence over config file):
+
+| Variable | Default | Description |
+|---|---|---|
+| `TYPEAGENT_MODE` | `direct` | `direct` or `mcp` |
+| `TYPEAGENT_HOST` | `localhost` | TypeAgent server host |
+| `TYPEAGENT_PORT` | `8999` | TypeAgent server port |
+| `TYPEAGENT_PLUGIN_DATA` | `~/.typeagent-copilot` | Config directory |
+
+---
+
+## Plugin Components
+
+### Hooks (`hooks.json`)
+
+| Hook | File | Purpose |
+|------|------|---------|
+| `userPromptSubmitted` | `hook-router.js` | Route action requests to TypeAgent or Copilot |
+| `agentStop` | `hook-agent-stop.js` | Track Copilot interactions in TypeAgent history |
+| `postToolUse` | `hook-post-tool.js` | Track Copilot tool results in TypeAgent history |
+| `preToolUse` | `hook-powershell.js` | Inject TypeAgent PowerShell guidance for PowerShell commands |
+
+### MCP Server (`.mcp.json`)
+
+Exposes TypeAgent as MCP tools for the LLM (used in MCP mode):
+
+| Tool | Description |
+|------|-------------|
+| `typeagent-processCommand` | Send a command to TypeAgent and get the response |
+| `typeagent-listAgents` | List available TypeAgent agents |
+| `typeagent-getStatus` | Get TypeAgent server status |
+
+### Agents (`agents/`)
+
+- `typeagent.agent.md` — Sub-agent that delegates action requests to TypeAgent via MCP tools
+
+### Skills (`skills/`)
+
+- `typeagent-setup/` — Interactive skill to configure integration mode and server connection
+
+---
+
+## Debugging
+
+### Enable Hook Debug Logging
+
+Hooks write diagnostics to stderr (not visible in normal CLI output). To see them, redirect stderr:
+
+```powershell
+# Windows: run hook directly for testing
+echo '{"sessionId":"test","timestamp":1234,"cwd":"C:\\temp","prompt":"list my playlists"}' | node D:\repos\SecretAgents\ts\packages\typeagent-plugin\dist\hooks\hook-router.js
+```
+
+### Test Hooks Directly (WSL)
+
+The `package.json` includes test scripts that simulate hook invocation:
+
+```bash
+cd /mnt/d/repos/SecretAgents/ts/packages/typeagent-plugin
+
+# Test direct mode routing (TypeAgent server must be running)
+pnpm run test:direct
+
+# Test MCP redirect mode (no server needed — just checks prompt injection)
+pnpm run test:mcp-redirect
+
+# Test question fall-through
+pnpm run test:question
+```
+
+### Check TypeAgent Connection
+
+```powershell
+# Windows: test WebSocket connection to TypeAgent
+> @typeagent status
+```
+
+Expected output shows server URL and current mode. If TypeAgent is not running, direct mode requests will fall through to Copilot.
+
+### Common Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `copilot-dev` not found | Not installed globally | Run `npm install -g .` from `D:\repos\copilot-agent-runtime` |
+| Action not routed to TypeAgent | Prompt detected as a question | Rephrase: use imperative ("schedule...", "send...", "play...") |
+| TypeAgent connection refused | Server not running | Start TypeAgent server (`pnpm run start:server`) |
+| Hook timeout | TypeAgent slow to respond | Increase `timeout` in `hooks.json` or use MCP mode |
+| SQLite experimental warning | Node 24 feature | Normal — can be suppressed with `--no-experimental-warnings` |
+
+---
+
+## Architecture Reference
+
+The key modification to `copilot-dev` is in:
+
+- **`src/core/hooks.ts`** — Added `handled`, `responseContent`, `handledBy` to `UserPromptSubmittedHookOutput`
+- **`src/core/session.ts`** (~line 7473) — Added handler that checks hook output and emits an assistant message directly, bypassing `runAgenticLoop()`
+
+This allows any `userPromptSubmitted` hook to fully handle a request and return a response without the LLM being invoked.
+
+See the [investigation document](D:\repos\codeDocs\TypeAgent\forAgent\investigations\active\2026-04-06_copilot-cli-typeagent-integration.md) for full architectural analysis.

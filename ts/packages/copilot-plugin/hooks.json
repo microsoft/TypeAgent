@@ -1,0 +1,33 @@
+{
+    "version": 1,
+    "hooks": {
+        "userPromptSubmitted": [
+            {
+                "type": "command",
+                "command": "node ${PLUGIN_ROOT}/dist/hooks/hook-router.js",
+                "timeout": 30000
+            }
+        ],
+        "agentStop": [
+            {
+                "type": "command",
+                "command": "node ${PLUGIN_ROOT}/dist/hooks/hook-agent-stop.js",
+                "timeout": 10000
+            }
+        ],
+        "postToolUse": [
+            {
+                "type": "command",
+                "command": "node ${PLUGIN_ROOT}/dist/hooks/hook-post-tool.js",
+                "timeout": 10000
+            }
+        ],
+        "preToolUse": [
+            {
+                "type": "command",
+                "command": "node ${PLUGIN_ROOT}/dist/hooks/hook-powershell.js",
+                "timeout": 5000
+            }
+        ]
+    }
+}
