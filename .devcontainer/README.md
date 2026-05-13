@@ -37,7 +37,7 @@ Default configuration for most development work. Includes:
 - Azure CLI, GitHub CLI
 - Claude Code
 
-**Note:** The Electron shell requires GUI support. Use the hybrid approach:
+**Note:** The Electron shell requires GUI support. To use the shell with devcontainer, you need to start teh agent-server in the container and run the shell on your host machine. The agent server port is forwarded to the host, so the shell will connect correctly:
 ```bash
 # In container - start the backend
 pnpm run server
@@ -45,13 +45,6 @@ pnpm run server
 # On host machine - run the Electron shell
 cd ts && pnpm run shell
 ```
-
-### VNC Desktop (`vnc/devcontainer.json`)
-Use this when you need GUI support inside the container (Codespaces or no WSLg).
-
-To use: Copy `vnc/devcontainer.json` to `.devcontainer/devcontainer.json` before opening.
-
-Access the desktop at http://localhost:6080 (password: `typeagent`)
 
 ## Working with the Container
 
@@ -61,19 +54,8 @@ cd ts                    # Navigate to TypeScript workspace
 pnpm run build           # Build all packages
 pnpm run cli             # Run the CLI
 pnpm run test:local      # Run unit tests
-pnpm run server          # Start agent server (for hybrid shell)
+pnpm run start:agent-server          # Start agent server
 ```
-
-### Azure Authentication
-```bash
-az login --use-device-code
-```
-
-### Environment Variables
-Set these as Codespaces secrets or in your shell:
-- `AZURE_OPENAI_API_KEY` - Azure OpenAI API key
-- `AZURE_OPENAI_ENDPOINT` - Azure OpenAI endpoint
-- `ANTHROPIC_API_KEY` - For Claude Code
 
 ## Using with AI Agents
 
