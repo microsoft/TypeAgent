@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 #
 # TypeAgent DevContainer Post-Create Script
 # Runs once when the container is first created

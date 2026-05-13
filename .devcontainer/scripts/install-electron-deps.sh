@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 #
 # Install Electron/GUI dependencies for VNC or WSLg environments
 #
