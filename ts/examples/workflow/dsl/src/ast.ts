@@ -65,14 +65,27 @@ export interface ObjectTypeField {
 
 export type Statement =
     | LetStatement
+    | ConstStatement
     | AssignmentStatement
     | ForOfStatement
+    | WhileStatement
     | IfStatement
     | MatchStatement
-    | ReturnStatement;
+    | TryStatement
+    | ReturnStatement
+    | BreakStatement
+    | ContinueStatement;
 
 export interface LetStatement {
     kind: "LetStatement";
+    name: string;
+    typeAnnotation?: TypeExpr | undefined;
+    value?: Expr | undefined;
+    loc: SourceLocation;
+}
+
+export interface ConstStatement {
+    kind: "ConstStatement";
     name: string;
     typeAnnotation?: TypeExpr | undefined;
     value: Expr;
@@ -99,6 +112,30 @@ export interface IfStatement {
     condition: Expr;
     then: Statement[];
     else_?: Statement[] | undefined;
+    loc: SourceLocation;
+}
+
+export interface WhileStatement {
+    kind: "WhileStatement";
+    condition: Expr;
+    body: Statement[];
+    loc: SourceLocation;
+}
+
+export interface TryStatement {
+    kind: "TryStatement";
+    tryBody: Statement[];
+    catchBody: Statement[];
+    loc: SourceLocation;
+}
+
+export interface BreakStatement {
+    kind: "BreakStatement";
+    loc: SourceLocation;
+}
+
+export interface ContinueStatement {
+    kind: "ContinueStatement";
     loc: SourceLocation;
 }
 

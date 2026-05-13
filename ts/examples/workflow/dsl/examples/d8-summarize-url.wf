@@ -1,0 +1,29 @@
+// Fetch a public URL, extract text, LLM-summarize, write to file.
+// Retries fetch once on failure.
+workflow summarizeUrl(url: string, outputPath: string): { path: string, summary: string } {
+    const summaryPrompt = "Summarize the following web page content in 3-5 paragraphs. Focus on the main points and key information. Be clear and concise.\n\nContent:\n";
+    const maxRetries = 2;
+
+    let attempt = 0;
+    let pageContent: string;
+    while (true) {
+        try {
+            let fetchResult = http.get({ url: url });
+            pageContent = fetchResult.body;
+            break;
+        } catch {
+            attempt = int.add(attempt, 1);
+            if (int.lessThan(attempt, maxRetries)) {
+                continue;
+            } else {
+                break;
+            }
+        }
+    }
+
+    let prompt = `${summaryPrompt}${pageContent}`;
+    let summaryResult = llm.generate(prompt);
+    let writeResult = file.write({ path: outputPath, content: summaryResult });
+
+    return { path: writeResult.path, summary: summaryResult.text };
+}

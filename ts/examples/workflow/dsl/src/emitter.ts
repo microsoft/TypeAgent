@@ -7,20 +7,22 @@
  * This is the lowering pass. It walks the AST and produces the IR JSON
  * that the workflow engine consumes. Key responsibilities:
  *
- * - Infer node IDs from let-binding names
- * - Fill `bind` from let bindings (A3)
+ * - Scope-based name resolution (params, let bindings, constants, state vars)
+ * - Conditional `bind`: only emit when a binding is referenced downstream
  * - Thread `next` edges from statement order
  * - Desugar `for..of` to loop nodes with index/length/compare/branch
- * - Look up task schemas from the registry (T1)
- * - Convert type annotations to JSON Schema (T2)
- * - Fill defaults: maxIterations, branch default (A1)
+ * - Desugar `while(true)` to loop nodes with state/break/continue
+ * - Desugar `if`/`else` to branch nodes with boolean selectors
+ * - Desugar `try`/`catch` to onError edges
+ * - Lower `const` to IR constants section
+ * - Lower object return to object output template
+ * - Auto-project single-field output schemas
  */
 
 import {
     WorkflowIR,
     WorkflowNode,
     TaskNode,
-    BranchNode,
     LoopNode,
     Template,
     JSONSchema,
@@ -34,10 +36,11 @@ import {
     TaskCallExpr,
     TemplateLiteralExpr,
     ForOfStatement,
+    WhileStatement,
     IfStatement,
     LetStatement,
+    ConstStatement,
     AssignmentStatement,
-    ReturnStatement,
 } from "./ast.js";
 
 export interface TaskSchemaInfo {
@@ -52,32 +55,54 @@ export interface EmitError {
     col: number;
 }
 
+/**
+ * Binding records track how a name resolves.
+ *
+ *  - "node": a task/loop node in the current scope (use $from: "scope")
+ *  - "param": a workflow parameter (use $from: "input")
+ *  - "constant": an IR constant (use $from: "constant")
+ *  - "state": a loop state variable (use $from: "state")
+ *  - "loopInput": a loop-body input (use $from: "input")
+ *  - "literal": an inline literal value (substituted directly)
+ *  - "uninitialized": declared but not yet assigned (e.g. `let x: type;`)
+ */
+type BindingKind =
+    | "node"
+    | "param"
+    | "constant"
+    | "state"
+    | "loopInput"
+    | "literal"
+    | "uninitialized";
+
+interface Binding {
+    kind: BindingKind;
+    /** For "node": the node ID. For "loopInput": the input name. */
+    nodeId?: string | undefined;
+    /** For "literal": the literal value. */
+    value?: Template | undefined;
+}
+
 interface ScopeContext {
     nodes: Record<string, WorkflowNode>;
-    /** Ordered list of node IDs for threading `next` edges */
     nodeOrder: string[];
-    /** Variables bound at this scope level (let bindings) */
-    bindings: Map<string, string>; // variable name -> node ID
-    /** Let bindings whose RHS is a literal (not a task call) */
-    literalBindings: Map<string, Template>;
-    /** The node ID of the return expression (workflow output or loop output) */
-    outputNodeId?: string;
-    /** The output template (for workflow output or loop output) */
-    outputTemplate?: Template;
-    /** For loop scopes: state variable names */
-    stateVars?: Set<string> | undefined;
-    /** For loop scopes: the loop variable name (the for..of iterator) */
+    bindings: Map<string, Binding>;
+    /** Parent scope for name resolution (lexical scoping) */
+    parent?: ScopeContext | undefined;
+    /** For loop body scopes: the loop variable name */
     loopVar?: string | undefined;
-    /** For loop scopes: the iterable expression's template */
-    loopIterable?: Template | undefined;
-    /** For loop body scopes: auto-project paths for input names from outer bindings */
-    inputAutoProject?: Map<string, string[]> | undefined;
+    /** For loop body scopes: the pick node ID */
+    pickNodeId?: string | undefined;
 }
 
 export class Emitter {
     private errors: EmitError[] = [];
     private taskSchemas: Map<string, TaskSchemaInfo>;
     private nodeCounter = 0;
+    private constants: Record<string, { schema: JSONSchema; value: unknown }> =
+        {};
+    /** Set of node IDs that are referenced by expressions */
+    private referencedNodes = new Set<string>();
 
     constructor(taskSchemas: TaskSchemaInfo[]) {
         this.taskSchemas = new Map(taskSchemas.map((t) => [t.name, t]));
@@ -89,17 +114,36 @@ export class Emitter {
     } {
         this.errors = [];
         this.nodeCounter = 0;
+        this.constants = {};
+        this.referencedNodes = new Set();
 
         const inputSchema = this.paramsToSchema(ast.params);
         const outputSchema = this.typeToSchema(ast.returnType);
 
-        const scope = this.emitScope(
-            ast.body,
-            new Set(ast.params.map((p) => p.name)),
-        );
+        // Build root scope with params
+        const rootScope: ScopeContext = {
+            nodes: {},
+            nodeOrder: [],
+            bindings: new Map(),
+        };
+        for (const p of ast.params) {
+            rootScope.bindings.set(p.name, { kind: "param" });
+        }
+
+        let outputTemplate: Template | undefined;
+
+        for (const stmt of ast.body) {
+            const result = this.emitStatement(stmt, rootScope);
+            if (result?.output !== undefined) {
+                outputTemplate = result.output;
+            }
+        }
 
         // Thread `next` edges
-        this.threadNext(scope);
+        this.threadNext(rootScope);
+
+        // Strip `bind` from unreferenced nodes
+        this.stripUnreferencedBinds(rootScope);
 
         const ir: WorkflowIR = {
             kind: "workflow",
@@ -108,10 +152,13 @@ export class Emitter {
             version: "1",
             inputSchema,
             outputSchema,
-            nodes: scope.nodes,
-            entry: scope.nodeOrder.length > 0 ? scope.nodeOrder[0] : "",
+            ...(Object.keys(this.constants).length > 0
+                ? { constants: this.constants }
+                : {}),
+            nodes: rootScope.nodes,
+            entry: rootScope.nodeOrder.length > 0 ? rootScope.nodeOrder[0] : "",
             output:
-                scope.outputTemplate ??
+                outputTemplate ??
                 ({ $from: "input", name: "" } as unknown as Template),
         };
 
@@ -121,113 +168,123 @@ export class Emitter {
         };
     }
 
-    private emitScope(
-        statements: Statement[],
-        inputNames: Set<string>,
-        stateVars?: Set<string>,
-        loopVar?: string,
-        loopIterable?: Template,
-    ): ScopeContext {
-        const scope: ScopeContext = {
-            nodes: {},
-            nodeOrder: [],
-            bindings: new Map(),
-            literalBindings: new Map(),
-            stateVars,
-            loopVar,
-            loopIterable,
-        };
-
-        for (const stmt of statements) {
-            this.emitStatement(stmt, scope, inputNames);
-        }
-
-        return scope;
-    }
+    // ---- Statement emission ----
 
     private emitStatement(
         stmt: Statement,
         scope: ScopeContext,
-        inputNames: Set<string>,
-    ): void {
+    ): { output?: Template } | undefined {
         switch (stmt.kind) {
             case "LetStatement":
-                this.emitLet(stmt, scope, inputNames);
-                break;
+                this.emitLet(stmt, scope);
+                return undefined;
+            case "ConstStatement":
+                this.emitConst(stmt, scope);
+                return undefined;
             case "AssignmentStatement":
-                this.emitAssignment(stmt, scope, inputNames);
-                break;
+                this.emitAssignment(stmt, scope);
+                return undefined;
             case "ForOfStatement":
-                this.emitForOf(stmt, scope, inputNames);
-                break;
+                this.emitForOf(stmt, scope);
+                return undefined;
+            case "WhileStatement":
+                this.emitWhile(stmt, scope);
+                return undefined;
             case "IfStatement":
-                this.emitIf(stmt, scope, inputNames);
-                break;
-            case "ReturnStatement":
-                this.emitReturn(stmt, scope, inputNames);
-                break;
-            default:
+                this.emitIf(stmt, scope);
+                return undefined;
+            case "TryStatement":
                 this.emitError(
-                    `Unsupported statement kind: ${(stmt as Statement).kind}`,
+                    "try/catch is only supported inside while loop bodies",
                     stmt.loc.line,
                     stmt.loc.col,
                 );
+                return undefined;
+            case "ReturnStatement":
+                return {
+                    output: this.exprToTemplate(stmt.value, scope),
+                };
+            case "BreakStatement":
+            case "ContinueStatement":
+                this.emitError(
+                    `${stmt.kind === "BreakStatement" ? "break" : "continue"} is only valid inside a loop body`,
+                    stmt.loc.line,
+                    stmt.loc.col,
+                );
+                return undefined;
+            default:
+                this.emitError(
+                    `Unsupported statement kind: ${(stmt as Statement).kind}`,
+                    (stmt as Statement).loc.line,
+                    (stmt as Statement).loc.col,
+                );
+                return undefined;
         }
     }
 
-    private emitLet(
-        stmt: LetStatement,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-    ): void {
+    private emitLet(stmt: LetStatement, scope: ScopeContext): void {
+        if (!stmt.value) {
+            // Uninitialized: `let x: type;`
+            scope.bindings.set(stmt.name, { kind: "uninitialized" });
+            return;
+        }
+
         const expr = stmt.value;
 
         if (expr.kind === "TaskCallExpr") {
             const nodeId = stmt.name;
-            const node = this.emitTaskCall(expr, scope, inputNames, nodeId);
+            const node = this.emitTaskCall(expr, scope, nodeId);
             if (node) {
                 scope.nodes[nodeId] = node;
                 scope.nodeOrder.push(nodeId);
-                scope.bindings.set(stmt.name, nodeId);
+                scope.bindings.set(stmt.name, {
+                    kind: "node",
+                    nodeId,
+                });
             }
         } else if (expr.kind === "TemplateLiteralExpr") {
             const nodeId = stmt.name;
-            const node = this.emitTemplateLiteral(
-                expr,
-                scope,
-                inputNames,
-                nodeId,
-            );
+            const node = this.emitTemplateLiteral(expr, scope, nodeId);
             if (node) {
                 scope.nodes[nodeId] = node;
                 scope.nodeOrder.push(nodeId);
-                scope.bindings.set(stmt.name, nodeId);
+                scope.bindings.set(stmt.name, {
+                    kind: "node",
+                    nodeId,
+                });
             }
         } else {
-            // Literal RHS: store for use as loop state initializer or constant
-            const value = this.exprToTemplate(expr, scope, inputNames);
-            scope.literalBindings.set(stmt.name, value);
+            // Literal RHS
+            const value = this.exprToTemplate(expr, scope);
+            scope.bindings.set(stmt.name, { kind: "literal", value });
         }
     }
 
+    private emitConst(stmt: ConstStatement, scope: ScopeContext): void {
+        const value = this.constExprToValue(stmt.value);
+        const schema = stmt.typeAnnotation
+            ? this.typeToSchema(stmt.typeAnnotation)
+            : this.inferLiteralSchema(stmt.value);
+        this.constants[stmt.name] = { schema, value };
+        scope.bindings.set(stmt.name, { kind: "constant" });
+    }
+
     private emitAssignment(
-        _stmt: AssignmentStatement,
+        stmt: AssignmentStatement,
         _scope: ScopeContext,
-        _inputNames: Set<string>,
     ): void {
-        // Assignments at the top level are not yet supported.
-        // Inside loop bodies, they are handled by emitLoopBody directly.
         this.emitError(
-            `Assignment to '${_stmt.name}' outside a loop body is not supported`,
-            _stmt.loc.line,
-            _stmt.loc.col,
+            `Assignment to '${stmt.name}' outside a loop body is not supported`,
+            stmt.loc.line,
+            stmt.loc.col,
         );
     }
+
+    // ---- Task call emission ----
 
     private emitTaskCall(
         expr: TaskCallExpr,
         scope: ScopeContext,
-        inputNames: Set<string>,
         bindName: string,
     ): TaskNode | undefined {
         const schema = this.taskSchemas.get(expr.task);
@@ -240,7 +297,7 @@ export class Emitter {
             return undefined;
         }
 
-        const inputs = this.resolveTaskArgs(expr, schema, scope, inputNames);
+        const inputs = this.resolveTaskArgs(expr, schema, scope);
 
         return {
             kind: "task",
@@ -252,20 +309,10 @@ export class Emitter {
         };
     }
 
-    /**
-     * Lower a template literal expression to a text.template TaskNode.
-     *
-     * `\`--author=${input.author}\`` becomes:
-     *   task: "text.template"
-     *   inputs: { template: "--author={{author}}", vars: { author: {$from:"input", name:"author"} } }
-     */
     private emitTemplateLiteral(
         expr: TemplateLiteralExpr,
         scope: ScopeContext,
-        inputNames: Set<string>,
         bindName: string,
-        loopVar?: string,
-        pickNodeId?: string,
     ): TaskNode | undefined {
         const schema = this.taskSchemas.get("text.template");
         if (!schema) {
@@ -277,32 +324,14 @@ export class Emitter {
             return undefined;
         }
 
-        // Build the template string and vars object
         let templateStr = expr.parts[0];
         const vars: Record<string, Template> = {};
         for (let i = 0; i < expr.expressions.length; i++) {
             const innerExpr = expr.expressions[i];
-            // Use the expression text as the var name if it's a simple
-            // dotted name (last segment), otherwise generate v0, v1, ...
             const varName = this.templateVarName(innerExpr, i);
             templateStr += `{{${varName}}}`;
             templateStr += expr.parts[i + 1];
-
-            if (loopVar !== undefined && pickNodeId !== undefined) {
-                vars[varName] = this.exprToTemplateInLoop(
-                    innerExpr,
-                    scope,
-                    inputNames,
-                    loopVar,
-                    pickNodeId,
-                );
-            } else {
-                vars[varName] = this.exprToTemplate(
-                    innerExpr,
-                    scope,
-                    inputNames,
-                );
-            }
+            vars[varName] = this.exprToTemplate(innerExpr, scope);
         }
 
         return {
@@ -310,19 +339,11 @@ export class Emitter {
             task: "text.template",
             inputSchema: schema.inputSchema,
             outputSchema: schema.outputSchema,
-            inputs: {
-                template: templateStr,
-                vars,
-            },
+            inputs: { template: templateStr, vars },
             bind: bindName,
         };
     }
 
-    /**
-     * Derive a readable variable name for a template interpolation.
-     * For `${input.author}` -> "author", for `${gitResult.stdout}` -> "stdout",
-     * for complex expressions -> "v0", "v1", ...
-     */
     private templateVarName(expr: Expr, index: number): string {
         if (expr.kind === "DottedNameExpr" && expr.segments.length > 0) {
             return expr.segments[expr.segments.length - 1];
@@ -334,7 +355,6 @@ export class Emitter {
         expr: TaskCallExpr,
         schema: TaskSchemaInfo,
         scope: ScopeContext,
-        inputNames: Set<string>,
     ): Record<string, Template> {
         const inputs: Record<string, Template> = {};
         const schemaProps = (schema.inputSchema as Record<string, unknown>)
@@ -342,7 +362,6 @@ export class Emitter {
         const paramNames = schemaProps ? Object.keys(schemaProps) : [];
 
         // Single object-literal arg: unwrap entries into named inputs
-        // e.g. shell.exec({ command: "git", cwd: repo })
         if (
             expr.args.length === 1 &&
             expr.args[0].kind === "PositionalArg" &&
@@ -350,11 +369,7 @@ export class Emitter {
         ) {
             const objExpr = expr.args[0].value;
             for (const entry of objExpr.entries) {
-                inputs[entry.key] = this.exprToTemplate(
-                    entry.value,
-                    scope,
-                    inputNames,
-                );
+                inputs[entry.key] = this.exprToTemplate(entry.value, scope);
             }
             return inputs;
         }
@@ -362,18 +377,12 @@ export class Emitter {
         let positionalIndex = 0;
         for (const arg of expr.args) {
             if (arg.kind === "NamedArg") {
-                inputs[arg.name] = this.exprToTemplate(
-                    arg.value,
-                    scope,
-                    inputNames,
-                );
+                inputs[arg.name] = this.exprToTemplate(arg.value, scope);
             } else {
-                // Positional: map to schema param names in order
                 if (positionalIndex < paramNames.length) {
                     inputs[paramNames[positionalIndex]] = this.exprToTemplate(
                         arg.value,
                         scope,
-                        inputNames,
                     );
                     positionalIndex++;
                 } else {
@@ -388,50 +397,171 @@ export class Emitter {
         return inputs;
     }
 
-    private emitForOf(
-        stmt: ForOfStatement,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-    ): void {
-        const loopId = this.freshId("loop");
-        const iterableTemplate = this.exprToTemplate(
-            stmt.iterable,
-            scope,
-            inputNames,
-        );
+    // ---- Name resolution ----
 
-        // The loop needs to bring in the iterable and any outer-scope bindings
-        // referenced in the body. For now, we bring in the iterable.
+    private exprToTemplate(expr: Expr, scope: ScopeContext): Template {
+        switch (expr.kind) {
+            case "StringLiteralExpr":
+                return expr.value;
+            case "NumberLiteralExpr":
+                return expr.value;
+            case "BooleanLiteralExpr":
+                return expr.value;
+            case "NullLiteralExpr":
+                return null;
+            case "ArrayLiteralExpr":
+                return expr.elements.map((e) => this.exprToTemplate(e, scope));
+            case "ObjectLiteralExpr": {
+                const obj: Record<string, Template> = {};
+                for (const entry of expr.entries) {
+                    obj[entry.key] = this.exprToTemplate(entry.value, scope);
+                }
+                return obj;
+            }
+            case "DottedNameExpr":
+                return this.resolveDottedName(expr.segments, scope, expr);
+            case "TaskCallExpr":
+                this.emitError(
+                    "Task calls can only appear on the right side of a let binding",
+                    expr.loc.line,
+                    expr.loc.col,
+                );
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Walk the scope chain to resolve a dotted name like `foo`, `foo.bar`,
+     * `fetchResult.body`, etc.
+     */
+    private resolveDottedName(
+        segments: string[],
+        scope: ScopeContext,
+        expr: Expr,
+    ): Template {
+        const first = segments[0];
+        const rest = segments.slice(1);
+
+        // Walk scope chain
+        let current: ScopeContext | undefined = scope;
+        while (current) {
+            // Check loop variable
+            if (current.loopVar && first === current.loopVar) {
+                const pickId = current.pickNodeId ?? `pick_${first}`;
+                return {
+                    $from: "scope",
+                    name: pickId,
+                    path: ["element", ...rest],
+                } as unknown as Template;
+            }
+
+            const binding = current.bindings.get(first);
+            if (binding) {
+                this.referencedNodes.add(first);
+                switch (binding.kind) {
+                    case "node": {
+                        const nodeId = binding.nodeId!;
+                        this.referencedNodes.add(nodeId);
+                        return {
+                            $from: "scope",
+                            name: nodeId,
+                            path:
+                                rest.length > 0
+                                    ? rest
+                                    : this.getAutoProjectPath(current, nodeId),
+                        } as unknown as Template;
+                    }
+                    case "param":
+                        return {
+                            $from: "input",
+                            name: first,
+                            path: rest.length > 0 ? rest : undefined,
+                        } as unknown as Template;
+                    case "constant":
+                        return {
+                            $from: "constant",
+                            name: first,
+                            path: rest.length > 0 ? rest : undefined,
+                        } as unknown as Template;
+                    case "state":
+                        return {
+                            $from: "state",
+                            name: first,
+                            path: rest.length > 0 ? rest : undefined,
+                        } as unknown as Template;
+                    case "loopInput": {
+                        const inputName = binding.nodeId ?? first;
+                        return {
+                            $from: "input",
+                            name: inputName,
+                            path: rest.length > 0 ? rest : undefined,
+                        } as unknown as Template;
+                    }
+                    case "literal":
+                        if (rest.length > 0) {
+                            this.emitError(
+                                `Cannot access path on literal value '${first}'`,
+                                expr.loc.line,
+                                expr.loc.col,
+                            );
+                            return null;
+                        }
+                        return binding.value!;
+                    case "uninitialized":
+                        this.emitError(
+                            `Variable '${first}' is used before being assigned`,
+                            expr.loc.line,
+                            expr.loc.col,
+                        );
+                        return null;
+                }
+            }
+
+            current = current.parent;
+        }
+
+        this.emitError(
+            `Unknown reference: ${segments.join(".")}`,
+            expr.loc.line,
+            expr.loc.col,
+        );
+        return segments.join(".");
+    }
+
+    // ---- for..of loop ----
+
+    private emitForOf(stmt: ForOfStatement, scope: ScopeContext): void {
+        const loopId = this.freshId("loop");
+        const iterableTemplate = this.exprToTemplate(stmt.iterable, scope);
+
         const loopInputs: Record<string, Template> = {
             items: iterableTemplate,
         };
         const loopInputSchema: JSONSchema = {
             type: "object",
             required: ["items"],
-            properties: {
-                items: { type: "array" },
-            },
+            properties: { items: { type: "array" } },
         };
 
-        // Also bring in any outer scope bindings referenced in the body
-        const outerRefs = this.collectOuterRefs(stmt.body, scope, inputNames);
+        // Collect outer refs
+        const outerRefs = this.collectOuterRefs(stmt.body, scope);
         for (const [name, template] of outerRefs) {
             loopInputs[name] = template;
-            (loopInputSchema as Record<string, unknown>).required = [
-                ...((loopInputSchema as Record<string, unknown>)
-                    .required as string[]),
-                name,
-            ];
+            (
+                (loopInputSchema as Record<string, unknown>)
+                    .required as string[]
+            ).push(name);
             const props = (loopInputSchema as Record<string, unknown>)
                 .properties as Record<string, unknown>;
-            props[name] = {}; // any type
+            props[name] = {};
         }
 
-        // State: index counter + state vars from assignments inside the body
-        // that target literal bindings from the outer scope.
+        // State: index counter + accumulator state vars
         const assignmentStateVars = this.findAssignmentStateVars(
             stmt.body,
-            scope.literalBindings,
+            scope,
         );
         const state: Record<string, LoopStateVar> = {
             i: { schema: { type: "integer" }, initial: 0 },
@@ -443,16 +573,15 @@ export class Emitter {
             };
         }
 
-        // Build loop body
-        const bodyScope = this.emitLoopBody(
+        // Build loop body scope
+        const bodyScope = this.buildForOfBody(
             stmt,
             scope,
-            inputNames,
             assignmentStateVars,
             outerRefs,
         );
 
-        // Determine output: last state var if any, otherwise the index
+        // Determine output
         let output: Template;
         let outputSchema: JSONSchema;
         const stateVarNames = [...assignmentStateVars.keys()];
@@ -504,42 +633,47 @@ export class Emitter {
 
         scope.nodes[loopId] = loopNode;
         scope.nodeOrder.push(loopId);
-        scope.bindings.set(loopId, loopId);
+        scope.bindings.set(loopId, { kind: "node", nodeId: loopId });
 
-        // Bind state variable names to the loop node so post-loop references
-        // (e.g. string.join(sections, ...)) resolve to the loop's output.
+        // Bind state variable names to the loop node
         for (const name of stateVarNames) {
-            scope.bindings.set(name, loopId);
+            scope.bindings.set(name, { kind: "node", nodeId: loopId });
         }
     }
 
-    private emitLoopBody(
+    private buildForOfBody(
         stmt: ForOfStatement,
         outerScope: ScopeContext,
-        inputNames: Set<string>,
         assignmentStateVars: Map<string, Template>,
         outerRefs: Map<string, Template>,
     ): ScopeContext {
-        const bodyNodes: Record<string, WorkflowNode> = {};
-        const bodyOrder: string[] = [];
-        const bodyBindings = new Map<string, string>();
-        const bodyInputNames = new Set(["items", ...outerRefs.keys()]);
-
         const stateVarNames = new Set(["i", ...assignmentStateVars.keys()]);
+        const pickId = `pick_${stmt.variable}`;
 
         const bodyScope: ScopeContext = {
-            nodes: bodyNodes,
-            nodeOrder: bodyOrder,
-            bindings: bodyBindings,
-            literalBindings: new Map(),
-            stateVars: stateVarNames,
+            nodes: {},
+            nodeOrder: [],
+            bindings: new Map(),
+            parent: outerScope,
             loopVar: stmt.variable,
-            inputAutoProject: this.buildInputAutoProject(outerRefs, outerScope),
+            pickNodeId: pickId,
         };
 
-        // First node: pick element at index
-        const pickId = `pick_${stmt.variable}`;
-        bodyNodes[pickId] = {
+        // State vars
+        for (const name of stateVarNames) {
+            bodyScope.bindings.set(name, { kind: "state" });
+        }
+
+        // Loop inputs
+        for (const [name] of outerRefs) {
+            bodyScope.bindings.set(name, {
+                kind: "loopInput",
+                nodeId: name,
+            });
+        }
+
+        // Pick element node
+        bodyScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
             inputSchema: this.taskSchemas.get("list.elementAt")!.inputSchema,
@@ -550,70 +684,54 @@ export class Emitter {
             },
             bind: pickId,
         };
-        bodyOrder.push(pickId);
-        bodyBindings.set(stmt.variable, pickId);
+        bodyScope.nodeOrder.push(pickId);
 
-        // Emit body statements
+        // Emit user body statements
         for (const s of stmt.body) {
-            if (s.kind === "LetStatement") {
+            if (s.kind === "LetStatement" && s.value) {
                 const expr = s.value;
+                const nodeId = s.name;
+                let node: TaskNode | undefined;
                 if (expr.kind === "TaskCallExpr") {
-                    const nodeId = s.name;
-                    const node = this.emitTaskCallInLoopBody(
-                        expr,
-                        bodyScope,
-                        bodyInputNames,
-                        nodeId,
-                        stmt.variable,
-                        pickId,
-                    );
-                    if (node) {
-                        bodyNodes[nodeId] = node;
-                        bodyOrder.push(nodeId);
-                        bodyBindings.set(s.name, nodeId);
-                    }
+                    node = this.emitTaskCall(expr, bodyScope, nodeId);
                 } else if (expr.kind === "TemplateLiteralExpr") {
-                    const nodeId = s.name;
-                    const node = this.emitTemplateLiteral(
-                        expr,
-                        bodyScope,
-                        bodyInputNames,
+                    node = this.emitTemplateLiteral(expr, bodyScope, nodeId);
+                }
+                if (node) {
+                    bodyScope.nodes[nodeId] = node;
+                    bodyScope.nodeOrder.push(nodeId);
+                    bodyScope.bindings.set(s.name, {
+                        kind: "node",
                         nodeId,
-                        stmt.variable,
-                        pickId,
-                    );
-                    if (node) {
-                        bodyNodes[nodeId] = node;
-                        bodyOrder.push(nodeId);
-                        bodyBindings.set(s.name, nodeId);
-                    }
+                    });
                 }
             } else if (s.kind === "AssignmentStatement") {
                 const expr = s.value;
                 if (expr.kind === "TaskCallExpr") {
-                    // Assignment to a state var (e.g. sections = list.append(...))
                     const nodeId = `assign_${s.name}`;
-                    const node = this.emitTaskCallInLoopBody(
-                        expr,
-                        bodyScope,
-                        bodyInputNames,
-                        nodeId,
-                        stmt.variable,
-                        pickId,
-                    );
+                    const node = this.emitTaskCall(expr, bodyScope, nodeId);
                     if (node) {
-                        bodyNodes[nodeId] = node;
-                        bodyOrder.push(nodeId);
+                        bodyScope.nodes[nodeId] = node;
+                        bodyScope.nodeOrder.push(nodeId);
                     }
                 }
             }
         }
 
-        // Step index
+        // Index stepping + length check + branch
+        this.appendForOfInfrastructure(bodyScope);
+
+        // Thread next
+        this.threadNext(bodyScope);
+
+        return bodyScope;
+    }
+
+    private appendForOfInfrastructure(bodyScope: ScopeContext): void {
         const stepId = "step_i";
         const intAddSchema = this.taskSchemas.get("int.add");
         if (intAddSchema) {
-            bodyNodes[stepId] = {
+            bodyScope.nodes[stepId] = {
                 kind: "task",
                 task: "int.add",
                 inputSchema: intAddSchema.inputSchema,
@@ -624,14 +742,13 @@ export class Emitter {
                 },
                 bind: stepId,
             };
-            bodyOrder.push(stepId);
+            bodyScope.nodeOrder.push(stepId);
         }
 
-        // Compute length
         const lengthId = "compute_length";
         const listLengthSchema = this.taskSchemas.get("list.length");
         if (listLengthSchema) {
-            bodyNodes[lengthId] = {
+            bodyScope.nodes[lengthId] = {
                 kind: "task",
                 task: "list.length",
                 inputSchema: listLengthSchema.inputSchema,
@@ -644,14 +761,13 @@ export class Emitter {
                 },
                 bind: lengthId,
             };
-            bodyOrder.push(lengthId);
+            bodyScope.nodeOrder.push(lengthId);
         }
 
-        // Compare
         const compareId = "compare_index";
         const intLessThanSchema = this.taskSchemas.get("int.lessThan");
         if (intLessThanSchema) {
-            bodyNodes[compareId] = {
+            bodyScope.nodes[compareId] = {
                 kind: "task",
                 task: "int.lessThan",
                 inputSchema: intLessThanSchema.inputSchema,
@@ -670,12 +786,11 @@ export class Emitter {
                 },
                 bind: compareId,
             };
-            bodyOrder.push(compareId);
+            bodyScope.nodeOrder.push(compareId);
         }
 
-        // Branch: continue or exit
         const branchId = "check_done";
-        const branchNode: BranchNode = {
+        bodyScope.nodes[branchId] = {
             kind: "branch",
             selector: {
                 $from: "scope",
@@ -686,319 +801,608 @@ export class Emitter {
             cases: { true: "@iterate", false: "@exit" },
             default: "@exit",
         };
-        bodyNodes[branchId] = branchNode;
-        bodyOrder.push(branchId);
-
-        // Thread next edges in body
-        this.threadNext(bodyScope);
-
-        return bodyScope;
+        bodyScope.nodeOrder.push(branchId);
     }
 
-    private emitTaskCallInLoopBody(
-        expr: TaskCallExpr,
-        bodyScope: ScopeContext,
-        inputNames: Set<string>,
-        bindName: string,
-        loopVar: string,
-        pickNodeId: string,
-    ): TaskNode | undefined {
-        const schema = this.taskSchemas.get(expr.task);
-        if (!schema) {
+    // ---- while(true) loop ----
+
+    private emitWhile(stmt: WhileStatement, scope: ScopeContext): void {
+        if (
+            stmt.condition.kind !== "BooleanLiteralExpr" ||
+            !stmt.condition.value
+        ) {
             this.emitError(
-                `Unknown task: ${expr.task}`,
-                expr.loc.line,
-                expr.loc.col,
+                "Only `while (true)` loops are supported",
+                stmt.loc.line,
+                stmt.loc.col,
             );
-            return undefined;
+            return;
         }
 
-        const inputs = this.resolveTaskArgsInLoop(
-            expr,
-            schema,
-            bodyScope,
-            inputNames,
-            loopVar,
-            pickNodeId,
+        const loopId = this.freshId("loop");
+
+        // Find state vars and output vars from pre-while declarations
+        const stateVars = new Map<
+            string,
+            { schema: JSONSchema; initial: Template }
+        >();
+        const outputVars = new Set<string>();
+        for (const s of stmt.body) {
+            this.findWhileStateVars(s, scope, stateVars, outputVars);
+        }
+
+        // Collect outer refs (bound names read in body)
+        const outerRefs = this.collectOuterRefs(stmt.body, scope);
+
+        // Build loop inputs
+        const loopInputs: Record<string, Template> = {};
+        const loopInputSchemaProps: Record<string, JSONSchema> = {};
+        const loopInputRequired: string[] = [];
+        for (const [name, template] of outerRefs) {
+            loopInputs[name] = template;
+            loopInputSchemaProps[name] = {};
+            loopInputRequired.push(name);
+        }
+
+        // Build state
+        const state: Record<string, LoopStateVar> = {};
+        for (const [name, info] of stateVars) {
+            state[name] = { schema: info.schema, initial: info.initial };
+        }
+
+        // Build body
+        const bodyResult = this.buildWhileBody(
+            stmt.body,
+            scope,
+            stateVars,
+            outerRefs,
+            outputVars,
         );
 
+        // Build iterateState
+        const iterateState: Record<string, Template> = {};
+        for (const [name] of stateVars) {
+            if (bodyResult.iterateStateRefs.has(name)) {
+                iterateState[name] = bodyResult.iterateStateRefs.get(name)!;
+            } else {
+                iterateState[name] = {
+                    $from: "state",
+                    name,
+                } as unknown as Template;
+            }
+        }
+
+        // Determine output
+        let output: Template;
+        let outputSchema: JSONSchema;
+        if (bodyResult.outputRef) {
+            output = bodyResult.outputRef;
+            outputSchema = bodyResult.outputSchema ?? { type: "string" };
+        } else {
+            const firstName = [...stateVars.keys()][0];
+            if (firstName) {
+                output = {
+                    $from: "state",
+                    name: firstName,
+                } as unknown as Template;
+                outputSchema = stateVars.get(firstName)!.schema;
+            } else {
+                output = null;
+                outputSchema = {};
+            }
+        }
+
+        const loopNode: LoopNode = {
+            kind: "loop",
+            inputs: Object.keys(loopInputs).length > 0 ? loopInputs : {},
+            inputSchema:
+                Object.keys(loopInputs).length > 0
+                    ? {
+                          type: "object",
+                          required: loopInputRequired,
+                          properties: loopInputSchemaProps,
+                      }
+                    : { type: "object", properties: {} },
+            state,
+            body: {
+                entry:
+                    bodyResult.scope.nodeOrder.length > 0
+                        ? bodyResult.scope.nodeOrder[0]
+                        : "",
+                nodes: bodyResult.scope.nodes,
+            },
+            iterateState,
+            output,
+            outputSchema,
+            maxIterations: 100,
+            bind: loopId,
+        };
+
+        scope.nodes[loopId] = loopNode;
+        scope.nodeOrder.push(loopId);
+        scope.bindings.set(loopId, { kind: "node", nodeId: loopId });
+
+        // Bind output variable names to the loop
+        if (bodyResult.outputVarName) {
+            scope.bindings.set(bodyResult.outputVarName, {
+                kind: "node",
+                nodeId: loopId,
+            });
+        }
+    }
+
+    private findWhileStateVars(
+        stmt: Statement,
+        outerScope: ScopeContext,
+        stateVars: Map<string, { schema: JSONSchema; initial: Template }>,
+        outputVars: Set<string>,
+    ): void {
+        if (stmt.kind === "AssignmentStatement") {
+            const binding = outerScope.bindings.get(stmt.name);
+            if (binding) {
+                if (binding.kind === "literal") {
+                    stateVars.set(stmt.name, {
+                        schema: this.inferTemplateSchema(binding.value!),
+                        initial: binding.value!,
+                    });
+                } else if (binding.kind === "uninitialized") {
+                    outputVars.add(stmt.name);
+                }
+            }
+        } else if (stmt.kind === "TryStatement") {
+            for (const s of stmt.tryBody) {
+                this.findWhileStateVars(s, outerScope, stateVars, outputVars);
+            }
+            for (const s of stmt.catchBody) {
+                this.findWhileStateVars(s, outerScope, stateVars, outputVars);
+            }
+        } else if (stmt.kind === "IfStatement") {
+            for (const s of stmt.then) {
+                this.findWhileStateVars(s, outerScope, stateVars, outputVars);
+            }
+            if (stmt.else_) {
+                for (const s of stmt.else_) {
+                    this.findWhileStateVars(
+                        s,
+                        outerScope,
+                        stateVars,
+                        outputVars,
+                    );
+                }
+            }
+        }
+    }
+
+    private buildWhileBody(
+        stmts: Statement[],
+        outerScope: ScopeContext,
+        stateVars: Map<string, { schema: JSONSchema; initial: Template }>,
+        outerRefs: Map<string, Template>,
+        outputVars: Set<string>,
+    ): {
+        scope: ScopeContext;
+        iterateStateRefs: Map<string, Template>;
+        outputRef?: Template | undefined;
+        outputSchema?: JSONSchema | undefined;
+        outputVarName?: string | undefined;
+    } {
+        const bodyScope: ScopeContext = {
+            nodes: {},
+            nodeOrder: [],
+            bindings: new Map(),
+            parent: outerScope,
+        };
+
+        for (const [name] of stateVars) {
+            bodyScope.bindings.set(name, { kind: "state" });
+        }
+
+        for (const [name] of outerRefs) {
+            bodyScope.bindings.set(name, {
+                kind: "loopInput",
+                nodeId: name,
+            });
+        }
+
+        const iterateStateRefs = new Map<string, Template>();
+        let outputRef: Template | undefined = undefined;
+        let outputSchema: JSONSchema | undefined = undefined;
+        let outputVarName: string | undefined = undefined;
+
+        this.emitWhileBodyStatements(
+            stmts,
+            bodyScope,
+            iterateStateRefs,
+            outputVars,
+            (ref, schema, varName) => {
+                outputRef = ref;
+                outputSchema = schema;
+                outputVarName = varName;
+            },
+        );
+
+        this.threadNext(bodyScope);
+
         return {
-            kind: "task",
-            task: expr.task,
-            inputSchema: schema.inputSchema,
-            outputSchema: schema.outputSchema,
-            inputs,
-            bind: bindName,
+            scope: bodyScope,
+            iterateStateRefs,
+            outputRef,
+            outputSchema,
+            outputVarName,
         };
     }
 
-    private resolveTaskArgsInLoop(
-        expr: TaskCallExpr,
-        schema: TaskSchemaInfo,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-        loopVar: string,
-        pickNodeId: string,
-    ): Record<string, Template> {
-        const inputs: Record<string, Template> = {};
-        const schemaProps = (schema.inputSchema as Record<string, unknown>)
-            .properties as Record<string, unknown> | undefined;
-        const paramNames = schemaProps ? Object.keys(schemaProps) : [];
-
-        // Single object-literal arg: unwrap entries into named inputs
-        if (
-            expr.args.length === 1 &&
-            expr.args[0].kind === "PositionalArg" &&
-            expr.args[0].value.kind === "ObjectLiteralExpr"
-        ) {
-            const objExpr = expr.args[0].value;
-            for (const entry of objExpr.entries) {
-                inputs[entry.key] = this.exprToTemplateInLoop(
-                    entry.value,
-                    scope,
-                    inputNames,
-                    loopVar,
-                    pickNodeId,
-                );
-            }
-            return inputs;
-        }
-
-        let positionalIndex = 0;
-        for (const arg of expr.args) {
-            let name: string;
-            let value: Expr;
-            if (arg.kind === "NamedArg") {
-                name = arg.name;
-                value = arg.value;
-            } else {
-                if (positionalIndex < paramNames.length) {
-                    name = paramNames[positionalIndex];
-                    positionalIndex++;
-                } else {
-                    this.emitError(
-                        `Too many positional arguments for task ${expr.task}`,
-                        expr.loc.line,
-                        expr.loc.col,
-                    );
-                    continue;
-                }
-                value = arg.value;
-            }
-            inputs[name] = this.exprToTemplateInLoop(
-                value,
-                scope,
-                inputNames,
-                loopVar,
-                pickNodeId,
+    private emitWhileBodyStatements(
+        stmts: Statement[],
+        bodyScope: ScopeContext,
+        iterateStateRefs: Map<string, Template>,
+        outputVars: Set<string>,
+        setOutput: (
+            ref: Template,
+            schema: JSONSchema | undefined,
+            varName: string | undefined,
+        ) => void,
+        onErrorTarget?: string,
+    ): void {
+        for (const s of stmts) {
+            this.emitWhileBodyStatement(
+                s,
+                bodyScope,
+                iterateStateRefs,
+                outputVars,
+                setOutput,
+                onErrorTarget,
             );
         }
-        return inputs;
     }
 
-    private exprToTemplateInLoop(
-        expr: Expr,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-        loopVar: string,
-        pickNodeId: string,
-    ): Template {
-        if (expr.kind === "DottedNameExpr") {
-            const first = expr.segments[0];
-            const rest = expr.segments.slice(1);
-
-            if (first === loopVar) {
-                // Reference to loop variable: $from scope, name is the pick node
-                if (rest.length > 0) {
-                    return {
-                        $from: "scope",
-                        name: pickNodeId,
-                        path: ["element", ...rest],
-                    } as unknown as Template;
+    private emitWhileBodyStatement(
+        stmt: Statement,
+        bodyScope: ScopeContext,
+        iterateStateRefs: Map<string, Template>,
+        outputVars: Set<string>,
+        setOutput: (
+            ref: Template,
+            schema: JSONSchema | undefined,
+            varName: string | undefined,
+        ) => void,
+        onErrorTarget?: string,
+    ): void {
+        switch (stmt.kind) {
+            case "LetStatement": {
+                if (!stmt.value) return;
+                const expr = stmt.value;
+                const nodeId = stmt.name;
+                let node: TaskNode | undefined;
+                if (expr.kind === "TaskCallExpr") {
+                    node = this.emitTaskCall(expr, bodyScope, nodeId);
+                } else if (expr.kind === "TemplateLiteralExpr") {
+                    node = this.emitTemplateLiteral(expr, bodyScope, nodeId);
                 }
-                return {
-                    $from: "scope",
-                    name: pickNodeId,
-                    path: ["element"],
-                } as unknown as Template;
+                if (node) {
+                    if (onErrorTarget) {
+                        node.onError = onErrorTarget;
+                    }
+                    bodyScope.nodes[nodeId] = node;
+                    bodyScope.nodeOrder.push(nodeId);
+                    bodyScope.bindings.set(stmt.name, {
+                        kind: "node",
+                        nodeId,
+                    });
+                }
+                break;
             }
-
-            if (scope.stateVars?.has(first)) {
-                return {
-                    $from: "state",
-                    name: first,
-                    path: rest.length > 0 ? rest : undefined,
-                } as unknown as Template;
+            case "AssignmentStatement": {
+                const binding = this.resolveBinding(stmt.name, bodyScope);
+                if (binding?.kind === "state") {
+                    if (stmt.value.kind === "TaskCallExpr") {
+                        const nodeId = `assign_${stmt.name}`;
+                        const node = this.emitTaskCall(
+                            stmt.value,
+                            bodyScope,
+                            nodeId,
+                        );
+                        if (node) {
+                            if (onErrorTarget) node.onError = onErrorTarget;
+                            bodyScope.nodes[nodeId] = node;
+                            bodyScope.nodeOrder.push(nodeId);
+                            const taskSchema = this.taskSchemas.get(
+                                stmt.value.task,
+                            );
+                            if (taskSchema) {
+                                const autoPath =
+                                    this.getAutoProjectPathFromSchema(
+                                        taskSchema.outputSchema,
+                                    );
+                                iterateStateRefs.set(stmt.name, {
+                                    $from: "scope",
+                                    name: nodeId,
+                                    path: autoPath,
+                                } as unknown as Template);
+                            }
+                        }
+                    }
+                } else if (
+                    binding?.kind === "uninitialized" ||
+                    outputVars.has(stmt.name)
+                ) {
+                    // Assignment to output var
+                    const template = this.exprToTemplate(stmt.value, bodyScope);
+                    setOutput(template, undefined, stmt.name);
+                }
+                break;
             }
-
-            if (scope.bindings.has(first)) {
-                const nodeId = scope.bindings.get(first)!;
-                return {
-                    $from: "scope",
-                    name: nodeId,
-                    path:
-                        rest.length > 0
-                            ? rest
-                            : this.getAutoProjectPath(scope, nodeId),
-                } as unknown as Template;
-            }
-
-            if (inputNames.has(first)) {
-                return {
-                    $from: "input",
-                    name: first,
-                    path:
-                        rest.length > 0
-                            ? rest
-                            : scope.inputAutoProject?.get(first),
-                } as unknown as Template;
-            }
-        }
-
-        return this.exprToTemplate(expr, scope, inputNames);
-    }
-
-    private exprToTemplate(
-        expr: Expr,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-    ): Template {
-        switch (expr.kind) {
-            case "StringLiteralExpr":
-                return expr.value;
-            case "NumberLiteralExpr":
-                return expr.value;
-            case "BooleanLiteralExpr":
-                return expr.value;
-            case "NullLiteralExpr":
-                return null;
-            case "ArrayLiteralExpr":
-                return expr.elements.map((e) =>
-                    this.exprToTemplate(e, scope, inputNames),
+            case "TryStatement": {
+                // Emit catch body first to get template nodes
+                const catchStartIdx = bodyScope.nodeOrder.length;
+                this.emitWhileBodyStatements(
+                    stmt.catchBody,
+                    bodyScope,
+                    iterateStateRefs,
+                    outputVars,
+                    setOutput,
                 );
-            case "ObjectLiteralExpr": {
-                const obj: Record<string, Template> = {};
-                for (const entry of expr.entries) {
-                    obj[entry.key] = this.exprToTemplate(
-                        entry.value,
-                        scope,
-                        inputNames,
+                const catchNodeIds = bodyScope.nodeOrder.slice(catchStartIdx);
+
+                // Save and remove catch nodes
+                const catchTemplate: [string, WorkflowNode][] =
+                    catchNodeIds.map((id) => [id, bodyScope.nodes[id]]);
+                for (const id of catchNodeIds) {
+                    delete bodyScope.nodes[id];
+                }
+                bodyScope.nodeOrder.splice(catchStartIdx);
+
+                // Emit try body WITHOUT onErrorTarget
+                const tryStartIdx = bodyScope.nodeOrder.length;
+                this.emitWhileBodyStatements(
+                    stmt.tryBody,
+                    bodyScope,
+                    iterateStateRefs,
+                    outputVars,
+                    setOutput,
+                    undefined,
+                );
+
+                // Find task nodes emitted in the try body
+                const tryNodeIds = bodyScope.nodeOrder.slice(tryStartIdx);
+                const tryTaskNodeIds = tryNodeIds.filter((id) => {
+                    const n = bodyScope.nodes[id];
+                    return n && (n.kind === "task" || n.kind === "loop");
+                });
+
+                if (tryTaskNodeIds.length === 1 && catchTemplate.length > 0) {
+                    // Single trigger: set onError directly, compliant
+                    const taskNode = bodyScope.nodes[tryTaskNodeIds[0]] as
+                        | TaskNode
+                        | LoopNode;
+                    taskNode.onError = catchTemplate[0][0];
+                    for (const [id, node] of catchTemplate) {
+                        bodyScope.nodes[id] = node;
+                        bodyScope.nodeOrder.push(id);
+                    }
+                } else if (
+                    tryTaskNodeIds.length > 1 &&
+                    catchTemplate.length > 0
+                ) {
+                    // Multiple triggers: clone catch per trigger
+                    for (let ti = 0; ti < tryTaskNodeIds.length; ti++) {
+                        const triggerId = tryTaskNodeIds[ti];
+                        const taskNode = bodyScope.nodes[triggerId] as
+                            | TaskNode
+                            | LoopNode;
+                        const suffix = `_t${ti}`;
+                        const cloned = this.cloneCatchNodes(
+                            catchTemplate,
+                            suffix,
+                        );
+                        taskNode.onError = cloned[0][0];
+                        for (const [id, node] of cloned) {
+                            bodyScope.nodes[id] = node;
+                            bodyScope.nodeOrder.push(id);
+                        }
+                        // Update iterateStateRefs for cloned state-modifying nodes
+                        for (const [origId] of catchTemplate) {
+                            const clonedId = origId + suffix;
+                            for (const [
+                                stateVar,
+                                ref,
+                            ] of iterateStateRefs.entries()) {
+                                const r = ref as unknown as {
+                                    $from: string;
+                                    name: string;
+                                };
+                                if (r.$from === "scope" && r.name === origId) {
+                                    // Point at last trigger's clone (all are
+                                    // mutually exclusive; last is as good as any
+                                    // since only one executes per iteration)
+                                    iterateStateRefs.set(stateVar, {
+                                        ...(ref as object),
+                                        name: clonedId,
+                                    } as unknown as Template);
+                                }
+                            }
+                        }
+                    }
+                }
+                // else: no tasks in try body or empty catch - nothing to wire
+                break;
+            }
+            case "IfStatement": {
+                let condTemplate: Template;
+                if (stmt.condition.kind === "TaskCallExpr") {
+                    // Emit the task call as an implicit node
+                    const condNodeId = this.freshId("cond");
+                    const condNode = this.emitTaskCall(
+                        stmt.condition,
+                        bodyScope,
+                        condNodeId,
+                    );
+                    if (condNode) {
+                        if (onErrorTarget) condNode.onError = onErrorTarget;
+                        bodyScope.nodes[condNodeId] = condNode;
+                        bodyScope.nodeOrder.push(condNodeId);
+                        const taskSchema = this.taskSchemas.get(
+                            stmt.condition.task,
+                        );
+                        const autoPath = taskSchema
+                            ? this.getAutoProjectPathFromSchema(
+                                  taskSchema.outputSchema,
+                              )
+                            : undefined;
+                        condTemplate = {
+                            $from: "scope",
+                            name: condNodeId,
+                            path: autoPath,
+                        } as unknown as Template;
+                    } else {
+                        condTemplate = null;
+                    }
+                } else {
+                    condTemplate = this.exprToTemplate(
+                        stmt.condition,
+                        bodyScope,
                     );
                 }
-                return obj;
-            }
-            case "DottedNameExpr": {
-                const first = expr.segments[0];
-                const rest = expr.segments.slice(1);
 
-                // Check if it's a loop variable reference
-                if (scope.loopVar && first === scope.loopVar) {
-                    const pickId = `pick_${first}`;
-                    return {
-                        $from: "scope",
-                        name: pickId,
-                        path: ["element", ...rest],
-                    } as unknown as Template;
-                }
-
-                // Check state vars
-                if (scope.stateVars?.has(first)) {
-                    return {
-                        $from: "state",
-                        name: first,
-                        path: rest.length > 0 ? rest : undefined,
-                    } as unknown as Template;
-                }
-
-                // Check scope bindings
-                if (scope.bindings.has(first)) {
-                    const nodeId = scope.bindings.get(first)!;
-                    return {
-                        $from: "scope",
-                        name: nodeId,
-                        path:
-                            rest.length > 0
-                                ? rest
-                                : this.getAutoProjectPath(scope, nodeId),
-                    } as unknown as Template;
-                }
-
-                // Check workflow inputs
-                if (inputNames.has(first)) {
-                    return {
-                        $from: "input",
-                        name: first,
-                        path: rest.length > 0 ? rest : undefined,
-                    } as unknown as Template;
-                }
-
-                // Check if segments[0].segments[1] is a known input (e.g., input.repos)
-                if (first === "input" && rest.length > 0) {
-                    return {
-                        $from: "input",
-                        name: rest[0],
-                        path: rest.length > 1 ? rest.slice(1) : undefined,
-                    } as unknown as Template;
-                }
-
-                this.emitError(
-                    `Unknown reference: ${expr.segments.join(".")}`,
-                    expr.loc.line,
-                    expr.loc.col,
+                // Emit then-branch
+                const thenStartIdx = bodyScope.nodeOrder.length;
+                this.emitWhileBodyStatements(
+                    stmt.then,
+                    bodyScope,
+                    iterateStateRefs,
+                    outputVars,
+                    setOutput,
+                    onErrorTarget,
                 );
-                return expr.segments.join(".");
+                const thenNodeIds = bodyScope.nodeOrder.slice(thenStartIdx);
+                const thenEntry =
+                    thenNodeIds.length > 0 ? thenNodeIds[0] : undefined;
+
+                // Emit else-branch
+                let elseEntry: string | undefined;
+                if (stmt.else_) {
+                    const elseStartIdx = bodyScope.nodeOrder.length;
+                    this.emitWhileBodyStatements(
+                        stmt.else_,
+                        bodyScope,
+                        iterateStateRefs,
+                        outputVars,
+                        setOutput,
+                        onErrorTarget,
+                    );
+                    const elseNodeIds = bodyScope.nodeOrder.slice(elseStartIdx);
+                    elseEntry =
+                        elseNodeIds.length > 0 ? elseNodeIds[0] : undefined;
+                }
+
+                // Insert branch before both branches
+                const branchId = this.freshId("if_branch");
+                const allBranchNodeIds =
+                    bodyScope.nodeOrder.splice(thenStartIdx);
+
+                const cases: Record<string, string> = {};
+                if (thenEntry) cases["true"] = thenEntry;
+                if (elseEntry) cases["false"] = elseEntry;
+
+                bodyScope.nodes[branchId] = {
+                    kind: "branch",
+                    selector: condTemplate,
+                    selectorSchema: { type: "boolean" },
+                    cases,
+                    default: elseEntry ?? thenEntry ?? "@exit",
+                };
+                bodyScope.nodeOrder.push(branchId);
+
+                for (const id of allBranchNodeIds) {
+                    bodyScope.nodeOrder.push(id);
+                }
+                break;
             }
-            case "TaskCallExpr":
-                this.emitError(
-                    "Task calls can only appear on the right side of a let binding",
-                    expr.loc.line,
-                    expr.loc.col,
-                );
-                return null;
+            case "BreakStatement": {
+                const exitId = this.freshId("break");
+                bodyScope.nodes[exitId] = {
+                    kind: "branch",
+                    selector: "exit",
+                    selectorSchema: { enum: ["exit"] },
+                    cases: { exit: "@exit" },
+                    default: "@exit",
+                };
+                bodyScope.nodeOrder.push(exitId);
+                break;
+            }
+            case "ContinueStatement": {
+                const iterateId = this.freshId("continue");
+                bodyScope.nodes[iterateId] = {
+                    kind: "branch",
+                    selector: "iterate",
+                    selectorSchema: { enum: ["iterate"] },
+                    cases: { iterate: "@iterate" },
+                    default: "@iterate",
+                };
+                bodyScope.nodeOrder.push(iterateId);
+                break;
+            }
             default:
-                return null;
+                break;
         }
     }
 
-    private emitIf(
-        stmt: IfStatement,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-    ): void {
-        // Lower `if cond { ... } else { ... }` to:
-        // 1. A bool.toLabel task to convert the boolean to a label
-        // 2. A branch node
-        // 3. The then/else bodies inlined into the scope
-        const condTemplate = this.exprToTemplate(
-            stmt.condition,
-            scope,
-            inputNames,
-        );
-        const labelId = this.freshId("if_label");
-        const boolToLabelSchema = this.taskSchemas.get("bool.toLabel");
-        if (boolToLabelSchema) {
-            scope.nodes[labelId] = {
-                kind: "task",
-                task: "bool.toLabel",
-                inputSchema: boolToLabelSchema.inputSchema,
-                outputSchema: boolToLabelSchema.outputSchema,
-                inputs: {
-                    value: condTemplate,
-                    ifTrue: "then",
-                    ifFalse: "else",
-                },
-                bind: labelId,
-            };
-            scope.nodeOrder.push(labelId);
+    // ---- if/else (top-level) ----
+
+    private emitIf(stmt: IfStatement, scope: ScopeContext): void {
+        let condTemplate: Template;
+        if (stmt.condition.kind === "TaskCallExpr") {
+            const condNodeId = this.freshId("cond");
+            const condNode = this.emitTaskCall(
+                stmt.condition,
+                scope,
+                condNodeId,
+            );
+            if (condNode) {
+                scope.nodes[condNodeId] = condNode;
+                scope.nodeOrder.push(condNodeId);
+                const taskSchema = this.taskSchemas.get(stmt.condition.task);
+                const autoPath = taskSchema
+                    ? this.getAutoProjectPathFromSchema(taskSchema.outputSchema)
+                    : undefined;
+                condTemplate = {
+                    $from: "scope",
+                    name: condNodeId,
+                    path: autoPath,
+                } as unknown as Template;
+            } else {
+                condTemplate = null;
+            }
+        } else {
+            condTemplate = this.exprToTemplate(stmt.condition, scope);
         }
 
-        // Emit then branch
-        const thenScope = this.emitScope(stmt.then, inputNames);
-        const elseScope = stmt.else_
-            ? this.emitScope(stmt.else_, inputNames)
-            : undefined;
+        const thenScope: ScopeContext = {
+            nodes: {},
+            nodeOrder: [],
+            bindings: new Map(),
+            parent: scope,
+        };
+        for (const s of stmt.then) {
+            this.emitStatement(s, thenScope);
+        }
+        this.threadNext(thenScope);
 
-        // Merge nodes into parent scope
+        let elseScope: ScopeContext | undefined;
+        if (stmt.else_) {
+            elseScope = {
+                nodes: {},
+                nodeOrder: [],
+                bindings: new Map(),
+                parent: scope,
+            };
+            for (const s of stmt.else_) {
+                this.emitStatement(s, elseScope);
+            }
+            this.threadNext(elseScope);
+        }
+
+        // Merge with prefixes
         for (const [id, node] of Object.entries(thenScope.nodes)) {
             scope.nodes[`then_${id}`] = node;
         }
@@ -1008,46 +1412,81 @@ export class Emitter {
             }
         }
 
-        // Branch node
         const branchId = this.freshId("if_branch");
-        const cases: Record<string, string> = {
-            then:
-                thenScope.nodeOrder.length > 0
-                    ? `then_${thenScope.nodeOrder[0]}`
-                    : "",
-        };
+        const cases: Record<string, string> = {};
         let defaultTarget: string;
+
+        if (thenScope.nodeOrder.length > 0) {
+            cases["true"] = `then_${thenScope.nodeOrder[0]}`;
+        }
         if (elseScope && elseScope.nodeOrder.length > 0) {
-            cases["else"] = `else_${elseScope.nodeOrder[0]}`;
+            cases["false"] = `else_${elseScope.nodeOrder[0]}`;
             defaultTarget = `else_${elseScope.nodeOrder[0]}`;
         } else {
-            defaultTarget = "";
+            defaultTarget =
+                thenScope.nodeOrder.length > 0
+                    ? `then_${thenScope.nodeOrder[0]}`
+                    : "";
         }
 
         scope.nodes[branchId] = {
             kind: "branch",
-            selector: {
-                $from: "scope",
-                name: labelId,
-                path: ["label"],
-            } as unknown as Template,
-            selectorSchema: { type: "string" },
+            selector: condTemplate,
+            selectorSchema: { type: "boolean" },
             cases,
             default: defaultTarget,
         };
         scope.nodeOrder.push(branchId);
     }
 
-    private emitReturn(
-        stmt: ReturnStatement,
-        scope: ScopeContext,
-        inputNames: Set<string>,
-    ): void {
-        scope.outputTemplate = this.exprToTemplate(
-            stmt.value,
-            scope,
-            inputNames,
-        );
+    // ---- Helpers ----
+
+    /**
+     * Deep-clone a set of catch template nodes with a suffix appended
+     * to all node IDs, updating internal references (next, branch
+     * cases/default) to use the renamed IDs. References to nodes
+     * outside the template (sentinels like @exit/@iterate, scope refs)
+     * are left unchanged.
+     */
+    private cloneCatchNodes(
+        template: [string, WorkflowNode][],
+        suffix: string,
+    ): [string, WorkflowNode][] {
+        const idMap = new Map<string, string>();
+        for (const [id] of template) {
+            idMap.set(id, id + suffix);
+        }
+
+        const cloned: [string, WorkflowNode][] = [];
+        for (const [id, node] of template) {
+            const newId = idMap.get(id)!;
+            const c = JSON.parse(JSON.stringify(node)) as WorkflowNode;
+
+            // Rename next edge
+            if ("next" in c && typeof c.next === "string") {
+                c.next = idMap.get(c.next) ?? c.next;
+            }
+
+            // Rename branch targets
+            if (c.kind === "branch") {
+                for (const key of Object.keys(c.cases)) {
+                    const target = c.cases[key];
+                    c.cases[key] = idMap.get(target) ?? target;
+                }
+                if (typeof c.default === "string") {
+                    c.default = idMap.get(c.default) ?? c.default;
+                }
+            }
+
+            // Rename onError (recovery nodes shouldn't have onError
+            // per spec, but be safe)
+            if ("onError" in c && typeof c.onError === "string") {
+                c.onError = idMap.get(c.onError) ?? c.onError;
+            }
+
+            cloned.push([newId, c]);
+        }
+        return cloned;
     }
 
     private threadNext(scope: ScopeContext): void {
@@ -1059,31 +1498,37 @@ export class Emitter {
                     node.next = scope.nodeOrder[i + 1];
                 }
             }
-            // Branch nodes don't get `next` - they have `cases`
         }
     }
 
-    // ---- Helpers ----
+    private resolveBinding(
+        name: string,
+        scope: ScopeContext,
+    ): Binding | undefined {
+        let current: ScopeContext | undefined = scope;
+        while (current) {
+            const b = current.bindings.get(name);
+            if (b) return b;
+            current = current.parent;
+        }
+        return undefined;
+    }
 
     private collectOuterRefs(
         statements: Statement[],
         outerScope: ScopeContext,
-        inputNames: Set<string>,
     ): Map<string, Template> {
         const refs = new Map<string, Template>();
         for (const stmt of statements) {
             this.walkExprs(stmt, (expr) => {
                 if (expr.kind === "DottedNameExpr") {
                     const first = expr.segments[0];
-                    if (outerScope.bindings.has(first)) {
-                        const nodeId = outerScope.bindings.get(first)!;
-                        // Bring in the full node output (no path projection).
-                        // Inside the loop body, path resolution happens
-                        // normally via exprToTemplateInLoop.
+                    const binding = outerScope.bindings.get(first);
+                    if (binding?.kind === "node") {
                         if (!refs.has(first)) {
                             refs.set(first, {
                                 $from: "scope",
-                                name: nodeId,
+                                name: binding.nodeId!,
                             } as unknown as Template);
                         }
                     }
@@ -1093,9 +1538,28 @@ export class Emitter {
         return refs;
     }
 
+    private findAssignmentStateVars(
+        statements: Statement[],
+        outerScope: ScopeContext,
+    ): Map<string, Template> {
+        const stateVars = new Map<string, Template>();
+        for (const stmt of statements) {
+            if (stmt.kind === "AssignmentStatement") {
+                const binding = outerScope.bindings.get(stmt.name);
+                if (binding?.kind === "literal") {
+                    stateVars.set(stmt.name, binding.value!);
+                }
+            }
+        }
+        return stateVars;
+    }
+
     private walkExprs(stmt: Statement, visitor: (expr: Expr) => void): void {
         switch (stmt.kind) {
             case "LetStatement":
+                if (stmt.value) this.walkExpr(stmt.value, visitor);
+                break;
+            case "ConstStatement":
                 this.walkExpr(stmt.value, visitor);
                 break;
             case "AssignmentStatement":
@@ -1105,11 +1569,19 @@ export class Emitter {
                 this.walkExpr(stmt.iterable, visitor);
                 for (const s of stmt.body) this.walkExprs(s, visitor);
                 break;
+            case "WhileStatement":
+                this.walkExpr(stmt.condition, visitor);
+                for (const s of stmt.body) this.walkExprs(s, visitor);
+                break;
             case "IfStatement":
                 this.walkExpr(stmt.condition, visitor);
                 for (const s of stmt.then) this.walkExprs(s, visitor);
                 if (stmt.else_)
                     for (const s of stmt.else_) this.walkExprs(s, visitor);
+                break;
+            case "TryStatement":
+                for (const s of stmt.tryBody) this.walkExprs(s, visitor);
+                for (const s of stmt.catchBody) this.walkExprs(s, visitor);
                 break;
             case "ReturnStatement":
                 this.walkExpr(stmt.value, visitor);
@@ -1138,38 +1610,31 @@ export class Emitter {
         }
     }
 
-    private findAssignmentStateVars(
-        statements: Statement[],
-        outerLiterals: Map<string, Template>,
-    ): Map<string, Template> {
-        const stateVars = new Map<string, Template>();
-        for (const stmt of statements) {
-            if (
-                stmt.kind === "AssignmentStatement" &&
-                outerLiterals.has(stmt.name)
-            ) {
-                stateVars.set(stmt.name, outerLiterals.get(stmt.name)!);
+    private stripUnreferencedBinds(scope: ScopeContext): void {
+        for (const [_id, node] of Object.entries(scope.nodes)) {
+            if (node.kind === "task" && node.bind) {
+                if (!this.referencedNodes.has(node.bind)) {
+                    delete (node as unknown as Record<string, unknown>).bind;
+                }
             }
         }
-        return stateVars;
     }
 
-    private freshId(prefix: string): string {
-        return `${prefix}_${this.nodeCounter++}`;
-    }
-
-    /**
-     * If the node has a single-property output schema, return the property
-     * name as a path for auto-projection. Otherwise return undefined.
-     */
     private getAutoProjectPath(
         scope: ScopeContext,
         nodeId: string,
     ): string[] | undefined {
         const node = scope.nodes[nodeId];
         if (!node || node.kind !== "task") return undefined;
-        const outSchema = node.outputSchema as Record<string, unknown>;
-        if (!outSchema || outSchema.type !== "object") return undefined;
+        return this.getAutoProjectPathFromSchema(node.outputSchema);
+    }
+
+    private getAutoProjectPathFromSchema(
+        schema: JSONSchema | undefined,
+    ): string[] | undefined {
+        if (!schema) return undefined;
+        const outSchema = schema as Record<string, unknown>;
+        if (outSchema.type !== "object") return undefined;
         const props = outSchema.properties as
             | Record<string, unknown>
             | undefined;
@@ -1179,25 +1644,65 @@ export class Emitter {
         return undefined;
     }
 
-    /**
-     * Build the auto-project map for loop body input names, based on
-     * the outer scope's task output schemas.
-     */
-    private buildInputAutoProject(
-        outerRefs: Map<string, Template>,
-        outerScope: ScopeContext,
-    ): Map<string, string[]> {
-        const map = new Map<string, string[]>();
-        for (const [name] of outerRefs) {
-            const outerNodeId = outerScope.bindings.get(name);
-            if (outerNodeId) {
-                const path = this.getAutoProjectPath(outerScope, outerNodeId);
-                if (path) {
-                    map.set(name, path);
+    private freshId(prefix: string): string {
+        return `${prefix}_${this.nodeCounter++}`;
+    }
+
+    private constExprToValue(expr: Expr): unknown {
+        switch (expr.kind) {
+            case "StringLiteralExpr":
+                return expr.value;
+            case "NumberLiteralExpr":
+                return expr.value;
+            case "BooleanLiteralExpr":
+                return expr.value;
+            case "NullLiteralExpr":
+                return null;
+            case "ArrayLiteralExpr":
+                return expr.elements.map((e) => this.constExprToValue(e));
+            case "ObjectLiteralExpr": {
+                const obj: Record<string, unknown> = {};
+                for (const entry of expr.entries) {
+                    obj[entry.key] = this.constExprToValue(entry.value);
                 }
+                return obj;
             }
+            default:
+                this.emitError(
+                    "const initializer must be a literal value",
+                    expr.loc.line,
+                    expr.loc.col,
+                );
+                return null;
         }
-        return map;
+    }
+
+    private inferLiteralSchema(expr: Expr): JSONSchema {
+        switch (expr.kind) {
+            case "StringLiteralExpr":
+                return { type: "string" };
+            case "NumberLiteralExpr":
+                return Number.isInteger(expr.value)
+                    ? { type: "integer" }
+                    : { type: "number" };
+            case "BooleanLiteralExpr":
+                return { type: "boolean" };
+            case "ArrayLiteralExpr":
+                return { type: "array" };
+            default:
+                return {};
+        }
+    }
+
+    private inferTemplateSchema(value: Template): JSONSchema {
+        if (typeof value === "string") return { type: "string" };
+        if (typeof value === "number")
+            return Number.isInteger(value)
+                ? { type: "integer" }
+                : { type: "number" };
+        if (typeof value === "boolean") return { type: "boolean" };
+        if (Array.isArray(value)) return { type: "array" };
+        return {};
     }
 
     private paramsToSchema(

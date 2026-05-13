@@ -12,12 +12,20 @@
  *   TypeExpr     = BaseType ("[]")?
  *   BaseType     = "string" | "number" | "integer" | "boolean" | "any"
  *                | "{" FieldList "}"
- *   Statement    = LetStmt | ForOfStmt | IfStmt | MatchStmt | ReturnStmt
- *   LetStmt      = "let" IDENT (":" TypeExpr)? "=" Expr ";"
+ *   Statement    = LetStmt | ConstStmt | ForOfStmt | WhileStmt | IfStmt
+ *                | TryStmt | MatchStmt | ReturnStmt | BreakStmt | ContinueStmt
+ *                | AssignStmt
+ *   LetStmt      = "let" IDENT (":" TypeExpr)? ("=" Expr)? ";"
+ *   ConstStmt    = "const" IDENT (":" TypeExpr)? "=" Expr ";"
  *   ForOfStmt    = "for" "(" IDENT "of" Expr ")" "{" Statement* "}"
- *   IfStmt       = "if" Expr "{" Statement* "}" ("else" "{" Statement* "}")?
+ *   WhileStmt    = "while" "(" Expr ")" "{" Statement* "}"
+ *   IfStmt       = "if" "(" Expr ")" "{" Statement* "}" ("else" "{" Statement* "}")?
+ *   TryStmt      = "try" "{" Statement* "}" "catch" "{" Statement* "}"
  *   MatchStmt    = "match" Expr "{" MatchCase* ("else" "{" Statement* "}")? "}"
  *   ReturnStmt   = "return" Expr ";"
+ *   BreakStmt    = "break" ";"
+ *   ContinueStmt = "continue" ";"
+ *   AssignStmt   = IDENT "=" Expr ";"
  *   Expr         = TaskCall | ArrayLiteral | ObjectLiteral | Literal | DottedName
  *   TaskCall     = IDENT "." IDENT "(" ArgList ")"
  *   DottedName   = IDENT ("." IDENT)*
@@ -30,12 +38,17 @@ import {
     TypeExpr,
     Statement,
     LetStatement,
+    ConstStatement,
     AssignmentStatement,
     ForOfStatement,
+    WhileStatement,
     IfStatement,
+    TryStatement,
     MatchStatement,
     MatchCase,
     ReturnStatement,
+    BreakStatement,
+    ContinueStatement,
     Expr,
     TaskArg,
     ObjectEntry,
@@ -200,14 +213,24 @@ export class Parser {
         switch (this.peek().kind) {
             case TokenKind.Let:
                 return this.parseLetStmt();
+            case TokenKind.Const:
+                return this.parseConstStmt();
             case TokenKind.For:
                 return this.parseForOfStmt();
+            case TokenKind.While:
+                return this.parseWhileStmt();
             case TokenKind.If:
                 return this.parseIfStmt();
+            case TokenKind.Try:
+                return this.parseTryStmt();
             case TokenKind.Match:
                 return this.parseMatchStmt();
             case TokenKind.Return:
                 return this.parseReturnStmt();
+            case TokenKind.Break:
+                return this.parseBreakStmt();
+            case TokenKind.Continue:
+                return this.parseContinueStmt();
             case TokenKind.Identifier: {
                 // Look ahead: IDENT "=" → assignment
                 const savedPos = this.pos;
@@ -237,10 +260,28 @@ export class Parser {
             this.advance();
             typeAnnotation = this.parseTypeExpr();
         }
+        let value: Expr | undefined;
+        if (this.peek().kind === TokenKind.Equals) {
+            this.advance();
+            value = this.parseExpr();
+        }
+        this.expect(TokenKind.Semicolon);
+        return { kind: "LetStatement", name, typeAnnotation, value, loc: l };
+    }
+
+    private parseConstStmt(): ConstStatement {
+        const l = this.loc();
+        this.expect(TokenKind.Const);
+        const name = this.expect(TokenKind.Identifier).value;
+        let typeAnnotation: TypeExpr | undefined;
+        if (this.peek().kind === TokenKind.Colon) {
+            this.advance();
+            typeAnnotation = this.parseTypeExpr();
+        }
         this.expect(TokenKind.Equals);
         const value = this.parseExpr();
         this.expect(TokenKind.Semicolon);
-        return { kind: "LetStatement", name, typeAnnotation, value, loc: l };
+        return { kind: "ConstStatement", name, typeAnnotation, value, loc: l };
     }
 
     private parseAssignmentStmt(): AssignmentStatement {
@@ -269,7 +310,9 @@ export class Parser {
     private parseIfStmt(): IfStatement {
         const l = this.loc();
         this.expect(TokenKind.If);
+        this.expect(TokenKind.LParen);
         const condition = this.parseExpr();
+        this.expect(TokenKind.RParen);
         this.expect(TokenKind.LBrace);
         const then = this.parseStatements();
         this.expect(TokenKind.RBrace);
@@ -281,6 +324,45 @@ export class Parser {
             this.expect(TokenKind.RBrace);
         }
         return { kind: "IfStatement", condition, then, else_, loc: l };
+    }
+
+    private parseWhileStmt(): WhileStatement {
+        const l = this.loc();
+        this.expect(TokenKind.While);
+        this.expect(TokenKind.LParen);
+        const condition = this.parseExpr();
+        this.expect(TokenKind.RParen);
+        this.expect(TokenKind.LBrace);
+        const body = this.parseStatements();
+        this.expect(TokenKind.RBrace);
+        return { kind: "WhileStatement", condition, body, loc: l };
+    }
+
+    private parseTryStmt(): TryStatement {
+        const l = this.loc();
+        this.expect(TokenKind.Try);
+        this.expect(TokenKind.LBrace);
+        const tryBody = this.parseStatements();
+        this.expect(TokenKind.RBrace);
+        this.expect(TokenKind.Catch);
+        this.expect(TokenKind.LBrace);
+        const catchBody = this.parseStatements();
+        this.expect(TokenKind.RBrace);
+        return { kind: "TryStatement", tryBody, catchBody, loc: l };
+    }
+
+    private parseBreakStmt(): BreakStatement {
+        const l = this.loc();
+        this.expect(TokenKind.Break);
+        this.expect(TokenKind.Semicolon);
+        return { kind: "BreakStatement", loc: l };
+    }
+
+    private parseContinueStmt(): ContinueStatement {
+        const l = this.loc();
+        this.expect(TokenKind.Continue);
+        this.expect(TokenKind.Semicolon);
+        return { kind: "ContinueStatement", loc: l };
     }
 
     private parseMatchStmt(): MatchStatement {

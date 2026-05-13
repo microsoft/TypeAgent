@@ -4,7 +4,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { compile, TaskSchemaInfo } from "../src/index.js";
+import { compile, TaskSchemaInfo, CompileOptions } from "../src/index.js";
+
+const VALIDATE: CompileOptions = { validate: true };
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
 
@@ -155,10 +157,60 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
     },
 ];
 
+// Additional schemas for d8-summarize-url
+const D8_SCHEMAS: TaskSchemaInfo[] = [
+    ...TASK_SCHEMAS,
+    {
+        name: "http.get",
+        inputSchema: {
+            type: "object",
+            required: ["url"],
+            properties: { url: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["body", "status"],
+            properties: {
+                body: { type: "string" },
+                status: { type: "integer" },
+            },
+        },
+    },
+    {
+        name: "llm.generate",
+        inputSchema: {
+            type: "object",
+            required: ["prompt"],
+            properties: { prompt: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["text"],
+            properties: { text: { type: "string" } },
+        },
+    },
+    {
+        name: "file.write",
+        inputSchema: {
+            type: "object",
+            required: ["path", "content"],
+            properties: {
+                path: { type: "string" },
+                content: { type: "string" },
+            },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["path"],
+            properties: { path: { type: "string" } },
+        },
+    },
+];
+
 describe("DSL lexer", () => {
     it("tokenizes a workflow declaration", () => {
         const source = `workflow hello(name: string): string {
-            let result = text.template("Hello {{name}}", { name: input.name });
+            let result = text.template("Hello {{name}}", { name: name });
             return result.text;
         }`;
         const { tokens, errors } = lex(source);
@@ -178,7 +230,7 @@ describe("DSL lexer", () => {
 describe("DSL parser", () => {
     it("parses a minimal workflow", () => {
         const source = `workflow hello(name: string): string {
-            let result = text.template("Hello", { name: input.name });
+            let result = text.template("Hello", { name: name });
             return result.text;
         }`;
         const { tokens } = lex(source);
@@ -194,10 +246,10 @@ describe("DSL parser", () => {
 
     it("parses for..of loops", () => {
         const source = `workflow test(items: string[]): string {
-            for (item of input.items) {
+            for (item of items) {
                 let x = text.template("{{i}}", { i: item });
             }
-            return input.items;
+            return items;
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -208,7 +260,7 @@ describe("DSL parser", () => {
 
     it("parses object type annotations", () => {
         const source = `workflow test(data: { name: string, age: integer }): string {
-            return input.data;
+            return data;
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -222,10 +274,10 @@ describe("DSL parser", () => {
 describe("DSL compiler", () => {
     it("compiles a minimal workflow to IR", () => {
         const source = `workflow hello(name: string): string {
-            let greeting = text.template("Hello {{name}}", { name: input.name });
+            let greeting = text.template("Hello {{name}}", { name: name });
             return greeting.text;
         }`;
-        const result = compile(source, TASK_SCHEMAS);
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
         expect(result.ir).toBeDefined();
         const ir = result.ir!;
@@ -242,10 +294,10 @@ describe("DSL compiler", () => {
 
     it("generates correct inputSchema from params", () => {
         const source = `workflow test(repos: string[], author: string): string {
-            let x = text.template("hi", { name: input.author });
+            let x = text.template("hi", { name: author });
             return x.text;
         }`;
-        const result = compile(source, TASK_SCHEMAS);
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
         const schema = result.ir!.inputSchema as Record<string, unknown>;
         expect(schema.type).toBe("object");
@@ -260,13 +312,13 @@ describe("DSL compiler", () => {
 
     it("lowers for..of to a loop node with index machinery", () => {
         const source = `workflow test(items: string[]): string {
-            for (item of input.items) {
+            for (item of items) {
                 let result = text.template("{{x}}", { x: item });
             }
-            let joined = string.join(input.items, ",");
+            let joined = string.join(items, ",");
             return joined.text;
         }`;
-        const result = compile(source, TASK_SCHEMAS);
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
@@ -298,11 +350,11 @@ describe("DSL compiler", () => {
 
     it("resolves dotted name references", () => {
         const source = `workflow test(name: string): string {
-            let a = text.template("{{x}}", { x: input.name });
+            let a = text.template("{{x}}", { x: name });
             let b = text.template("{{x}}", { x: a.text });
             return b.text;
         }`;
-        const result = compile(source, TASK_SCHEMAS);
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
 
         const nodeB = result.ir!.nodes["b"] as {
@@ -328,12 +380,12 @@ describe("DSL compiler", () => {
 
     it("threads next edges between sequential nodes", () => {
         const source = `workflow test(x: string): string {
-            let a = text.template("1", { x: input.x });
+            let a = text.template("1", { x: x });
             let b = text.template("2", { x: a.text });
             let c = text.template("3", { x: b.text });
             return c.text;
         }`;
-        const result = compile(source, TASK_SCHEMAS);
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
 
         const nodeA = result.ir!.nodes["a"] as { next?: string };
@@ -353,7 +405,7 @@ describe("DSL d1-standup-prep", () => {
             "d1-standup-prep.wf",
         );
         const source = fs.readFileSync(wfPath, "utf-8");
-        const result = compile(source, TASK_SCHEMAS);
+        const result = compile(source, TASK_SCHEMAS, VALIDATE);
 
         expect(result.errors).toHaveLength(0);
         expect(result.ir).toBeDefined();
@@ -430,5 +482,118 @@ describe("DSL d1-standup-prep", () => {
         expect(output.$from).toBe("scope");
         expect(output.name).toBe("joined");
         expect(output.path).toEqual(["text"]);
+    });
+});
+
+describe("DSL d8-summarize-url", () => {
+    it("compiles the d8-summarize-url.wf example", () => {
+        const wfPath = path.resolve(
+            __dirname,
+            "..",
+            "..",
+            "examples",
+            "d8-summarize-url.wf",
+        );
+        const source = fs.readFileSync(wfPath, "utf-8");
+        const result = compile(source, D8_SCHEMAS, VALIDATE);
+
+        if (result.errors.length > 0) {
+            console.error("d8 errors:", result.errors);
+        }
+        expect(result.errors).toHaveLength(0);
+        expect(result.ir).toBeDefined();
+        const ir = result.ir!;
+
+        // Top-level structure
+        expect(ir.name).toBe("summarizeUrl");
+        expect(ir.version).toBe("1");
+        const schema = ir.inputSchema as Record<string, unknown>;
+        expect(schema.required).toEqual(["url", "outputPath"]);
+
+        // Should have constants
+        expect(ir.constants).toBeDefined();
+        expect(ir.constants!["summaryPrompt"]).toBeDefined();
+        expect(ir.constants!["maxRetries"]).toBeDefined();
+
+        // Should have a loop node (while true)
+        const loopNodes = Object.entries(ir.nodes).filter(
+            ([_, n]) => n.kind === "loop",
+        );
+        expect(loopNodes.length).toBe(1);
+        const [_loopId, loopNode] = loopNodes[0];
+        const loop = loopNode as {
+            kind: string;
+            state: Record<string, unknown>;
+            body: { entry: string; nodes: Record<string, unknown> };
+            maxIterations: number;
+        };
+        expect(loop.maxIterations).toBe(100);
+
+        // Loop state should have attempt
+        expect(loop.state).toHaveProperty("attempt");
+
+        // Loop body should have branch nodes for try/catch and if
+        const bodyNodes = loop.body.nodes;
+        const branchNodes = Object.entries(bodyNodes).filter(
+            ([_, n]) => (n as { kind: string }).kind === "branch",
+        );
+        expect(branchNodes.length).toBeGreaterThanOrEqual(1);
+
+        // Post-loop: should have prompt, summaryResult, writeResult
+        expect(ir.nodes["prompt"]).toBeDefined();
+        expect(ir.nodes["summaryResult"]).toBeDefined();
+        expect(ir.nodes["writeResult"]).toBeDefined();
+
+        // Output should be an object with path and summary
+        const output = ir.output as Record<string, unknown>;
+        expect(output).toBeDefined();
+    });
+});
+
+describe("DSL try/catch single-trigger compliance", () => {
+    it("clones catch body per trigger when try has multiple tasks", () => {
+        const source = `workflow multiFetch(u1: string, u2: string): string {
+            let result: string;
+            while (true) {
+                try {
+                    let a = http.get({ url: u1 });
+                    let b = http.get({ url: u2 });
+                    result = b.body;
+                    break;
+                } catch {
+                    break;
+                }
+            }
+            return result;
+        }`;
+        const result = compile(source, D8_SCHEMAS, VALIDATE);
+        if (result.errors.length > 0) {
+            console.error("multi-trigger errors:", result.errors);
+        }
+        expect(result.errors).toHaveLength(0);
+
+        const ir = result.ir!;
+        const loopNodes = Object.entries(ir.nodes).filter(
+            ([_, n]) => n.kind === "loop",
+        );
+        expect(loopNodes.length).toBe(1);
+        const loop = loopNodes[0][1] as {
+            body: { nodes: Record<string, { onError?: string; kind: string }> };
+        };
+
+        // Find task nodes with onError
+        const tasksWithOnError = Object.entries(loop.body.nodes).filter(
+            ([_, n]) => n.kind === "task" && n.onError,
+        );
+
+        // Each trigger should point to a DIFFERENT recovery entry
+        expect(tasksWithOnError.length).toBe(2);
+        const targets = tasksWithOnError.map(([_, n]) => n.onError);
+        expect(targets[0]).not.toBe(targets[1]);
+
+        // Both recovery entries should exist in the body
+        for (const t of targets) {
+            expect(loop.body.nodes[t!]).toBeDefined();
+        }
     });
 });

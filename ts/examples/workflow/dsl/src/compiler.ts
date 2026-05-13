@@ -7,16 +7,21 @@
  * This is the public API. It orchestrates: lex -> parse -> emit.
  */
 
-import { WorkflowIR } from "workflow-model";
+import { WorkflowIR, validateWorkflowIR } from "workflow-model";
 import { lex } from "./lexer.js";
 import { Parser } from "./parser.js";
 import { Emitter, TaskSchemaInfo } from "./emitter.js";
 
 export interface CompileError {
-    phase: "lex" | "parse" | "emit";
+    phase: "lex" | "parse" | "emit" | "validate";
     message: string;
     line: number;
     col: number;
+}
+
+export interface CompileOptions {
+    /** Run IR validation after emit. Defaults to false. */
+    validate?: boolean;
 }
 
 export interface CompileResult {
@@ -27,6 +32,7 @@ export interface CompileResult {
 export function compile(
     source: string,
     taskSchemas: TaskSchemaInfo[],
+    options?: CompileOptions,
 ): CompileResult {
     const errors: CompileError[] = [];
 
@@ -71,5 +77,24 @@ export function compile(
         });
     }
 
+    maybeValidate(ir ?? null, errors, options);
+
     return { ir: ir ?? undefined, errors };
+}
+
+function maybeValidate(
+    ir: WorkflowIR | null,
+    errors: CompileError[],
+    options?: CompileOptions,
+): void {
+    if (!options?.validate || !ir || errors.length > 0) return;
+    const result = validateWorkflowIR(ir);
+    for (const e of result.errors) {
+        errors.push({
+            phase: "validate",
+            message: `${e.path}: ${e.message}`,
+            line: 0,
+            col: 0,
+        });
+    }
 }
