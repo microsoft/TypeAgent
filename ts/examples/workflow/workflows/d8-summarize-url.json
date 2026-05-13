@@ -21,17 +21,25 @@
     "type": "object",
     "required": ["path", "summary"],
     "properties": {
-      "path": { "type": "string" },
-      "summary": { "type": "string" }
+      "path": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string"
+      }
     }
   },
   "constants": {
     "summaryPrompt": {
-      "schema": { "type": "string" },
+      "schema": {
+        "type": "string"
+      },
       "value": "Summarize the following web page content in 3-5 paragraphs. Focus on the main points and key information. Be clear and concise.\n\nContent:\n"
     },
     "maxRetries": {
-      "schema": { "type": "integer" },
+      "schema": {
+        "type": "integer"
+      },
       "value": 2
     }
   },
@@ -39,19 +47,34 @@
     "fetchLoop": {
       "kind": "loop",
       "inputs": {
-        "url": { "$from": "input", "name": "url" },
-        "maxRetries": { "$from": "constant", "name": "maxRetries" }
+        "url": {
+          "$from": "input",
+          "name": "url"
+        },
+        "maxRetries": {
+          "$from": "constant",
+          "name": "maxRetries"
+        }
       },
       "inputSchema": {
         "type": "object",
         "required": ["url", "maxRetries"],
         "properties": {
-          "url": { "type": "string" },
-          "maxRetries": { "type": "integer" }
+          "url": {
+            "type": "string"
+          },
+          "maxRetries": {
+            "type": "integer"
+          }
         }
       },
       "state": {
-        "attempt": { "schema": { "type": "integer" }, "initial": 0 }
+        "attempt": {
+          "schema": {
+            "type": "integer"
+          },
+          "initial": 0
+        }
       },
       "body": {
         "entry": "fetchUrl",
@@ -63,19 +86,28 @@
               "type": "object",
               "required": ["url"],
               "properties": {
-                "url": { "type": "string" }
+                "url": {
+                  "type": "string"
+                }
               }
             },
             "outputSchema": {
               "type": "object",
               "required": ["body", "status"],
               "properties": {
-                "body": { "type": "string" },
-                "status": { "type": "integer" }
+                "body": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "integer"
+                }
               }
             },
             "inputs": {
-              "url": { "$from": "input", "name": "url" }
+              "url": {
+                "$from": "input",
+                "name": "url"
+              }
             },
             "next": "@exit",
             "onError": "incrementAttempt",
@@ -86,19 +118,36 @@
             "task": "int.add",
             "inputSchema": {
               "type": "object",
-              "required": ["a", "b"],
+              "required": ["a", "b", "error", "trigger"],
               "properties": {
-                "a": { "type": "integer" },
-                "b": { "type": "integer" }
+                "a": {
+                  "type": "integer"
+                },
+                "b": {
+                  "type": "integer"
+                },
+                "error": {
+                  "type": "object"
+                },
+                "trigger": {
+                  "type": "object"
+                }
               }
             },
             "outputSchema": {
               "type": "object",
               "required": ["result"],
-              "properties": { "result": { "type": "integer" } }
+              "properties": {
+                "result": {
+                  "type": "integer"
+                }
+              }
             },
             "inputs": {
-              "a": { "$from": "state", "name": "attempt" },
+              "a": {
+                "$from": "state",
+                "name": "attempt"
+              },
               "b": 1
             },
             "next": "checkRetry",
@@ -111,14 +160,22 @@
               "type": "object",
               "required": ["a", "b"],
               "properties": {
-                "a": { "type": "integer" },
-                "b": { "type": "integer" }
+                "a": {
+                  "type": "integer"
+                },
+                "b": {
+                  "type": "integer"
+                }
               }
             },
             "outputSchema": {
               "type": "object",
               "required": ["result"],
-              "properties": { "result": { "type": "boolean" } }
+              "properties": {
+                "result": {
+                  "type": "boolean"
+                }
+              }
             },
             "inputs": {
               "a": {
@@ -126,7 +183,10 @@
                 "name": "nextAttempt",
                 "path": ["result"]
               },
-              "b": { "$from": "input", "name": "maxRetries" }
+              "b": {
+                "$from": "input",
+                "name": "maxRetries"
+              }
             },
             "next": "branchRetry",
             "bind": "shouldRetry"
@@ -138,8 +198,13 @@
               "name": "shouldRetry",
               "path": ["result"]
             },
-            "selectorSchema": { "type": "boolean" },
-            "cases": { "true": "@iterate", "false": "@exit" },
+            "selectorSchema": {
+              "type": "boolean"
+            },
+            "cases": {
+              "true": "@iterate",
+              "false": "@exit"
+            },
             "default": "@exit"
           }
         }
@@ -157,7 +222,9 @@
         "path": ["body"],
         "optional": true
       },
-      "outputSchema": { "type": "string" },
+      "outputSchema": {
+        "type": "string"
+      },
       "maxIterations": 3,
       "next": "buildPrompt",
       "bind": "pageContent"
@@ -169,20 +236,34 @@
         "type": "object",
         "required": ["template", "vars"],
         "properties": {
-          "template": { "type": "string" },
-          "vars": { "type": "object" }
+          "template": {
+            "type": "string"
+          },
+          "vars": {
+            "type": "object"
+          }
         }
       },
       "outputSchema": {
         "type": "object",
         "required": ["text"],
-        "properties": { "text": { "type": "string" } }
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
       },
       "inputs": {
         "template": "{{prefix}}{{content}}",
         "vars": {
-          "prefix": { "$from": "constant", "name": "summaryPrompt" },
-          "content": { "$from": "scope", "name": "pageContent" }
+          "prefix": {
+            "$from": "constant",
+            "name": "summaryPrompt"
+          },
+          "content": {
+            "$from": "scope",
+            "name": "pageContent"
+          }
         }
       },
       "next": "summarize",
@@ -194,15 +275,27 @@
       "inputSchema": {
         "type": "object",
         "required": ["prompt"],
-        "properties": { "prompt": { "type": "string" } }
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        }
       },
       "outputSchema": {
         "type": "object",
         "required": ["text"],
-        "properties": { "text": { "type": "string" } }
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
       },
       "inputs": {
-        "prompt": { "$from": "scope", "name": "prompt", "path": ["text"] }
+        "prompt": {
+          "$from": "scope",
+          "name": "prompt",
+          "path": ["text"]
+        }
       },
       "next": "writeFile",
       "bind": "summaryResult"
@@ -214,17 +307,28 @@
         "type": "object",
         "required": ["path", "content"],
         "properties": {
-          "path": { "type": "string" },
-          "content": { "type": "string" }
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
         }
       },
       "outputSchema": {
         "type": "object",
         "required": ["path"],
-        "properties": { "path": { "type": "string" } }
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        }
       },
       "inputs": {
-        "path": { "$from": "input", "name": "outputPath" },
+        "path": {
+          "$from": "input",
+          "name": "outputPath"
+        },
         "content": {
           "$from": "scope",
           "name": "summaryResult",
@@ -236,7 +340,15 @@
   },
   "entry": "fetchLoop",
   "output": {
-    "path": { "$from": "scope", "name": "writeResult", "path": ["path"] },
-    "summary": { "$from": "scope", "name": "summaryResult", "path": ["text"] }
+    "path": {
+      "$from": "scope",
+      "name": "writeResult",
+      "path": ["path"]
+    },
+    "summary": {
+      "$from": "scope",
+      "name": "summaryResult",
+      "path": ["text"]
+    }
   }
 }
