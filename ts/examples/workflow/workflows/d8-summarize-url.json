@@ -5,10 +5,7 @@
   "description": "Fetch a public URL, extract text, LLM summarize, write to file. Retries fetch once on failure.",
   "inputSchema": {
     "type": "object",
-    "required": [
-      "url",
-      "outputPath"
-    ],
+    "required": ["url", "outputPath"],
     "properties": {
       "url": {
         "type": "string",
@@ -22,10 +19,7 @@
   },
   "outputSchema": {
     "type": "object",
-    "required": [
-      "path",
-      "summary"
-    ],
+    "required": ["path", "summary"],
     "properties": {
       "path": {
         "type": "string"
@@ -64,10 +58,7 @@
       },
       "inputSchema": {
         "type": "object",
-        "required": [
-          "url",
-          "maxRetries"
-        ],
+        "required": ["url", "maxRetries"],
         "properties": {
           "url": {
             "type": "string"
@@ -93,9 +84,7 @@
             "task": "http.get",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "url"
-              ],
+              "required": ["url"],
               "properties": {
                 "url": {
                   "type": "string"
@@ -104,10 +93,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "body",
-                "status"
-              ],
+              "required": ["body", "status"],
               "properties": {
                 "body": {
                   "type": "string"
@@ -132,12 +118,7 @@
             "task": "int.add",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "a",
-                "b",
-                "error",
-                "trigger"
-              ],
+              "required": ["a", "b", "error", "trigger"],
               "properties": {
                 "a": {
                   "type": "integer"
@@ -155,9 +136,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "result"
-              ],
+              "required": ["result"],
               "properties": {
                 "result": {
                   "type": "integer"
@@ -179,10 +158,7 @@
             "task": "int.lessThan",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "a",
-                "b"
-              ],
+              "required": ["a", "b"],
               "properties": {
                 "a": {
                   "type": "integer"
@@ -194,9 +170,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "result"
-              ],
+              "required": ["result"],
               "properties": {
                 "result": {
                   "type": "boolean"
@@ -207,9 +181,7 @@
               "a": {
                 "$from": "scope",
                 "name": "nextAttempt",
-                "path": [
-                  "result"
-                ]
+                "path": ["result"]
               },
               "b": {
                 "$from": "input",
@@ -224,9 +196,7 @@
             "selector": {
               "$from": "scope",
               "name": "shouldRetry",
-              "path": [
-                "result"
-              ]
+              "path": ["result"]
             },
             "selectorSchema": {
               "type": "boolean"
@@ -243,17 +213,13 @@
         "attempt": {
           "$from": "scope",
           "name": "nextAttempt",
-          "path": [
-            "result"
-          ]
+          "path": ["result"]
         }
       },
       "output": {
         "$from": "scope",
         "name": "fetchResult",
-        "path": [
-          "body"
-        ],
+        "path": ["body"],
         "optional": true
       },
       "outputSchema": {
@@ -268,10 +234,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -283,9 +246,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "text"
-        ],
+        "required": ["text"],
         "properties": {
           "text": {
             "type": "string"
@@ -313,9 +274,7 @@
       "task": "llm.generate",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "prompt"
-        ],
+        "required": ["prompt"],
         "properties": {
           "prompt": {
             "type": "string"
@@ -324,9 +283,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "text"
-        ],
+        "required": ["text"],
         "properties": {
           "text": {
             "type": "string"
@@ -337,9 +294,7 @@
         "prompt": {
           "$from": "scope",
           "name": "prompt",
-          "path": [
-            "text"
-          ]
+          "path": ["text"]
         }
       },
       "next": "writeFile",
@@ -350,10 +305,7 @@
       "task": "file.write",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "path",
-          "content"
-        ],
+        "required": ["path", "content"],
         "properties": {
           "path": {
             "type": "string"
@@ -365,9 +317,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "path"
-        ],
+        "required": ["path"],
         "properties": {
           "path": {
             "type": "string"
@@ -382,9 +332,7 @@
         "content": {
           "$from": "scope",
           "name": "summaryResult",
-          "path": [
-            "text"
-          ]
+          "path": ["text"]
         }
       },
       "bind": "writeResult"
@@ -395,16 +343,12 @@
     "path": {
       "$from": "scope",
       "name": "writeResult",
-      "path": [
-        "path"
-      ]
+      "path": ["path"]
     },
     "summary": {
       "$from": "scope",
       "name": "summaryResult",
-      "path": [
-        "text"
-      ]
+      "path": ["text"]
     }
   }
 }

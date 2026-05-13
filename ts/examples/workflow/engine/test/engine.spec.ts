@@ -490,7 +490,12 @@ function makeA4IR(): WorkflowIR {
                             task: "text.placeholderSection",
                             inputSchema: {
                                 type: "object",
-                                required: ["section", "reason", "error", "trigger"],
+                                required: [
+                                    "section",
+                                    "reason",
+                                    "error",
+                                    "trigger",
+                                ],
                                 properties: {
                                     section: { type: "string" },
                                     reason: { type: "string" },
@@ -6286,7 +6291,10 @@ describe("WorkflowEngine (IR v1)", () => {
                                         },
                                     },
                                     inputs: {
-                                        i: { $from: "state", name: "i" } as Template,
+                                        i: {
+                                            $from: "state",
+                                            name: "i",
+                                        } as Template,
                                     },
                                     next: "check",
                                     bind: "counted",
