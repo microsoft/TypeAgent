@@ -95,22 +95,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode: comma-ending word before Latin word", () => {
-                // After "hello," the next char is "w" (Latin).
-                // requiresSeparator(",", "w", auto) → false (comma not word-boundary)
-                // → separatorMode should be "optionalSpace"
-                const result = matchGrammarCompletion(grammar, "hello,");
-                expectMetadata(result, {
-                    completions: ["world"],
-                    matchedPrefixLength: 6,
-                    separatorMode: "autoSpacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
-
             it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world");
                 // Exact match backs up to the last term.
@@ -167,22 +151,6 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello");
                 // "hello" fully matched, no trailing sep → direction-sensitive
                 // requiresSeparator("o", ",", auto) → comma is punct → "optionalSpace"
-                expectMetadata(result, {
-                    completions: [",world"],
-                    matchedPrefixLength: 5,
-                    separatorMode: "autoSpacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
-
-            it("separatorMode: Latin word before comma-starting word", () => {
-                // After "hello" the next char is "," (punctuation).
-                // requiresSeparator("o", ",", auto) → false (comma not word-boundary)
-                // → separatorMode should be "optionalSpace"
-                const result = matchGrammarCompletion(grammar, "hello");
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
@@ -517,21 +485,6 @@ describeForEachCompletion(
                     });
                 });
 
-                it("separatorMode after 'hello' before ' world'", () => {
-                    // requiresSeparator("o", " ", auto) → " " not word-boundary → false
-                    // → separatorMode = "optionalSpace"
-                    const result = matchGrammarCompletion(grammar, "hello");
-                    expectMetadata(result, {
-                        completions: [" world"],
-                        matchedPrefixLength: 5,
-                        separatorMode: "autoSpacePunctuation",
-                        closedSet: true,
-                        directionSensitive: true,
-                        afterWildcard: "none",
-                        properties: [],
-                    });
-                });
-
                 it("offers 'next' after 'hello world' (one space)", () => {
                     // One input space: flex-space zero, literal " world" starts at 5
                     const result = matchGrammarCompletion(
@@ -794,22 +747,6 @@ describeForEachCompletion(
                         "hello world",
                     );
                     // None mode → "none"
-                    expectMetadata(result, {
-                        completions: ["next"],
-                        matchedPrefixLength: 11,
-                        separatorMode: "none",
-                        closedSet: true,
-                        directionSensitive: true,
-                        afterWildcard: "none",
-                        properties: [],
-                    });
-                });
-
-                it("separatorMode after ' world' in none mode", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "hello world",
-                    );
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
@@ -1222,27 +1159,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode: comma before entity should be 'optional'", () => {
-                // requiresSeparator(",", "a", auto) → false → optional
-                const result = matchGrammarCompletion(grammar, "hello,");
-                expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 6,
-                    separatorMode: "autoSpacePunctuation",
-                    closedSet: false,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [
-                        {
-                            match: {
-                                actionName: "test",
-                                parameters: {},
-                            },
-                            propertyNames: ["parameters.x"],
-                        },
-                    ],
-                });
-            });
         });
 
         // ================================================================
@@ -1564,18 +1480,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode for required spacing after punctuation word", () => {
-                const result = matchGrammarCompletion(grammar, "hello, ");
-                expectMetadata(result, {
-                    completions: ["world"],
-                    matchedPrefixLength: 6,
-                    separatorMode: "spacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
         });
 
         describe("spacing=optional with punctuation keyword completion", () => {
@@ -1596,18 +1500,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode should be 'optionalSpacePunctuation'", () => {
-                const result = matchGrammarCompletion(grammar, "hello,");
-                expectMetadata(result, {
-                    completions: ["world"],
-                    matchedPrefixLength: 6,
-                    separatorMode: "optionalSpacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
         });
 
         describe("spacing=none with punctuation keyword completion", () => {
@@ -1643,18 +1535,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode should be 'none'", () => {
-                const result = matchGrammarCompletion(grammar, "hello,");
-                expectMetadata(result, {
-                    completions: ["world"],
-                    matchedPrefixLength: 6,
-                    separatorMode: "none",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
         });
 
         // ================================================================
@@ -1694,18 +1574,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode should be 'none' after escaped-space keyword", () => {
-                const result = matchGrammarCompletion(grammar, "hello world");
-                expectMetadata(result, {
-                    completions: ["next"],
-                    matchedPrefixLength: 11,
-                    separatorMode: "none",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
         });
 
         // ================================================================
@@ -2051,23 +1919,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode: apostrophe-ending word before Latin word", () => {
-                // The apostrophe is inside the segment "don't" — it is NOT the
-                // boundary character.  matchedPrefixLength = 5, so the char at
-                // prefix[4] is 't' (last char of "don't"), and completionText[0]
-                // is 's' (start of "stop").  requiresSeparator("t", "s", auto)
-                // → both Latin → true → "spacePunctuation".
-                const result = matchGrammarCompletion(grammar, "don't");
-                expectMetadata(result, {
-                    completions: ["stop"],
-                    matchedPrefixLength: 5,
-                    separatorMode: "autoSpacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
         });
 
         // ================================================================
@@ -2524,18 +2375,6 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode should be 'spacePunctuation' for required spacing", () => {
-                const result = matchGrammarCompletion(grammar, "hello world");
-                expectMetadata(result, {
-                    completions: ["next"],
-                    matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    afterWildcard: "none",
-                    properties: [],
-                });
-            });
         });
 
         // ================================================================
