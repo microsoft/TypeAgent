@@ -41,8 +41,12 @@ export type CodeReadinessProbe = {
     // user has set everything up correctly and just closed VS Code is
     // misleading.
     vsCodeCliInstalled: boolean;
-    // For messaging only. Pulled from CODE_WEBSOCKET_PORT (default 8082).
-    port: number;
+    // For messaging only. Undefined until the shared server is bound; the
+    // user-facing message then omits the port number. Pulled from the
+    // actual bound port (via getSharedCodePort()) so readiness stays in
+    // sync with the registered listener, including when the OS picked a
+    // free ephemeral port (port=0 default).
+    port: number | undefined;
 };
 
 // Pure decision function — exported for unit tests so we don't have to
@@ -77,9 +81,10 @@ export function evaluateCodeReadiness(
     // This is a transient runtime state, not a config problem; `setup`
     // resolves it by launching VS Code and waiting for the extension to
     // connect.
+    const portSuffix = probe.port !== undefined ? ` on port ${probe.port}` : "";
     return {
         state: "setup-required",
-        message: `VS Code isn't currently running (or the Coda extension isn't connected on port ${probe.port}).`,
+        message: `VS Code isn't currently running (or the Coda extension isn't connected${portSuffix}).`,
         details:
             "Run `@config agent setup code` to launch VS Code — the Coda extension will auto-connect — or open VS Code yourself and your code commands will start working immediately.",
     };
@@ -102,16 +107,21 @@ export async function whichExists(tool: string): Promise<boolean> {
     });
 }
 
-// Resolves the configured port the same way updateAgentContext does.
-// Centralized here so readiness messaging stays in sync with the actual
-// listener configuration.
-export function resolveCodePort(env: NodeJS.ProcessEnv): number {
+// Resolves the explicit port override (CODE_WEBSOCKET_PORT) for readiness
+// messaging when the shared server isn't bound yet. Returns undefined to
+// signal "no static port" — the caller (readiness probe) should query
+// `getSharedCodePort()` first and fall through here only when the server
+// hasn't been started yet.
+//
+// Validation matches getCodeBindPort() in codeActionHandler.ts.
+export function resolveCodePortOverride(
+    env: NodeJS.ProcessEnv,
+): number | undefined {
     const raw = env.CODE_WEBSOCKET_PORT;
-    if (raw !== undefined) {
-        const n = parseInt(raw);
-        if (Number.isFinite(n) && n > 0) return n;
-    }
-    return 8082;
+    if (raw === undefined) return undefined;
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+    return undefined;
 }
 
 // ============================================================================
@@ -169,7 +179,7 @@ export async function setupCode(
     actionContext: ActionContext<unknown>,
     choiceManager: ChoiceManager,
     isConnected: () => boolean,
-    port: number,
+    port: number | undefined,
 ): Promise<ActionResult> {
     if (isConnected()) {
         // Defense-in-depth: dispatcher only invokes setup() when readiness
@@ -181,9 +191,10 @@ export async function setupCode(
             "VS Code is already connected.",
         );
     }
+    const portSuffix = port !== undefined ? ` on port ${port}` : "";
     return createYesNoChoiceResult(
         choiceManager,
-        `Launch VS Code? The Coda extension will auto-connect to the code agent's WebSocket server on port ${port}. I'll wait up to 30 seconds for the connection — you can keep working in the meantime.`,
+        `Launch VS Code? The Coda extension will auto-connect to the code agent's WebSocket server${portSuffix}. I'll wait up to 30 seconds for the connection — you can keep working in the meantime.`,
         async (confirmed, liveActionContext) => {
             if (!confirmed) {
                 return createActionResultFromTextDisplay(
@@ -204,7 +215,7 @@ export async function setupCode(
 export async function runLaunchAndWait(
     actionContext: ActionContext<unknown>,
     isConnected: () => boolean,
-    port: number,
+    port: number | undefined,
     options?: {
         timeoutMs?: number;
         launchImpl?: () => Promise<void>;
@@ -229,10 +240,11 @@ export async function runLaunchAndWait(
         );
     }
 
+    const waitOn = port !== undefined ? ` on port ${port}` : "";
     actionContext.actionIO.appendDisplay(
         {
             type: "text",
-            content: `[${ts()}] Waiting for the Coda extension to connect on port ${port} (up to ${Math.round(timeoutMs / 1000)}s)…`,
+            content: `[${ts()}] Waiting for the Coda extension to connect${waitOn} (up to ${Math.round(timeoutMs / 1000)}s)…`,
             kind: "status",
         },
         "block",

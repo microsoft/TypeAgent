@@ -3548,6 +3548,12 @@ importers:
 
   packages/coda:
     dependencies:
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../agentServer/protocol
       body-parser:
         specifier: ^1.20.3
         version: 1.20.3

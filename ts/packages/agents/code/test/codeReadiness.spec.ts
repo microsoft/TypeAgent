@@ -5,14 +5,14 @@
  * Tests for the code agent's readiness/setup wiring.
  *
  * Pure functions only — `evaluateCodeReadiness` (decision) and
- * `resolveCodePort` (env parse) — plus `runLaunchAndWait` exercised with
- * an injected `launchImpl` so we don't actually spawn `code --new-window`
- * during tests.
+ * `resolveCodePortOverride` (env parse) — plus `runLaunchAndWait`
+ * exercised with an injected `launchImpl` so we don't actually spawn
+ * `code --new-window` during tests.
  */
 
 import {
     evaluateCodeReadiness,
-    resolveCodePort,
+    resolveCodePortOverride,
     runLaunchAndWait,
 } from "../src/readiness.js";
 import type { ActionContext } from "@typeagent/agent-sdk";
@@ -75,43 +75,58 @@ describe("evaluateCodeReadiness", () => {
         });
         expect(r.message).toMatch(/port 9999/);
     });
+
+    test("port omitted from message when undefined (server not yet bound)", () => {
+        // Initial readiness probe can fire before updateAgentContext has
+        // bound the shared server. Messaging must still be coherent — no
+        // dangling "port undefined" string.
+        const r = evaluateCodeReadiness({
+            clientConnected: false,
+            vsCodeCliInstalled: true,
+            port: undefined,
+        });
+        expect(r.message).not.toMatch(/port/i);
+        expect(r.message).not.toMatch(/undefined/);
+    });
 });
 
-describe("resolveCodePort", () => {
-    test("defaults to 8082 when CODE_WEBSOCKET_PORT is unset", () => {
-        expect(resolveCodePort({} as NodeJS.ProcessEnv)).toBe(8082);
+describe("resolveCodePortOverride", () => {
+    test("returns undefined when CODE_WEBSOCKET_PORT is unset (dynamic port)", () => {
+        expect(
+            resolveCodePortOverride({} as NodeJS.ProcessEnv),
+        ).toBeUndefined();
     });
 
     test("parses a valid integer override", () => {
         expect(
-            resolveCodePort({
+            resolveCodePortOverride({
                 CODE_WEBSOCKET_PORT: "9100",
             } as NodeJS.ProcessEnv),
         ).toBe(9100);
     });
 
-    test("falls back to default when CODE_WEBSOCKET_PORT is non-numeric", () => {
-        // Defensive: parseInt on garbage returns NaN. Without the
-        // Number.isFinite guard we'd return NaN as the port and the
-        // listener would explode.
+    test("returns undefined when CODE_WEBSOCKET_PORT is non-numeric", () => {
+        // Defensive: parseInt on garbage returns NaN. We must not propagate
+        // NaN as a port — return undefined so the agent falls back to
+        // OS-assigned binding.
         expect(
-            resolveCodePort({
+            resolveCodePortOverride({
                 CODE_WEBSOCKET_PORT: "abc",
             } as NodeJS.ProcessEnv),
-        ).toBe(8082);
+        ).toBeUndefined();
     });
 
-    test("falls back to default for zero / negative values", () => {
+    test("returns undefined for zero / negative values", () => {
         expect(
-            resolveCodePort({
+            resolveCodePortOverride({
                 CODE_WEBSOCKET_PORT: "0",
             } as NodeJS.ProcessEnv),
-        ).toBe(8082);
+        ).toBeUndefined();
         expect(
-            resolveCodePort({
+            resolveCodePortOverride({
                 CODE_WEBSOCKET_PORT: "-1",
             } as NodeJS.ProcessEnv),
-        ).toBe(8082);
+        ).toBeUndefined();
     });
 });
 
