@@ -74,10 +74,10 @@ azureOpenAI:
           capacity: 115
         - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
 
-    dalle:
-      defaultCapacity: 2
+    gpt_image_1_5:
+      defaultCapacity: 30
       endpoints:
-        - endpoint: https://my-resource.openai.azure.com/openai/deployments/dall-e-3/images/generations?api-version=2024-02-01
+        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-image-1.5/images/generations?api-version=2025-04-01-preview
 
     # Shorthand: a deployment with a single endpoint can be a bare list.
     gpt_v:

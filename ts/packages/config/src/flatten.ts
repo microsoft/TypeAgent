@@ -22,7 +22,7 @@ const PASSTHROUGH_KEYS = new Set(["env", "extra"]);
  *
  *   identity:
  *     - AZURE_OPENAI_API_KEY
- *     - AZURE_OPENAI_API_KEY_DALLE
+ *     - AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5
  *
  * instead of repeating `: identity` on every line.
  */

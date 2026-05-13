@@ -164,13 +164,13 @@ function azureImageApiSettingsFromEnv(
             env,
             EnvVars.AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5,
             endpointName,
-            env[EnvVars.AZURE_OPENAI_API_KEY_DALLE] ?? "identity",
+            env[EnvVars.AZURE_OPENAI_API_KEY_GPT_IMAGE] ?? "identity",
         ),
         endpoint: getEnvSetting(
             env,
             EnvVars.AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5,
             endpointName,
-            env[EnvVars.AZURE_OPENAI_ENDPOINT_DALLE],
+            env[EnvVars.AZURE_OPENAI_ENDPOINT_GPT_IMAGE],
         ),
     };
 }

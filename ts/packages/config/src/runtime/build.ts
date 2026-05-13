@@ -208,7 +208,7 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
     );
     const defaultImage = popServiceDefault(
         flat,
-        ["GPT_IMAGE_1_5", "DALLE"],
+        ["GPT_IMAGE_1_5"],
         defaultAuth,
     );
     const defaultVideo = popServiceDefault(flat, ["SORA_2"], defaultAuth);
@@ -233,7 +233,7 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
     const finalDefaultEmbedding =
         defaultEmbedding ?? synthDefault(["embedding", "embedding_3_large"]);
     const finalDefaultImage =
-        defaultImage ?? synthDefault(["gpt_image_1_5", "dalle"]);
+        defaultImage ?? synthDefault(["gpt_image_1_5"]);
     const finalDefaultVideo = defaultVideo ?? synthDefault(["sora_2"]);
 
     return {
@@ -274,8 +274,7 @@ function makeBareEndpoint(
 /**
  * Pop a service-default (`EMBEDDING`, `GPT_IMAGE_1_5`, `SORA_2`) bare
  * endpoint+key pair from `flat`. Tries each candidate name in order
- * (the first one with an endpoint set wins; lets `GPT_IMAGE_1_5` take
- * precedence over the legacy `DALLE`).
+ * (the first one with an endpoint set wins).
  */
 function popServiceDefault(
     flat: Map<string, string>,
