@@ -7,6 +7,7 @@ import {
     ActionContext,
     AppAction,
     AppAgent,
+    ReadinessReport,
     SessionContext,
 } from "@typeagent/agent-sdk";
 import Database from "better-sqlite3";
@@ -17,9 +18,16 @@ import os from "os";
 import registerDebug from "debug";
 import chalk from "chalk";
 import {
+    ChoiceManager,
     createActionResult,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
+import {
+    evaluateCodeReadiness,
+    resolveCodePort,
+    setupCode,
+    whichExists,
+} from "./readiness.js";
 
 const debug = registerDebug("typeagent:code");
 
@@ -50,6 +58,22 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeCodeContext,
         updateAgentContext: updateCodeContext,
         executeAction: executeCodeAction,
+        checkReadiness: checkCodeReadiness,
+        setup: (actionContext) => {
+            const ctx = (actionContext as ActionContext<CodeActionContext>)
+                .sessionContext.agentContext;
+            return setupCode(
+                actionContext,
+                ctx.choiceManager,
+                () => ctx.webSocketServer?.isConnected() === true,
+                resolveCodePort(process.env),
+            );
+        },
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<CodeActionContext>)
+                .sessionContext.agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
     };
 }
 
@@ -63,6 +87,9 @@ type CodeActionContext = {
             context?: ActionContext<CodeActionContext> | undefined;
         }
     >;
+    // Manages yes/no choice callbacks (currently only the setup-flow card).
+    // Hooked up via the AppAgent.handleChoice in instantiate() above.
+    choiceManager: ChoiceManager;
 };
 
 async function initializeCodeContext(): Promise<CodeActionContext> {
@@ -70,7 +97,37 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
         enabled: new Set(),
         webSocketServer: undefined,
         pendingCall: new Map(),
+        choiceManager: new ChoiceManager(),
     };
+}
+
+// Cheap readiness probe — checks (1) whether any client is connected to
+// the WebSocket server, and (2) whether the `code` CLI is on PATH. (2)
+// is the cheap proxy for "VS Code is installed at all" so we can
+// distinguish a real configuration gap from the common transient case
+// of VS Code just being closed. See evaluateCodeReadiness for the
+// branching messages.
+//
+// The `webSocketServer` field is undefined until updateAgentContext
+// fires (on first enable), so initial probes can show setup-required
+// even when the agent is healthy. The dispatcher's post-handleChoice
+// readiness refresh + explicit `@config agent refresh code` are the
+// recovery paths.
+async function checkCodeReadiness(
+    context: SessionContext<CodeActionContext>,
+): Promise<ReadinessReport> {
+    const clientConnected =
+        context.agentContext?.webSocketServer?.isConnected() === true;
+    // Skip the PATH probe when we already know the answer is "ready" —
+    // saves a subprocess on every refresh of a healthy agent.
+    const vsCodeCliInstalled = clientConnected
+        ? true
+        : await whichExists("code");
+    return evaluateCodeReadiness({
+        clientConnected,
+        vsCodeCliInstalled,
+        port: resolveCodePort(process.env),
+    });
 }
 
 async function updateCodeContext(
@@ -305,7 +362,7 @@ async function executeConversationAction(
         case "newConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Created new conversation "${action.parameters.name}".`
+                    ? `Creating conversation "${action.parameters.name}".`
                     : "Creating a new conversation.",
             );
         case "renameConversation":
@@ -315,8 +372,14 @@ async function executeConversationAction(
         case "switchConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Switched to conversation "${action.parameters.name}".`
+                    ? `Switching to conversation "${action.parameters.name}".`
                     : "Switching conversation.",
+            );
+        case "deleteConversation":
+            return createActionResult(
+                action.parameters.name
+                    ? `Deleting conversation "${action.parameters.name}".`
+                    : "Deleting conversation.",
             );
         default: {
             const _exhaustive: never = action;
@@ -340,7 +403,11 @@ async function executeCodeAction(
     // handled locally and routed back to the originating extension webview
     // via takeAction. All other code sub-schemas are forwarded to the Coda
     // VS Code extension over the WebSocket bridge below.
-    if (action.schemaName === "code-vscode-shell") {
+    //
+    // Note: sub-schema names are dot-prefixed with the parent agent name by
+    // the dispatcher (see actionConfig.collectActionConfigs), so the runtime
+    // schemaName here is "code.code-vscode-shell", not "code-vscode-shell".
+    if (action.schemaName === "code.code-vscode-shell") {
         return executeConversationAction(
             action as VSCodeConversationActions,
             context,

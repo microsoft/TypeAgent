@@ -8,6 +8,7 @@ import {
     DisplayType,
     DynamicDisplay,
     DisplayContent,
+    DisplayAppendMode,
 } from "./display.js";
 import { Entity } from "./memory.js";
 import { Profiler } from "./profiler.js";
@@ -97,6 +98,32 @@ export type ResolveEntityResult = {
     entities: Entity[];
 };
 
+// Reports whether an agent is set up and able to execute actions/commands.
+// Cached by the dispatcher; refreshed on enable, after `setup` runs, and on
+// explicit `@config agent refresh`. Agents that don't implement
+// `checkReadiness` are treated as `ready`.
+//
+// State semantics:
+//   "ready"          — actions/commands can run normally
+//   "setup-required" — actions/commands are blocked; pre-flight either
+//                      surfaces the message or (when setupOnFirstUse is on)
+//                      offers to run `setup`
+//   "unsupported"    — actions/commands are permanently blocked on this
+//                      machine (e.g. macOS for osNotifications). `setup` is
+//                      not offered.
+export type ReadinessState = "ready" | "setup-required" | "unsupported";
+
+export type ReadinessReport = {
+    state: ReadinessState;
+    // One-line reason. Shown next to the agent in `@config agent` listings
+    // and in pre-flight error messages. Required when state is anything
+    // other than "ready".
+    message?: string;
+    // Optional longer explanation (markdown OK). Shown in per-agent detail
+    // views and could include hyperlinks to relevant docs / portals.
+    details?: string;
+};
+
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
     initializeAgentContext?(settings?: AppAgentInitSettings): Promise<unknown>;
@@ -106,6 +133,32 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         schemaName: string, // for sub-action schemas
     ): Promise<void>;
     closeAgentContext?(context: SessionContext): Promise<void>;
+
+    // Readiness — the agent reports whether it's set up and ready to execute
+    // actions/commands. The dispatcher pre-flights this immediately before
+    // calling executeAction / executeCommand. Agents that don't implement
+    // are treated as `ready`. See ReadinessReport for state semantics.
+    //
+    // checkReadiness should be CHEAP (file-existence / env-var read level).
+    // Expensive probes (network, child processes) belong in `setup`.
+    checkReadiness?(context: SessionContext<unknown>): Promise<ReadinessReport>;
+
+    // Idempotent setup that brings the agent from `setup-required` to `ready`.
+    // Returns ActionResult so it can use the in-chat yes/no card pattern
+    // (createYesNoChoiceResult) for confirmation, progress display, etc.
+    // After setup runs (success or failure), the dispatcher re-calls
+    // checkReadiness to update the cached state — agents don't get to
+    // self-report readiness.
+    setup?(context: ActionContext<unknown>): Promise<ActionResult | undefined>;
+
+    // Background lifecycle for agent-initiated work (timers, watchers,
+    // external-event subscriptions). startBackgroundTasks runs once per
+    // session, after initializeAgentContext succeeds and before the first
+    // updateAgentContext call. stopBackgroundTasks runs once at session
+    // teardown, before any updateAgentContext(false, ...) calls and before
+    // closeAgentContext.
+    startBackgroundTasks?(context: SessionContext): Promise<void>;
+    stopBackgroundTasks?(context: SessionContext): Promise<void>;
 
     // Actions
     streamPartialAction?(
@@ -190,6 +243,23 @@ export enum AppAgentEvent {
     Inline = "inline",
 }
 
+// Render style for agent-initiated messages (messages not paired with a user
+// request). Selected per-message via SessionContext.beginAgentThread().
+export type AgentMessageKind = "bubble" | "toast" | "inline";
+
+// Handle returned by SessionContext.beginAgentThread(). Lets an agent push
+// display content into the UI without a preceding user request.
+//
+// Lifetime: setDisplay/appendDisplay can be called any number of times. After
+// complete() the handle is finished — call beginAgentThread() again to start
+// a new thread.
+export interface AgentThreadHandle {
+    readonly kind: AgentMessageKind;
+    setDisplay(content: DisplayContent): void;
+    appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;
+    complete(): void;
+}
+
 export interface SessionContext<T = unknown> {
     readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
@@ -209,6 +279,12 @@ export interface SessionContext<T = unknown> {
         message: string | DisplayContent,
         notificationId?: string,
     ): void;
+
+    // Begin an agent-initiated message thread. The returned handle can push
+    // display content (setDisplay/appendDisplay) into the UI without a
+    // preceding user request. Each call mints a fresh clientRequestId of the
+    // form "agent-<agentName>-<uuid>".
+    beginAgentThread(kind: AgentMessageKind): AgentThreadHandle;
 
     // choices default to ["Yes", "No"]
     popupQuestion(
@@ -273,6 +349,12 @@ export interface SessionContext<T = unknown> {
 
     // Experimental: get the available indexes
     indexes(type: "image" | "email" | "website" | "all"): Promise<any[]>;
+
+    // Validate grammar patterns before creating a workflow.
+    // Tests patterns for quality and collisions against all registered agents.
+    validateGrammarPatterns?(
+        request: GrammarValidationRequest,
+    ): Promise<GrammarValidationResult>;
 }
 
 // TODO: only utf8 & base64 is supported for now.
@@ -334,3 +416,59 @@ export interface ActionContext<T = void> {
         active: boolean,
     ): Promise<void>;
 }
+
+//==============================================================================
+// Grammar Validation Types
+//==============================================================================
+
+/**
+ * Request for grammar pattern validation before creating a workflow.
+ */
+export type GrammarValidationRequest = {
+    /** Name of the action being created */
+    actionName: string;
+    /** Description of what the action does */
+    description: string;
+    /** Grammar patterns to validate (AGR format patterns) */
+    patterns: string[];
+    /** Optional: Parameter definitions for context */
+    parameters?: Record<
+        string,
+        {
+            type: string;
+            required: boolean;
+            description: string;
+            default?: unknown;
+        }
+    >;
+};
+
+/**
+ * Result of grammar pattern validation.
+ */
+export type GrammarValidationResult = {
+    /** Whether patterns are approved for use */
+    approved: boolean;
+    /** Refined/improved patterns (use these if provided) */
+    patterns?: string[];
+    /** Non-blocking warnings */
+    warnings?: string[];
+    /** Blocking errors (why approval failed) */
+    errors?: string[];
+    /** Suggestions for improvement */
+    suggestions?: string[];
+    /** Pattern quality scores */
+    qualityScores?: Array<{
+        pattern: string;
+        score: number; // 1-5
+        reasoning: string;
+    }>;
+    /** Detected collisions */
+    collisions?: Array<{
+        pattern: string;
+        collidingAgent: string;
+        collidingAction: string;
+        testUtterance: string;
+        severity: "critical" | "warning" | "info";
+    }>;
+};

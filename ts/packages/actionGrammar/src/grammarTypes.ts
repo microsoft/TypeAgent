@@ -190,6 +190,8 @@ export type StringPart = {
      */
     variable: string | undefined;
     value: string[];
+    /** Stable compile-time identifier for debug info and trace events. */
+    partId?: number | undefined;
 
     /**
      * Cache of compiled RegExp objects.  There are exactly 4
@@ -218,12 +220,16 @@ export type VarStringPart = {
     variable: string;
 
     typeName: string; // Not needed at runtime?
+    /** Stable compile-time identifier for debug info and trace events. */
+    partId?: number | undefined;
 };
 
 export type VarNumberPart = {
     type: "number";
     optional: boolean | undefined;
     variable: string;
+    /** Stable compile-time identifier for debug info and trace events. */
+    partId?: number | undefined;
 };
 
 /**
@@ -362,6 +368,8 @@ export type RulesPart = {
      * cache bookkeeping.
      */
     skipMemo?: boolean | undefined;
+    /** Stable compile-time identifier for debug info and trace events. */
+    partId?: number | undefined;
 };
 
 export type PhraseSetPart = {
@@ -378,6 +386,8 @@ export type PhraseSetPart = {
     variable: string | undefined;
     /** Name of the phrase-set matcher (e.g. "Polite", "Greeting") */
     matcherName: string;
+    /** Stable compile-time identifier for debug info and trace events. */
+    partId?: number | undefined;
 };
 
 export type GrammarPart =
@@ -437,12 +447,14 @@ export function getCapturedVariableName(part: GrammarPart): string | undefined {
 export function createStringPart(
     value: string[],
     variable?: string,
+    partId?: number,
 ): StringPart {
     return {
         type: "string",
         optional: undefined,
         variable,
         value,
+        partId,
         regexpCache: undefined,
         joinedCache: undefined,
     };
@@ -452,23 +464,27 @@ export function createWildcardPart(
     variable: string,
     typeName: string,
     optional?: boolean,
+    partId?: number,
 ): VarStringPart {
     return {
         type: "wildcard",
         optional: optional,
         variable,
         typeName,
+        partId,
     };
 }
 
 export function createNumberPart(
     variable: string,
     optional?: boolean,
+    partId?: number,
 ): VarNumberPart {
     return {
         type: "number",
         optional: optional,
         variable,
+        partId,
     };
 }
 
@@ -482,6 +498,7 @@ export function createRulesPart(
         repeat?: boolean | undefined;
         tailCall?: boolean | undefined;
         skipMemo?: boolean | undefined;
+        partId?: number | undefined;
     },
 ): RulesPart {
     return {
@@ -494,18 +511,21 @@ export function createRulesPart(
         repeat: options?.repeat,
         tailCall: options?.tailCall,
         skipMemo: options?.skipMemo,
+        partId: options?.partId,
     };
 }
 
 export function createPhraseSetPart(
     matcherName: string,
     variable?: string,
+    partId?: number,
 ): PhraseSetPart {
     return {
         type: "phraseSet",
         optional: undefined,
         variable,
         matcherName,
+        partId,
     };
 }
 
@@ -542,6 +562,8 @@ export type StringPartJson = {
     value: string[];
     /** Optional capture variable - see `StringPart.variable`. */
     variable?: string | undefined;
+    /** Stable compile-time identifier - see `StringPart.partId`. */
+    partId?: number | undefined;
 };
 
 export type VarStringPartJson = {
@@ -549,12 +571,16 @@ export type VarStringPartJson = {
     variable: string;
     typeName: string;
     optional?: boolean | undefined;
+    /** Stable compile-time identifier - see `VarStringPart.partId`. */
+    partId?: number | undefined;
 };
 
 export type VarNumberPartJson = {
     type: "number";
     variable: string;
     optional?: boolean | undefined;
+    /** Stable compile-time identifier - see `VarNumberPart.partId`. */
+    partId?: number | undefined;
 };
 
 export type RulePartJson = {
@@ -592,6 +618,8 @@ export type RulePartJson = {
     tailCall?: boolean | undefined;
     /** See `RulesPart.skipMemo`. */
     skipMemo?: boolean | undefined;
+    /** Stable compile-time identifier - see `RulesPart.partId`. */
+    partId?: number | undefined;
 };
 
 export type PhraseSetPartJson = {
@@ -599,6 +627,8 @@ export type PhraseSetPartJson = {
     matcherName: string;
     /** Optional capture variable - see `PhraseSetPart.variable`. */
     variable?: string | undefined;
+    /** Stable compile-time identifier - see `PhraseSetPart.partId`. */
+    partId?: number | undefined;
 };
 
 export type GrammarPartJson =

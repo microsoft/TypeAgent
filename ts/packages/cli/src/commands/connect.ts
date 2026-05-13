@@ -416,6 +416,7 @@ export default class Connect extends Command {
                     undefined,
                     createCompletionController(activeDispatcher),
                     activeDispatcher,
+                    () => loadUserSettings().ui.autoComplete,
                 );
             } finally {
                 if (

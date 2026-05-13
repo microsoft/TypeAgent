@@ -56,12 +56,19 @@ export interface SourceFile {
     readonly id: string;
     readonly text: string;
     readonly synthetic?: boolean;
+    readonly imported?: boolean;
 }
 
 export interface GrammarDebugInfo {
     readonly grammarHash: string;
     readonly rules: ReadonlyMap<RuleId, SourceLocation>;
     readonly parts: ReadonlyMap<PartId, SourceLocation>;
+    /** Maps partId -> owning ruleId (recorded at compile time). */
+    readonly partRules: ReadonlyMap<PartId, RuleId>;
+    /** Maps partId -> human-readable label (e.g. '"play"', '$title:string', '<Artist>'). */
+    readonly partLabels: ReadonlyMap<PartId, string>;
+    /** Maps fileId (displayPath) -> resolved absolute path on disk. */
+    readonly filePaths: ReadonlyMap<string, string>;
 }
 
 export interface GrammarIdentifierIndex {
@@ -129,6 +136,19 @@ export type SeparatorMode =
 
 export type AfterWildcard = "none" | "some" | "all";
 
+export type CompletionDirection = "forward" | "backward";
+
+export type WildcardPolicy = "exhaustive" | "shortest";
+export type OptionalPolicy = "exhaustive" | "preferTake" | "preferSkip";
+export type RepeatPolicy = "exhaustive" | "greedy" | "nonGreedy";
+
+export interface CompletionOptions {
+    direction?: CompletionDirection;
+    wildcardPolicy?: WildcardPolicy;
+    optionalPolicy?: OptionalPolicy;
+    repeatPolicy?: RepeatPolicy;
+}
+
 export interface CompletionGroup {
     completions: string[];
     separatorMode: SeparatorMode;
@@ -158,6 +178,8 @@ export interface MatchTrace {
     readonly input: string;
     readonly events: readonly TraceEvent[];
     readonly result: "matched" | "noMatch";
+    /** The produced value from the first match result, if any. */
+    readonly matchValue?: unknown;
 }
 
 // ---------------------------------------------------------------------------

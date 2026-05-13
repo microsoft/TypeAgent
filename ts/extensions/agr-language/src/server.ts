@@ -21,13 +21,18 @@ import {
     Position,
 } from "vscode-languageserver/node.js";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import * as path from "node:path";
+import * as fs from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
     loadGrammarFromBuffer,
     getSymbolIndex,
+    symbolAtPosition,
     format,
     type LoadResult,
     type SymbolIndex,
     type Diagnostic,
+    type FileLoader,
 } from "grammar-tools-core";
 
 // ---------------------------------------------------------------------------
@@ -66,8 +71,31 @@ function validateDocument(doc: TextDocument): void {
     const text = doc.getText();
     const uri = doc.uri;
 
+    // Build a FileLoader if the document is on disk, so imports resolve.
+    // The loader intercepts reads for the current file to use the
+    // in-memory buffer (which may differ from disk).
+    let fileLoader: FileLoader | undefined;
+    let id: string;
+    if (uri.startsWith("file://")) {
+        const filePath = fileURLToPath(uri);
+        id = filePath;
+        fileLoader = {
+            resolvePath: (name: string, ref?: string) =>
+                ref
+                    ? path.resolve(path.dirname(ref), name)
+                    : path.resolve(path.dirname(filePath), name),
+            readContent: (fullPath: string) => {
+                if (fullPath === filePath) return text;
+                return fs.readFileSync(fullPath, "utf-8");
+            },
+            displayPath: (fullPath: string) => fullPath,
+        };
+    } else {
+        id = uriToId(uri);
+    }
+
     // Parse and cache
-    const result = loadGrammarFromBuffer(uriToId(uri), text);
+    const result = loadGrammarFromBuffer(id, text, fileLoader);
     grammarCache.set(uri, result);
     symbolCache.delete(uri); // invalidate
 
@@ -113,7 +141,12 @@ connection.onDefinition((params: DefinitionParams) => {
     const index = getIndex(params.textDocument.uri);
     if (!index) return null;
 
-    const word = getWordAtPosition(params.textDocument.uri, params.position);
+    const word = symbolAtPosition(
+        index,
+        getFileId(params.textDocument.uri),
+        params.position.line,
+        params.position.character,
+    );
     if (!word) return null;
 
     const sym = index.byId.get(word);
@@ -138,7 +171,12 @@ connection.onReferences((params: ReferenceParams) => {
     const index = getIndex(params.textDocument.uri);
     if (!index) return null;
 
-    const word = getWordAtPosition(params.textDocument.uri, params.position);
+    const word = symbolAtPosition(
+        index,
+        getFileId(params.textDocument.uri),
+        params.position.line,
+        params.position.character,
+    );
     if (!word) return null;
 
     const refs = index.references(word);
@@ -181,7 +219,12 @@ connection.onHover((params: HoverParams) => {
     const index = getIndex(params.textDocument.uri);
     if (!index) return null;
 
-    const word = getWordAtPosition(params.textDocument.uri, params.position);
+    const word = symbolAtPosition(
+        index,
+        getFileId(params.textDocument.uri),
+        params.position.line,
+        params.position.character,
+    );
     if (!word) return null;
 
     const sym = index.byId.get(word);
@@ -269,61 +312,16 @@ function getIndex(uri: string): SymbolIndex | null {
     return index;
 }
 
-function getWordAtPosition(uri: string, pos: Position): string | null {
-    const doc = documents.get(uri);
-    if (!doc) return null;
-
-    const text = doc.getText();
-    const offset = doc.offsetAt(pos);
-
-    // Find word boundaries: rule names are inside < > or after $( or just identifiers
-    // Strategy: find the <Name> or identifier under cursor
-    let start = offset;
-    let end = offset;
-
-    // Check if we're inside a <RuleName> reference
-    // Scan backward for < (or start of identifier)
-    let insideAngleBrackets = false;
-    let scanBack = offset;
-    while (scanBack > 0) {
-        const ch = text[scanBack - 1];
-        if (ch === "<") {
-            insideAngleBrackets = true;
-            start = scanBack; // start after the <
-            break;
-        }
-        if (!isIdentChar(ch)) break;
-        scanBack--;
+/**
+ * Return the file ID used for symbol lookups in the current document.
+ * For file:// URIs with a FileLoader, this is the absolute path (matching
+ * the root SourceFile.id). Otherwise, just the filename.
+ */
+function getFileId(uri: string): string {
+    if (uri.startsWith("file://")) {
+        return fileURLToPath(uri);
     }
-
-    if (insideAngleBrackets) {
-        // Scan forward to find >
-        end = offset;
-        while (
-            end < text.length &&
-            text[end] !== ">" &&
-            isIdentChar(text[end])
-        ) {
-            end++;
-        }
-    } else {
-        // Plain identifier: expand backward and forward
-        start = offset;
-        while (start > 0 && isIdentChar(text[start - 1])) {
-            start--;
-        }
-        end = offset;
-        while (end < text.length && isIdentChar(text[end])) {
-            end++;
-        }
-    }
-
-    if (start === end) return null;
-    return text.substring(start, end);
-}
-
-function isIdentChar(ch: string): boolean {
-    return /[a-zA-Z0-9_]/.test(ch);
+    return uriToId(uri);
 }
 
 function uriToId(uri: string): string {
@@ -333,13 +331,23 @@ function uriToId(uri: string): string {
 }
 
 function fileIdToUri(fileId: string, contextUri: string): string {
-    // If fileId matches the filename part of contextUri, return contextUri
+    // Try to resolve via debugInfo.filePaths first
+    const result = grammarCache.get(contextUri);
+    if (result?.ok && result.grammar.debugInfo?.filePaths) {
+        const resolvedPath = result.grammar.debugInfo.filePaths.get(fileId);
+        if (resolvedPath) {
+            return pathToFileURL(resolvedPath).toString();
+        }
+    }
+    // Fallback: if fileId matches the filename part of contextUri, return contextUri
     const contextFile = uriToId(contextUri);
     if (fileId === contextFile) return contextUri;
-    // Otherwise, try to resolve relative to the context
+    // Resolve relative to the context URI, encoding the fileId for URI safety
     const lastSlash = contextUri.lastIndexOf("/");
     if (lastSlash >= 0) {
-        return contextUri.substring(0, lastSlash + 1) + fileId;
+        return (
+            contextUri.substring(0, lastSlash + 1) + encodeURIComponent(fileId)
+        );
     }
     return fileId;
 }

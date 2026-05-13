@@ -1319,9 +1319,21 @@ type TrieStep =
            * sequence for bound (atomic, never split). */
           tokens: string[];
           local: string | undefined;
+          partId: number | undefined;
       }
-    | { kind: "wildcard"; typeName: string; optional: boolean; local: string }
-    | { kind: "number"; optional: boolean; local: string }
+    | {
+          kind: "wildcard";
+          typeName: string;
+          optional: boolean;
+          local: string;
+          partId: number | undefined;
+      }
+    | {
+          kind: "number";
+          optional: boolean;
+          local: string;
+          partId: number | undefined;
+      }
     | {
           kind: "rules";
           rules: GrammarRule[];
@@ -1330,11 +1342,13 @@ type TrieStep =
           name: string | undefined;
           local: string | undefined;
           tailCall: boolean;
+          partId: number | undefined;
       }
     | {
           kind: "phraseSet";
           matcherName: string;
           local: string | undefined;
+          partId: number | undefined;
       };
 
 type TrieEdge =
@@ -1343,14 +1357,21 @@ type TrieEdge =
           tokens: string[];
           /** undefined iff every inserter at this edge was unbound. */
           canonical: string | undefined;
+          partId: number | undefined;
       }
     | {
           kind: "wildcard";
           typeName: string;
           optional: boolean;
           canonical: string;
+          partId: number | undefined;
       }
-    | { kind: "number"; optional: boolean; canonical: string }
+    | {
+          kind: "number";
+          optional: boolean;
+          canonical: string;
+          partId: number | undefined;
+      }
     | {
           kind: "rules";
           rules: GrammarRule[];
@@ -1360,12 +1381,14 @@ type TrieEdge =
           /** undefined iff every inserter at this edge was unbound. */
           canonical: string | undefined;
           tailCall: boolean;
+          partId: number | undefined;
       }
     | {
           kind: "phraseSet";
           matcherName: string;
           /** undefined iff every inserter at this edge was unbound. */
           canonical: string | undefined;
+          partId: number | undefined;
       };
 
 type Terminal = {
@@ -1559,14 +1582,20 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                         kind: "string",
                         tokens: p.value,
                         local: p.variable,
+                        partId: p.partId,
                     };
                 } else {
+                    // Explode unbound strings to per-token steps.
+                    // Only the first token carries the partId.
+                    let first = true;
                     for (const tok of p.value) {
                         yield {
                             kind: "string",
                             tokens: [tok],
                             local: undefined,
+                            partId: first ? p.partId : undefined,
                         };
+                        first = false;
                     }
                 }
                 break;
@@ -1576,6 +1605,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                     typeName: p.typeName,
                     optional: !!p.optional,
                     local: p.variable,
+                    partId: p.partId,
                 };
                 break;
             case "number":
@@ -1583,6 +1613,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                     kind: "number",
                     optional: !!p.optional,
                     local: p.variable,
+                    partId: p.partId,
                 };
                 break;
             case "rules":
@@ -1594,6 +1625,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                     name: p.name,
                     local: p.variable,
                     tailCall: !!p.tailCall,
+                    partId: p.partId,
                 };
                 break;
             case "phraseSet":
@@ -1601,6 +1633,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                     kind: "phraseSet",
                     matcherName: p.matcherName,
                     local: p.variable,
+                    partId: p.partId,
                 };
                 break;
         }
@@ -1618,6 +1651,7 @@ function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
                     step.local !== undefined
                         ? freshCanonical(buildState)
                         : undefined,
+                partId: step.partId,
             };
         case "phraseSet":
             return {
@@ -1627,6 +1661,7 @@ function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
                     step.local !== undefined
                         ? freshCanonical(buildState)
                         : undefined,
+                partId: step.partId,
             };
         case "wildcard":
             return {
@@ -1634,12 +1669,14 @@ function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
                 typeName: step.typeName,
                 optional: step.optional,
                 canonical: freshCanonical(buildState),
+                partId: step.partId,
             };
         case "number":
             return {
                 kind: "number",
                 optional: step.optional,
                 canonical: freshCanonical(buildState),
+                partId: step.partId,
             };
         case "rules":
             return {
@@ -1653,6 +1690,7 @@ function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
                         ? freshCanonical(buildState)
                         : undefined,
                 tailCall: step.tailCall,
+                partId: step.partId,
             };
     }
 }
@@ -1685,15 +1723,16 @@ function recordStepRemap(
 function edgeToPart(edge: TrieEdge): GrammarPart {
     switch (edge.kind) {
         case "string":
-            return createStringPart(edge.tokens, edge.canonical);
+            return createStringPart(edge.tokens, edge.canonical, edge.partId);
         case "wildcard":
             return createWildcardPart(
                 edge.canonical,
                 edge.typeName,
                 edge.optional,
+                edge.partId,
             );
         case "number":
-            return createNumberPart(edge.canonical, edge.optional);
+            return createNumberPart(edge.canonical, edge.optional, edge.partId);
         case "rules":
             return createRulesPart(edge.rules, {
                 optional: edge.optional,
@@ -1701,9 +1740,14 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
                 repeat: edge.repeat,
                 name: edge.name,
                 tailCall: edge.tailCall,
+                partId: edge.partId,
             });
         case "phraseSet":
-            return createPhraseSetPart(edge.matcherName, edge.canonical);
+            return createPhraseSetPart(
+                edge.matcherName,
+                edge.canonical,
+                edge.partId,
+            );
     }
 }
 
@@ -1726,10 +1770,11 @@ function appendPartInPlace(prefix: GrammarPart[], part: GrammarPart): void {
         last.variable === undefined &&
         part.variable === undefined
     ) {
-        prefix[prefix.length - 1] = createStringPart([
-            ...last.value,
-            ...part.value,
-        ]);
+        prefix[prefix.length - 1] = createStringPart(
+            [...last.value, ...part.value],
+            undefined,
+            last.partId ?? part.partId,
+        );
         return;
     }
     prefix.push(part);
@@ -1747,7 +1792,11 @@ function concatParts(a: GrammarPart[], b: GrammarPart[]): GrammarPart[] {
         last.variable === undefined &&
         first.variable === undefined
     ) {
-        const merged = createStringPart([...last.value, ...first.value]);
+        const merged = createStringPart(
+            [...last.value, ...first.value],
+            undefined,
+            last.partId ?? first.partId,
+        );
         return [...a.slice(0, a.length - 1), merged, ...b.slice(1)];
     }
     return [...a, ...b];
@@ -2564,6 +2613,7 @@ function tryDispatchifyRulesPart(
         name: part.name,
         repeat: part.repeat,
         tailCall: part.tailCall,
+        partId: part.partId,
     });
 }
 
@@ -3100,6 +3150,7 @@ function tryPromoteTrailing(
         tailCall: true,
         name: last.name,
         dispatch: newDispatch,
+        partId: last.partId,
     });
 
     const newParts = parts.slice();

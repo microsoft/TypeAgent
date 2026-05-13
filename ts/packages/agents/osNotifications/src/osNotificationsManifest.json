@@ -1,0 +1,12 @@
+{
+  "emojiChar": "🔔",
+  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into chat. Off by default; opt in via @config agent enable osNotifications.",
+  "defaultEnabled": false,
+  "schema": {
+    "description": "Diagnostic actions for the OS notifications agent: sync currently-present notifications and inject synthetic test notifications.",
+    "originalSchemaFile": "./osNotificationsSchema.ts",
+    "schemaFile": "../dist/osNotificationsSchema.pas.json",
+    "grammarFile": "../dist/osNotificationsSchema.ag.json",
+    "schemaType": "OsNotificationsActions"
+  }
+}

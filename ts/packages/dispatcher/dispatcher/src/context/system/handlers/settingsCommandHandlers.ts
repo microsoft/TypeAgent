@@ -20,6 +20,7 @@ import {
     saveUserSettings,
     resetUserSettings,
 } from "../../../helpers/userSettings.js";
+import { processCommandNoLock } from "../../../command/command.js";
 import chalk from "chalk";
 
 class SettingsShowCommandHandler implements CommandHandler {
@@ -34,6 +35,7 @@ class SettingsShowCommandHandler implements CommandHandler {
             `  server.hidden:        ${settings.server.hidden}`,
             `  server.idleTimeout:   ${settings.server.idleTimeout}s`,
             `  conversation.resume:  ${settings.conversation.resume}`,
+            `  ui.autoComplete:      ${settings.ui.autoComplete}`,
         ];
         displayResult(lines.join("\n"), context);
     }
@@ -159,6 +161,56 @@ class SettingsConversationResumeCommandHandler implements CommandHandler {
     }
 }
 
+class SettingsUIAutoCompleteCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set whether inline autocompletion is enabled in the CLI (true/false)";
+    public readonly parameters = {
+        args: {
+            value: {
+                description: "true or false",
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const val = params.args.value;
+        if (val !== "true" && val !== "false") {
+            displayWarn(`Value must be 'true' or 'false'.`, context);
+            return;
+        }
+        const autoComplete = val === "true";
+        const settings = saveUserSettings({ ui: { autoComplete } });
+        displayResult(
+            `ui.autoComplete set to ${settings.ui.autoComplete}`,
+            context,
+        );
+
+        // Hot-reload the shell's partialCompletion setting if the shell agent is active.
+        const agentContext = context.sessionContext.agentContext;
+        if (agentContext.agents.getAppAgentNames().includes("shell")) {
+            await processCommandNoLock(
+                `@shell set partialCompletion ${autoComplete}`,
+                agentContext,
+            );
+        }
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: any,
+        names: string[],
+    ) {
+        return {
+            groups: names
+                .filter((n) => n === "value")
+                .map((n) => ({ name: n, completions: ["true", "false"] })),
+        };
+    }
+}
+
 export function getSettingsCommandHandlers(): CommandHandlerTable {
     return {
         description: "Persistent user settings",
@@ -177,6 +229,12 @@ export function getSettingsCommandHandlers(): CommandHandlerTable {
                 description: "Conversation settings",
                 commands: {
                     resume: new SettingsConversationResumeCommandHandler(),
+                },
+            },
+            ui: {
+                description: "UI settings",
+                commands: {
+                    autoComplete: new SettingsUIAutoCompleteCommandHandler(),
                 },
             },
         },

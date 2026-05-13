@@ -13,6 +13,7 @@ packages:
   - packages/security/*
   - examples/*
   - examples/agentExamples/*
+  - examples/workflow/*
   - extensions/*
   - tools
 

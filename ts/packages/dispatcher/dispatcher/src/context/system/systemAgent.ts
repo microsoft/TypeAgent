@@ -204,7 +204,8 @@ export const systemManifest: AppAgentManifest = {
                     "Manage persistent user settings for the TypeAgent system. " +
                     "Set whether the agent server starts hidden in the background (e.g. 'start the server hidden', 'run the server in the background', 'show the server window'). " +
                     "Set the idle timeout for the agent server (e.g. 'shut down the server after 5 minutes of inactivity', 'set idle timeout to 300 seconds', 'disable idle timeout'). " +
-                    "Set whether to resume the last conversation on startup (e.g. 'always resume my last conversation', 'pick up where I left off', 'start fresh each time').",
+                    "Set whether to resume the last conversation on startup (e.g. 'always resume my last conversation', 'pick up where I left off', 'start fresh each time'). " +
+                    "Enable or disable inline autocomplete suggestions in the CLI and Shell (e.g. 'turn off autocomplete', 'disable tab completion', 'enable autocomplete', 'turn on inline suggestions').",
                 schemaFile:
                     "./src/context/system/schema/settingsActionSchema.ts",
                 schemaType: "UserSettingsAction",

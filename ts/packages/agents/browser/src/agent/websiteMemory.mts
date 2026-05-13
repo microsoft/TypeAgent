@@ -151,6 +151,11 @@ export async function resolveURLWithHistory(
             sessionStorage: undefined,
             instanceStorage: undefined,
             notify: () => {},
+            beginAgentThread: () => {
+                throw new Error(
+                    "beginAgentThread is not supported on this minimal SessionContext stub",
+                );
+            },
             popupQuestion: async () => 0,
             toggleTransientAgent: async () => {},
             addDynamicAgent: async () => {},

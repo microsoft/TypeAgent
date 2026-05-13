@@ -266,6 +266,7 @@ export async function createConversationManager(
                     createSharedDispatcher(hostName, {
                         ...baseOptions,
                         persistDir,
+                        instanceDir: baseDir,
                         persistSession: true,
                     }),
                 )

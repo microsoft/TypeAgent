@@ -3,6 +3,8 @@
 
 import {
     ActionContext,
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgent,
     SessionContext,
     Storage,
@@ -167,6 +169,18 @@ export function createAgentRpcServer(
             unregisterAgentContext(param.agentContextId!);
             return result;
         },
+        async startBackgroundTasks(param): Promise<void> {
+            if (agent.startBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of startBackgroundTasks");
+            }
+            await agent.startBackgroundTasks(getSessionContextShim(param));
+        },
+        async stopBackgroundTasks(param): Promise<void> {
+            if (agent.stopBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of stopBackgroundTasks");
+            }
+            await agent.stopBackgroundTasks(getSessionContextShim(param));
+        },
 
         async getCommands(param): Promise<any> {
             if (agent.getCommands === undefined) {
@@ -265,6 +279,18 @@ export function createAgentRpcServer(
                 getSessionContextShim(param),
                 param.schemaName,
             );
+        },
+        async checkReadiness(param) {
+            if (agent.checkReadiness === undefined) {
+                throw new Error("Invalid invocation of checkReadiness");
+            }
+            return agent.checkReadiness(getSessionContextShim(param));
+        },
+        async setup(param) {
+            if (agent.setup === undefined) {
+                throw new Error("Invalid invocation of setup");
+            }
+            return agent.setup(getActionContextShim(param));
         },
     };
 
@@ -432,6 +458,45 @@ export function createAgentRpcServer(
                 notificationId?: string,
             ): void => {
                 rpc.send("notify", contextId, event, message, notificationId);
+            },
+            beginAgentThread: (kind: AgentMessageKind): AgentThreadHandle => {
+                const threadId = globalThis.crypto.randomUUID();
+                let completed = false;
+                const completedError = () =>
+                    new Error(
+                        `Agent thread ${threadId} is completed; call beginAgentThread() to start a new thread.`,
+                    );
+                rpc.send("agentThreadBegin", contextId, threadId, kind);
+                return {
+                    kind,
+                    setDisplay(content: DisplayContent) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadSetDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                        );
+                    },
+                    appendDisplay(
+                        content: DisplayContent,
+                        mode: DisplayAppendMode = "block",
+                    ) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadAppendDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                            mode,
+                        );
+                    },
+                    complete() {
+                        if (completed) return;
+                        completed = true;
+                        rpc.send("agentThreadComplete", contextId, threadId);
+                    },
+                };
             },
             popupQuestion: async (
                 message: string,

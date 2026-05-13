@@ -72,6 +72,15 @@ export class ChatView {
     private _reconnectBanner!: HTMLElement;
 
     public userGivenName: string = "";
+    /**
+     * Whether the local user has signed in to a Microsoft / Graph identity
+     * (set after `@calendar login` / `@email login` succeeds, either by the
+     * host directly or via the embedded HTML marker scanner). Drives the
+     * user-icon avatar's click behavior in MessageContainer — when true,
+     * the avatar becomes inert so signed-in users don't re-trigger login.
+     */
+    private signedIn = false;
+    private signedInEmail?: string;
     public chatInput: ChatInput | undefined;
     public tts?: TTS | undefined;
     public onRequestComplete?: () => void;
@@ -504,6 +513,106 @@ export class ChatView {
         this.clientMessageGroups.clear();
         this.commandBackStackIndex = -1;
         this.commandBackStack = [];
+    }
+
+    // Removes a notification message group (created via addNotificationMessage)
+    // by its clientRequestId. Used by OS-notification dismiss handling — the
+    // OS reports a notification has left the action center and we drop the
+    // corresponding chat bubble. No-op if the group doesn't exist.
+    public removeNotificationGroup(clientRequestId: string): boolean {
+        const group = this.clientMessageGroups.get(clientRequestId);
+        if (group === undefined) return false;
+        group.dispose();
+        this.clientMessageGroups.delete(clientRequestId);
+        return true;
+    }
+
+    public isUserSignedIn(): boolean {
+        return this.signedIn;
+    }
+
+    /**
+     * Mark the local user as signed in (called after `@calendar login`
+     * succeeds). Updates `userGivenName`, retroactively rewrites every
+     * existing user-icon in the transcript to show the new initial + a
+     * "Signed in as ..." tooltip, and flips signedIn so the avatar's
+     * click handler stops triggering sign-in.
+     */
+    public setUserSignedIn(name: string, email: string) {
+        this.userGivenName = name;
+        this.signedIn = true;
+        this.signedInEmail = email;
+        this.refreshAllUserIcons();
+    }
+
+    public setUserSignedOut() {
+        this.signedIn = false;
+        this.signedInEmail = undefined;
+        // Reset display name back to placeholder so future user-icon
+        // refreshes show "U" instead of the previously-signed-in user's
+        // initial. (applyUserIconState falls back to "U" when
+        // userGivenName is empty, so clearing is sufficient.)
+        this.userGivenName = "";
+        this.refreshAllUserIcons();
+    }
+
+    /**
+     * Apply current signed-in state to a single user-icon div. MessageContainer
+     * calls this when constructing the user bubble's avatar so the cursor +
+     * tooltip + letter reflect current state without each container needing
+     * to know about the marker scanner.
+     */
+    public applyUserIconState(iconDiv: HTMLElement) {
+        const initial = (this.userGivenName || "U")
+            .trim()
+            .charAt(0)
+            .toUpperCase();
+        iconDiv.innerText = initial || "U";
+        if (this.signedIn) {
+            iconDiv.style.cursor = "default";
+            iconDiv.title = this.signedInEmail
+                ? `Signed in as ${this.userGivenName} <${this.signedInEmail}>`
+                : `Signed in as ${this.userGivenName}`;
+        } else {
+            iconDiv.style.cursor = "pointer";
+            iconDiv.title = "Sign in to Microsoft (calendar + email)";
+        }
+    }
+
+    private refreshAllUserIcons() {
+        const icons =
+            this.messageDiv.querySelectorAll<HTMLElement>(".user-icon");
+        icons.forEach((el) => this.applyUserIconState(el));
+    }
+
+    /**
+     * Look for the hidden user-signed-in / user-signed-out markers emitted
+     * by the calendar/email login + logout handlers and lift them into
+     * ChatView state. Marker shapes:
+     *   <span class="typeagent-user-signed-in" data-name="..." data-email="..." hidden></span>
+     *   <span class="typeagent-user-signed-out" hidden></span>
+     * Markers are removed after extraction so they don't leak into copy
+     * operations or future scans.
+     */
+    public extractUserMarker(root: HTMLElement) {
+        const signedIn = root.querySelectorAll<HTMLElement>(
+            "span.typeagent-user-signed-in",
+        );
+        signedIn.forEach((el) => {
+            const name = el.getAttribute("data-name");
+            const email = el.getAttribute("data-email");
+            if (name && email) {
+                this.setUserSignedIn(name, email);
+            }
+            el.remove();
+        });
+        const signedOut = root.querySelectorAll<HTMLElement>(
+            "span.typeagent-user-signed-out",
+        );
+        signedOut.forEach((el) => {
+            this.setUserSignedOut();
+            el.remove();
+        });
     }
 
     async addUserMessage(

@@ -72,7 +72,14 @@ jobs:
         run: |
           gh auth status
           echo "---"
-          gh api repos/${{ github.repository }}/dependabot/alerts?per_page=1 --jq 'length' || echo "API call failed with exit $?"
+          # Probe the Dependabot API with a 1-item page. If the call fails the
+          # subsequent discovery step would silently produce an empty workspace
+          # list and the entire job would report "No fixable alerts found" —
+          # masking infra outages as "everything's fine". Fail fast instead.
+          if ! gh api "repos/${{ github.repository }}/dependabot/alerts?per_page=1" --jq 'length'; then
+            echo "::error::Dependabot API probe failed — aborting before silently misreporting alerts"
+            exit 1
+          fi
 
       # Install ts/ dependencies once before the per-workspace loop.
       # The fix-dependabot-alerts.mjs script lives under ts/tools/scripts/ and
@@ -85,6 +92,22 @@ jobs:
         run: |
           corepack enable
           pnpm install --frozen-lockfile
+
+      # Restore per-package rollback memory across runs. When a fix attempt
+      # rolls back (build/install failure), we record the package + lockfile
+      # SHA so subsequent daily runs skip retrying the same broken upgrade
+      # until either (a) the cooldown expires (default 7 days) or (b) the
+      # underlying lockfile changes (different SHA → potentially different
+      # outcome). Without this, the workflow burns CI minutes attempting
+      # the same hopeless rollback every single day.
+      - name: Restore rollback memory
+        id: rollback-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/dep-rollback-state.json
+          key: dep-rollback-state-v1-${{ github.run_id }}
+          restore-keys: |
+            dep-rollback-state-v1-
 
       # ── Analyse and fix alerts across workspaces ──────────────────────
       #
@@ -104,6 +127,7 @@ jobs:
           FLAGS="${{ inputs.auto-fix-args || '--auto-fix' }}"
           ALL_APPLIED=""
           ALL_ROLLED_BACK=""
+          ALL_SKIPPED_RECENT_ROLLBACK=""
           ALL_BLOCKED_PACKAGES=""
           ALL_NO_PATCH_PACKAGES=""
           ALL_FAILED_WORKSPACES=""
@@ -111,8 +135,28 @@ jobs:
           TOTAL_BLOCKED=0
           TOTAL_NO_PATCH=0
           TOTAL_FAILED=0
+          TOTAL_SKIPPED=0
 
-          # Discover workspaces with open npm alerts from the Dependabot API
+          # Rollback memory: skip retrying any (workspace,pkg) that rolled
+          # back recently against the *current* lockfile SHA. Cooldown is in
+          # days; entries older than this are considered stale and retried.
+          ROLLBACK_STATE=/tmp/dep-rollback-state.json
+          ROLLBACK_COOLDOWN_DAYS=7
+          if [ ! -f "$ROLLBACK_STATE" ]; then
+            echo '{"version":1,"rollbacks":{}}' > "$ROLLBACK_STATE"
+          fi
+          NOW_EPOCH=$(date -u +%s)
+          COOLDOWN_SECONDS=$((ROLLBACK_COOLDOWN_DAYS * 86400))
+
+          # Discover workspaces with open npm alerts from the Dependabot API.
+          #
+          # NOTE: `split("/")[0]` collapses every alert manifest_path to its
+          # leading directory (so `ts/packages/X/package.json` → `ts`). This is
+          # correct for this repo because the only pnpm workspace roots are
+          # `ts/` and `docs/`, but it would silently misroute alerts whose
+          # manifest_path points outside those roots (e.g. a future workspace
+          # under `subprojects/foo/package.json`). Revisit if/when a third
+          # workspace root is added.
           WORKSPACES=$(gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
             --paginate \
             --jq '[.[] | select(.dependency.package.ecosystem == "npm") | .dependency.manifest_path | split("/")[0]] | unique | .[]')
@@ -177,6 +221,23 @@ jobs:
             BLOCKED_PKGS=$(jq -r '[.blocked[].package] | unique | join(", ")' /tmp/dep-analysis.json)
             NO_PATCH_PKGS=$(jq -r '[.noPatch[].package] | unique | join(", ")' /tmp/dep-analysis.json)
 
+            # If there are blocked packages, capture --show-chains output
+            # for the PR body so reviewers can see why each was blocked
+            # without having to re-run the script locally.
+            if [ "$WS_BLOCKED" -gt 0 ]; then
+              echo "Capturing dependency chains for $WS_BLOCKED blocked package(s) in $WS_DIR"
+              CHAINS_OUT="/tmp/dep-chains-$WS_DIR.txt"
+              NO_COLOR=1 node "$SCRIPT" --dry-run --show-chains --skip-install \
+                > "$CHAINS_OUT" 2>&1 || true
+              if [ -s "$CHAINS_OUT" ]; then
+                {
+                  echo ""
+                  echo "===== $WS_DIR ====="
+                  cat "$CHAINS_OUT"
+                } >> /tmp/all-blocked-chains.txt
+              fi
+            fi
+
             FIXABLE=$(jq -r '.resolved[].package' /tmp/dep-analysis.json | sort -u)
             FIXABLE_COUNT=$(echo "$FIXABLE" | grep -c . || true)
             echo "Fixable $WS_DIR packages ($FIXABLE_COUNT): $FIXABLE"
@@ -201,6 +262,29 @@ jobs:
             # ── Step 2: Apply fixes one package at a time ───────────
             for PKG in $FIXABLE; do
               echo "::group::Fixing $WS_DIR/$PKG"
+
+              # Recompute LOCK_SHA per package: earlier successful fixes in
+              # the same run mutate pnpm-lock.yaml, so a once-per-workspace
+              # snapshot would make the rollback cooldown skip key drift away
+              # from the actual on-disk lockfile state.
+              LOCK_SHA=$(sha256sum pnpm-lock.yaml 2>/dev/null | awk '{print $1}' || echo "no-lock")
+
+              # Skip if this (workspace,pkg,lockSha) recently rolled back.
+              ROLLBACK_KEY="$WS_DIR/$PKG"
+              PREV_TS=$(jq -r --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                '.rollbacks[$k] | select(.lockSha == $sha) | .timestamp // empty' \
+                "$ROLLBACK_STATE")
+              if [ -n "$PREV_TS" ]; then
+                AGE=$((NOW_EPOCH - PREV_TS))
+                if [ "$AGE" -lt "$COOLDOWN_SECONDS" ]; then
+                  AGE_DAYS=$((AGE / 86400))
+                  echo "⏭️  Skipping $PKG: rolled back ${AGE_DAYS}d ago against same lockfile (cooldown ${ROLLBACK_COOLDOWN_DAYS}d)"
+                  ALL_SKIPPED_RECENT_ROLLBACK="$ALL_SKIPPED_RECENT_ROLLBACK $PKG"
+                  TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
+                  echo "::endgroup::"
+                  continue
+                fi
+              fi
 
               # Save a rollback point
               cp package.json /tmp/pkg-backup.json
@@ -252,6 +336,10 @@ jobs:
                   git checkout -- . 2>/dev/null || true
                   ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                   TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                  jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                     --argjson ts "$NOW_EPOCH" --arg reason "install failed" \
+                     '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                   echo "::endgroup::"
                   continue
                 fi
@@ -273,10 +361,17 @@ jobs:
                   git checkout -- . 2>/dev/null || true
                   ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                   TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                  jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                     --argjson ts "$NOW_EPOCH" --arg reason "build failed" \
+                     '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 else
                   echo "✅ $PKG fixed and build passed"
                   ALL_APPLIED="$ALL_APPLIED $PKG"
                   TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
+                  # Successful upgrade — clear any stale rollback record.
+                  jq --arg k "$ROLLBACK_KEY" 'del(.rollbacks[$k])' \
+                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 fi
               else
                 echo "No changes for $PKG (may already be fixed)"
@@ -287,12 +382,21 @@ jobs:
           done
 
           # ── Step 3: Report results ──────────────────────────────────
+          # Prune rollback entries older than the cooldown window so the
+          # state file doesn't grow unbounded.
+          STALE_THRESHOLD=$((NOW_EPOCH - COOLDOWN_SECONDS))
+          jq --argjson th "$STALE_THRESHOLD" \
+             '.rollbacks |= with_entries(select(.value.timestamp >= $th))' \
+             "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+
           echo "resolved=$TOTAL_RESOLVED" >> "$GITHUB_OUTPUT"
           echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
           echo "no_patch=$TOTAL_NO_PATCH" >> "$GITHUB_OUTPUT"
           echo "failed=$TOTAL_FAILED" >> "$GITHUB_OUTPUT"
+          echo "skipped=$TOTAL_SKIPPED" >> "$GITHUB_OUTPUT"
           echo "applied_packages=$ALL_APPLIED" >> "$GITHUB_OUTPUT"
           echo "rolled_back_packages=$ALL_ROLLED_BACK" >> "$GITHUB_OUTPUT"
+          echo "skipped_packages=$ALL_SKIPPED_RECENT_ROLLBACK" >> "$GITHUB_OUTPUT"
           echo "blocked_packages=$ALL_BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
           echo "no_patch_packages=$ALL_NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
           echo "failed_workspaces=$ALL_FAILED_WORKSPACES" >> "$GITHUB_OUTPUT"
@@ -352,6 +456,26 @@ jobs:
 
           git push origin "$BRANCH"
 
+          # Close any previously-open PRs from this workflow before opening a
+          # new one. Each daily run produces a unique branch (date + run_number),
+          # so without dedup the repo accumulates stacking duplicate PRs when
+          # yesterday's hasn't merged yet. The freshest PR always wins because
+          # it incorporates the latest set of fixes (and re-verifies the build).
+          PREV_PRS=$(gh pr list \
+            --state open \
+            --search 'head:automated/fix-dependabot-alerts- in:branch' \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName != "'"$BRANCH"'") | .number')
+          if [ -n "$PREV_PRS" ]; then
+            echo "Closing superseded Dependabot fix PRs: $PREV_PRS"
+            for PR in $PREV_PRS; do
+              gh pr close "$PR" \
+                --delete-branch \
+                --comment "Superseded by a newer automated Dependabot fix PR." \
+                || echo "::warning::Failed to close PR #$PR"
+            done
+          fi
+
           # Build PR body from step outputs
           APPLIED="${{ steps.fix.outputs.applied_packages }}"
           ROLLED="${{ steps.fix.outputs.rolled_back_packages }}"
@@ -376,12 +500,31 @@ jobs:
           - **Blocked ($BLOCKED):**${BLOCKED_PKGS:- (none)}
           - **No patch available (${{ steps.fix.outputs.no_patch }}):**${NO_PATCH_PKGS:- (none)}
           - **Rolled back ($FAILED):**${ROLLED:- (none)}
+          - **Skipped (recent rollback, ${{ steps.fix.outputs.skipped }}):**${{ steps.fix.outputs.skipped_packages || ' (none)' }}
           - **Workspaces with analysis failures:**${{ steps.fix.outputs.failed_workspaces && format(' {0}', steps.fix.outputs.failed_workspaces) || ' (none)' }}
           - **Build:** ✅ Passed
           - **Shell packaging:** ${{ steps.shell.outputs.shell_ok == 'true' && '✅ Passed' || '⚠️ Skipped' }}
 
           > _Note: the analysis source (\`fix-dependabot-alerts.mjs\`) is broader than the GitHub Dependabot REST API — it also audits the lockfile directly. Some packages listed above may not have a corresponding open Dependabot alert, and vice versa._
+          "
 
+          # Embed dependency chain output for blocked packages so reviewers
+          # can see why each package couldn't be auto-fixed.
+          if [ -s /tmp/all-blocked-chains.txt ]; then
+            CHAINS=$(cat /tmp/all-blocked-chains.txt)
+            BODY="$BODY
+          ### Why blocked packages couldn't be auto-fixed
+          <details><summary>Dependency chains (\`--show-chains\` output)</summary>
+
+          \`\`\`
+          $CHAINS
+          \`\`\`
+
+          </details>
+          "
+          fi
+
+          BODY="$BODY
           ### How this works
           1. Analyses all open Dependabot alerts
           2. Applies each fix **individually** with build verification

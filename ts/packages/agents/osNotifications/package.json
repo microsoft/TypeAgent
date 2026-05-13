@@ -1,0 +1,80 @@
+{
+  "name": "os-notifications-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into TypeAgent chat as ephemeral toasts/inline messages",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/osNotifications"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/osNotificationsManifest.json",
+    "./agent/handlers": "./dist/osNotificationsActionHandler.js"
+  },
+  "scripts": {
+    "agc": "agc -i ./src/osNotificationsSchema.agr -o ./dist/osNotificationsSchema.ag.json",
+    "asc": "asc -i ./src/osNotificationsSchema.ts -o ./dist/osNotificationsSchema.pas.json -t OsNotificationsActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b src test"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "dbus-next": "^0.10.2",
+    "debug": "^4.4.0"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/osNotificationsSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/osNotificationsSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/osNotificationsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/osNotificationsSchema.pas.json"
+          ]
+        }
+      }
+    }
+  }
+}

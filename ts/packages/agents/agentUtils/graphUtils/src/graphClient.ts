@@ -7,6 +7,8 @@ import {
     UsernamePasswordCredential,
     UsernamePasswordCredentialOptions,
     DeviceCodeCredentialOptions,
+    InteractiveBrowserCredential,
+    InteractiveBrowserCredentialNodeOptions,
 } from "@azure/identity";
 import {
     AuthenticationRecord,
@@ -19,7 +21,8 @@ import { User } from "@microsoft/microsoft-graph-types";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import { useIdentityPlugin } from "@azure/identity";
 import { cachePersistencePlugin } from "@azure/identity-cache-persistence";
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { nativeBrokerPlugin } from "@azure/identity-broker";
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from "fs";
 import path from "path";
 import lockfile from "proper-lockfile";
 import registerDebug from "debug";
@@ -36,6 +39,21 @@ try {
         ),
     );
 }
+
+// WAM (Web Account Manager) broker plugin. Active only on Windows; on
+// other platforms the plugin is a no-op and InteractiveBrowserCredential
+// falls back to the regular browser flow. Enables silent SSO when the
+// user's Windows session already has a matching work/school account
+// (useDefaultBrokerAccount: true below).
+try {
+    useIdentityPlugin(nativeBrokerPlugin);
+} catch (e: any) {
+    console.warn(
+        chalk.yellowBright(
+            `Failed to load Azure Identity native broker plugin:${e.message}`,
+        ),
+    );
+}
 export interface ErrorResponse {
     code: string;
     message: string;
@@ -47,7 +65,21 @@ export interface AppSettings {
     graphUserScopes: string[];
     username?: string | undefined;
     password?: string | undefined;
+    authMode: "browser" | "device-code";
+    redirectPort: number;
 }
+
+export type SignInPrompt =
+    | {
+          kind: "deviceCode";
+          userCode: string;
+          verificationUri: string;
+          message: string;
+      }
+    | { kind: "browser"; url?: string; message: string }
+    | { kind: "error"; message: string };
+
+export type SignInPromptCallback = (prompt: SignInPrompt) => void;
 
 export interface DynamicObject {
     [key: string]: any;
@@ -87,15 +119,50 @@ async function withLockFile<T>(file: string, fn: () => Promise<T>): Promise<T> {
     }
 }
 
-const invalidSettings = {
+const DEFAULT_REDIRECT_PORT = 6893;
+
+/**
+ * Parses a port string and validates it is an integer in the 1–65535 range.
+ * Uses `Number()` for strict conversion (rejects partial parses like "123abc").
+ * Logs a warning and falls back to `defaultPort` when the value is absent or invalid.
+ */
+function parseValidPort(raw: string | undefined, defaultPort: number): number {
+    if (raw === undefined) {
+        return defaultPort;
+    }
+    const num = Number(raw.trim());
+    if (Number.isInteger(num) && num >= 1 && num <= 65535) {
+        return num;
+    }
+    debugGraphError(
+        `Invalid port value "${raw}" for MSGRAPH_APP_REDIRECT_PORT; using default port ${defaultPort}.`,
+    );
+    return defaultPort;
+}
+
+const invalidSettings: AppSettings = {
     clientId: "",
     clientSecret: "",
     tenantId: "",
     graphUserScopes: [],
+    authMode: "browser",
+    redirectPort: DEFAULT_REDIRECT_PORT,
 };
 
 function loadMSGraphSettings(): AppSettings {
-    const settings = {
+    const authModeRaw = (
+        process.env["MSGRAPH_APP_AUTH_MODE"] ?? "browser"
+    ).toLowerCase();
+    const authMode: "browser" | "device-code" =
+        authModeRaw === "device-code" || authModeRaw === "devicecode"
+            ? "device-code"
+            : "browser";
+    const redirectPort = parseValidPort(
+        process.env["MSGRAPH_APP_REDIRECT_PORT"],
+        DEFAULT_REDIRECT_PORT,
+    );
+
+    const settings: AppSettings = {
         clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
         clientSecret: process.env["MSGRAPH_APP_CLIENTSECRET"] ?? "",
         tenantId: process.env["MSGRAPH_APP_TENANTID"] ?? "",
@@ -105,29 +172,43 @@ function loadMSGraphSettings(): AppSettings {
             "user.read",
             "mail.read",
             "mail.send",
-            "user.read.all",
+            "user.readbasic.all",
             "calendars.readwrite",
         ],
+        authMode,
+        redirectPort,
     };
 
-    if (
-        settings.clientId === "" ||
-        settings.clientSecret === "" ||
-        settings.tenantId === ""
-    ) {
+    // clientSecret is optional now — only the username/password ROPC path uses
+    // it. Both DeviceCodeCredential and InteractiveBrowserCredential are
+    // public-client flows that don't need a secret.
+    if (settings.clientId === "" || settings.tenantId === "") {
         debugGraphError(
-            chalk.red(
-                "Please provide valid clientId, clientSecret and tenantId",
-            ),
+            chalk.red("Please provide valid clientId and tenantId"),
         );
         return invalidSettings;
     }
     return settings;
 }
 
-export type DevicePromptCallback = (prompt: string) => void;
+/**
+ * Back-compat alias. The shape changed from `(prompt: string) => void` to
+ * `(prompt: SignInPrompt) => void`; existing callers in the providers were
+ * updated to handle the structured form.
+ */
+export type DevicePromptCallback = SignInPromptCallback;
 
 export class GraphClient extends EventEmitter {
+    /**
+     * All live GraphClient instances. Used by logout() to broadcast a
+     * cross-instance clear: calendar+email share an MS Graph identity
+     * (single tenant, single persisted auth record), so logging out from
+     * one needs to invalidate the other's in-memory client too — otherwise
+     * a subsequent action on the other agent would silently keep working
+     * against the stale cached client.
+     */
+    private static _instances: Set<GraphClient> = new Set();
+
     private _userClient: Client | undefined = undefined;
     private AUTH_RECORD_PATH: string = path.join(
         path.join(os.homedir(), ".typeagent"),
@@ -146,6 +227,7 @@ export class GraphClient extends EventEmitter {
     protected constructor(private readonly authCommand: string) {
         super();
         this._settings = loadMSGraphSettings();
+        GraphClient._instances.add(this);
     }
 
     private async initializeGraphFromDeviceCode(
@@ -169,7 +251,12 @@ export class GraphClient extends EventEmitter {
                 };
                 if (cb) {
                     options.userPromptCallback = (deviceCodeInfo) =>
-                        cb(deviceCodeInfo.message);
+                        cb({
+                            kind: "deviceCode",
+                            userCode: deviceCodeInfo.userCode,
+                            verificationUri: deviceCodeInfo.verificationUri,
+                            message: deviceCodeInfo.message,
+                        });
                 }
 
                 if (existsSync(this.AUTH_RECORD_PATH)) {
@@ -216,6 +303,108 @@ export class GraphClient extends EventEmitter {
                         serializedAuthRecord,
                     );
                     debugGraph("Authenticated");
+                }
+                return this.createClient(credential);
+            },
+        );
+    }
+
+    private async initializeGraphFromInteractiveBrowser(
+        cb?: DevicePromptCallback,
+    ): Promise<Client> {
+        return withLockFile(
+            existsSync(this.AUTH_RECORD_PATH)
+                ? this.AUTH_RECORD_PATH
+                : path.dirname(this.AUTH_RECORD_PATH),
+            async () => {
+                const options: InteractiveBrowserCredentialNodeOptions = {
+                    clientId: this._settings.clientId,
+                    tenantId: this._settings.tenantId,
+                    redirectUri: `http://localhost:${this._settings.redirectPort}`,
+                    // Silent if cb is not provided; only authenticate when
+                    // explicitly requested via login().
+                    disableAutomaticAuthentication: cb === undefined,
+                    tokenCachePersistenceOptions: {
+                        enabled: true,
+                        name: "typeagent-tokencache",
+                    },
+                };
+
+                // On Windows, route through WAM (Web Account Manager) so a
+                // user already signed in to their work/school account in
+                // Windows can SSO silently — no browser popup, no consent
+                // prompt. parentWindowHandle is required by the SDK whenever
+                // brokerOptions.enabled is true; an empty Uint8Array means
+                // "no parent window" (the broker dialog, if shown, appears
+                // as a top-level system window). Falls back to interactive
+                // browser when no default account matches the tenant.
+                //
+                // Requires the WAM redirect URI on the AAD app registration:
+                //   ms-appx-web://Microsoft.AAD.BrokerPlugin/<clientId>
+                if (process.platform === "win32") {
+                    options.brokerOptions = {
+                        enabled: true,
+                        useDefaultBrokerAccount: true,
+                        parentWindowHandle: new Uint8Array(0),
+                    };
+                }
+
+                if (existsSync(this.AUTH_RECORD_PATH)) {
+                    const fileContent = readFileSafely(this.AUTH_RECORD_PATH);
+                    if (fileContent !== undefined && fileContent != "") {
+                        const authRecord: AuthenticationRecord =
+                            deserializeAuthenticationRecord(fileContent);
+                        if (authRecord.authority !== undefined) {
+                            options.authenticationRecord = authRecord;
+                        }
+                    }
+                }
+
+                const credential = new InteractiveBrowserCredential(options);
+
+                if (cb === undefined) {
+                    // Silent path — only works if we have a cached auth record.
+                    if (options.authenticationRecord === undefined) {
+                        throw new Error(
+                            `No cached credentials. Run ${this.authCommand} to authenticate.`,
+                        );
+                    }
+                    try {
+                        await credential.getToken(this.MSGRAPH_AUTH_URL);
+                    } catch {
+                        throw new Error(
+                            `Cached credentials expired. Run ${this.authCommand} to re-authenticate.`,
+                        );
+                    }
+                    return this.createClient(credential);
+                }
+
+                // Notify the caller that auth is in flight. The credential
+                // takes over from here: on Windows with WAM, silent SSO via
+                // the user's signed-in Windows account often succeeds with
+                // no UI at all; on cache miss it falls back to the system
+                // account picker. On other platforms the SDK opens the
+                // system browser via the `open` package.
+                cb({
+                    kind: "browser",
+                    message:
+                        process.platform === "win32"
+                            ? "Signing in to Microsoft (using your Windows account if available)..."
+                            : "Opening your browser to sign in to Microsoft. Complete sign-in in the browser window.",
+                });
+
+                const authRecord = await credential.authenticate(
+                    this.MSGRAPH_AUTH_URL,
+                );
+
+                if (authRecord) {
+                    const serializedAuthRecord =
+                        serializeAuthenticationRecord(authRecord);
+                    writeFileSafety(
+                        this.AUTH_RECORD_PATH,
+                        serializedAuthRecord,
+                    );
+                    debugGraph("Authenticated (interactive browser)");
                 }
                 return this.createClient(credential);
             },
@@ -286,10 +475,12 @@ export class GraphClient extends EventEmitter {
         if (settings === invalidSettings) {
             throw new Error("Missing graph settings in environment variables");
         }
-        if (!settings.username || !settings.password) {
-            return await this.initializeGraphFromDeviceCode(cb);
+        if (settings.username && settings.password) {
+            return await this.initializeGraphFromUserCred();
         }
-        return await this.initializeGraphFromUserCred();
+        return settings.authMode === "browser"
+            ? await this.initializeGraphFromInteractiveBrowser(cb)
+            : await this.initializeGraphFromDeviceCode(cb);
     }
 
     public async login(cb?: DevicePromptCallback): Promise<boolean> {
@@ -305,12 +496,31 @@ export class GraphClient extends EventEmitter {
     }
 
     public logout() {
-        if (this._userClient !== undefined) {
-            this._userClient = undefined;
-            this.emit("disconnected");
-            return true;
+        // Real logout has three pieces: drop the in-memory client on every
+        // GraphClient instance (calendar + email share an identity), delete
+        // the persisted authentication record so silent re-auth can't pick
+        // up where we left off, and clear the in-memory user-email cache.
+        // Without all three, the next action on either agent would
+        // silently re-authenticate from cache and the user wouldn't
+        // actually be logged out.
+        let wasAuthenticated = false;
+        for (const instance of GraphClient._instances) {
+            if (instance._userClient !== undefined) {
+                wasAuthenticated = true;
+                instance._userClient = undefined;
+                instance.emit("disconnected");
+            }
+            instance._userEmailAddresses.clear();
         }
-        return false;
+        try {
+            if (existsSync(this.AUTH_RECORD_PATH)) {
+                unlinkSync(this.AUTH_RECORD_PATH);
+                debugGraph("Deleted persisted auth record");
+            }
+        } catch (error: any) {
+            debugGraphError(`Failed to delete auth record: ${error.message}`);
+        }
+        return wasAuthenticated;
     }
 
     public isAuthenticated() {

@@ -29,6 +29,8 @@ describe("grammar-tools CLI", () => {
     let tmpDir: string;
     let validFile: string;
     let invalidFile: string;
+    let corpusFile: string;
+    let validFileB: string;
 
     beforeAll(() => {
         tmpDir = mkdtempSync(join(tmpdir(), "grammar-tools-test-"));
@@ -39,12 +41,21 @@ describe("grammar-tools CLI", () => {
         );
         invalidFile = join(tmpDir, "bad.agr");
         writeFileSync(invalidFile, "this is not valid <<<");
+        corpusFile = join(tmpDir, "corpus.txt");
+        writeFileSync(corpusFile, `play something\npause\nxyz nothing\n`);
+        validFileB = join(tmpDir, "test-b.agr");
+        writeFileSync(
+            validFileB,
+            `<Start> = play $(song:string) -> { action: "play", song };\n<Start> = stop -> { action: "stop" };\n`,
+        );
     });
 
     afterAll(() => {
         try {
             unlinkSync(validFile);
             unlinkSync(invalidFile);
+            unlinkSync(corpusFile);
+            unlinkSync(validFileB);
         } catch {
             // ignore cleanup errors
         }
@@ -218,6 +229,71 @@ describe("grammar-tools CLI", () => {
         const result = JSON.parse(stdout);
         expect(result.ok).toBe(false);
         expect(result.diagnostics).toBeDefined();
+    });
+
+    // ---------------------------------------------------------------
+    // coverage
+    // ---------------------------------------------------------------
+
+    it("coverage: outputs summary", async () => {
+        const { stdout, code } = await run(["coverage", validFile, corpusFile]);
+        expect(code).toBe(0);
+        expect(stdout).toContain("Coverage:");
+    });
+
+    it("coverage --json: returns JSON report", async () => {
+        const { stdout, code } = await run([
+            "coverage",
+            validFile,
+            corpusFile,
+            "--json",
+        ]);
+        expect(code).toBe(0);
+        const report = JSON.parse(stdout);
+        expect(report.totals).toBeDefined();
+        expect(report.perRule).toBeInstanceOf(Array);
+        expect(report.unmatchedInputs).toBeInstanceOf(Array);
+        expect(report.unmatchedInputs.length).toBeGreaterThan(0);
+    });
+
+    it("coverage: errors on missing args", async () => {
+        const { code } = await run(["coverage"]);
+        expect(code).not.toBe(0);
+    });
+
+    // ---------------------------------------------------------------
+    // diff
+    // ---------------------------------------------------------------
+
+    it("diff: outputs changes", async () => {
+        const { stdout, code } = await run(["diff", validFile, validFileB]);
+        expect(code).toBe(0);
+        expect(stdout).toContain("Changed rules:");
+    });
+
+    it("diff --json: returns JSON diff", async () => {
+        const { stdout, code } = await run([
+            "diff",
+            validFile,
+            validFileB,
+            "--json",
+        ]);
+        expect(code).toBe(0);
+        const diff = JSON.parse(stdout);
+        expect(diff.added).toBeInstanceOf(Array);
+        expect(diff.removed).toBeInstanceOf(Array);
+        expect(diff.changed).toBeInstanceOf(Array);
+    });
+
+    it("diff: shows no differences for identical files", async () => {
+        const { stdout, code } = await run(["diff", validFile, validFile]);
+        expect(code).toBe(0);
+        expect(stdout).toContain("No differences.");
+    });
+
+    it("diff: errors on missing args", async () => {
+        const { code } = await run(["diff"]);
+        expect(code).not.toBe(0);
     });
 
     // ---------------------------------------------------------------

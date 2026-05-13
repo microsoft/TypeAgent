@@ -1,0 +1,322 @@
+[
+  {
+    "id": "coll-01",
+    "category": "grammar-collision",
+    "description": "Collision: 'play' command disambiguation between powershell and player",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "play script backup.ps1",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": null
+        }
+      },
+      {
+        "text": "execute script deploy.ps1",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": null
+        }
+      },
+      {
+        "text": "run powershell script test.ps1",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-02",
+    "category": "grammar-collision",
+    "description": "Collision: 'search' command should distinguish file search from web search",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "search for files containing error",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "findText"
+        }
+      },
+      {
+        "text": "find files with pattern *.log",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "findText"
+        }
+      },
+      {
+        "text": "grep TODO in source files",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "findText"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-03",
+    "category": "grammar-collision",
+    "description": "Collision: 'list' commands - files vs browser navigation",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "list files in downloads",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "listFiles"
+        }
+      },
+      {
+        "text": "show files in documents",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "listFiles"
+        }
+      },
+      {
+        "text": "display directory contents",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "listFiles"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-04",
+    "category": "grammar-collision",
+    "description": "Collision: 'start' - process launch vs media playback",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "start notepad application",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "startProcess"
+        }
+      },
+      {
+        "text": "launch calculator program",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "startProcess"
+        }
+      },
+      {
+        "text": "run cmd.exe",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "startProcess"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-05",
+    "category": "grammar-collision",
+    "description": "Collision: 'stop/kill' - process termination vs player stop",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "stop process notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "stopProcess"
+        }
+      },
+      {
+        "text": "kill chrome browser",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "stopProcess"
+        }
+      },
+      {
+        "text": "terminate running processes",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "stopProcess"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-06",
+    "category": "grammar-collision",
+    "description": "Collision: system operations - should NOT match browser/player",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "show system processes",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "listProcesses"
+        }
+      },
+      {
+        "text": "check service status",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "checkServiceStatus"
+        }
+      },
+      {
+        "text": "restart windows service",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "restartService"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-07",
+    "category": "grammar-collision",
+    "description": "Collision: network commands - should stay in powershell domain",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "ping google.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "testConnection"
+        }
+      },
+      {
+        "text": "test network connection to server",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "testConnection"
+        }
+      },
+      {
+        "text": "check connectivity to website",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "testConnection"
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-08",
+    "category": "grammar-collision",
+    "description": "Negative test: Browser commands should NOT match powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "navigate to google.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "browser",
+          "matchedFlow": null
+        }
+      },
+      {
+        "text": "click the login button",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "browser",
+          "matchedFlow": null
+        }
+      },
+      {
+        "text": "scroll down the page",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "browser",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-09",
+    "category": "grammar-collision",
+    "description": "Negative test: Media player commands should NOT match powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "play music album",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "player",
+          "matchedFlow": null
+        }
+      },
+      {
+        "text": "pause the video",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "player",
+          "matchedFlow": null
+        }
+      },
+      {
+        "text": "skip to next track",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "player",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "coll-10",
+    "category": "grammar-collision",
+    "description": "Edge case: Ambiguous commands requiring context",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "open notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "startProcess"
+        }
+      },
+      {
+        "text": "close all windows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": "stopProcess"
+        }
+      },
+      {
+        "text": "refresh system state",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedAgent": "powershell",
+          "matchedFlow": null
+        }
+      }
+    ]
+  }
+]
