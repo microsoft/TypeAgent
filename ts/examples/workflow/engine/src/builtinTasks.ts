@@ -12,11 +12,47 @@
  */
 
 import { execFile } from "node:child_process";
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { TaskDefinition } from "workflow-model";
+import { JSONSchema, TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
+
+/**
+ * Recursively enforce OpenAI structured output requirements on a schema:
+ * - `additionalProperties: false` on every object
+ * - `required` must list every key in `properties`
+ * Returns a deep copy; the original schema is not mutated.
+ */
+function sealObjects(schema: JSONSchema): JSONSchema {
+    const copy = { ...schema };
+    if (copy.type === "object" || copy.properties) {
+        copy.additionalProperties = false;
+        if (copy.properties) {
+            const sealed: Record<string, JSONSchema> = {};
+            for (const [key, sub] of Object.entries(copy.properties)) {
+                if (typeof sub !== "boolean") {
+                    sealed[key] = sealObjects(sub);
+                }
+            }
+            copy.properties = sealed;
+            copy.required = Object.keys(sealed);
+        }
+    }
+    if (
+        copy.items &&
+        typeof copy.items !== "boolean" &&
+        !Array.isArray(copy.items)
+    ) {
+        copy.items = sealObjects(copy.items);
+    }
+    for (const kw of ["oneOf", "anyOf", "allOf"] as const) {
+        if (Array.isArray(copy[kw])) {
+            copy[kw] = (copy[kw] as JSONSchema[]).map(sealObjects);
+        }
+    }
+    return copy;
+}
 
 export const intAdd: TaskDefinition<
     { a: number; b: number },
@@ -101,6 +137,14 @@ export const listElementAt: TaskDefinition<
         properties: { element: {} },
     },
     async execute(input) {
+        if (input.index < 0 || input.index >= input.list.length) {
+            return {
+                kind: "fail",
+                error: {
+                    message: `Index ${input.index} out of bounds for list of length ${input.list.length}`,
+                },
+            };
+        }
         return { kind: "ok", output: { element: input.list[input.index] } };
     },
 };
@@ -296,6 +340,79 @@ export const llmGenerate: TaskDefinition<
     },
 };
 
+export const llmGenerateJson: TaskDefinition<
+    { prompt: string; endpoint?: string },
+    { value: unknown }
+> = {
+    name: "llm.generateJson",
+    sideEffects: true,
+    inputSchema: {
+        type: "object",
+        required: ["prompt"],
+        properties: {
+            prompt: { type: "string" },
+            endpoint: { type: "string" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: {} },
+    },
+    async execute(input, ctx) {
+        ctx?.signal?.throwIfAborted();
+        let model;
+        try {
+            model = openai.createJsonChatModel(input.endpoint);
+        } catch (err) {
+            return {
+                kind: "fail",
+                error: {
+                    message: err instanceof Error ? err.message : String(err),
+                },
+            };
+        }
+        // Derive structured output schema from the node's outputSchema if
+        // it declares a "value" property with a non-opaque schema.
+        const valueSchema = ctx.outputSchema?.properties?.value;
+        const jsonSchema =
+            valueSchema &&
+            typeof valueSchema !== "boolean" &&
+            Object.keys(valueSchema).length > 0
+                ? {
+                      name: "response",
+                      strict: true as const,
+                      schema: sealObjects(valueSchema) as Record<
+                          string,
+                          unknown
+                      >,
+                  }
+                : undefined;
+        const result = await model.complete(
+            input.prompt,
+            undefined,
+            jsonSchema,
+        );
+        if (!result.success) {
+            return {
+                kind: "fail",
+                error: { message: result.message },
+            };
+        }
+        try {
+            const value = JSON.parse(result.data);
+            return { kind: "ok", output: { value } };
+        } catch (parseErr) {
+            return {
+                kind: "fail",
+                error: {
+                    message: `Failed to parse LLM JSON response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+                },
+            };
+        }
+    },
+};
+
 // ---- Utility tasks ----
 
 export const textTemplate: TaskDefinition<
@@ -354,7 +471,7 @@ export const stringJoin: TaskDefinition<
 };
 
 export const stringSplit: TaskDefinition<
-    { text: string; delimiter: string },
+    { text: string; delimiter: string; keepEmpty?: boolean },
     { list: string[] }
 > = {
     name: "string.split",
@@ -365,6 +482,11 @@ export const stringSplit: TaskDefinition<
         properties: {
             text: { type: "string" },
             delimiter: { type: "string" },
+            keepEmpty: {
+                type: "boolean",
+                description:
+                    "Keep empty strings in the result (default: false).",
+            },
         },
     },
     outputSchema: {
@@ -373,10 +495,13 @@ export const stringSplit: TaskDefinition<
         properties: { list: { type: "array", items: { type: "string" } } },
     },
     async execute(input) {
-        const list = input.text
-            .split(input.delimiter)
-            .filter((s) => s.length > 0);
-        return { kind: "ok", output: { list } };
+        const list = input.text.split(input.delimiter);
+        return {
+            kind: "ok",
+            output: {
+                list: input.keepEmpty ? list : list.filter((s) => s.length > 0),
+            },
+        };
     },
 };
 
@@ -426,7 +551,7 @@ export const httpGet: TaskDefinition<
                 hostname === "[::1]" ||
                 hostname?.startsWith("10.") ||
                 hostname?.startsWith("192.168.") ||
-                hostname?.startsWith("172.16.") ||
+                /^172\.(1[6-9]|2\d|3[01])\./.test(hostname ?? "") ||
                 hostname?.endsWith(".internal") ||
                 parsed.protocol === "file:"
             ) {
@@ -574,16 +699,15 @@ export const fileRead: TaskDefinition<
         const maxBytes = input.maxBytes ?? DEFAULT_MAX_FILE_READ_BYTES;
         try {
             const safePath = validateFilePath(input.path);
-            const info = await stat(safePath);
-            if (info.size > maxBytes) {
+            const content = await readFile(safePath, "utf8");
+            if (Buffer.byteLength(content, "utf8") > maxBytes) {
                 return {
                     kind: "fail",
                     error: {
-                        message: `File is ${info.size} bytes, exceeding the ${maxBytes} byte limit`,
+                        message: `File exceeds the ${maxBytes} byte limit`,
                     },
                 };
             }
-            const content = await readFile(safePath, "utf8");
             return { kind: "ok", output: { content } };
         } catch (err) {
             return {
@@ -647,6 +771,7 @@ export const allBuiltinTasks: TaskDefinition[] = [
     boolToLabel,
     shellExec,
     llmGenerate,
+    llmGenerateJson,
     httpGet,
     fileRead,
     fileWrite,

@@ -34,6 +34,9 @@ export interface TaskContext {
      * Task implementations should check these to enforce caller restrictions.
      */
     constraints?: TaskConstraints;
+
+    /** The node's declared output schema, if any. */
+    outputSchema?: JSONSchema;
 }
 
 /**

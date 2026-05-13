@@ -1,0 +1,100 @@
+{
+  "name": "TypeAgent Development",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+
+  // This configuration works with:
+  // - VS Code + Docker Desktop (local)
+  // - GitHub Codespaces (cloud)
+  // - JetBrains IDEs with Dev Containers support
+
+  // Fix stale yarn GPG key in base image before features install
+  "initializeCommand": "docker run --rm mcr.microsoft.com/devcontainers/universal:2 echo 'Pulling base image...' || true",
+
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22",
+      "nodeGypDependencies": true
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": true
+    },
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "8.0"
+    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+    // Note: common-utils removed - universal:2 already includes zsh, oh-my-zsh, and common utilities
+  },
+
+  // Fix yarn GPG key issue in base image
+  "onCreateCommand": "sudo rm -f /etc/apt/sources.list.d/yarn.list || true",
+
+  "forwardPorts": [8999, 8081, 8082, 3000, 3443],
+  "portsAttributes": {
+    "8999": { "label": "Agent Server (WebSocket)", "onAutoForward": "notify" },
+    "8081": { "label": "Browser Agent (WebSocket)", "onAutoForward": "notify" },
+    "8082": { "label": "Code Agent (WebSocket)", "onAutoForward": "notify" },
+    "3000": { "label": "API Server (HTTP)", "onAutoForward": "notify" },
+    "3443": { "label": "API Server (HTTPS)", "onAutoForward": "notify" }
+  },
+
+  "mounts": [
+    // Global pnpm store - shared across containers for fast installs
+    "source=pnpm-global-store,target=/home/codespace/.local/share/pnpm/store,type=volume",
+    // Per-container node_modules (symlinks to global store)
+    "source=typeagent-node_modules-${devcontainerId},target=${containerWorkspaceFolder}/ts/node_modules,type=volume",
+    // Claude Code config persistence
+    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume"
+  ],
+
+  "containerEnv": {
+    "PNPM_HOME": "/home/codespace/.local/share/pnpm"
+    // For Codespaces, set these as repository secrets:
+    // - AZURE_OPENAI_API_KEY
+    // - AZURE_OPENAI_ENDPOINT
+    // - ANTHROPIC_API_KEY (for Claude Code)
+  },
+
+  "postCreateCommand": "cat .devcontainer/scripts/post-create.sh | tr -d '\\r' | bash",
+  "postStartCommand": "cat .devcontainer/scripts/post-start.sh | tr -d '\\r' | bash",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-dotnettools.csharp",
+        "ms-azuretools.vscode-azurefunctions",
+        "github.copilot",
+        "humao.rest-client"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    },
+    // Codespaces-specific settings
+    "codespaces": {
+      "openFiles": [
+        "ts/README.md"
+      ]
+    }
+  },
+
+  "remoteUser": "codespace",
+
+  // Resource requirements
+  // Codespaces: Choose "4-core" or higher machine type
+  // Local: Ensure Docker has at least these resources allocated
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  }
+}
