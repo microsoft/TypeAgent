@@ -116,16 +116,15 @@ export async function fetchKeyVaultConfig(
         !keyVaultAllowedInTests()
     ) {
         const msg =
-            `Refusing live Key Vault fetch from inside Jest ` +
-            `(vault=${vaultName}, secret=${secretName}). ` +
-            `Set TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS=1 to opt in, or ` +
-            `inject a stub fetcher.`;
+            "Refusing live Key Vault fetch from inside Jest. " +
+            "Set TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS=1 to opt in, or " +
+            "inject a stub fetcher.";
         if (failOnError) throw new Error(msg);
         debug(msg);
         return null;
     }
 
-    debug("fetching vault=%s secret=%s", vaultName, secretName);
+    debug("fetching Key Vault secret");
 
     if (!vaultName) {
         const msg = "vaultName is required for Key Vault fetch";
@@ -153,7 +152,7 @@ export async function fetchKeyVaultConfig(
         // hand-edited secret could in principle exceed this; surface
         // a useful error rather than silently truncate.
         const msg =
-            `Key Vault secret ${secretName} exceeds the ${MAX_SECRET_BYTES}-byte ` +
+            `Key Vault secret exceeds the ${MAX_SECRET_BYTES}-byte ` +
             `limit. Split into multiple secrets or reduce content.`;
         if (failOnError) throw new Error(msg);
         debug(msg);
@@ -176,8 +175,7 @@ export async function fetchKeyVaultConfig(
     }
     if (typeof parsed !== "object" || Array.isArray(parsed)) {
         const msg =
-            `Key Vault secret ${vaultName}/${secretName} must contain a ` +
-            `YAML mapping at the top level.`;
+            "Key Vault secret must contain a YAML mapping at the top level.";
         if (failOnError) throw new Error(msg);
         debug(msg);
         return null;

@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "copyfiles": "^2.4.1",
@@ -30,8 +31,7 @@
     "fastest-levenshtein": "^1.0.16",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.1",
-    "@typeagent/config": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

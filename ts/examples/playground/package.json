@@ -21,6 +21,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "copyfiles": "^2.4.1",
     "dotenv": "^16.3.1",
@@ -28,8 +29,7 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5",
-    "@typeagent/config": "workspace:*"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "rimraf": "^6.0.1"

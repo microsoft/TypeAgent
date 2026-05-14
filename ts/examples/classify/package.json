@@ -21,12 +21,12 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "chalk": "^5.4.1",
     "copyfiles": "^2.4.1",
     "dotenv": "^16.3.1",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.1",
-    "@typeagent/config": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

@@ -25,6 +25,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "cheerio": "1.0.0-rc.12",
@@ -39,8 +40,7 @@
     "proper-lockfile": "^4.1.2",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5",
-    "@typeagent/config": "workspace:*"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

@@ -56,6 +56,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
@@ -72,8 +73,7 @@
     "open": "^10.1.0",
     "telemetry": "workspace:*",
     "ts-node": "^10.9.1",
-    "typechat-utils": "workspace:*",
-    "@typeagent/config": "workspace:*"
+    "typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

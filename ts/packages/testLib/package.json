@@ -24,9 +24,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
-    "typechat": "^0.1.1",
-    "@typeagent/config": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

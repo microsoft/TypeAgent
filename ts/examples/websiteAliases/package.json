@@ -29,6 +29,7 @@
     "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/identity": "^4.10.0",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
@@ -39,8 +40,7 @@
     "puppeteer": "^24.15.0",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5",
-    "@typeagent/config": "workspace:*"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",

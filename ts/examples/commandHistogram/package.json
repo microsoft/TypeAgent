@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",
@@ -40,8 +41,7 @@
     "mongodb": "^6.15.0",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5",
-    "@typeagent/config": "workspace:*"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "copyfiles": "^2.4.1",

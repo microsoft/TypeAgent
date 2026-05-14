@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@azure/search-documents": "12.1.0",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "better-sqlite3": "12.6.2",
     "chalk": "^5.4.1",
@@ -46,8 +47,7 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
-    "typescript": "~5.4.5",
-    "@typeagent/config": "workspace:*"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",
