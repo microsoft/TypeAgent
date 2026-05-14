@@ -50,7 +50,7 @@ function makeTaskNode(overrides?: Partial<TaskNode>): TaskNode {
 /**
  * Build a loop node with a single-counter state and a branch body that
  * exits/iterates. Override any field via `overrides`; override the body
- * entry or nodes via `bodyOverrides`.
+ * scope fields via `bodyOverrides`.
  */
 function makeLoopNode(
     overrides?: Partial<LoopNode>,
@@ -59,11 +59,8 @@ function makeLoopNode(
     return {
         kind: "loop",
         inputs: {},
-        inputSchema: { type: "object" },
-        state: {
-            i: { schema: { type: "integer" }, initial: 0 },
-        },
         body: {
+            inputSchema: { type: "object" },
             entry: "decide",
             nodes: {
                 decide: {
@@ -74,11 +71,14 @@ function makeLoopNode(
                     default: "@iterate",
                 } as BranchNode,
             },
+            output: { $from: "state", name: "i" },
+            outputSchema: { type: "integer" },
             ...bodyOverrides,
         },
+        state: {
+            i: { schema: { type: "integer" }, initial: 0 },
+        },
         iterateState: { i: { $from: "state", name: "i" } },
-        output: { $from: "state", name: "i" },
-        outputSchema: { type: "integer" },
         maxIterations: 10,
         ...overrides,
     };
@@ -358,12 +358,12 @@ describe("validateWorkflowIR", () => {
             nodes: {
                 start: makeLoopNode(
                     {
-                        output: null,
-                        outputSchema: { type: "null" },
                         onError: "recover",
                         bind: "out",
                     },
                     {
+                        output: null,
+                        outputSchema: { type: "null" },
                         entry: "step",
                         nodes: {
                             step: makeTaskNode(),
@@ -1397,7 +1397,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1405,6 +1404,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1415,12 +1415,12 @@ describe("validateWorkflowIR", () => {
                                     inputs: {},
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         onError: "handler",
                     } as any,
@@ -1474,7 +1474,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1482,6 +1481,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1509,12 +1509,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1537,7 +1537,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1545,6 +1544,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1556,12 +1556,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1629,7 +1629,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1637,6 +1636,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1653,12 +1653,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                     } as any,
                 },
@@ -1681,7 +1681,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1689,6 +1688,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1705,12 +1705,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1737,7 +1737,6 @@ describe("validateWorkflowIR", () => {
                     outerLoop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1745,12 +1744,12 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "innerLoop",
                             nodes: {
                                 innerLoop: {
                                     kind: "loop",
                                     inputs: {},
-                                    inputSchema: { type: "object" },
                                     state: {
                                         j: {
                                             schema: { type: "integer" },
@@ -1758,6 +1757,7 @@ describe("validateWorkflowIR", () => {
                                         },
                                     },
                                     body: {
+                                        inputSchema: { type: "object" },
                                         entry: "innerStep",
                                         nodes: {
                                             innerStep: {
@@ -1778,6 +1778,8 @@ describe("validateWorkflowIR", () => {
                                                 next: "@iterate",
                                             },
                                         },
+                                        output: null,
+                                        outputSchema: { type: "null" },
                                     },
                                     iterateState: {
                                         j: {
@@ -1785,18 +1787,16 @@ describe("validateWorkflowIR", () => {
                                             name: "j",
                                         },
                                     },
-                                    output: null,
-                                    outputSchema: { type: "null" },
                                     maxIterations: 5,
                                     next: "@iterate",
                                 } as any,
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                     } as any,
                 },
@@ -1998,7 +1998,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2010,6 +2009,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2021,13 +2021,13 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                             // missing "j"
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2054,7 +2054,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2062,6 +2061,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2078,12 +2078,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2108,7 +2108,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2116,6 +2115,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2127,13 +2127,13 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                             phantom: { $from: "state", name: "phantom" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2158,7 +2158,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             count: {
                                 schema: { type: "integer" },
@@ -2166,6 +2165,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2187,12 +2187,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             count: { $from: "state", name: "count" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2844,7 +2844,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2852,6 +2851,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2870,16 +2870,16 @@ describe("validateWorkflowIR", () => {
                                     bind: "stepOut",
                                 },
                             },
+                            output: {
+                                $from: "scope",
+                                name: "stepOut",
+                                path: ["val"],
+                            },
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: {
-                            $from: "scope",
-                            name: "stepOut",
-                            path: ["val"],
-                        },
-                        outputSchema: { type: "integer" },
                         maxIterations: 5,
                         bind: "out",
                     } as any,
@@ -2912,15 +2912,27 @@ describe("validateWorkflowIR", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                entry: "a_step",
-                                nodes: {
-                                    a_step: makeTaskNode({ bind: "aOut" }),
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             b: {
-                                entry: "b_step",
-                                nodes: {
-                                    b_step: makeTaskNode({ bind: "bOut" }),
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                         },
@@ -2950,8 +2962,14 @@ describe("validateWorkflowIR", () => {
             const ir = makeForkIR({
                 branches: {
                     only: {
-                        entry: "s",
-                        nodes: { s: makeTaskNode({ bind: "x" }) },
+                        inputs: {},
+                        scope: {
+                            inputSchema: {},
+                            entry: "s",
+                            nodes: { s: makeTaskNode({ bind: "x" }) },
+                            output: { $from: "scope", name: "x" },
+                            outputSchema: {},
+                        },
                     },
                 },
             });
@@ -2996,12 +3014,24 @@ describe("validateWorkflowIR", () => {
             const ir = makeForkIR({
                 branches: {
                     a: {
-                        entry: "missing",
-                        nodes: { a_step: makeTaskNode({ bind: "x" }) },
+                        inputs: {},
+                        scope: {
+                            inputSchema: {},
+                            entry: "missing",
+                            nodes: { a_step: makeTaskNode({ bind: "x" }) },
+                            output: null,
+                            outputSchema: {},
+                        },
                     },
                     b: {
-                        entry: "b_step",
-                        nodes: { b_step: makeTaskNode({ bind: "y" }) },
+                        inputs: {},
+                        scope: {
+                            inputSchema: {},
+                            entry: "b_step",
+                            nodes: { b_step: makeTaskNode({ bind: "y" }) },
+                            output: { $from: "scope", name: "y" },
+                            outputSchema: {},
+                        },
                     },
                 },
             });
@@ -3070,10 +3100,13 @@ describe("validateWorkflowIR", () => {
                         },
                         elementParam: "item",
                         body: {
+                            inputSchema: {},
                             entry: "body_step",
                             nodes: {
                                 body_step: makeTaskNode({ bind: "stepOut" }),
                             },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
                         },
                         outputSchema: {
                             type: "array",
@@ -3124,8 +3157,11 @@ describe("validateWorkflowIR", () => {
         it("rejects forkMap with missing body entry", () => {
             const ir = makeForkMapIR({
                 body: {
+                    inputSchema: {},
                     entry: "missing",
                     nodes: { body_step: makeTaskNode() },
+                    output: null,
+                    outputSchema: {},
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -3140,6 +3176,7 @@ describe("validateWorkflowIR", () => {
         it("rejects forkMap body that uses $from: state", () => {
             const ir = makeForkMapIR({
                 body: {
+                    inputSchema: {},
                     entry: "body_step",
                     nodes: {
                         body_step: makeTaskNode({
@@ -3149,6 +3186,8 @@ describe("validateWorkflowIR", () => {
                             bind: "stepOut",
                         }),
                     },
+                    output: { $from: "scope", name: "stepOut" },
+                    outputSchema: {},
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));

@@ -391,17 +391,6 @@ function makeA4IR(): WorkflowIR {
                     repos: { $from: "input", name: "repos" },
                     maxCommits: { $from: "input", name: "maxCommits" },
                 },
-                inputSchema: {
-                    type: "object",
-                    required: ["repos", "maxCommits"],
-                    properties: {
-                        repos: {
-                            type: "array",
-                            items: { type: "string" },
-                        },
-                        maxCommits: { type: "integer" },
-                    },
-                },
                 state: {
                     i: { schema: { type: "integer" }, initial: 0 },
                     sections: {
@@ -410,6 +399,17 @@ function makeA4IR(): WorkflowIR {
                     },
                 },
                 body: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["repos", "maxCommits"],
+                        properties: {
+                            repos: {
+                                type: "array",
+                                items: { type: "string" },
+                            },
+                            maxCommits: { type: "integer" },
+                        },
+                    },
                     entry: "pickRepo",
                     nodes: {
                         pickRepo: {
@@ -634,6 +634,16 @@ function makeA4IR(): WorkflowIR {
                             default: "@exit",
                         },
                     },
+                    // NOTE: output reads from scope (body binding), not state.
+                    // At @exit, state reflects the beginning of the last iteration
+                    // (set by the prior @iterate). The final appendSection result
+                    // is only in the scope binding "appended".
+                    output: {
+                        $from: "scope",
+                        name: "appended",
+                        path: ["list"],
+                    } as Template,
+                    outputSchema: { type: "array" },
                 },
                 iterateState: {
                     i: {
@@ -647,16 +657,6 @@ function makeA4IR(): WorkflowIR {
                         path: ["list"],
                     } as Template,
                 },
-                // NOTE: output reads from scope (body binding), not state.
-                // At @exit, state reflects the beginning of the last iteration
-                // (set by the prior @iterate). The final appendSection result
-                // is only in the scope binding "appended".
-                output: {
-                    $from: "scope",
-                    name: "appended",
-                    path: ["list"],
-                } as Template,
-                outputSchema: { type: "array" },
                 maxIterations: 1000,
                 next: "compose",
                 bind: "repoSections",
@@ -2798,7 +2798,6 @@ describe("WorkflowEngine (IR v1)", () => {
                     loop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2806,6 +2805,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2841,6 +2841,8 @@ describe("WorkflowEngine (IR v1)", () => {
                                     default: "@exit",
                                 },
                             },
+                            output: 0 as Template,
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {
                             i: {
@@ -2849,8 +2851,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["nonexistent"],
                             } as Template,
                         },
-                        output: 0 as Template,
-                        outputSchema: { type: "integer" },
                         maxIterations: 1,
                         bind: "result",
                     },
@@ -3056,7 +3056,6 @@ describe("WorkflowEngine (IR v1)", () => {
                     badLoop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -3064,6 +3063,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "willFail",
                             nodes: {
                                 willFail: {
@@ -3074,12 +3074,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                     inputs: {},
                                 },
                             },
+                            output: null as Template,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" } as Template,
                         },
-                        output: null as Template,
-                        outputSchema: { type: "null" },
                         maxIterations: 1,
                         onError: "recover",
                     },
@@ -3787,7 +3787,6 @@ describe("WorkflowEngine (IR v1)", () => {
                     loop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             count: {
                                 schema: { type: "integer" },
@@ -3795,6 +3794,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "inc",
                             nodes: {
                                 inc: {
@@ -3830,6 +3830,11 @@ describe("WorkflowEngine (IR v1)", () => {
                                     default: "@iterate",
                                 },
                             },
+                            output: {
+                                $from: "state",
+                                name: "count",
+                            } as Template,
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {
                             count: {
@@ -3838,11 +3843,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["value"],
                             } as Template,
                         },
-                        output: {
-                            $from: "state",
-                            name: "count",
-                        } as Template,
-                        outputSchema: { type: "integer" },
                         maxIterations: 1000,
                         bind: "result",
                     },
@@ -3877,7 +3877,6 @@ describe("WorkflowEngine (IR v1)", () => {
                     loop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -3885,6 +3884,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "add",
                             nodes: {
                                 add: {
@@ -3923,6 +3923,11 @@ describe("WorkflowEngine (IR v1)", () => {
                                     default: "@iterate",
                                 },
                             },
+                            output: {
+                                $from: "state",
+                                name: "i",
+                            } as Template,
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {
                             i: {
@@ -3931,11 +3936,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["result"],
                             } as Template,
                         },
-                        output: {
-                            $from: "state",
-                            name: "i",
-                        } as Template,
-                        outputSchema: { type: "integer" },
                         maxIterations: 3,
                         bind: "result",
                     },
@@ -3971,7 +3971,6 @@ describe("WorkflowEngine (IR v1)", () => {
                     loop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             total: {
                                 schema: { type: "integer" },
@@ -3983,6 +3982,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "addStep",
                             nodes: {
                                 addStep: {
@@ -4056,6 +4056,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                     default: "@iterate",
                                 },
                             },
+                            output: {
+                                $from: "scope",
+                                name: "sum",
+                                path: ["result"],
+                            } as Template,
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {
                             total: {
@@ -4069,12 +4075,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["result"],
                             } as Template,
                         },
-                        output: {
-                            $from: "scope",
-                            name: "sum",
-                            path: ["result"],
-                        } as Template,
-                        outputSchema: { type: "integer" },
                         maxIterations: 10,
                         bind: "result",
                     },
@@ -5253,7 +5253,6 @@ describe("WorkflowEngine (IR v1)", () => {
                     loop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -5261,6 +5260,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -5288,10 +5288,10 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "r",
                                 },
                             },
+                            output: 0 as Template,
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {},
-                        output: 0 as Template,
-                        outputSchema: { type: "integer" },
                         maxIterations: 10,
                         bind: "result",
                     },
@@ -6429,41 +6429,53 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                entry: "a_step",
-                                nodes: {
-                                    a_step: {
-                                        kind: "task",
-                                        task: "mock.branchA",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: {
-                                            type: "object",
-                                            required: ["val"],
-                                            properties: {
-                                                val: { type: "string" },
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: {
+                                            kind: "task",
+                                            task: "mock.branchA",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["val"],
+                                                properties: {
+                                                    val: { type: "string" },
+                                                },
                                             },
+                                            inputs: {},
+                                            bind: "aOut",
                                         },
-                                        inputs: {},
-                                        bind: "aOut",
                                     },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             b: {
-                                entry: "b_step",
-                                nodes: {
-                                    b_step: {
-                                        kind: "task",
-                                        task: "mock.branchB",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: {
-                                            type: "object",
-                                            required: ["val"],
-                                            properties: {
-                                                val: { type: "string" },
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: {
+                                            kind: "task",
+                                            task: "mock.branchB",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["val"],
+                                                properties: {
+                                                    val: { type: "string" },
+                                                },
                                             },
+                                            inputs: {},
+                                            bind: "bOut",
                                         },
-                                        inputs: {},
-                                        bind: "bOut",
                                     },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                         },
@@ -6527,42 +6539,60 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                entry: "s1",
-                                nodes: {
-                                    s1: {
-                                        kind: "task",
-                                        task: "mock.slow1",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "x",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "s1",
+                                    nodes: {
+                                        s1: {
+                                            kind: "task",
+                                            task: "mock.slow1",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             b: {
-                                entry: "s2",
-                                nodes: {
-                                    s2: {
-                                        kind: "task",
-                                        task: "mock.slow2",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "x",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "s2",
+                                    nodes: {
+                                        s2: {
+                                            kind: "task",
+                                            task: "mock.slow2",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             c: {
-                                entry: "s3",
-                                nodes: {
-                                    s3: {
-                                        kind: "task",
-                                        task: "mock.slow3",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "x",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "s3",
+                                    nodes: {
+                                        s3: {
+                                            kind: "task",
+                                            task: "mock.slow3",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                         },
@@ -6637,74 +6667,86 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                entry: "a1",
-                                nodes: {
-                                    a1: {
-                                        kind: "task",
-                                        task: "mock.step1",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: {
-                                            type: "object",
-                                            required: ["intermediate"],
-                                            properties: {
-                                                intermediate: {
-                                                    type: "number",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a1",
+                                    nodes: {
+                                        a1: {
+                                            kind: "task",
+                                            task: "mock.step1",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["intermediate"],
+                                                properties: {
+                                                    intermediate: {
+                                                        type: "number",
+                                                    },
                                                 },
                                             },
+                                            inputs: {},
+                                            bind: "mid",
+                                            next: "a2",
                                         },
-                                        inputs: {},
-                                        bind: "mid",
-                                        next: "a2",
-                                    },
-                                    a2: {
-                                        kind: "task",
-                                        task: "mock.step2",
-                                        inputSchema: {
-                                            type: "object",
-                                            required: ["intermediate"],
-                                            properties: {
-                                                intermediate: {
-                                                    type: "number",
+                                        a2: {
+                                            kind: "task",
+                                            task: "mock.step2",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["intermediate"],
+                                                properties: {
+                                                    intermediate: {
+                                                        type: "number",
+                                                    },
                                                 },
                                             },
-                                        },
-                                        outputSchema: {
-                                            type: "object",
-                                            required: ["final"],
-                                            properties: {
-                                                final: { type: "number" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["final"],
+                                                properties: {
+                                                    final: { type: "number" },
+                                                },
                                             },
-                                        },
-                                        inputs: {
-                                            intermediate: {
-                                                $from: "scope",
-                                                name: "mid",
-                                                path: ["intermediate"],
+                                            inputs: {
+                                                intermediate: {
+                                                    $from: "scope",
+                                                    name: "mid",
+                                                    path: ["intermediate"],
+                                                },
                                             },
+                                            bind: "result",
                                         },
-                                        bind: "result",
                                     },
+                                    output: { $from: "scope", name: "result" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             b: {
-                                entry: "b1",
-                                nodes: {
-                                    b1: {
-                                        kind: "task",
-                                        task: "mock.step1",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: {
-                                            type: "object",
-                                            required: ["intermediate"],
-                                            properties: {
-                                                intermediate: {
-                                                    type: "number",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b1",
+                                    nodes: {
+                                        b1: {
+                                            kind: "task",
+                                            task: "mock.step1",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["intermediate"],
+                                                properties: {
+                                                    intermediate: {
+                                                        type: "number",
+                                                    },
                                                 },
                                             },
+                                            inputs: {},
+                                            bind: "bOut",
                                         },
-                                        inputs: {},
-                                        bind: "bOut",
                                     },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                         },
@@ -6782,29 +6824,41 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "fork",
                         branches: {
                             good: {
-                                entry: "ok",
-                                nodes: {
-                                    ok: {
-                                        kind: "task",
-                                        task: "mock.okTask",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "ok",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "ok",
+                                    nodes: {
+                                        ok: {
+                                            kind: "task",
+                                            task: "mock.okTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "ok",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "ok" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             bad: {
-                                entry: "fail",
-                                nodes: {
-                                    fail: {
-                                        kind: "task",
-                                        task: "mock.failTask",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "fail",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "fail",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "fail" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                         },
@@ -6889,6 +6943,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         elementParam: "n",
                         body: {
+                            inputSchema: {},
                             entry: "double",
                             nodes: {
                                 double: {
@@ -6914,6 +6969,8 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "doubled",
                                 },
                             },
+                            output: { $from: "scope", name: "doubled" },
+                            outputSchema: { type: "object" },
                         },
                         outputSchema: {
                             type: "array",
@@ -6985,6 +7042,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         elementParam: "item",
                         body: {
+                            inputSchema: {},
                             entry: "step",
                             nodes: {
                                 step: {
@@ -6996,6 +7054,8 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "r",
                                 },
                             },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
                         },
                         outputSchema: {
                             type: "array",
@@ -7058,6 +7118,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         elementParam: "item",
                         body: {
+                            inputSchema: {},
                             entry: "step",
                             nodes: {
                                 step: {
@@ -7069,6 +7130,8 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "r",
                                 },
                             },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
                         },
                         outputSchema: {
                             type: "array",
@@ -7129,6 +7192,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         elementParam: "item",
                         body: {
+                            inputSchema: {},
                             entry: "step",
                             nodes: {
                                 step: {
@@ -7140,6 +7204,8 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "r",
                                 },
                             },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
                         },
                         outputSchema: {
                             type: "array",
@@ -7193,29 +7259,41 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                entry: "a_s",
-                                nodes: {
-                                    a_s: {
-                                        kind: "task",
-                                        task: "mock.noop",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "x",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_s",
+                                    nodes: {
+                                        a_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                             b: {
-                                entry: "b_s",
-                                nodes: {
-                                    b_s: {
-                                        kind: "task",
-                                        task: "mock.noop",
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { type: "object" },
-                                        inputs: {},
-                                        bind: "y",
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_s",
+                                    nodes: {
+                                        b_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "y",
+                                        },
                                     },
+                                    output: { $from: "scope", name: "y" },
+                                    outputSchema: { type: "object" },
                                 },
                             },
                         },

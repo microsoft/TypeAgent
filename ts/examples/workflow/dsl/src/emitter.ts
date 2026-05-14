@@ -981,24 +981,24 @@ export class Emitter {
         const loopNode: LoopNode = {
             kind: "loop",
             inputs: { ...outer.inputs },
-            inputSchema: {
-                type: "object",
-                required: [...outer.required],
-                properties: { ...outer.properties },
-            },
-            state,
             body: {
+                inputSchema: {
+                    type: "object",
+                    required: [...outer.required],
+                    properties: { ...outer.properties },
+                },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
+                output: outputTemplate ?? null,
+                outputSchema: {},
             },
+            state,
             iterateState: {
                 attempt: {
                     $from: "scope",
                     name: stepId,
                 } as unknown as Template,
             },
-            output: outputTemplate ?? null,
-            outputSchema: {},
             maxIterations: 100, // safety limit
             ...(onError ? { onError } : {}),
             bind: loopId,
@@ -1159,16 +1159,21 @@ export class Emitter {
         const loopNode: LoopNode = {
             kind: "loop",
             inputs: { items: collectionTemplate, ...outer.inputs },
-            inputSchema: {
-                type: "object",
-                required: ["items", ...outer.required],
-                properties: { items: { type: "array" }, ...outer.properties },
-            },
-            state,
             body: {
+                inputSchema: {
+                    type: "object",
+                    required: ["items", ...outer.required],
+                    properties: { items: { type: "array" }, ...outer.properties },
+                },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
+                output: {
+                    $from: "state",
+                    name: "results",
+                } as unknown as Template,
+                outputSchema: { type: "array" },
             },
+            state,
             iterateState: {
                 i: { $from: "scope", name: stepId } as unknown as Template,
                 results: {
@@ -1176,11 +1181,6 @@ export class Emitter {
                     name: appendId,
                 } as unknown as Template,
             },
-            output: {
-                $from: "state",
-                name: "results",
-            } as unknown as Template,
-            outputSchema: { type: "array" },
             maxIterations: 10000,
             bind: loopId,
         };
@@ -1379,16 +1379,21 @@ export class Emitter {
         const loopNode: LoopNode = {
             kind: "loop",
             inputs: { items: collectionTemplate, ...outer.inputs },
-            inputSchema: {
-                type: "object",
-                required: ["items", ...outer.required],
-                properties: { items: { type: "array" }, ...outer.properties },
-            },
-            state,
             body: {
+                inputSchema: {
+                    type: "object",
+                    required: ["items", ...outer.required],
+                    properties: { items: { type: "array" }, ...outer.properties },
+                },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
+                output: {
+                    $from: "state",
+                    name: "results",
+                } as unknown as Template,
+                outputSchema: { type: "array" },
             },
+            state,
             iterateState: {
                 i: { $from: "scope", name: stepId } as unknown as Template,
                 results: {
@@ -1396,11 +1401,6 @@ export class Emitter {
                     name: "updated_results",
                 } as unknown as Template,
             },
-            output: {
-                $from: "state",
-                name: "results",
-            } as unknown as Template,
-            outputSchema: { type: "array" },
             maxIterations: 10000,
             bind: loopId,
         };
@@ -1413,10 +1413,7 @@ export class Emitter {
     private emitParallel(expr: ParallelNode, scope: ScopeContext): Template {
         const forkId = this.freshId("parallel");
 
-        const branches: Record<
-            string,
-            { entry: string; nodes: Record<string, WorkflowNode> }
-        > = {};
+        const branches: ForkNode["branches"] = {};
 
         for (let i = 0; i < expr.bodies.length; i++) {
             const branchScope = this.childScope(scope);
@@ -1425,9 +1422,33 @@ export class Emitter {
             }
             this.threadNext(branchScope);
 
+            // Determine branch output: last node's bind, or null
+            const lastNodeId =
+                branchScope.nodeOrder[branchScope.nodeOrder.length - 1];
+            const lastNode = lastNodeId
+                ? branchScope.nodes[lastNodeId]
+                : undefined;
+            const outputBind =
+                lastNode &&
+                (lastNode.kind === "task" ||
+                    lastNode.kind === "loop" ||
+                    lastNode.kind === "fork" ||
+                    lastNode.kind === "forkMap") &&
+                lastNode.bind
+                    ? lastNode.bind
+                    : undefined;
+
             branches[`branch_${i}`] = {
-                entry: branchScope.nodeOrder[0] ?? "",
-                nodes: branchScope.nodes,
+                inputs: {},
+                scope: {
+                    inputSchema: {},
+                    entry: branchScope.nodeOrder[0] ?? "",
+                    nodes: branchScope.nodes,
+                    output: outputBind
+                        ? ({ $from: "scope", name: outputBind } as unknown as Template)
+                        : null,
+                    outputSchema: {},
+                },
             };
         }
 
@@ -1484,18 +1505,39 @@ export class Emitter {
             new Set([expr.param]),
         );
 
+        // Determine body output: last node's bind
+        const lastNodeId =
+            bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
+        const lastNode = lastNodeId
+            ? bodyScope.nodes[lastNodeId]
+            : undefined;
+        const outputBind =
+            lastNode &&
+            (lastNode.kind === "task" ||
+                lastNode.kind === "loop" ||
+                lastNode.kind === "fork" ||
+                lastNode.kind === "forkMap") &&
+            lastNode.bind
+                ? lastNode.bind
+                : undefined;
+
         const forkMapNode: ForkMapNode = {
             kind: "forkMap",
             collection: collectionTemplate,
             collectionSchema: { type: "array" },
             elementParam: expr.param,
-            body: {
-                entry: bodyScope.nodeOrder[0] ?? "",
-                nodes: bodyScope.nodes,
-            },
             ...(Object.keys(outer.inputs).length > 0
                 ? { inputs: outer.inputs }
                 : {}),
+            body: {
+                inputSchema: {},
+                entry: bodyScope.nodeOrder[0] ?? "",
+                nodes: bodyScope.nodes,
+                output: outputBind
+                    ? ({ $from: "scope", name: outputBind } as unknown as Template)
+                    : null,
+                outputSchema: {},
+            },
             outputSchema: { type: "array" },
             ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
             bind: forkMapId,

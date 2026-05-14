@@ -901,7 +901,7 @@ export class WorkflowEngine {
 
                 if (exit.sentinel === "@exit") {
                     // Resolve output in body scope (state + body bindings)
-                    const output = resolveTemplate(node.output, bodyScope);
+                    const output = resolveTemplate(node.body.output, bodyScope);
 
                     if (node.bind) {
                         outerScope.bindings.set(node.bind, output);
@@ -1012,15 +1012,19 @@ export class WorkflowEngine {
 
             const runBranch = async (bName: string) => {
                 const branch = node.branches[bName];
+                const branchInput = resolveTemplate(
+                    branch.inputs,
+                    outerScope,
+                ) as Record<string, unknown>;
                 const branchScope: ScopeContext = {
-                    input: outerScope.input,
+                    input: branchInput,
                     constants: outerScope.constants,
-                    bindings: new Map(outerScope.bindings),
+                    bindings: new Map(),
                 };
                 const branchScopePath = [...scopePath, `${nodeId}.${bName}`];
                 await this.executeScope(
-                    branch.nodes,
-                    branch.entry,
+                    branch.scope.nodes,
+                    branch.scope.entry,
                     branchScope,
                     branchScopePath,
                     runId,
@@ -1030,36 +1034,10 @@ export class WorkflowEngine {
                     taskTimeoutMs,
                     constraints,
                 );
-                // Walk the next-chain from entry to find the terminal node
-                const terminalId = findTerminalNode(
-                    branch.nodes,
-                    branch.entry,
+                results[bName] = resolveTemplate(
+                    branch.scope.output,
+                    branchScope,
                 );
-                const termNode = terminalId
-                    ? branch.nodes[terminalId]
-                    : undefined;
-                if (
-                    termNode &&
-                    (termNode.kind === "task" ||
-                        termNode.kind === "loop" ||
-                        termNode.kind === "fork" ||
-                        termNode.kind === "forkMap") &&
-                    termNode.bind
-                ) {
-                    results[bName] = branchScope.bindings.get(termNode.bind);
-                } else {
-                    // Fallback: collect all new bindings produced by branch
-                    const branchOutput: Record<string, unknown> = {};
-                    for (const [k, v] of branchScope.bindings) {
-                        if (!outerScope.bindings.has(k)) {
-                            branchOutput[k] = v;
-                        }
-                    }
-                    results[bName] =
-                        Object.keys(branchOutput).length === 1
-                            ? Object.values(branchOutput)[0]
-                            : branchOutput;
-                }
             };
 
             while (branchQueue.length > 0 || executing.size > 0) {
@@ -1176,13 +1154,20 @@ export class WorkflowEngine {
                     timestamp: Date.now(),
                 });
 
+                const itemInput: Record<string, unknown> = {
+                    [node.elementParam]: items[index],
+                };
+                if (node.inputs) {
+                    const resolvedInputs = resolveTemplate(
+                        node.inputs,
+                        outerScope,
+                    ) as Record<string, unknown>;
+                    Object.assign(itemInput, resolvedInputs);
+                }
                 const itemScope: ScopeContext = {
-                    input: {
-                        ...outerScope.input,
-                        [node.elementParam]: items[index],
-                    },
+                    input: itemInput,
                     constants: outerScope.constants,
-                    bindings: new Map(outerScope.bindings),
+                    bindings: new Map(),
                 };
                 const itemScopePath = [...scopePath, `${nodeId}[${index}]`];
                 await this.executeScope(
@@ -1198,24 +1183,10 @@ export class WorkflowEngine {
                     constraints,
                 );
 
-                // Walk the next-chain from entry to find the terminal node
-                const terminalId = findTerminalNode(
-                    node.body.nodes,
-                    node.body.entry,
+                results[index] = resolveTemplate(
+                    node.body.output,
+                    itemScope,
                 );
-                const termNode = terminalId
-                    ? node.body.nodes[terminalId]
-                    : undefined;
-                if (
-                    termNode &&
-                    (termNode.kind === "task" ||
-                        termNode.kind === "loop" ||
-                        termNode.kind === "fork" ||
-                        termNode.kind === "forkMap") &&
-                    termNode.bind
-                ) {
-                    results[index] = itemScope.bindings.get(termNode.bind);
-                }
 
                 this.emit({
                     type: "forkMapIterationCompleted",
@@ -1279,35 +1250,6 @@ export class WorkflowEngine {
             throw err;
         }
     }
-}
-
-/**
- * Walk the next-chain from entry to find the terminal (last) node in a scope.
- * Returns the nodeId of the terminal, or undefined if the chain is broken.
- */
-function findTerminalNode(
-    nodes: Record<string, WorkflowNode>,
-    entry: string,
-): string | undefined {
-    let current: string | undefined = entry;
-    const visited = new Set<string>();
-    while (current && nodes[current]) {
-        if (visited.has(current)) break; // cycle guard
-        visited.add(current);
-        const n: WorkflowNode = nodes[current];
-        let next: string | undefined;
-        if (
-            n.kind === "task" ||
-            n.kind === "loop" ||
-            n.kind === "fork" ||
-            n.kind === "forkMap"
-        ) {
-            next = n.next;
-        }
-        if (!next || !nodes[next]) return current;
-        current = next;
-    }
-    return current;
 }
 
 function buildErrorObject(

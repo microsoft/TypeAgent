@@ -822,17 +822,17 @@ function validateScopeCFG(
                 bodyPrefix,
                 errors,
                 true,
-                node.output,
-                `${prefix}.${id}.output`,
+                node.body.output,
+                `${prefix}.${id}.body.output`,
                 !!node.onError, // skip body termination check when loop has onError
             );
         } else if (node.kind === "fork") {
             for (const [bName, branch] of Object.entries(node.branches)) {
-                if (branch.entry in branch.nodes) {
-                    const branchPrefix = `${prefix}.${id}.branches.${bName}.nodes`;
+                if (branch.scope.entry in branch.scope.nodes) {
+                    const branchPrefix = `${prefix}.${id}.branches.${bName}.scope.nodes`;
                     validateScopeCFG(
-                        branch.nodes,
-                        branch.entry,
+                        branch.scope.nodes,
+                        branch.scope.entry,
                         branchPrefix,
                         errors,
                         false,
@@ -1052,7 +1052,9 @@ function checkStateSoundness(
                 const consumerPropSchema = resolveConsumerPropertySchema(
                     ref.templatePath,
                     inputsPrefix,
-                    node.inputSchema,
+                    node.kind === "loop"
+                        ? node.body.inputSchema
+                        : node.inputSchema,
                 );
                 if (stateSchema.type && consumerPropSchema?.type) {
                     const stateTypes = normalizeTypeSet(stateSchema.type);
@@ -1242,22 +1244,22 @@ function validateScope(
                 });
             }
             for (const [bName, branch] of Object.entries(node.branches)) {
-                if (!(branch.entry in branch.nodes)) {
+                if (!(branch.scope.entry in branch.scope.nodes)) {
                     errors.push({
-                        path: `${path}.branches.${bName}.entry`,
-                        message: `Branch entry "${branch.entry}" does not exist.`,
+                        path: `${path}.branches.${bName}.scope.entry`,
+                        message: `Branch entry "${branch.scope.entry}" does not exist.`,
                     });
                 }
                 validateScope(
-                    branch.nodes,
-                    `${path}.branches.${bName}.nodes`,
+                    branch.scope.nodes,
+                    `${path}.branches.${bName}.scope.nodes`,
                     tasks,
                     errors,
                     false,
                 );
                 validateSchemaCompat(
-                    branch.nodes,
-                    `${path}.branches.${bName}.nodes`,
+                    branch.scope.nodes,
+                    `${path}.branches.${bName}.scope.nodes`,
                     errors,
                 );
             }
@@ -1416,7 +1418,11 @@ function buildBindingMap(
                 node.kind === "forkMap") &&
             node.bind
         ) {
-            map.set(node.bind, node.outputSchema);
+            const schema =
+                node.kind === "loop"
+                    ? node.body.outputSchema
+                    : node.outputSchema;
+            map.set(node.bind, schema);
         }
     }
     return map;
@@ -1808,7 +1814,11 @@ function validateTypeCompatibility(
             // Check each input template value against the corresponding
             // inputSchema property.
             const inputs = node.inputs;
-            const inputProps = node.inputSchema.properties ?? {};
+            const inputProps =
+                (node.kind === "loop"
+                    ? node.body.inputSchema
+                    : node.inputSchema
+                ).properties ?? {};
             for (const [fieldName, templateValue] of Object.entries(inputs)) {
                 const resolved = resolveTemplateType(templateValue, ctx);
                 if (!resolved) continue;
@@ -1894,38 +1904,38 @@ function validateTypeCompatibility(
                 node.body.nodes,
                 `${path}.body.nodes`,
                 errors,
-                node.inputSchema,
+                node.body.inputSchema,
                 node.state,
                 constants,
-                node.output,
-                `${path}.output`,
-                node.outputSchema,
+                node.body.output,
+                `${path}.body.output`,
+                node.body.outputSchema,
             );
 
             // Check loop output template type vs loop outputSchema
             const bodyBindings = buildBindingMap(node.body.nodes);
             const bodyCtx: TypeResolutionContext = {
                 bindings: bodyBindings,
-                inputSchema: node.inputSchema,
+                inputSchema: node.body.inputSchema,
                 stateVars: node.state,
                 constants,
             };
-            if (node.output && node.outputSchema) {
+            if (node.body.output && node.body.outputSchema) {
                 const outputResolved = resolveTemplateType(
-                    node.output,
+                    node.body.output,
                     bodyCtx,
                 );
-                if (outputResolved && !isTopSchema(node.outputSchema)) {
+                if (outputResolved && !isTopSchema(node.body.outputSchema)) {
                     if (
-                        !isStructuralSubtype(outputResolved, node.outputSchema)
+                        !isStructuralSubtype(outputResolved, node.body.outputSchema)
                     ) {
                         errors.push({
-                            path: `${path}.output`,
+                            path: `${path}.body.output`,
                             message:
                                 `Loop output resolved type ` +
                                 `${formatSchemaType(outputResolved)} is not ` +
                                 `compatible with loop outputSchema ` +
-                                `${formatSchemaType(node.outputSchema)}.`,
+                                `${formatSchemaType(node.body.outputSchema)}.`,
                         });
                     }
                 }
@@ -1935,10 +1945,10 @@ function validateTypeCompatibility(
         // Recurse into fork branches
         if (node.kind === "fork") {
             for (const [bName, branch] of Object.entries(node.branches)) {
-                if (branch.entry in branch.nodes) {
+                if (branch.scope.entry in branch.scope.nodes) {
                     validateTypeCompatibility(
-                        branch.nodes,
-                        `${path}.branches.${bName}.nodes`,
+                        branch.scope.nodes,
+                        `${path}.branches.${bName}.scope.nodes`,
                         errors,
                         scopeInputSchema,
                         undefined,
@@ -1992,7 +2002,11 @@ function checkPhiMergeTypes(
     for (const [id, node] of Object.entries(nodes)) {
         if (node.kind !== "task" && node.kind !== "loop") continue;
         const inputs = node.inputs;
-        const inputProps = node.inputSchema.properties ?? {};
+        const inputProps =
+            (node.kind === "loop"
+                ? node.body.inputSchema
+                : node.inputSchema
+            ).properties ?? {};
 
         for (const [fieldName, templateValue] of Object.entries(inputs)) {
             if (
@@ -2022,11 +2036,12 @@ function checkPhiMergeTypes(
                 if (!binderNode) continue;
                 const binderSchema =
                     binderNode.kind === "task" ||
-                    binderNode.kind === "loop" ||
                     binderNode.kind === "fork" ||
                     binderNode.kind === "forkMap"
                         ? binderNode.outputSchema
-                        : undefined;
+                        : binderNode.kind === "loop"
+                          ? binderNode.body.outputSchema
+                          : undefined;
                 if (!binderSchema) continue;
 
                 // Apply path projection if present
@@ -2300,8 +2315,8 @@ function validateSchemaCompat(
                 );
             }
             checkScopeRefsAgainstBindings(
-                node.output,
-                `${path}.output`,
+                node.body.output,
+                `${path}.body.output`,
                 bodyBindings,
                 errors,
             );
@@ -2331,7 +2346,9 @@ function validateSchemaCompat(
             const consumerType = resolveConsumerPropertySchema(
                 ref.templatePath,
                 inputsPrefix,
-                node.inputSchema,
+                node.kind === "loop"
+                    ? node.body.inputSchema
+                    : node.inputSchema,
             )?.type;
             const err = checkSchemaCompat(
                 producerSchema,
