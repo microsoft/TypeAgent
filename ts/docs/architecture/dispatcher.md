@@ -505,6 +505,8 @@ Handles `@`-prefixed system commands:
 - `@notify` — Notification management
 - `@construction` — Cache construction management
 - `@explain` — Explanation of cached translations
+- `@feedback` — Inspect and export user-feedback entries
+  recorded by the chat UI (`list`, `top`, `filter`, `export`, `count`)
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.

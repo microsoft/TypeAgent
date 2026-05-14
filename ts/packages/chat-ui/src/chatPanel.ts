@@ -15,8 +15,18 @@ import type {
     PhaseTiming,
     CompletionUsageStats,
     NotifyExplainedData,
+    RequestId,
+    UserFeedbackCategory,
+    UserFeedbackEntry,
+    UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
 import { setContent } from "./setContent.js";
+import {
+    FEEDBACK_VARIANTS,
+    FeedbackController,
+    FeedbackUIVariant,
+    FeedbackWidget,
+} from "./feedbackWidget.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -395,6 +405,23 @@ export interface ChatPanelOptions {
         source: string,
         displayId: string,
     ) => Promise<DynamicDisplayResult>;
+    /**
+     * Optional callback fired when the user rates an agent message via the
+     * feedback widget. The host should call dispatcher.recordUserFeedback
+     * (or its own equivalent) so the rating is persisted and broadcast.
+     */
+    onFeedback?: (
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ) => Promise<void> | void;
+    /**
+     * Initial feedback widget placement variant. Defaults to "footer-always".
+     * Change at runtime via ChatPanel.setFeedbackUIVariant.
+     */
+    feedbackUIVariant?: FeedbackUIVariant;
 }
 
 /**
@@ -542,6 +569,17 @@ export class ChatPanel {
         source: string,
         displayId: string,
     ) => Promise<DynamicDisplayResult>;
+    public onFeedback?: (
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ) => Promise<void> | void;
+    private _feedbackUIVariant: FeedbackUIVariant = "footer-always";
+    // Tracks the current rating per requestId so re-rendering / replay
+    // can apply the latest state. Keyed by RequestId.requestId (UUID).
+    private feedbackByRequestId = new Map<string, UserFeedbackEntry>();
 
     constructor(
         private readonly rootElement: HTMLElement,
@@ -553,6 +591,8 @@ export class ChatPanel {
         this.onCancel = options.onCancel;
         this.getCompletions = options.getCompletions;
         this.getDynamicDisplay = options.getDynamicDisplay;
+        this.onFeedback = options.onFeedback;
+        this._feedbackUIVariant = options.feedbackUIVariant ?? "footer-always";
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -1334,6 +1374,7 @@ export class ChatPanel {
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
+            threadId,
         );
         this.threadContainers.set(threadId, container);
         // Capture the elapsed time from request send to first agent
@@ -2433,6 +2474,7 @@ export class ChatPanel {
     private createAgentContainer(
         source: string,
         icon: string,
+        threadId?: string,
     ): AgentMessageContainer {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = new AgentMessageContainer(
@@ -2442,7 +2484,71 @@ export class ChatPanel {
             this.settingsView,
             this.platformAdapter,
         );
+        if (threadId !== undefined) {
+            this.attachFeedbackToContainer(container, threadId);
+        }
         return container;
+    }
+
+    private attachFeedbackToContainer(
+        container: AgentMessageContainer,
+        threadId: string,
+    ) {
+        // The thread id IS the canonical requestId.requestId for user-driven
+        // threads. For synthetic agent-N ids we still attach so the UI is
+        // consistent; the host can choose to ignore feedback callbacks
+        // whose requestId doesn't correspond to a known request.
+        const requestId: RequestId = { requestId: threadId };
+        const controller: FeedbackController = {
+            getCurrentFeedback: () =>
+                this.feedbackByRequestId.get(threadId) ?? null,
+            submit: async (rating, category, comment, includeContext) => {
+                const cb = this.onFeedback;
+                if (!cb) return;
+                try {
+                    await cb(
+                        requestId,
+                        rating,
+                        category,
+                        comment,
+                        includeContext,
+                    );
+                } catch (e) {
+                    console.error("onFeedback callback failed", e);
+                }
+            },
+        };
+        container.attachFeedbackController(controller, this._feedbackUIVariant);
+        const existing = this.feedbackByRequestId.get(threadId);
+        if (existing) {
+            container.setFeedbackState(existing);
+        }
+    }
+
+    /**
+     * Apply a feedback entry to the matching bubble. Hosts call this when
+     * the dispatcher broadcasts a UserFeedbackEntry (via ClientIO
+     * onUserFeedback) or during replay of historical entries.
+     */
+    public applyFeedback(entry: UserFeedbackEntry): void {
+        const tid = entry.requestId.requestId;
+        if (!tid) return;
+        this.feedbackByRequestId.set(tid, entry);
+        const container = this.threadContainers.get(tid);
+        container?.setFeedbackState(entry.rating === null ? null : entry);
+    }
+
+    public get feedbackUIVariant(): FeedbackUIVariant {
+        return this._feedbackUIVariant;
+    }
+
+    /** Switch the variant for every existing agent bubble in the panel. */
+    public setFeedbackUIVariant(variant: FeedbackUIVariant): void {
+        if (this._feedbackUIVariant === variant) return;
+        this._feedbackUIVariant = variant;
+        for (const c of this.threadContainers.values()) {
+            c.setFeedbackVariant(variant);
+        }
     }
 
     private createTimestamp(
@@ -2506,12 +2612,14 @@ export class ChatPanel {
  * Manages a single agent message container within the chat panel.
  */
 class AgentMessageContainer {
-    private readonly div: HTMLDivElement;
+    public readonly div: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
     private readonly detailsDiv: HTMLDivElement;
     private readonly metricsDiv: HTMLDivElement;
     private readonly nameSpan: HTMLSpanElement;
     private readonly iconDiv: HTMLDivElement;
+    private readonly timestampDiv: HTMLDivElement;
+    private feedbackWidget?: FeedbackWidget;
     private lastAppendMode?: DisplayAppendMode;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
@@ -2562,6 +2670,7 @@ class AgentMessageContainer {
         dateSpan.textContent = "- " + new Date().toLocaleTimeString();
         timestampDiv.appendChild(dateSpan);
 
+        this.timestampDiv = timestampDiv;
         this.div.appendChild(timestampDiv);
 
         // Icon
@@ -2834,6 +2943,40 @@ class AgentMessageContainer {
     /** Remove this container from the DOM. */
     public remove() {
         this.div.remove();
+    }
+
+    /** Plain-text contents of the rendered message — used by the copy action. */
+    public getMessageText(): string {
+        return this.messageDiv.innerText;
+    }
+
+    public attachFeedbackController(
+        controller: FeedbackController,
+        variant: FeedbackUIVariant,
+    ) {
+        if (this.feedbackWidget !== undefined) return;
+        this.feedbackWidget = new FeedbackWidget(
+            {
+                container: this.div,
+                // chat-ui doesn't expose the bubble body as a separate
+                // element — the message content sits directly inside the
+                // container div. For bubble-corner placement we use the
+                // messageDiv as the body so the action row anchors to it.
+                bodyDiv: this.messageDiv,
+                headerDiv: this.timestampDiv,
+                messageDiv: this.messageDiv,
+            },
+            controller,
+            variant,
+        );
+    }
+
+    public setFeedbackState(entry: UserFeedbackEntry | null) {
+        this.feedbackWidget?.setFeedbackState(entry);
+    }
+
+    public setFeedbackVariant(variant: FeedbackUIVariant) {
+        this.feedbackWidget?.setVariant(variant);
     }
 
     /**

@@ -21,6 +21,8 @@ import {
     PendingInteractionResponse,
     RequestId,
     TemplateEditConfig,
+    UserFeedbackEntry,
+    UserMessageHiddenEntry,
 } from "agent-dispatcher";
 
 import { PartialCompletion } from "../partial";
@@ -28,6 +30,12 @@ import { ChoicePanel, InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
+import {
+    FeedbackController,
+    FeedbackUIVariant,
+    FeedbackWidget,
+} from "../feedbackWidget";
+import { iconTrash } from "../icon";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 
@@ -166,6 +174,174 @@ export class ChatView {
             throw new Error("Dispatcher is not initialized");
         }
         return this._dispatcher;
+    }
+
+    public get dispatcher(): Dispatcher | undefined {
+        return this._dispatcher;
+    }
+
+    public get feedbackUIVariant(): FeedbackUIVariant {
+        return "footer-always";
+    }
+
+    /**
+     * Restore feedback widgets on agent bubbles that were loaded from the
+     * saved chat-history HTML. Those messages don't have backing JS state
+     * — only DOM — so the buttons saved in the HTML have no click
+     * handlers. For each container that carries a `data-feedback-request-id`
+     * (stamped on by MessageGroup when the widget was first attached),
+     * strip the stale action-row DOM and rebuild a fresh widget wired to
+     * a dispatcher-backed controller. Containers without that attribute
+     * (predating this feature) are left alone.
+     */
+    public rewireHistoricalFeedback() {
+        // Only target .history-class containers — that class is added to
+        // every node restored from saved chat-history HTML by
+        // initializeChatHistory in main.ts. Live JS-managed bubbles
+        // don't have it, so they're left alone.
+
+        // Agent bubbles get the full feedback widget rebuilt AND the
+        // trash button re-wired.
+        const agentContainers = this.messageDiv.querySelectorAll<HTMLElement>(
+            ".chat-message-container-agent.history",
+        );
+        for (const container of Array.from(agentContainers)) {
+            const reqId = container.dataset.feedbackRequestId;
+            const clientReqId = container.dataset.feedbackClientRequestId;
+            if (!reqId && !clientReqId) continue;
+
+            // Remove the saved (handler-less) action row / corner — the
+            // new widget will build fresh DOM with click handlers wired.
+            container
+                .querySelectorAll(
+                    ".chat-message-actions, .chat-message-actions-corner",
+                )
+                .forEach((el) => el.remove());
+
+            const requestId: RequestId = {
+                requestId: reqId ?? "",
+                clientRequestId: clientReqId,
+            };
+            const controller = this.buildHistoricalController(requestId);
+            const bodyDiv = container.querySelector<HTMLElement>(
+                ".chat-message-body, .chat-message-body-hide-metrics, .chat-message-agent",
+            );
+            const headerDiv = container.querySelector<HTMLElement>(
+                ".chat-timestamp-agent",
+            );
+            const messageDiv = container.querySelector<HTMLElement>(
+                ".chat-message-content",
+            );
+            if (!bodyDiv || !headerDiv || !messageDiv) continue;
+
+            new FeedbackWidget(
+                { container, bodyDiv, headerDiv, messageDiv },
+                controller,
+                "footer-always",
+            );
+            // Rebuild the trash button (saved HTML has it without
+            // any click handler attached).
+            this.wireHistoricalTrash(container, requestId, "agent");
+        }
+
+        // User bubbles only get the trash button — no feedback widget.
+        const userContainers = this.messageDiv.querySelectorAll<HTMLElement>(
+            ".chat-message-container-user.history",
+        );
+        for (const container of Array.from(userContainers)) {
+            const reqId = container.dataset.feedbackRequestId;
+            const clientReqId = container.dataset.feedbackClientRequestId;
+            if (!reqId && !clientReqId) continue;
+            const requestId: RequestId = {
+                requestId: reqId ?? "",
+                clientRequestId: clientReqId,
+            };
+            this.wireHistoricalTrash(container, requestId, "user");
+        }
+    }
+
+    /**
+     * Replace any (saved, handler-less) trash button inside the
+     * container with a fresh one that calls dispatcher.recordUserHide.
+     * Also applies the optimistic-hide / undo-on-error semantics used
+     * by live trash clicks.
+     */
+    private wireHistoricalTrash(
+        container: HTMLElement,
+        requestId: RequestId,
+        target: "user" | "agent",
+    ) {
+        container
+            .querySelectorAll(".chat-message-trash")
+            .forEach((el) => el.remove());
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-action-button chat-message-trash";
+        btn.title = "Move to trash";
+        btn.setAttribute("aria-label", "Move to trash");
+        btn.dataset.action = "trash";
+        btn.appendChild(iconTrash());
+        btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            container.classList.add("chat-message-trashed");
+            const dispatcher = this._dispatcher;
+            if (!dispatcher) return;
+            try {
+                await dispatcher.recordUserHide(requestId, true, target);
+            } catch (e) {
+                container.classList.remove("chat-message-trashed");
+                console.error("recordUserHide failed", e);
+            }
+        });
+
+        // Anchor in the body element (.chat-message-agent or
+        // .chat-message-user) which matches how live bubbles are
+        // built. Without the body element we can't position the
+        // trash; skip.
+        const body = container.querySelector<HTMLElement>(
+            target === "agent" ? ".chat-message-agent" : ".chat-message-user",
+        );
+        if (body) {
+            body.appendChild(btn);
+        }
+    }
+
+    /**
+     * Build a minimal FeedbackController for a historical message —
+     * submits go straight through the dispatcher. We don't try to
+     * recover the saved rating state here; the widget starts unrated.
+     */
+    private buildHistoricalController(
+        requestId: RequestId,
+    ): FeedbackController {
+        return {
+            getCurrentFeedback: () => null,
+            submit: async (rating, category, comment, includeContext) => {
+                const dispatcher = this._dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserFeedback(
+                        requestId,
+                        rating,
+                        category,
+                        comment,
+                        includeContext,
+                    );
+                } catch (e) {
+                    console.error("recordUserFeedback failed", e);
+                }
+            },
+            setHidden: async (hidden: boolean, target?: "user" | "agent") => {
+                const dispatcher = this._dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserHide(requestId, hidden, target);
+                } catch (e) {
+                    console.error("recordUserHide failed", e);
+                }
+            },
+        };
     }
 
     public initializeDispatcher(dispatcher: Dispatcher) {
@@ -438,6 +614,9 @@ export class ChatView {
                 if (pending) {
                     this.pendingLocalGroups.delete(clientId);
                     this.idToMessageGroup.set(id, pending);
+                    // Stamp the canonical requestId on the group now that
+                    // it's known — drives the feedback widget.
+                    pending.setRequestId(requestId);
                     return pending;
                 }
             }
@@ -457,6 +636,13 @@ export class ChatView {
                     this.agents,
                     this.hideMetrics,
                 );
+                // Stamp the requestId so the feedback widget attaches to
+                // these bubbles too — feedback for system messages is
+                // keyed by the synthetic id since there's no server UUID.
+                mg.setRequestId({
+                    requestId: id,
+                    clientRequestId: mgId,
+                });
                 this.clientMessageGroups.set(mgId, mg);
                 mg.hideUserMessage();
                 return mg;
@@ -492,6 +678,13 @@ export class ChatView {
                 this.agents,
                 this.hideMetrics,
             );
+            // Stamp the requestId so the feedback widget attaches —
+            // notifications use the clientRequestId as the key (no
+            // server-side UUID exists for these).
+            mg.setRequestId({
+                requestId: "",
+                clientRequestId: clientId,
+            });
             this.clientMessageGroups.set(clientId, mg);
             mg.hideUserMessage();
             return mg;
@@ -710,6 +903,7 @@ export class ChatView {
             this.agents,
             this.hideMetrics,
         );
+        mg.setRequestId(requestId);
 
         this.idToMessageGroup.set(id, mg);
         this.updateScroll();
@@ -778,6 +972,54 @@ export class ChatView {
 
     appendDiagnosticData(requestId: RequestId, data: any) {
         this.getMessageGroup(requestId)?.appendDiagnosticData(requestId, data);
+    }
+
+    /**
+     * Apply a user-feedback rating to the matching agent message bubble.
+     * Invoked both for live rating updates (via ClientIO.onUserFeedback
+     * broadcast) and replay during conversation rejoin.
+     */
+    applyFeedback(entry: UserFeedbackEntry) {
+        this.getMessageGroup(entry.requestId)?.applyFeedback(entry);
+    }
+
+    /**
+     * Apply a hide / restore to the matching agent message bubble.
+     * Routes to the live MessageGroup if one exists; otherwise (e.g.
+     * the bubble was restored from saved chat-history HTML) toggles
+     * the CSS class directly on the matching container by data
+     * attribute.
+     */
+    applyHide(entry: UserMessageHiddenEntry) {
+        const mg = this.getMessageGroup(entry.requestId);
+        if (mg) {
+            mg.applyHide(entry);
+            return;
+        }
+        // Fallback: locate historical containers by data attribute. We
+        // walk both user and agent containers since hide is per-side.
+        const key =
+            entry.requestId.requestId ||
+            (entry.requestId.clientRequestId as string | undefined);
+        if (!key) return;
+        const selectors: string[] = [];
+        if (entry.target === undefined || entry.target === "user") {
+            selectors.push(".chat-message-container-user");
+        }
+        if (entry.target === undefined || entry.target === "agent") {
+            selectors.push(".chat-message-container-agent");
+        }
+        const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+            selectors.join(", "),
+        );
+        containers.forEach((c) => {
+            if (
+                c.dataset.feedbackRequestId === key ||
+                c.dataset.feedbackClientRequestId === key
+            ) {
+                c.classList.toggle("chat-message-trashed", entry.hidden);
+            }
+        });
     }
 
     private getNotificationMessageGroupId(
@@ -1379,9 +1621,12 @@ export class ChatView {
                         this.commandBackStack[this.commandBackStackIndex] !==
                             currentContent
                     ) {
+                        // Include previous-session entries (.history) — the
+                        // up-arrow should walk every user bubble currently
+                        // in the window, not just the ones from this run.
                         const messages: NodeListOf<Element> =
                             this.messageDiv.querySelectorAll(
-                                ".chat-message-container-user:not(.history):not(.chat-message-hidden) .chat-message-content",
+                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
                             );
                         this.commandBackStack = Array.from(messages).map(
                             (m: Element) =>

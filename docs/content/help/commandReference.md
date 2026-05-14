@@ -475,6 +475,38 @@ Usage: `@email login`
 ## @email logout - Log out of MS Graph to access email  
 Usage: `@email logout`  
 
+## @feedback list - List recent user-feedback entries (most recent first)
+Usage: `@feedback list [--limit <number>] [--all]`
+### Flags:
+  - --limit &lt;number&gt; : Maximum number of entries to show (default: 20)
+  - --all : Include every entry; otherwise only the latest rating per request is shown (default: false)
+
+## @feedback top - Aggregate user feedback — counts by rating and category
+Usage: `@feedback top [--limit <number>]`
+### Flags:
+  - --limit &lt;number&gt; : Top-N depth for the per-category breakdown (default: 10)
+
+## @feedback filter - Filter feedback by rating, category, and/or date range
+Usage: `@feedback filter [--rating <string>] [--category <string>] [--since <string>] [--until <string>] [--limit <number>] [--all]`
+### Flags:
+  - --rating &lt;string&gt; : up | down | cleared
+  - --category &lt;string&gt; : wrong-agent | didnt-understand | bad-response | other
+  - --since &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/after this date
+  - --until &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/before this date
+  - --limit &lt;number&gt; : Maximum number of entries to show (default: 50)
+  - --all : Include every entry; otherwise only the latest rating per request (default: false)
+
+## @feedback export - Export user-feedback entries to a local file (JSON or JSONL)
+Usage: `@feedback export <file> [--format <string>] [--all]`
+### Arguments:
+  - &lt;file&gt; - Destination path. Extension picks the format if `--format` is omitted: `.jsonl` → JSONL, anything else → JSON. (type: string)
+### Flags:
+  - --format &lt;string&gt; : `json` | `jsonl` (overrides the path extension)
+  - --all : Include every entry; otherwise only the latest rating per request (default: false)
+
+## @feedback count - Show the total number of feedback entries
+Usage: `@feedback count`
+
 ## @history list - List history  
 Usage: `@history list`  
    
@@ -680,11 +712,12 @@ Usage: `@shell theme light`
   
 ## @shell theme dark - Set the theme to dark  
 Usage: `@shell theme dark`  
-          
-## @spelunker request - Send a natural language request to the Spelunker  
-Usage: `@spelunker request <question>`  
-### Arguments:  
-  - &lt;question&gt; - Request for Spelunker (type: string)  
+
+## @shell trash restore - Restore agent messages from the trash (un-hide everything that was sent to the bin via the trash icon)
+Usage: `@shell trash restore`
+
+## @shell trash flush - Permanently delete every message currently in the trash. They stay hidden and can no longer be restored
+Usage: `@shell trash flush`
 
 ## @uninstall - Uninstall an agent  
 Usage: `@uninstall <name>`  
