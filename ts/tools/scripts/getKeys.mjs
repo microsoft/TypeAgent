@@ -31,7 +31,7 @@ let paramSharedVault = undefined;
 let paramPrivateVault = undefined;
 let paramCommit = true;
 let paramVerbose = false;
-let paramFormat = undefined; // "yaml" | "dotenv" | undefined (auto-detect)
+let paramFormat = undefined; // "yaml" | "dotenv" | undefined (defaults to yaml)
 
 function nowHHMMSS() {
     const d = new Date();
@@ -328,14 +328,12 @@ async function writeYamlConfig(envMap) {
 }
 
 /**
- * Detect output format: explicit --dotenv flag, explicit --yaml flag,
- * or auto-detect based on which file exists (YAML preferred).
+ * Detect output format: explicit --dotenv flag selects legacy dotenv mode.
+ * Otherwise default to YAML (the current standard format).
  */
 function resolveFormat() {
     if (paramFormat) return paramFormat;
-    if (fs.existsSync(yamlPath)) return "yaml";
-    if (fs.existsSync(dotenvPath)) return "dotenv";
-    return "yaml"; // default for new installs
+    return "yaml";
 }
 
 /**
@@ -850,11 +848,8 @@ ${chalk.bold("Options:")}
   --dry-run   Preview changes without writing
   --verbose   Show detailed timing info
 
-${chalk.bold("Format auto-detection:")}
-  If neither --yaml nor --dotenv is specified, the tool auto-detects:
-    1. If config.local.yaml exists → use YAML
-    2. If .env exists → use .env (with deprecation warning)
-    3. Otherwise → use YAML (default for new installs)
+${chalk.bold("Default format:")}
+  YAML is the default. Pass --dotenv to use the deprecated .env format.
 
 ${chalk.bold("YAML mode (default):")}
   pull: Downloads the '${config.vault.configSecret}' secret as config.local.yaml
