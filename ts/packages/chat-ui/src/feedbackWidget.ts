@@ -415,8 +415,7 @@ class FeedbackPopover {
             },
             { value: "other", label: "Other" },
         ];
-        const selected =
-            prefill?.category ?? defaultCategory ?? "bad-response";
+        const selected = prefill?.category ?? defaultCategory ?? "bad-response";
         const radios: HTMLInputElement[] = [];
         for (const c of choices) {
             const row = document.createElement("label");

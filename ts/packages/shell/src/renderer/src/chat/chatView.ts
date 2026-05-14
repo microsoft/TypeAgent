@@ -312,7 +312,9 @@ export class ChatView {
      * submits go straight through the dispatcher. We don't try to
      * recover the saved rating state here; the widget starts unrated.
      */
-    private buildHistoricalController(requestId: RequestId): FeedbackController {
+    private buildHistoricalController(
+        requestId: RequestId,
+    ): FeedbackController {
         return {
             getCurrentFeedback: () => null,
             submit: async (rating, category, comment, includeContext) => {
@@ -330,18 +332,11 @@ export class ChatView {
                     console.error("recordUserFeedback failed", e);
                 }
             },
-            setHidden: async (
-                hidden: boolean,
-                target?: "user" | "agent",
-            ) => {
+            setHidden: async (hidden: boolean, target?: "user" | "agent") => {
                 const dispatcher = this._dispatcher;
                 if (dispatcher === undefined) return;
                 try {
-                    await dispatcher.recordUserHide(
-                        requestId,
-                        hidden,
-                        target,
-                    );
+                    await dispatcher.recordUserHide(requestId, hidden, target);
                 } catch (e) {
                     console.error("recordUserHide failed", e);
                 }

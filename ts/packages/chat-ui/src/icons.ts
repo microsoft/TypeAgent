@@ -8,10 +8,7 @@
 
 function fromSvg(svg: string): HTMLElement {
     const wrapper = document.createElement("i");
-    const empty = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "svg",
-    );
+    const empty = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     wrapper.appendChild(empty);
     empty.outerHTML = svg;
     return wrapper;

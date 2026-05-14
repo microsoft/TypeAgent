@@ -1003,7 +1003,10 @@ span.ansi-bright-white-fg {
   border-radius: 6px;
   color: #8a8a8a;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
 }
 .chat-action-button i {
   display: inline-flex;

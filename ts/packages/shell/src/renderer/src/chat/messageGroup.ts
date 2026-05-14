@@ -73,7 +73,8 @@ export class MessageGroup {
         const controller = this.buildFeedbackController();
         if (controller !== undefined) {
             this.statusMessage?.attachFeedbackController(controller);
-            this.statusMessage && stampRequestIdOn(this.statusMessage.div, requestId);
+            this.statusMessage &&
+                stampRequestIdOn(this.statusMessage.div, requestId);
             for (const agentMessage of this.agentMessages) {
                 agentMessage?.attachFeedbackController(controller);
                 agentMessage && stampRequestIdOn(agentMessage.div, requestId);
@@ -114,10 +115,7 @@ export class MessageGroup {
                     console.error("recordUserFeedback failed", e);
                 }
             },
-            setHidden: async (
-                hidden: boolean,
-                target?: "user" | "agent",
-            ) => {
+            setHidden: async (hidden: boolean, target?: "user" | "agent") => {
                 const dispatcher = this.chatView.dispatcher;
                 if (dispatcher === undefined) return;
                 try {
@@ -370,10 +368,7 @@ export class MessageGroup {
                     const controller = this.buildFeedbackController();
                     if (controller && this._requestId) {
                         newAgentMessage.attachFeedbackController(controller);
-                        stampRequestIdOn(
-                            newAgentMessage.div,
-                            this._requestId,
-                        );
+                        stampRequestIdOn(newAgentMessage.div, this._requestId);
                         if (this._currentFeedback !== null) {
                             newAgentMessage.setFeedbackState(
                                 this._currentFeedback,

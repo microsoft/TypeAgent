@@ -431,15 +431,17 @@ class FeedbackPopover {
 
         const choices: { value: UserFeedbackCategory; label: string }[] = [
             { value: "wrong-agent", label: "Wrong agent/action selected" },
-            { value: "didnt-understand", label: "Didn't understand my request" },
+            {
+                value: "didnt-understand",
+                label: "Didn't understand my request",
+            },
             {
                 value: "bad-response",
                 label: "Response was incorrect or unhelpful",
             },
             { value: "other", label: "Other" },
         ];
-        const selected =
-            prefill?.category ?? defaultCategory ?? "bad-response";
+        const selected = prefill?.category ?? defaultCategory ?? "bad-response";
         const radios: HTMLInputElement[] = [];
         for (const c of choices) {
             const row = document.createElement("label");
@@ -533,7 +535,12 @@ class FeedbackPopover {
             }
         };
         setTimeout(
-            () => document.addEventListener("mousedown", this.dismissHandler, true),
+            () =>
+                document.addEventListener(
+                    "mousedown",
+                    this.dismissHandler,
+                    true,
+                ),
             0,
         );
         document.addEventListener("keydown", this.keyHandler, true);

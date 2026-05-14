@@ -259,7 +259,11 @@ function gatherFeedbackContext(
                 break;
         }
     }
-    if (prompt === undefined && responses.length === 0 && actions.length === 0) {
+    if (
+        prompt === undefined &&
+        responses.length === 0 &&
+        actions.length === 0
+    ) {
         return undefined;
     }
     const result: ReturnType<typeof gatherFeedbackContext> = {

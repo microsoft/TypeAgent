@@ -18,12 +18,7 @@ import {
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chat/chatView";
-import {
-    iconCheckMarkCircle,
-    iconRoadrunner,
-    iconTrash,
-    iconX,
-} from "./icon";
+import { iconCheckMarkCircle, iconRoadrunner, iconTrash, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
 import { SettingsView } from "./settingsView";
 import { FeedbackController, FeedbackWidget } from "./feedbackWidget";
