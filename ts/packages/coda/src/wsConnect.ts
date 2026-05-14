@@ -112,13 +112,27 @@ function arrayBufferToJson(arrayBuffer: any) {
     }
 }
 
+// Single in-flight reconnect interval. Pre-discovery code path spawned
+// a new setInterval each time reconnect was called (from initializeWS
+// and from every onclose); on rapid disconnects that leaked one
+// interval per disconnect, all racing to call ensureWebsocketConnected.
+// Guard with a module-scoped handle so only one timer is alive at a time.
+let reconnectIntervalId: ReturnType<typeof setInterval> | undefined;
+
 function reconnectWebSocket() {
-    const connectionCheckIntervalId = setInterval(async () => {
+    if (reconnectIntervalId !== undefined) {
+        return;
+    }
+    reconnectIntervalId = setInterval(async () => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             console.log("Clearing reconnect retry interval");
-            clearInterval(connectionCheckIntervalId);
+            clearInterval(reconnectIntervalId);
+            reconnectIntervalId = undefined;
         } else {
             console.log("Retrying connection");
+            // Re-runs the discovery handshake — important because the
+            // code agent's port can change across agent-server
+            // restarts (now that it binds to an OS-assigned port).
             await ensureWebsocketConnected();
         }
     }, 5 * 1000);
