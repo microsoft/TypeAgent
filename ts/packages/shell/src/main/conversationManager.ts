@@ -103,6 +103,12 @@ export async function replayDisplayHistory(
                     entry.source,
                 );
                 break;
+            case "user-feedback":
+                // Last-wins is enforced at apply time by the renderer
+                // (newer entry replaces older). The renderer simply applies
+                // each entry in order.
+                clientIO.onUserFeedback?.(entry);
+                break;
             // pending-interaction, interaction-resolved, interaction-cancelled
             // are not replayed — the Shell does not yet support deferred
             // interactions so there is no UI to display them.

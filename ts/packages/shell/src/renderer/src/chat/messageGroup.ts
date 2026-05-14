@@ -7,12 +7,28 @@ import {
     IAgentMessage,
     NotifyExplainedData,
     RequestId,
+    UserFeedbackEntry,
 } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 import { MessageContainer } from "../messageContainer";
 import { ChatView } from "./chatView";
 import { SettingsView } from "../settingsView";
+
+/**
+ * Persist the requestId on the agent message container as data
+ * attributes so that when chat history is restored from saved HTML, we
+ * can locate the rated request and rebuild a fresh widget with click
+ * handlers (the saved HTML has only DOM, no JS state).
+ */
+function stampRequestIdOn(div: HTMLElement, requestId: RequestId) {
+    if (requestId.requestId) {
+        div.dataset.feedbackRequestId = requestId.requestId;
+    }
+    if (requestId.clientRequestId !== undefined) {
+        div.dataset.feedbackClientRequestId = String(requestId.clientRequestId);
+    }
+}
 
 export class MessageGroup {
     public metricsDiv?: {
@@ -23,6 +39,77 @@ export class MessageGroup {
     private statusMessage: MessageContainer | undefined;
     private readonly agentMessages: MessageContainer[] = [];
     private readonly start: number = performance.now();
+
+    // The canonical RequestId for this group, populated when the server
+    // assigns a UUID via setUserRequest (or when a remote/replayed
+    // MessageGroup is constructed). Required for recordUserFeedback;
+    // the feedback widget is attached only after this is set.
+    private _requestId: RequestId | undefined;
+    private _currentFeedback: UserFeedbackEntry | null = null;
+
+    public get requestId(): RequestId | undefined {
+        return this._requestId;
+    }
+
+    /**
+     * Associate this group with a server-assigned RequestId. Idempotent —
+     * later calls with the same id are no-ops. Also wires feedback for
+     * any agent messages that already exist.
+     *
+     * Notifications use an empty server requestId and identify the group
+     * by clientRequestId, so equality has to compare both fields (not
+     * just `.requestId`).
+     */
+    public setRequestId(requestId: RequestId) {
+        if (
+            this._requestId !== undefined &&
+            this._requestId.requestId === requestId.requestId &&
+            this._requestId.clientRequestId === requestId.clientRequestId
+        ) {
+            return;
+        }
+        this._requestId = requestId;
+        const controller = this.buildFeedbackController();
+        if (controller !== undefined) {
+            this.statusMessage?.attachFeedbackController(controller);
+            this.statusMessage && stampRequestIdOn(this.statusMessage.div, requestId);
+            for (const agentMessage of this.agentMessages) {
+                agentMessage?.attachFeedbackController(controller);
+                agentMessage && stampRequestIdOn(agentMessage.div, requestId);
+            }
+        }
+        if (this._currentFeedback !== null) {
+            this.applyFeedback(this._currentFeedback);
+        }
+    }
+
+    private buildFeedbackController() {
+        const reqId = this._requestId;
+        if (reqId === undefined) return undefined;
+        return {
+            getCurrentFeedback: () => this._currentFeedback,
+            submit: async (
+                rating: UserFeedbackEntry["rating"],
+                category?: UserFeedbackEntry["category"],
+                comment?: string,
+                includeContext?: boolean,
+            ) => {
+                const dispatcher = this.chatView.dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserFeedback(
+                        reqId,
+                        rating,
+                        category,
+                        comment,
+                        includeContext,
+                    );
+                } catch (e) {
+                    console.error("recordUserFeedback failed", e);
+                }
+            },
+        };
+    }
     constructor(
         private readonly chatView: ChatView,
         private readonly settingsView: SettingsView,
@@ -174,6 +261,14 @@ export class MessageGroup {
                 this.start,
                 true,
             );
+            const controller = this.buildFeedbackController();
+            if (controller && this._requestId) {
+                this.statusMessage.attachFeedbackController(controller);
+                stampRequestIdOn(this.statusMessage.div, this._requestId);
+                if (this._currentFeedback !== null) {
+                    this.statusMessage.setFeedbackState(this._currentFeedback);
+                }
+            }
         }
 
         return this.statusMessage;
@@ -254,6 +349,19 @@ export class MessageGroup {
                     if (notification) {
                         newAgentMessage.div.classList.add("notification");
                     }
+                    const controller = this.buildFeedbackController();
+                    if (controller && this._requestId) {
+                        newAgentMessage.attachFeedbackController(controller);
+                        stampRequestIdOn(
+                            newAgentMessage.div,
+                            this._requestId,
+                        );
+                        if (this._currentFeedback !== null) {
+                            newAgentMessage.setFeedbackState(
+                                this._currentFeedback,
+                            );
+                        }
+                    }
                     this.agentMessages[i] = newAgentMessage;
                 }
                 beforeElem = this.agentMessages[i];
@@ -263,6 +371,29 @@ export class MessageGroup {
 
         this.updateMetrics(msg.metrics);
         return this.agentMessages[index];
+    }
+
+    /** Switch the feedback widget variant on every bubble in the group. */
+    public setFeedbackVariant(
+        variant: import("../feedbackWidget").FeedbackUIVariant,
+    ) {
+        this.statusMessage?.setFeedbackVariant(variant);
+        for (const agentMessage of this.agentMessages) {
+            agentMessage?.setFeedbackVariant(variant);
+        }
+    }
+
+    /**
+     * Apply a feedback rating to every agent message bubble in this group.
+     * Feedback is per-request, so all bubbles for the request reflect the
+     * same rating regardless of which one was clicked.
+     */
+    public applyFeedback(entry: UserFeedbackEntry) {
+        this._currentFeedback = entry.rating === null ? null : entry;
+        this.statusMessage?.setFeedbackState(this._currentFeedback);
+        for (const agentMessage of this.agentMessages) {
+            agentMessage?.setFeedbackState(this._currentFeedback);
+        }
     }
 
     public getLastAgentMessage(): MessageContainer | undefined {

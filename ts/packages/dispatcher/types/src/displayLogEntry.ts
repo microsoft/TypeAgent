@@ -99,6 +99,30 @@ export type CommandResultEntry = {
     tokenUsage?: import("./dispatcher.js").CompletionUsageStats;
 };
 
+export type UserFeedbackRating = "up" | "down" | null;
+
+export type UserFeedbackCategory =
+    | "wrong-agent"
+    | "didnt-understand"
+    | "bad-response"
+    | "other";
+
+/**
+ * A user's rating of a completed agent message, keyed by the request
+ * that produced the message. Append-only: later entries with the same
+ * requestId shadow earlier ones, so editing or clearing a rating is
+ * just another entry.
+ */
+export type UserFeedbackEntry = {
+    type: "user-feedback";
+    seq: number;
+    timestamp: number;
+    requestId: RequestId;
+    rating: UserFeedbackRating;
+    category?: UserFeedbackCategory;
+    comment?: string;
+};
+
 export type DisplayLogEntry =
     | SetDisplayEntry
     | AppendDisplayEntry
@@ -108,4 +132,5 @@ export type DisplayLogEntry =
     | PendingInteractionEntry
     | InteractionResolvedEntry
     | InteractionCancelledEntry
-    | CommandResultEntry;
+    | CommandResultEntry
+    | UserFeedbackEntry;

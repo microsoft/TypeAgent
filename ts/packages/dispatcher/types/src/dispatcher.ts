@@ -10,7 +10,11 @@ import {
     TypeAgentAction,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
-import type { DisplayLogEntry } from "./displayLogEntry.js";
+import type {
+    DisplayLogEntry,
+    UserFeedbackCategory,
+    UserFeedbackRating,
+} from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
 
 export const DispatcherName = "dispatcher";
@@ -278,4 +282,21 @@ export interface Dispatcher {
      * @param clientRequestId the same value passed to processCommand() as clientRequestId
      */
     cancelCommandByClientId(clientRequestId: unknown): void;
+
+    /**
+     * Record a user's rating on the agent message identified by requestId.
+     * Append-only: a subsequent call with the same requestId supersedes the
+     * earlier rating. Pass `rating: null` to clear.
+     *
+     * The dispatcher persists the rating in displayLog, emits a telemetry
+     * "userFeedback" event, and broadcasts the change to other connected
+     * clients via ClientIO.onUserFeedback so their views stay in sync.
+     */
+    recordUserFeedback(
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ): Promise<void>;
 }

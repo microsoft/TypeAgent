@@ -12,6 +12,7 @@ import {
     PhaseTiming,
     NotifyExplainedData,
     Dispatcher,
+    UserFeedbackEntry,
 } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
@@ -20,6 +21,7 @@ import { ChatView } from "./chat/chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
 import { SettingsView } from "./settingsView";
+import { FeedbackController, FeedbackWidget } from "./feedbackWidget";
 
 function updateMetrics(
     mainMetricsDiv: HTMLDivElement,
@@ -108,6 +110,7 @@ export class MessageContainer {
     private pendingSpeakText: string = "";
     private defaultSource?: string;
     private action?: TypeAgentAction | string[];
+    private feedbackWidget?: FeedbackWidget;
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
@@ -327,6 +330,35 @@ export class MessageContainer {
 
     public getMessageDiv() {
         return this.messageDiv;
+    }
+
+    /**
+     * Build the feedback affordance for this bubble. Idempotent: if a
+     * widget already exists, leaves it alone (subsequent calls during
+     * RequestId promotion are no-ops).
+     */
+    public attachFeedbackController(controller: FeedbackController) {
+        if (this.classNameSuffix !== "agent") return;
+        if (this.feedbackWidget !== undefined) return;
+        this.feedbackWidget = new FeedbackWidget(
+            {
+                container: this.div,
+                bodyDiv: this.messageBodyDiv,
+                headerDiv: this.timestampDiv,
+                messageDiv: this.messageDiv,
+            },
+            controller,
+            this.chatView.feedbackUIVariant,
+        );
+    }
+
+    public setFeedbackState(entry: UserFeedbackEntry | null) {
+        this.feedbackWidget?.setFeedbackState(entry);
+    }
+
+    /** Switch the feedback widget variant in place (settings change). */
+    public setFeedbackVariant(variant: import("./feedbackWidget").FeedbackUIVariant) {
+        this.feedbackWidget?.setVariant(variant);
     }
 
     public setMessage(

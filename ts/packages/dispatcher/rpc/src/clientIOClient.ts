@@ -74,5 +74,8 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         takeAction(...args): void {
             return rpc.send("takeAction", ...args);
         },
+        onUserFeedback(...args): void {
+            return rpc.send("onUserFeedback", ...args);
+        },
     };
 }

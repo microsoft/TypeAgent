@@ -253,6 +253,14 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.takeAction(requestId, ...args),
             ),
+        onUserFeedback: (entry) => {
+            // Fan out the rating change to every connected client (including
+            // the originator — the dispatcher relies on the broadcast for its
+            // own local UI update too).
+            broadcast("onUserFeedback", entry.requestId, (cio) =>
+                cio.onUserFeedback?.(entry),
+            );
+        },
     };
     const context = await initializeCommandHandlerContext(hostName, {
         ...options,

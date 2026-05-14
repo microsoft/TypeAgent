@@ -9,6 +9,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestId, RequestMetrics } from "./dispatcher.js";
+import type { UserFeedbackEntry } from "./displayLogEntry.js";
 import type { PendingInteractionRequest } from "./pendingInteraction.js";
 
 export type TemplateData = {
@@ -137,4 +138,11 @@ export interface ClientIO {
 
     // Host specific (TODO: Formalize the API)
     takeAction(requestId: RequestId, action: string, data: unknown): void;
+
+    // User-feedback broadcast. When one client posts a rating via
+    // Dispatcher.recordUserFeedback, the dispatcher fans the resulting
+    // UserFeedbackEntry out to all connected clients via this call so
+    // their views stay in sync without a full history refetch.
+    // Optional: tests and CLI-only implementations may omit it.
+    onUserFeedback?(entry: UserFeedbackEntry): void;
 }

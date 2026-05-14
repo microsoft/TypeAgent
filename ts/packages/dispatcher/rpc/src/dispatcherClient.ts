@@ -67,5 +67,8 @@ export function createDispatcherRpcClient(
         cancelCommandByClientId(...args) {
             return rpc.send("cancelCommandByClientId", ...args);
         },
+        async recordUserFeedback(...args) {
+            return rpc.invoke("recordUserFeedback", ...args);
+        },
     };
 }

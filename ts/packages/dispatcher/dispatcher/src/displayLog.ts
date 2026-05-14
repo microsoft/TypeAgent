@@ -10,6 +10,9 @@ import type {
     RequestId,
     RequestMetrics,
     PendingInteractionRequest,
+    UserFeedbackCategory,
+    UserFeedbackEntry,
+    UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
 
 import fs from "node:fs";
@@ -295,6 +298,58 @@ export class DisplayLog {
         this.entries.push(entry);
         this.dirty = true;
         return seq;
+    }
+
+    /**
+     * Append a user-feedback entry. Append-only: a later entry with the
+     * same requestId supersedes any earlier one. Use getCurrentFeedback()
+     * to fetch the effective rating.
+     * @returns the constructed entry (with seq stamped)
+     */
+    logUserFeedback(
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+    ): UserFeedbackEntry {
+        const seq = this.nextSeq++;
+        const entry: UserFeedbackEntry = {
+            type: "user-feedback",
+            seq,
+            timestamp: Date.now(),
+            requestId,
+            rating,
+        };
+        if (category !== undefined) {
+            entry.category = category;
+        }
+        if (comment !== undefined && comment.length > 0) {
+            entry.comment = comment;
+        }
+        this.entries.push(entry);
+        this.dirty = true;
+        return entry;
+    }
+
+    /**
+     * Resolve the current (last-wins) feedback for a given requestId.
+     * Walks entries in reverse so this is O(n) worst case; callers that
+     * need to bulk-resolve many requestIds should iterate getEntries()
+     * once themselves.
+     */
+    getCurrentFeedback(requestId: RequestId): UserFeedbackEntry | undefined {
+        const matchId = requestId.requestId;
+        if (!matchId) return undefined;
+        for (let i = this.entries.length - 1; i >= 0; i--) {
+            const e = this.entries[i];
+            if (
+                e.type === "user-feedback" &&
+                e.requestId.requestId === matchId
+            ) {
+                return e;
+            }
+        }
+        return undefined;
     }
 
     /**

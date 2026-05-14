@@ -76,6 +76,9 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         cancelInteraction(...args) {
             calls.push({ method: "cancelInteraction", args });
         },
+        async recordUserFeedback(...args) {
+            calls.push({ method: "recordUserFeedback", args });
+        },
         ...overrides,
         calls,
     };

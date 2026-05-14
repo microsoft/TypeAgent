@@ -14,6 +14,9 @@ import type {
     DispatcherStatus,
     ProcessCommandOptions,
     PendingInteractionResponse,
+    RequestId,
+    UserFeedbackCategory,
+    UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 
@@ -64,6 +67,14 @@ export type DispatcherInvokeFunctions = {
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 
     respondToInteraction(response: PendingInteractionResponse): Promise<void>;
+
+    recordUserFeedback(
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ): Promise<void>;
 };
 
 export type DispatcherCallFunctions = {

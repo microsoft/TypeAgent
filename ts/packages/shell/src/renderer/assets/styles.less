@@ -1548,3 +1548,301 @@ input[type="file"] {
     color: #aaa;
   }
 }
+
+/* ----- Feedback widget --------------------------------------------------- */
+
+@feedback-accent: #1f6feb;
+@feedback-dim: #8a8a8a;
+
+.chat-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: @feedback-dim;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+
+  i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  i svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #333;
+  }
+  &:focus-visible {
+    outline: 2px solid @feedback-accent;
+    outline-offset: 1px;
+  }
+  &.feedback-selected {
+    color: @feedback-accent;
+  }
+  &[data-action="thumbs-down"].feedback-selected {
+    color: #c83e3e;
+  }
+  &.feedback-copied {
+    color: #2e8b57; // sea green — quick "copied!" confirmation
+  }
+}
+
+.chat-message-actions {
+  display: flex;
+  gap: 2px;
+  margin: 2px 0 6px 40px; // align under the bubble (left of agent icon area)
+  align-items: center;
+  opacity: 0.65;
+  transition: opacity 0.15s ease;
+}
+
+.chat-message-container-agent:hover .chat-message-actions,
+.chat-message-container-agent.feedback-rated .chat-message-actions {
+  opacity: 1;
+}
+
+/* Variant: footer-always — already covered by base rules above */
+
+/* Variant: bubble-corner — thumbs anchored top-right INSIDE the bubble.
+   Reserve right-padding in the message content so text wraps before
+   reaching the corner controls (otherwise the thumbs sit on top of the
+   last words on the first line). */
+.chat-message-container-agent.feedback-variant-bubble-corner
+  .chat-message-agent {
+  position: relative;
+}
+.chat-message-container-agent.feedback-variant-bubble-corner
+  .chat-message-content {
+  padding-right: 60px;
+}
+.chat-message-container-agent.feedback-variant-bubble-corner
+  .chat-message-actions-corner {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  margin: 0;
+  padding: 1px 2px;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.chat-message-container-agent.feedback-variant-bubble-corner
+  .chat-message-actions-corner
+  .chat-action-button {
+  width: 22px;
+  height: 22px;
+}
+.chat-message-container-agent.feedback-variant-bubble-corner:hover
+  .chat-message-actions-corner,
+.chat-message-container-agent.feedback-variant-bubble-corner.feedback-rated
+  .chat-message-actions-corner {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hover affordance: signal that the avatar is interactive in this variant. */
+.chat-message-container-agent.feedback-variant-avatar-hover .agent-icon {
+  cursor: pointer;
+}
+/* Ring the avatar when a rating exists so the user can find their report
+   without hovering — accent for thumbs-up, warning for thumbs-down. The
+   ring is rendered with box-shadow so it doesn't grow the 30x30 icon. */
+.chat-message-container-agent.feedback-variant-avatar-hover.feedback-rated
+  .agent-icon {
+  box-shadow: 0 0 0 2px @feedback-accent;
+}
+.chat-message-container-agent.feedback-variant-avatar-hover.feedback-rated:has(
+    .chat-action-button[data-action="thumbs-down"].feedback-selected
+  )
+  .agent-icon {
+  box-shadow: 0 0 0 2px #c83e3e;
+}
+
+/* Dropdown menu (⋯ more / category menu) */
+.chat-feedback-menu {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 220px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+.chat-feedback-menu-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  color: #222;
+}
+.chat-feedback-menu-item:hover {
+  background: #f3f5f7;
+}
+
+/* Popover card (thumbs-down detail) */
+.chat-feedback-popover {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
+  padding: 14px 16px;
+  width: 340px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #222;
+}
+.chat-feedback-popover-heading {
+  font-weight: 600;
+  font-size: 14px;
+}
+.chat-feedback-popover-subtitle {
+  color: #555;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.chat-feedback-popover-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+.chat-feedback-popover-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  padding: 6px 8px;
+  font: inherit;
+}
+.chat-feedback-popover-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.chat-feedback-popover-fieldset legend {
+  font-weight: 500;
+  font-size: 12px;
+  padding: 0 0 4px 0;
+  color: #444;
+}
+.chat-feedback-popover-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.chat-feedback-popover-share {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: #444;
+  line-height: 1.4;
+}
+.chat-feedback-popover-share input {
+  margin-top: 2px;
+}
+.chat-feedback-popover-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chat-feedback-popover-button {
+  border: 1px solid #d0d7de;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: #222;
+}
+.chat-feedback-popover-button:hover {
+  background: #f3f5f7;
+}
+.chat-feedback-popover-button.submit {
+  background: @feedback-accent;
+  color: #fff;
+  border-color: @feedback-accent;
+}
+.chat-feedback-popover-button.submit:hover {
+  background: darken(@feedback-accent, 6%);
+}
+.chat-feedback-popover-button.clear {
+  color: #a23737;
+  border-color: transparent;
+}
+
+/* Dark mode */
+body.dark-mode {
+  .chat-action-button {
+    color: #9aa0a6;
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #d7dbe0;
+    }
+    &.feedback-selected {
+      color: #6aa3ff;
+    }
+    &[data-action="thumbs-down"].feedback-selected {
+      color: #e87a7a;
+    }
+  }
+  .chat-feedback-menu,
+  .chat-feedback-popover {
+    background: #2a2a36;
+    border-color: #4a4a5c;
+    color: #e1e4ea;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  }
+  .chat-feedback-menu-item {
+    color: #e1e4ea;
+  }
+  .chat-feedback-menu-item:hover {
+    background: #353648;
+  }
+  .chat-feedback-popover-subtitle,
+  .chat-feedback-popover-fieldset legend,
+  .chat-feedback-popover-share {
+    color: #b4b9c2;
+  }
+  .chat-feedback-popover-textarea {
+    background: #1f1f29;
+    border-color: #4a4a5c;
+    color: #e1e4ea;
+  }
+  .chat-feedback-popover-button {
+    background: #353648;
+    border-color: #4a4a5c;
+    color: #e1e4ea;
+  }
+  .chat-feedback-popover-button:hover {
+    background: #44455c;
+  }
+}
