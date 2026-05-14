@@ -10,6 +10,10 @@ import type {
     RequestId,
     RequestMetrics,
     PendingInteractionRequest,
+    UserFeedbackCategory,
+    UserFeedbackEntry,
+    UserFeedbackRating,
+    UserMessageHiddenEntry,
 } from "@typeagent/dispatcher-types";
 
 import fs from "node:fs";
@@ -295,6 +299,103 @@ export class DisplayLog {
         this.entries.push(entry);
         this.dirty = true;
         return seq;
+    }
+
+    /**
+     * Append a user-feedback entry. Append-only: a later entry with the
+     * same requestId supersedes any earlier one. Use getCurrentFeedback()
+     * to fetch the effective rating.
+     * @returns the constructed entry (with seq stamped)
+     */
+    logUserFeedback(
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+    ): UserFeedbackEntry {
+        const seq = this.nextSeq++;
+        const entry: UserFeedbackEntry = {
+            type: "user-feedback",
+            seq,
+            timestamp: Date.now(),
+            requestId,
+            rating,
+        };
+        if (category !== undefined) {
+            entry.category = category;
+        }
+        if (comment !== undefined && comment.length > 0) {
+            entry.comment = comment;
+        }
+        this.entries.push(entry);
+        this.dirty = true;
+        return entry;
+    }
+
+    /**
+     * Append a user-hide entry. Append-only: a later entry with the same
+     * requestId supersedes any earlier one. `permanent` marks a flushed
+     * hide (recoverable only via direct displayLog editing).
+     */
+    logUserHide(
+        requestId: RequestId,
+        hidden: boolean,
+        target?: "user" | "agent",
+        permanent?: boolean,
+    ): UserMessageHiddenEntry {
+        const seq = this.nextSeq++;
+        const entry: UserMessageHiddenEntry = {
+            type: "user-message-hidden",
+            seq,
+            timestamp: Date.now(),
+            requestId,
+            hidden,
+        };
+        if (target !== undefined) entry.target = target;
+        if (permanent === true) entry.permanent = true;
+        this.entries.push(entry);
+        this.dirty = true;
+        return entry;
+    }
+
+    /**
+     * Return the latest hide-entry per (requestId, target) pair. Used
+     * by commands like `@shell trash restore` to find what's currently
+     * in the bin. User-bubble and agent-bubble hides for the same
+     * request are tracked separately.
+     */
+    getCurrentHides(): UserMessageHiddenEntry[] {
+        const latest = new Map<string, UserMessageHiddenEntry>();
+        for (const e of this.entries) {
+            if (e.type !== "user-message-hidden") continue;
+            const reqKey =
+                e.requestId.requestId || String(e.requestId.clientRequestId);
+            if (!reqKey) continue;
+            const key = `${reqKey}::${e.target ?? "all"}`;
+            latest.set(key, e);
+        }
+        return Array.from(latest.values());
+    }
+
+    /**
+     * Resolve the current (last-wins) feedback for a given requestId.
+     * Walks entries in reverse so this is O(n) worst case; callers that
+     * need to bulk-resolve many requestIds should iterate getEntries()
+     * once themselves.
+     */
+    getCurrentFeedback(requestId: RequestId): UserFeedbackEntry | undefined {
+        const matchId = requestId.requestId;
+        if (!matchId) return undefined;
+        for (let i = this.entries.length - 1; i >= 0; i--) {
+            const e = this.entries[i];
+            if (
+                e.type === "user-feedback" &&
+                e.requestId.requestId === matchId
+            ) {
+                return e;
+            }
+        }
+        return undefined;
     }
 
     /**

@@ -10,7 +10,11 @@ import {
     TypeAgentAction,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
-import type { DisplayLogEntry } from "./displayLogEntry.js";
+import type {
+    DisplayLogEntry,
+    UserFeedbackCategory,
+    UserFeedbackRating,
+} from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
 
 export const DispatcherName = "dispatcher";
@@ -278,4 +282,53 @@ export interface Dispatcher {
      * @param clientRequestId the same value passed to processCommand() as clientRequestId
      */
     cancelCommandByClientId(clientRequestId: unknown): void;
+
+    /**
+     * Record a user's rating on the agent message identified by requestId.
+     * Append-only: a subsequent call with the same requestId supersedes the
+     * earlier rating. Pass `rating: null` to clear.
+     *
+     * The dispatcher persists the rating in displayLog, emits a telemetry
+     * "userFeedback" event, and broadcasts the change to other connected
+     * clients via ClientIO.onUserFeedback so their views stay in sync.
+     */
+    recordUserFeedback(
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ): Promise<void>;
+
+    /**
+     * Move (or restore) one side of a request — `target: "user"` for
+     * the user message bubble, `target: "agent"` for the agent
+     * response(s), or omit `target` to apply to both. Append-only: a
+     * subsequent call with the same (requestId, target) supersedes the
+     * earlier state. `permanent: true` marks the hide as flushed — the
+     * user can't recover it via `@shell trash restore`.
+     *
+     * Persists to displayLog, broadcasts via ClientIO.onUserHide.
+     */
+    recordUserHide(
+        requestId: RequestId,
+        hidden: boolean,
+        target?: "user" | "agent",
+        permanent?: boolean,
+    ): Promise<void>;
+
+    /**
+     * Restore every currently-hidden (non-permanent) bubble. Writes one
+     * `hidden: false` entry per restored request. Returns the count
+     * restored.
+     */
+    restoreAllHidden(): Promise<number>;
+
+    /**
+     * Flush the trash: every currently-hidden (non-permanent) bubble is
+     * re-recorded with `permanent: true`. The bubbles stay hidden, and
+     * `restoreAllHidden` will no longer touch them. Returns the count
+     * flushed.
+     */
+    flushHidden(): Promise<number>;
 }

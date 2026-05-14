@@ -125,8 +125,7 @@ function setConnectionStatus(connected: boolean) {
             banner.style.display = "none";
         }, 3000);
     } else {
-        banner.textContent =
-            `Not connected — ensure agent-server is running on ${AGENT_SERVER_DEFAULT_URL}`;
+        banner.textContent = `Not connected — ensure agent-server is running on ${AGENT_SERVER_DEFAULT_URL}`;
         banner.className = "connection-banner";
         banner.style.display = "";
         chatPanel.setEnabled(false);
