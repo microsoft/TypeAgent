@@ -16,7 +16,42 @@
   "license": "MIT",
   "author": "Microsoft",
   "publisher": "typeagent",
+  "type": "module",
+  "main": "./dist/client.js",
+  "scripts": {
+    "build": "tsc -b && vite build --config vite.config.webview.ts",
+    "build:webview": "vite build --config vite.config.webview.ts",
+    "clean": "rimraf dist webview-dist"
+  },
   "contributes": {
+    "commands": [
+      {
+        "command": "agr.traceMatch",
+        "title": "Trace Match",
+        "category": "Action Grammar"
+      },
+      {
+        "command": "agr.openDebugPanel",
+        "title": "Open Debug Panel",
+        "icon": "$(debug)",
+        "category": "Action Grammar"
+      },
+      {
+        "command": "agr.showCoverage",
+        "title": "Show Coverage",
+        "category": "Action Grammar"
+      },
+      {
+        "command": "agr.clearCoverage",
+        "title": "Clear Coverage",
+        "category": "Action Grammar"
+      },
+      {
+        "command": "agr.diffGrammars",
+        "title": "Diff Grammars",
+        "category": "Action Grammar"
+      }
+    ],
     "grammars": [
       {
         "language": "agr",
@@ -36,7 +71,33 @@
         ],
         "configuration": "./language-configuration.json"
       }
-    ]
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "agr.openDebugPanel",
+          "when": "editorLangId == agr",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onLanguage:agr"
+  ],
+  "dependencies": {
+    "grammar-tools-core": "workspace:*",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "grammar-tools-ui": "workspace:*",
+    "lit": "^3.1.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.4.5",
+    "vite": "^5.4.0"
   },
   "engines": {
     "vscode": "^1.90.0"

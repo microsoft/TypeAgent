@@ -47,7 +47,7 @@ import { BrowserActions } from "./browserActionSchema.mts";
 // ===== Follow Link =====
 <FollowLink> = follow (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords } }
                | click (on)? (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords } }
-               | click (on)? $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords } };
+               | click (on)? (the)? button $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords } };
 
 // ===== Tab Control =====
 <TabControl> = switch to tab $(tabDescription:wildcard) -> { actionName: "changeTab", parameters: { tabDescription } }

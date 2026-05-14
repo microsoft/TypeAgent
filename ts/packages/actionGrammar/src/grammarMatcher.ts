@@ -24,6 +24,7 @@ import {
     getDispatchMergedSingle,
     getDispatchMergedMulti,
 } from "./dispatchHelpers.js";
+import type { TraceCallback } from "./traceEvents.js";
 
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
@@ -294,6 +295,13 @@ export type GrammarMatchOptions = {
      * behavior to the pre-memoization matcher.
      */
     memoization?: boolean;
+
+    /**
+     * Opt-in trace callback. When provided, the matcher emits
+     * {@link TraceEvent}s as it progresses through the grammar.
+     * Zero overhead when absent (single `if` guard on the hot path).
+     */
+    trace?: TraceCallback;
 };
 
 // Origin tag carried on each Backtrack frame.  Used by
@@ -1057,6 +1065,13 @@ export type MatchState = PendingMatchState & {
     // other policy fields.
     debugEnabled: boolean;
 
+    // When true, `state.name` and `namePrefix` are populated with
+    // human-readable rule identifiers.  Set when EITHER debug
+    // logging or tracing is active.  Separated from `debugEnabled`
+    // so that tracing gets rule names without also triggering the
+    // ~20 `debugMatchRaw(...)` logging calls on the hot path.
+    trackNames: boolean;
+
     // When false, `enterRulesAlternation` skips the memo marker
     // push entirely - no failure caching, no success capture, no
     // replay.  See `memoization` on `GrammarMatchOptions`.
@@ -1077,6 +1092,21 @@ export type MatchState = PendingMatchState & {
     // policy fields - not snapshotted, persists across
     // `tryNextBacktrack` restores.  See `MemoCache`.
     memoCache: MemoCache;
+
+    // When true, the matcher writes `lastMatchedPartInfo` on each
+    // successful string/number part match.  Only the completion
+    // system reads this field; the non-completion `matchGrammar`
+    // path sets this to `false` to avoid 4-6 object allocations
+    // per match attempt and skip the associated memoization delta
+    // bookkeeping (which becomes a no-op when the field stays
+    // `undefined` throughout).
+    trackLastMatchedPart: boolean;
+
+    // Opt-in trace hook.  Set once at `initialMatchState` time.
+    // Zero cost when undefined (single `if` guard).  Not in
+    // PendingMatchState/SnapshotState - persists across backtracks.
+    trace?: TraceCallback | undefined;
+    traceSeq: number;
 };
 
 // Explicit per-field copy of `state`.  Single source of truth
@@ -1316,10 +1346,19 @@ function restoreSnapshot(state: MatchState, snap: SnapshotState) {
 }
 
 export function tryNextBacktrack(state: MatchState): boolean {
+    const debugEnabled = state.debugEnabled;
     while (true) {
         const frame = state.backtracks;
         if (frame === undefined) {
             return false;
+        }
+        if (state.trace !== undefined) {
+            state.trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "backtrack",
+                origin: frame.origin,
+            });
         }
         if (frame.origin === "alternation") {
             // Cursor frame: restore the shared base, then overlay the
@@ -1336,7 +1375,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
             // value, spacingMode) are written from `rule` directly
             // after restoring the shared base.
             restoreSnapshot(state, base);
-            state.name = state.debugEnabled ? `${frame.namePrefix}[${i}]` : "";
+            state.name = state.trackNames ? `${frame.namePrefix}[${i}]` : "";
             state.parts = rule.parts;
             state.value = rule.value;
             state.spacingMode = rule.spacingMode;
@@ -1346,6 +1385,15 @@ export function tryNextBacktrack(state: MatchState): boolean {
                 state.backtracks = frame.prev;
             }
             debugMatch(state, `Restoring local backtrack (alternation)`);
+            if (state.trace !== undefined) {
+                state.trace({
+                    seq: state.traceSeq++,
+                    inputPos: state.index,
+                    kind: "ruleEntered",
+                    rule: state.name,
+                    depth: state.nestedLevel,
+                });
+            }
             return true;
         }
         if (frame.origin === "memoMarker") {
@@ -1373,7 +1421,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     state.memoCache.set(frame.rules, inner);
                 }
                 inner.set(key, "failed");
-                if (state.debugEnabled) {
+                if (debugEnabled) {
                     debugMatchRaw(
                         `memoMarker: cached intrinsic failure for rules@${key}`,
                     );
@@ -1389,7 +1437,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     // soundness condition documented on
                     // `MemoCache`.
                     inner.set(key, frame.successes);
-                    if (state.debugEnabled) {
+                    if (debugEnabled) {
                         debugMatchRaw(
                             `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
                         );
@@ -2175,6 +2223,15 @@ export function finalizeNestedRule(
     const parent = state.parent;
     if (parent !== undefined) {
         debugMatch(state, `finished nested`);
+        if (state.trace !== undefined) {
+            state.trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "ruleExited",
+                rule: state.name,
+                result: "matched",
+            });
+        }
 
         // Reuse state
         const { valueIds, value: value } = state;
@@ -2290,6 +2347,7 @@ function matchStringPartWithWildcard(
     part: StringPart,
     state: MatchState,
 ) {
+    const debugEnabled = state.debugEnabled;
     regExp.lastIndex = state.index;
     while (true) {
         const match = regExp.exec(request);
@@ -2299,7 +2357,7 @@ function matchStringPartWithWildcard(
         const wildcardEnd = match.index;
         const newIndex = wildcardEnd + match[0].length;
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            if (state.debugEnabled) {
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -2321,18 +2379,16 @@ function matchStringPartWithWildcard(
             if (requiresValue(state, part)) {
                 addValue(state, part.variable, getJoinedValue(part));
             }
-            // Always replaced (never mutated in place):
-            // `captureSuccessDelta` relies on pointer inequality
-            // with `marker.lastMatchedPartInfoAtEntry` to detect
-            // whether this field changed during the sub-rule.
-            state.lastMatchedPartInfo = {
-                type: "string",
-                start: wildcardEnd,
-                part,
-                afterWildcard: true,
-                matchedSpacingMode: state.spacingMode,
-            };
-            if (state.debugEnabled) {
+            if (state.trackLastMatchedPart) {
+                state.lastMatchedPartInfo = {
+                    type: "string",
+                    start: wildcardEnd,
+                    part,
+                    afterWildcard: true,
+                    matchedSpacingMode: state.spacingMode,
+                };
+            }
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -2340,7 +2396,7 @@ function matchStringPartWithWildcard(
             }
             return true;
         }
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
@@ -2355,6 +2411,7 @@ function matchStringPartWithoutWildcard(
     part: StringPart,
     state: MatchState,
 ) {
+    const debugEnabled = state.debugEnabled;
     const curr = state.index;
     regExp.lastIndex = curr;
     if (!regExp.test(request)) {
@@ -2362,7 +2419,7 @@ function matchStringPartWithoutWildcard(
     }
     const newIndex = regExp.lastIndex;
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `Rejected non-separated matched string ${part.value.join(" ")}`,
@@ -2371,7 +2428,7 @@ function matchStringPartWithoutWildcard(
         return false;
     }
 
-    if (state.debugEnabled) {
+    if (debugEnabled) {
         debugMatch(
             state,
             `Matched string ${part.value.join(" ")} to ${newIndex}`,
@@ -2381,17 +2438,15 @@ function matchStringPartWithoutWildcard(
     if (requiresValue(state, part)) {
         addValue(state, part.variable, getJoinedValue(part));
     }
-    // Always replaced (never mutated in place):
-    // `captureSuccessDelta` relies on pointer inequality
-    // with `marker.lastMatchedPartInfoAtEntry` to detect
-    // whether this field changed during the sub-rule.
-    state.lastMatchedPartInfo = {
-        type: "string",
-        start: curr,
-        part,
-        afterWildcard: false,
-        matchedSpacingMode: state.spacingMode,
-    };
+    if (state.trackLastMatchedPart) {
+        state.lastMatchedPartInfo = {
+            type: "string",
+            start: curr,
+            part,
+            afterWildcard: false,
+            matchedSpacingMode: state.spacingMode,
+        };
+    }
     state.index = newIndex;
     return true;
 }
@@ -2524,7 +2579,8 @@ function getJoinedValue(part: StringPart): string {
 }
 
 function matchStringPart(request: string, state: MatchState, part: StringPart) {
-    if (state.debugEnabled) {
+    const debugEnabled = state.debugEnabled;
+    if (debugEnabled) {
         debugMatch(
             state,
             `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
@@ -2547,6 +2603,7 @@ function matchVarNumberPartWithWildcard(
     state: MatchState,
     part: VarNumberPart,
 ) {
+    const debugEnabled = state.debugEnabled;
     const curr = state.index;
     const re =
         leadingSpacingMode(state) === "none"
@@ -2567,7 +2624,7 @@ function matchVarNumberPartWithWildcard(
         const newIndex = wildcardEnd + match[0].length;
 
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            if (state.debugEnabled) {
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Rejected non-separated matched number at ${wildcardEnd}`,
@@ -2577,7 +2634,7 @@ function matchVarNumberPartWithWildcard(
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex)) {
-            if (state.debugEnabled) {
+            if (debugEnabled) {
                 debugMatch(
                     state,
                     `Matched number at ${wildcardEnd} to ${newIndex}`,
@@ -2587,19 +2644,19 @@ function matchVarNumberPartWithWildcard(
             const valueId = addValueId(state, part.variable);
             if (valueId !== undefined) {
                 addValueWithId(state, valueId, n, false);
-                // Always replaced (never mutated in place):
-                // `captureSuccessDelta` relies on pointer inequality.
-                state.lastMatchedPartInfo = {
-                    type: "number",
-                    start: wildcardEnd,
-                    valueId,
-                    afterWildcard: true,
-                    matchedSpacingMode: state.spacingMode,
-                };
+                if (state.trackLastMatchedPart) {
+                    state.lastMatchedPartInfo = {
+                        type: "number",
+                        start: wildcardEnd,
+                        valueId,
+                        afterWildcard: true,
+                        matchedSpacingMode: state.spacingMode,
+                    };
+                }
             }
             return true;
         }
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `Rejected match number at ${wildcardEnd} to ${newIndex} with empty wildcard`,
@@ -2618,6 +2675,7 @@ function matchVarNumberPartWithoutWildcard(
     state: MatchState,
     part: VarNumberPart,
 ) {
+    const debugEnabled = state.debugEnabled;
     const curr = state.index;
     const re =
         leadingSpacingMode(state) === "none"
@@ -2636,28 +2694,28 @@ function matchVarNumberPartWithoutWildcard(
     const newIndex = curr + m[0].length;
 
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(state, `Rejected non-separated matched number`);
         }
         return false;
     }
 
-    if (state.debugEnabled) {
+    if (debugEnabled) {
         debugMatch(state, `Matched number to ${newIndex}`);
     }
 
     const valueId = addValueId(state, part.variable);
     if (valueId !== undefined) {
         addValueWithId(state, valueId, n, false);
-        // Always replaced (never mutated in place):
-        // `captureSuccessDelta` relies on pointer inequality.
-        state.lastMatchedPartInfo = {
-            type: "number",
-            start: curr,
-            valueId,
-            afterWildcard: false,
-            matchedSpacingMode: state.spacingMode,
-        };
+        if (state.trackLastMatchedPart) {
+            state.lastMatchedPartInfo = {
+                type: "number",
+                start: curr,
+                valueId,
+                afterWildcard: false,
+                matchedSpacingMode: state.spacingMode,
+            };
+        }
     }
     state.index = newIndex;
     return true;
@@ -2668,7 +2726,8 @@ function matchVarNumberPart(
     state: MatchState,
     part: VarNumberPart,
 ) {
-    if (state.debugEnabled) {
+    const debugEnabled = state.debugEnabled;
+    if (debugEnabled) {
         debugMatch(
             state,
             `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
@@ -2726,7 +2785,7 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // would otherwise check (rules.length >= 2, no
     // repeat/optional/variable, member spacingMode matches parent's)
     // are caught at construction time at the offending site.
-    const namePrefix = state.debugEnabled
+    const namePrefix = state.trackNames
         ? part.name
             ? `<${part.name}>`
             : getStateName(state)
@@ -2753,7 +2812,7 @@ function enterTailAlternation(
     namePrefix: string,
 ): void {
     state.leadingSpacingMode = leadingSpacingMode(state);
-    state.name = state.debugEnabled ? getNestedStateName(state, part, 0) : "";
+    state.name = state.trackNames ? getNestedStateName(state, part, 0) : "";
     state.parts = rules[0].parts;
     state.value = rules[0].value;
     state.partIndex = 0;
@@ -2787,6 +2846,8 @@ function enterTailAlternation(
 }
 
 export function matchState(state: MatchState, request: string) {
+    const trace = state.trace;
+    const debugEnabled = state.debugEnabled;
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
@@ -2838,7 +2899,7 @@ export function matchState(state: MatchState, request: string) {
         }
 
         const part = parts[partIndex];
-        if (state.debugEnabled) {
+        if (debugEnabled) {
             debugMatch(
                 state,
                 `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
@@ -2884,27 +2945,80 @@ export function matchState(state: MatchState, request: string) {
             pushBacktrack(state, skipState, "optional");
         }
 
+        if (trace !== undefined) {
+            const tracePartId = part.partId ?? partIndex;
+            trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "partAttempted",
+                rule: state.name,
+                part: tracePartId,
+                partKind: part.type,
+            });
+        }
+
+        // Snapshot the values head before the match so we can detect
+        // whether a new value was actually pushed (vs. reading a
+        // stale entry from an ancestor context).
+        const prevValues = trace !== undefined ? state.values : undefined;
+
         switch (part.type) {
             case "string":
                 if (!matchStringPart(request, state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: part.partId ?? partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
 
             case "number":
                 if (!matchVarNumberPart(request, state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: part.partId ?? partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
             case "wildcard":
                 // string variable, wildcard
                 if (!matchVarStringPart(state, part)) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: part.partId ?? partIndex,
+                        });
+                    }
                     return false;
                 }
                 break;
             case "rules": {
                 if (part.dispatch !== undefined) {
                     if (!enterDispatchPart(state, part, request)) {
+                        if (trace !== undefined) {
+                            trace({
+                                seq: state.traceSeq++,
+                                inputPos: state.index,
+                                kind: "partFailed",
+                                rule: state.name,
+                                part: part.partId ?? partIndex,
+                            });
+                        }
                         return false;
                     }
                     // continue the loop (without incrementing partIndex)
@@ -2915,13 +3029,13 @@ export function matchState(state: MatchState, request: string) {
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
-                if (state.debugEnabled) {
+                if (debugEnabled) {
                     debugMatch(
                         state,
                         `expanding ${part.alternatives.length} rules`,
                     );
                 }
-                const namePrefix = state.debugEnabled
+                const namePrefix = state.trackNames
                     ? part.name
                         ? `<${part.name}>`
                         : getStateName(state)
@@ -2939,6 +3053,36 @@ export function matchState(state: MatchState, request: string) {
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
+        }
+        if (trace !== undefined) {
+            // Wildcard parts defer value capture (the extent isn't
+            // known until a following part resolves it), so we skip
+            // capturedValue for them.  We also compare against the
+            // pre-match snapshot: if no new value was pushed (e.g.
+            // the rule is not tracking values), we report no capture
+            // rather than reading a stale entry from an ancestor.
+            const varName =
+                part.type !== "wildcard"
+                    ? (part as { variable?: string }).variable
+                    : undefined;
+            const captured =
+                varName !== undefined &&
+                state.values !== undefined &&
+                state.values !== prevValues
+                    ? {
+                          variable: varName,
+                          value: state.values.value,
+                      }
+                    : undefined;
+            trace({
+                seq: state.traceSeq++,
+                inputPos: state.index,
+                kind: "partMatched",
+                rule: state.name,
+                part: part.partId ?? partIndex,
+                endPos: state.index,
+                capturedValue: captured,
+            });
         }
         state.partIndex++;
     }
@@ -2964,8 +3108,9 @@ function memoLookup(
     repeat: boolean,
     requireValue: boolean,
     isCarrier: boolean,
+    skipMemo: boolean,
 ): "failed" | "replayed" | MemoMarkerBacktrack | undefined {
-    if (!state.memoization) {
+    if (!state.memoization || skipMemo) {
         return undefined;
     }
     const innerCache = state.memoCache.get(rules);
@@ -3081,6 +3226,7 @@ function enterRulesAlternation(
         repeat,
         requireValue,
         isCarrier,
+        !!part.skipMemo,
     );
     if (memo === "failed") {
         return false;
@@ -3119,7 +3265,7 @@ function enterRulesAlternation(
     // Note: `requireValue` was computed above for the cache key.
 
     // Update the current state to consider the first nested rule.
-    state.name = state.debugEnabled ? `${namePrefix}[0]` : "";
+    state.name = state.trackNames ? `${namePrefix}[0]` : "";
     state.parts = rules[0].parts;
     state.value = rules[0].value;
     state.partIndex = 0;
@@ -3138,6 +3284,15 @@ function enterRulesAlternation(
     if (rules.length > 1) {
         const base = forkMatchState(state);
         pushAlternation(state, base, rules, namePrefix);
+    }
+    if (state.trace !== undefined) {
+        state.trace({
+            seq: state.traceSeq++,
+            inputPos: state.index,
+            kind: "ruleEntered",
+            rule: state.name,
+            depth: state.nestedLevel,
+        });
     }
     return true;
 }
@@ -3247,7 +3402,7 @@ function enterDispatchPart(
             debugMatch(state, `dispatch: pending-wildcard fallback empty`);
             return false;
         }
-        const namePrefix = state.debugEnabled
+        const namePrefix = state.trackNames
             ? part.name
                 ? `<${part.name}>`
                 : `${getStateName(state)}<dispatch>`
@@ -3321,7 +3476,7 @@ function enterDispatchPart(
         );
     }
 
-    const namePrefix = state.debugEnabled
+    const namePrefix = state.trackNames
         ? part.name
             ? `<${part.name}>`
             : `${getStateName(state)}<dispatch>`
@@ -3372,6 +3527,7 @@ export function initialMatchState(
     // Read the debug flag once from the getter; stored on the state
     // so every downstream function reads a plain boolean field.
     const debugEnabled = debugMatchRaw.enabled;
+    const trackNames = debugEnabled || options?.trace !== undefined;
     const wildcardPolicy = options?.wildcardPolicy ?? "exhaustive";
     const optionalPolicy = options?.optionalPolicy ?? "exhaustive";
     const repeatPolicy = options?.repeatPolicy ?? "exhaustive";
@@ -3439,7 +3595,7 @@ export function initialMatchState(
     }
 
     const state: MatchState = {
-        name: debugEnabled ? `<Start>[0]` : "",
+        name: trackNames ? `<Start>[0]` : "",
         parts: effective[0].parts,
         value: effective[0].value,
         partIndex: 0,
@@ -3454,11 +3610,13 @@ export function initialMatchState(
         index: 0,
         pendingWildcard: undefined,
         lastMatchedPartInfo: undefined,
+        trackLastMatchedPart: false,
         backtracks: undefined,
         wildcardPolicy,
         optionalPolicy,
         repeatPolicy,
         debugEnabled,
+        trackNames,
         memoization,
         lastReplayBatch: undefined,
         lastReplaySuffixKey: undefined,
@@ -3467,6 +3625,8 @@ export function initialMatchState(
         // success-delta records).  See `MemoCache` and the
         // memoMarker branch in `tryNextBacktrack`.
         memoCache: new Map(),
+        trace: options?.trace,
+        traceSeq: 0,
     };
     // Top-level alternation: push a single compressed cursor frame
     // covering effective[1..N-1].  The cursor advances forward
@@ -3480,7 +3640,7 @@ export function initialMatchState(
             state,
             forkMatchState(state),
             effective,
-            debugEnabled ? "<Start>" : "",
+            state.trackNames ? "<Start>" : "",
         );
     }
     return state;
@@ -3515,6 +3675,16 @@ export function matchGrammar(
     if (state === undefined) {
         return results;
     }
+    const trace = state.trace;
+    if (trace !== undefined) {
+        trace({
+            seq: state.traceSeq++,
+            inputPos: 0,
+            kind: "ruleEntered",
+            rule: state.name,
+            depth: 0,
+        });
+    }
     // Explicit-stack DFS over the parse forest: `matchState` walks
     // the live state's parts left-to-right; on success collect the
     // result and prune any per-policy first-success frames; then
@@ -3544,6 +3714,15 @@ export function matchGrammar(
             matchState(state, request) &&
             finalizeMatch(state, request, results)
         ) {
+            if (trace !== undefined) {
+                trace({
+                    seq: state.traceSeq++,
+                    inputPos: state.index,
+                    kind: "ruleExited",
+                    rule: state.name,
+                    result: "matched",
+                });
+            }
             suppressBacktracksAfterSuccess(state);
         }
 

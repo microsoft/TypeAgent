@@ -1,0 +1,74 @@
+{
+  "name": "TypeAgent Development (VNC Desktop)",
+
+  // Use this configuration when you need GUI support in Codespaces
+  // or environments without WSLg. Access via http://localhost:6080
+
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+
+  // Fix stale yarn GPG key in base image
+  "onCreateCommand": "sudo rm -f /etc/apt/sources.list.d/yarn.list || true",
+
+  "features": {
+    // VNC desktop for Electron shell support
+    "ghcr.io/devcontainers/features/desktop-lite:1": {
+      "password": "typeagent",
+      "webPort": "6080",
+      "vncPort": "5901"
+    },
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22",
+      "nodeGypDependencies": true
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": true
+    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "forwardPorts": [6080, 5901, 8999, 8081, 8082, 3000],
+  "portsAttributes": {
+    "6080": { "label": "noVNC Web Desktop", "onAutoForward": "openBrowser" },
+    "5901": { "label": "VNC Client" },
+    "8999": { "label": "Agent Server (WebSocket)", "onAutoForward": "notify" },
+    "8081": { "label": "Browser Agent (WebSocket)", "onAutoForward": "notify" },
+    "8082": { "label": "Code Agent (WebSocket)", "onAutoForward": "notify" },
+    "3000": { "label": "API Server (HTTP)", "onAutoForward": "notify" }
+  },
+
+  "mounts": [
+    "source=pnpm-global-store,target=/home/codespace/.local/share/pnpm/store,type=volume",
+    "source=typeagent-node_modules-${devcontainerId},target=${containerWorkspaceFolder}/ts/node_modules,type=volume",
+    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume"
+  ],
+
+  "containerEnv": {
+    "PNPM_HOME": "/home/codespace/.local/share/pnpm"
+  },
+
+  "postCreateCommand": "cat .devcontainer/scripts/post-create.sh | tr -d '\\r' | bash && cat .devcontainer/scripts/install-electron-deps.sh | tr -d '\\r' | bash",
+  "postStartCommand": "cat .devcontainer/scripts/post-start.sh | tr -d '\\r' | bash",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-python.python",
+        "github.copilot"
+      ]
+    }
+  },
+
+  "remoteUser": "codespace",
+
+  // VNC requires more resources
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  }
+}

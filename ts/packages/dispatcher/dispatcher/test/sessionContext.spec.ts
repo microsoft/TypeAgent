@@ -31,6 +31,10 @@ function makeContext(overrides: {
                 getSharedLocalHostPort: async () => undefined,
                 setLocalHostPort: () => {},
             },
+            portRegistrar: {
+                register: () => "test-reg-id",
+                release: () => {},
+            },
             clientIO: {
                 notify: () => {},
                 question: async () => 0,
@@ -49,7 +53,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: "/global/instance",
             persistDir: "/session/persist",
         });
-        createSessionContext("myAgent", {}, context, false);
+        createSessionContext("myAgent", {}, context, false, "test-session-id");
         const instanceCall = calls.find((c) => c.name === "myAgent");
         expect(instanceCall?.baseDir).toBe("/global/instance");
     });
@@ -59,7 +63,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: "/session/persist",
         });
-        createSessionContext("myAgent", {}, context, false);
+        createSessionContext("myAgent", {}, context, false, "test-session-id");
         const instanceCall = calls.find((c) => c.name === "myAgent");
         expect(instanceCall?.baseDir).toBe("/session/persist");
     });
@@ -73,8 +77,8 @@ describe("createSessionContext storage routing", () => {
             instanceDir: "/global/instance",
             persistDir: "/session/session-2",
         });
-        createSessionContext("myAgent", {}, ctx1, false);
-        createSessionContext("myAgent", {}, ctx2, false);
+        createSessionContext("myAgent", {}, ctx1, false, "test-session-id");
+        createSessionContext("myAgent", {}, ctx2, false, "test-session-id");
         expect(calls1.find((c) => c.name === "myAgent")?.baseDir).toBe(
             "/global/instance",
         );
@@ -88,8 +92,107 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: undefined,
         });
-        const sessionCtx = createSessionContext("myAgent", {}, context, false);
+        const sessionCtx = createSessionContext(
+            "myAgent",
+            {},
+            context,
+            false,
+            "test-session-id",
+        );
         expect(sessionCtx.instanceStorage).toBeUndefined();
+    });
+});
+
+describe("beginAgentThread", () => {
+    function makeContextWithClientIO() {
+        const calls: any[] = [];
+        const ctx = {
+            session: {
+                getSessionDirPath: () => undefined,
+                getConfig: () => ({}),
+            },
+            storageProvider: { getStorage: () => ({}) as any },
+            persistDir: undefined,
+            instanceDir: undefined,
+            commandLock: async (fn: any) => fn(),
+            agents: {
+                getTransientState: () => undefined,
+                getSharedLocalHostPort: async () => undefined,
+                setLocalHostPort: () => {},
+            },
+            clientIO: {
+                setDisplay: (msg: any) => calls.push({ type: "set", msg }),
+                appendDisplay: (msg: any, mode: string) =>
+                    calls.push({ type: "append", msg, mode }),
+                notify: () => {},
+                question: async () => 0,
+            },
+            translatorCache: { clear: () => {} },
+            lastActionSchemaName: undefined,
+            conversationManager: undefined,
+        } as any;
+        return { ctx, calls };
+    }
+
+    test("setDisplay routes to clientIO with synthetic agent-* clientRequestId and kind", () => {
+        const { ctx, calls } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-1");
+        const thread = sc.beginAgentThread("bubble");
+        thread.setDisplay({ type: "text", content: "hi" });
+
+        expect(calls).toHaveLength(1);
+        expect(calls[0].type).toBe("set");
+        const msg = calls[0].msg;
+        expect(msg.source).toBe("myAgent");
+        expect(msg.kind).toBe("bubble");
+        expect(msg.message).toEqual({ type: "text", content: "hi" });
+        expect(msg.requestId.requestId).toBe("");
+        expect(msg.requestId.clientRequestId).toMatch(/^agent-myAgent-/);
+    });
+
+    test("appendDisplay carries mode through and reuses the same clientRequestId", () => {
+        const { ctx, calls } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-2");
+        const thread = sc.beginAgentThread("toast");
+        thread.appendDisplay({ type: "text", content: "a" }, "inline");
+        thread.appendDisplay({ type: "text", content: "b" });
+
+        expect(calls).toHaveLength(2);
+        expect(calls[0].mode).toBe("inline");
+        expect(calls[1].mode).toBe("block");
+        expect(calls[0].msg.kind).toBe("toast");
+        expect(calls[0].msg.requestId.clientRequestId).toBe(
+            calls[1].msg.requestId.clientRequestId,
+        );
+    });
+
+    test("two threads get distinct clientRequestIds", () => {
+        const { ctx, calls } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-3");
+        sc.beginAgentThread("bubble").setDisplay({
+            type: "text",
+            content: "1",
+        });
+        sc.beginAgentThread("bubble").setDisplay({
+            type: "text",
+            content: "2",
+        });
+        expect(calls[0].msg.requestId.clientRequestId).not.toBe(
+            calls[1].msg.requestId.clientRequestId,
+        );
+    });
+
+    test("setDisplay/appendDisplay throw after complete()", () => {
+        const { ctx } = makeContextWithClientIO();
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-4");
+        const thread = sc.beginAgentThread("inline");
+        thread.complete();
+        expect(() => thread.setDisplay({ type: "text", content: "x" })).toThrow(
+            /completed/,
+        );
+        expect(() =>
+            thread.appendDisplay({ type: "text", content: "x" }),
+        ).toThrow(/completed/);
     });
 });
 

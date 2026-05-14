@@ -22,6 +22,10 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     AgentServerInvokeFunctions,
     AgentServerChannelName,
+    AGENT_SERVER_DEFAULT_PORT,
+    AGENT_SERVER_DISCOVERY_NAME,
+    DiscoveryChannelName,
+    DiscoveryInvokeFunctions,
     DispatcherConnectOptions,
     UserIdentity,
     getDispatcherChannelName,
@@ -29,6 +33,7 @@ import {
 } from "@typeagent/agent-server-protocol";
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
+import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
 import { loadConfig } from "@typeagent/config";
 import {
     writeServerPid,
@@ -156,6 +161,14 @@ async function main() {
         configIdx !== -1 ? process.argv[configIdx + 1] : undefined;
 
     debugStartup("creating conversation manager (will lockInstanceDir)");
+    // Single PortRegistrar shared across every conversation in this
+    // process. Lets external clients (browser extension, VS Code, CLI)
+    // discover any agent's port via the discovery channel regardless of
+    // which conversation that agent is loaded into. Standalone hosts
+    // (shell, CLI dispatcher) skip this and let each dispatcher mint
+    // its own — see DispatcherOptions.portRegistrar in agent-dispatcher.
+    const portRegistrar = new PortRegistrar();
+
     const conversationManager: ConversationManager =
         await createConversationManager(
             "agent server",
@@ -179,6 +192,7 @@ async function main() {
                     actionResultKnowledgeExtraction: false,
                 },
                 collectCommandResult: true,
+                portRegistrar,
             },
             instanceDir,
         );
@@ -196,7 +210,7 @@ async function main() {
             ? parseInt(process.argv[portIdx + 1], 10)
             : process.env.AGENT_SERVER_PORT
               ? parseInt(process.env.AGENT_SERVER_PORT, 10)
-              : 8999;
+              : AGENT_SERVER_DEFAULT_PORT;
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
@@ -220,6 +234,17 @@ async function main() {
 
     function scheduleIdleShutdown() {
         if (idleShutdownMs <= 0 || connectionCount > 0) {
+            return;
+        }
+        // Don't tear the process down while an agent still has a port
+        // registered: out-of-process clients (Chrome/VS Code extension)
+        // may have cached that port and could try to reconnect at any
+        // moment. Once the agent releases (or its session-context
+        // backstop fires), the next disconnect will re-arm this timer.
+        if (portRegistrar.hasActiveAllocations()) {
+            debugStartup(
+                "skipping idle shutdown: PortRegistrar still has active allocations",
+            );
             return;
         }
         idleShutdownTimer = setTimeout(async () => {
@@ -417,7 +442,47 @@ async function main() {
                 channelProvider.createChannel(AgentServerChannelName),
                 invokeFunctions,
             );
+
+            // Discovery channel: read-only port lookup for external
+            // clients (browser extension, VS Code extension, CLI). Hosted
+            // on the same WS as agent-server so clients only need one
+            // connection. Mutations to the registrar are NOT exposed
+            // here — only agents themselves can register, via the
+            // in-process SessionContext.registerPort.
+            const discoveryFunctions: DiscoveryInvokeFunctions = {
+                lookupPort: async ({ agentName, role }) => {
+                    // The agent-server's own port is registered as a
+                    // real allocation under AGENT_SERVER_DISCOVERY_NAME
+                    // / DEFAULT_ROLE (see registerSelfPort below), so
+                    // no special-case is needed here — the lookup just
+                    // works for both well-known and agent-defined
+                    // names.
+                    const port = portRegistrar.lookup(agentName, role);
+                    return { port: port ?? null };
+                },
+            };
+            createRpc(
+                "agent-server:discovery",
+                channelProvider.createChannel(DiscoveryChannelName),
+                discoveryFunctions,
+            );
         },
+    );
+
+    // Register the agent-server's own listen port as a regular
+    // allocation under the well-known AGENT_SERVER_DISCOVERY_NAME with
+    // the synthetic SYSTEM_SESSION_CONTEXT_ID. This gives discovery
+    // clients a uniform lookup path (no special-case in the discovery
+    // handler) and lets the registrar's collision guard flag agents
+    // that try to bind the same port via the same code path it uses
+    // for any other allocation. The system sessionContextId protects
+    // the entry from releaseAllForSession when real conversation
+    // sessions close — it lives for the lifetime of the process.
+    portRegistrar.register(
+        AGENT_SERVER_DISCOVERY_NAME,
+        "default",
+        port,
+        SYSTEM_SESSION_CONTEXT_ID,
     );
 
     console.log(`Agent server started at ws://localhost:${port}`);

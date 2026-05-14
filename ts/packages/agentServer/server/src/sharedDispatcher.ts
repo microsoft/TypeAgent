@@ -278,22 +278,31 @@ export async function createSharedDispatcher(
         const origSetDisplay = orig.setDisplay.bind(orig);
         orig.setDisplay = (message) => {
             origSetDisplay(message);
-            log.logSetDisplay(message);
-            log.saveQueued();
+            // Toast and inline kinds are ephemeral (visual notifications, not
+            // chat history). Skip logging so they don't replay on reconnect —
+            // matches notify's default-not-persisted behavior. Bubble (or
+            // absent kind = a normal request response) always logs.
+            if (message.kind !== "toast" && message.kind !== "inline") {
+                log.logSetDisplay(message);
+                log.saveQueued();
+            }
         };
 
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
-            // Don't persist transient status messages (mode === "temporary").
-            // They're meant to be ephemeral indicators (e.g. "Executing
-            // action ...", reasoning's "Thinking..." stream). Persisting them
-            // causes:
-            //   - replayed bubbles for late-joining peers / reconnects
-            //   - DisplayLog growth proportional to streaming token count
-            //   - apparent "duplicate" bubbles when a stale temporary
-            //     re-appears alongside the real reply
-            if (mode !== "temporary") {
+            // Skip ephemeral output:
+            //   - toast/inline kinds (visual-only notifications)
+            //   - mode === "temporary" (transient status indicators like
+            //     "Executing action ...", reasoning's "Thinking..." stream).
+            // Persisting either causes replayed bubbles on reconnect,
+            // DisplayLog growth proportional to streaming tokens, and
+            // apparent "duplicate" bubbles next to the real reply.
+            if (
+                message.kind !== "toast" &&
+                message.kind !== "inline" &&
+                mode !== "temporary"
+            ) {
                 log.logAppendDisplay(message, mode);
                 log.saveQueued();
             }
@@ -310,6 +319,28 @@ export async function createSharedDispatcher(
             origSetDisplayInfo(requestId, source, actionIndex, action, ...rest);
             log.logSetDisplayInfo(requestId, source, actionIndex, action);
             log.saveQueued();
+        };
+
+        // Notifications are ephemeral by default — only log when the producer
+        // explicitly opts in via options.persist. Agents (e.g. OS-notification
+        // forwarding) that should never enter durable history MUST leave the
+        // flag unset.
+        const origNotify = orig.notify.bind(orig) as (
+            ...args: Parameters<ClientIO["notify"]>
+        ) => void;
+        orig.notify = (
+            notificationId: any,
+            event: any,
+            data: any,
+            source: any,
+            seq?: any,
+            options?: any,
+        ) => {
+            origNotify(notificationId, event, data, source, seq, options);
+            if (options?.persist === true) {
+                log.logNotify(notificationId, event, data, source);
+                log.saveQueued();
+            }
         };
     }
 

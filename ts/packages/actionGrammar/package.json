@@ -19,8 +19,8 @@
     "./generation": "./dist/generation/index.js"
   },
   "bin": {
-    "generate-grammar": "./dist/generation/generate-grammar-cli.js",
-    "test-grammar": "./dist/generation/test-grammar-cli.js"
+    "generate-grammar": "./bin/generate-grammar.js",
+    "test-grammar": "./bin/test-grammar.js"
   },
   "files": [
     "dist",

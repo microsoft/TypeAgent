@@ -462,3 +462,4 @@ traces/
 *.trace.json
 test-results-*.md
 ts/packages/agentSdkWrapper/plans/
+/.pnpm-store

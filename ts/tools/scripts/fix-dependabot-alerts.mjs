@@ -260,8 +260,13 @@ const _npmSem = new Semaphore(
  * @param {Function} opts.fetchFn   - async (key) => result
  * @param {Semaphore} [opts.semaphore] - optional concurrency limiter
  * @param {*}        [opts.fallback=null] - value to cache on failure
+ * @param {Function} [opts.isFatal] - (e) => boolean. When provided and it
+ *   returns true for a thrown error, the error is rethrown instead of
+ *   caching `fallback`. Use for failures (missing binaries, permission
+ *   errors) where treating the empty fallback as "no data" would mask a
+ *   broken environment and produce silently-wrong downstream results.
  */
-function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
+function cachedAsync(label, { fetchFn, semaphore, fallback = null, isFatal }) {
     const cache = new Map();
     const inflight = new Map();
 
@@ -276,6 +281,10 @@ function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
                 cache.set(key, result);
                 return result;
             } catch (e) {
+                // Some failures (e.g. missing binaries) are too dangerous to
+                // mask with a fallback — they let downstream code conclude
+                // "no data" when the real cause is a broken environment.
+                if (isFatal && isFatal(e)) throw e;
                 verbose(`${label}(${key}) failed: ${e.message}`);
                 cache.set(key, fallback);
                 return fallback;
@@ -358,15 +367,33 @@ function runCmdAsync(cmd, cmdArgs, { nothrow, ...opts } = {}) {
             { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
             (error, stdout, stderr) => {
                 if (error) {
-                    if (nothrow) {
+                    // `nothrow` should swallow non-zero exits but NOT spawn
+                    // failures (ENOENT, EACCES, etc.) — those usually indicate
+                    // a misconfigured environment (missing binary, missing
+                    // permissions) and silently treating them as "no output"
+                    // can mask real bugs (e.g. classifying vulnerable packages
+                    // as already-fixed because `pnpm why` couldn't even run).
+                    const isSpawnFailure =
+                        typeof error.code === "string" &&
+                        !Number.isFinite(Number(error.code));
+                    if (nothrow && !isSpawnFailure) {
                         verbose(
                             `${cmd} ${cmdArgs.join(" ")} failed: ${error.message}`,
                         );
                         resolve(null);
                     } else {
+                        // pnpm prints its actionable error context (e.g.
+                        // ERR_PNPM_OVERRIDE_NO_VERSIONS_MATCH) to stdout —
+                        // include both streams so callers can diagnose the
+                        // failure without re-running with verbose output.
+                        const detail =
+                            [stderr, stdout]
+                                .map((s) => (s || "").trim())
+                                .filter(Boolean)
+                                .join("\n") || error.message;
                         reject(
                             new Error(
-                                `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${stderr || error.message}`,
+                                `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${detail}`,
                             ),
                         );
                     }
@@ -546,8 +573,9 @@ function fmtDepChain(whyData, pkg) {
         }
     }
 
+    const reverseTree = toReverseTree(whyData, pkg);
     const roots = [];
-    for (const entry of whyData) {
+    for (const entry of reverseTree) {
         const tree = buildTree(entry, true);
         roots.push(...tree.children);
     }
@@ -576,14 +604,42 @@ async function getLatestVersion(pkg) {
 }
 
 /**
- * Extract unique sorted versions from pnpm-why data.
+ * Extract unique sorted resolved versions of a specific package from
+ * `pnpm why <pkg> -r --json` output.
+ *
+ * The output is an array of workspace-project entries, each with its own
+ * `name`/`version` (the workspace's version, NOT the queried package's
+ * version) and a nested `dependencies`/`devDependencies`/`optionalDependencies`
+ * tree. Each node in those trees keyed by a package name carries the
+ * `version` we actually want.
+ *
+ * Earlier this function read `e.version` off the top-level entries, which
+ * always returned the workspace project's own version (e.g. `1.0.0`) and
+ * caused `verifyAllVersionsFixed` to incorrectly conclude that updates had
+ * left vulnerable versions in place.
  */
-function getResolvedVersions(whyData) {
-    return [
-        ...new Set(
-            whyData.map((e) => e.version).filter((v) => v && semver.valid(v)),
-        ),
-    ].sort(semver.compare);
+function getResolvedVersions(whyData, pkg) {
+    const versions = new Set();
+    const depKeys = ["dependencies", "devDependencies", "optionalDependencies"];
+
+    function walk(node) {
+        if (!node || typeof node !== "object") return;
+        for (const key of depKeys) {
+            const deps = node[key];
+            if (!deps || typeof deps !== "object") continue;
+            for (const [depName, depNode] of Object.entries(deps)) {
+                if (!depNode || typeof depNode !== "object") continue;
+                if (depName === pkg && typeof depNode.version === "string") {
+                    versions.add(depNode.version);
+                }
+                walk(depNode);
+            }
+        }
+    }
+
+    for (const entry of whyData) walk(entry);
+
+    return [...versions].filter((v) => semver.valid(v)).sort(semver.compare);
 }
 
 /**
@@ -605,13 +661,18 @@ async function verifyAllVersionsFixed(pkg, requiredVersion) {
     }
     getPnpmWhy.cache.delete(pkg);
     getPnpmWhy.inflight.delete(pkg);
-    const versions = getResolvedVersions(await getPnpmWhy(pkg));
+    const versions = getResolvedVersions(await getPnpmWhy(pkg), pkg);
     const unfixed = versions.filter((v) => semver.lt(v, requiredVersion));
     return { ok: unfixed.length === 0, versions, unfixed };
 }
 
 /**
  * Run `pnpm why <pkg> -r --json` and return parsed entries.
+ *
+ * Spawn-level failures (e.g. `pnpm` not on PATH) propagate to callers
+ * rather than getting masked as "no data" — see the `isFatal` clause.
+ * Without this, a missing pnpm shim would let analysis report every
+ * vulnerable package as `alreadyFixed`.
  */
 const getPnpmWhy = cachedAsync("getPnpmWhy", {
     fetchFn: async (pkg) => {
@@ -622,11 +683,15 @@ const getPnpmWhy = cachedAsync("getPnpmWhy", {
         return parsePaginatedJson(output);
     },
     fallback: [],
+    // runCmdAsync now throws on spawn failure even with nothrow; surface
+    // those instead of caching `[]`.
+    isFatal: (e) => /\bENOENT\b|\bEACCES\b|\bEPERM\b/.test(e?.message || ""),
 });
 
 async function findConstrainingParentsFromData(whyData, pkg) {
+    const reverseTree = toReverseTree(whyData, pkg);
     const pairs = deduplicateBy(
-        whyData.flatMap((entry) => entry.dependents || []),
+        reverseTree.flatMap((entry) => entry.dependents || []),
         (dep) => `${dep.name}@${dep.version}`,
     );
     const specs = await Promise.all(
@@ -643,6 +708,187 @@ async function findConstrainingParentsFromData(whyData, pkg) {
         version: dep.version,
         requiredSpec: specs[i],
     }));
+}
+
+/**
+ * Convert the forward-direction `pnpm why <pkg> -r --json` output into the
+ * reverse-direction `{version, dependents: [...]}` shape that the rest of
+ * the planner (planFixes, walkUpTree, fmtDepChain, extractWorkspaceRoots,
+ * findConstrainingParentsFromData) was originally written for.
+ *
+ * The current pnpm CLI emits forward-direction trees only:
+ *   [
+ *     { name: <ws-name>, version, path,
+ *       dependencies: { foo: { version, dependencies: { bar: {...} } } },
+ *       devDependencies: {...}, optionalDependencies: {...}
+ *     }, ...
+ *   ]
+ *
+ * walkUpTree / planFixes were written assuming each top-level entry is a
+ * distinct resolved version of `pkg` with a `dependents: [...]` array
+ * walking back toward the workspace roots — a shape that pnpm no longer
+ * produces (and may never have, depending on which version of pnpm the
+ * original code was tested against). With the wrong shape, every entry
+ * had `dependents === undefined`, the `if (!entry.dependents) continue;`
+ * guard in planFixes silently dropped every transitively-vulnerable
+ * package, and the planner reported them as `alreadyFixed`.
+ *
+ * This helper does a single forward walk per workspace, collecting every
+ * path that ends at `pkg`, then reverses each path and merges paths that
+ * share the same parent chain so the resulting reverse-tree has the
+ * dedup characteristics walkUpTree's cache assumes.
+ *
+ * Returned shape (matches what walkUpTree expects):
+ *   [
+ *     { version: <pkg-version>,
+ *       dependents: [
+ *         { name, version, dependents: [...] }, // intermediate
+ *         { name: <ws-name>, depField: <field> } // workspace (terminal;
+ *                                                // no `dependents` field)
+ *       ]
+ *     }, ...
+ *   ]
+ */
+function toReverseTree(whyData, pkg) {
+    if (!Array.isArray(whyData) || whyData.length === 0) return [];
+    const depFields = [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+    ];
+
+    // Collect every root→pkg path. Each entry in `path` is one node; the
+    // first node is the workspace and the last is `pkg`.
+    const paths = [];
+    const visited = new WeakSet();
+
+    function walk(node, path, fromWorkspaceField) {
+        if (!node || typeof node !== "object") return;
+        // Cycle guard: pnpm output should be tree-shaped but defend anyway.
+        if (visited.has(node)) return;
+        visited.add(node);
+        for (const field of depFields) {
+            const deps = node[field];
+            if (!deps || typeof deps !== "object") continue;
+            for (const [depName, depNode] of Object.entries(deps)) {
+                if (!depNode || typeof depNode !== "object") continue;
+                if (typeof depNode.version !== "string") continue;
+                const childEntry = {
+                    name: depName,
+                    version: depNode.version,
+                };
+                const newPath = [...path, childEntry];
+                if (depName === pkg) {
+                    // Record the workspace's depField on the path's
+                    // workspace node (path[0]) so the reverse tree can
+                    // surface it. Use the field nearest to the workspace
+                    // (i.e. the first traversal's field).
+                    paths.push({
+                        pkgVersion: depNode.version,
+                        chain: newPath,
+                        workspaceDepField: fromWorkspaceField ?? field,
+                    });
+                }
+                walk(depNode, newPath, fromWorkspaceField ?? field);
+            }
+        }
+        visited.delete(node);
+    }
+
+    for (const ws of whyData) {
+        if (!ws || typeof ws !== "object") continue;
+        walk(
+            ws,
+            [
+                {
+                    name: ws.name,
+                    version: ws.version,
+                    isWorkspace: true,
+                },
+            ],
+            null,
+        );
+    }
+
+    if (paths.length === 0) return [];
+
+    // Group paths by the resolved version of `pkg` they end at.
+    const byVersion = new Map();
+    for (const p of paths) {
+        if (!byVersion.has(p.pkgVersion)) byVersion.set(p.pkgVersion, []);
+        byVersion.get(p.pkgVersion).push(p);
+    }
+
+    // For each version, reverse the chains (drop the pkg leaf so the
+    // reverse-tree's first level holds pkg's *parents*) and merge nodes
+    // that share the same identity.
+    function buildLevel(reversedChains) {
+        const buckets = new Map();
+        for (const chain of reversedChains) {
+            if (chain.length === 0) continue;
+            const head = chain[0];
+            const key = head.isWorkspace
+                ? `ws:${head.name}`
+                : `${head.name}@${head.version}`;
+            if (!buckets.has(key)) {
+                buckets.set(key, { head, tails: [] });
+            }
+            buckets.get(key).tails.push(chain.slice(1));
+        }
+        const nodes = [];
+        for (const { head, tails } of buckets.values()) {
+            if (head.isWorkspace) {
+                // walkUpTree only checks `node.depField` truthiness to
+                // recognise workspace nodes; getWorkspaceDepInfo() reads
+                // the workspace's package.json directly to resolve the
+                // actual spec. The recorded depField is informational.
+                nodes.push({
+                    name: head.name,
+                    depField: head.workspaceDepField || "dependencies",
+                });
+            } else {
+                nodes.push({
+                    name: head.name,
+                    version: head.version,
+                    dependents: buildLevel(tails),
+                });
+            }
+        }
+        return nodes;
+    }
+
+    const result = [];
+    for (const [version, ps] of byVersion) {
+        const reversed = ps.map((p) => {
+            // Drop the pkg leaf, reverse, then attach workspaceDepField
+            // to the workspace node (now at the end after reversal).
+            const noLeaf = p.chain.slice(0, -1);
+            const reversedChain = [...noLeaf].reverse();
+            // The workspace is the last element of reversedChain; clone it
+            // before tagging — the same workspace identity object is shared
+            // across every path emitted from that workspace, so mutating
+            // workspaceDepField in place would let later paths overwrite
+            // earlier ones (and the chosen depField would become
+            // traversal-order dependent).
+            if (reversedChain.length > 0) {
+                const lastIdx = reversedChain.length - 1;
+                const wsNode = reversedChain[lastIdx];
+                if (wsNode.isWorkspace) {
+                    reversedChain[lastIdx] = {
+                        ...wsNode,
+                        workspaceDepField: p.workspaceDepField,
+                    };
+                }
+            }
+            return reversedChain;
+        });
+        result.push({
+            version,
+            dependents: buildLevel(reversed),
+        });
+    }
+
+    return result;
 }
 
 /**
@@ -1096,7 +1342,10 @@ async function planFixes(pkg, requiredVersion, whyData) {
     const allBlockReasons = [];
     const allConstraints = [];
 
-    for (const entry of whyData) {
+    // pnpm emits forward-direction trees; convert once per planFixes call.
+    const reverseTree = toReverseTree(whyData, pkg);
+
+    for (const entry of reverseTree) {
         if (!entry.version || !semver.valid(entry.version)) continue;
         if (semver.gte(entry.version, requiredVersion)) continue; // already OK
         if (!entry.dependents || entry.dependents.length === 0) continue;
@@ -1814,8 +2063,9 @@ function addOverrides(overridesMap) {
  * Extract workspace root names from pnpm-why data by walking the dependents
  * tree to find leaf nodes (those with a `depField` property).
  */
-function extractWorkspaceRoots(whyData) {
+function extractWorkspaceRoots(whyData, pkg) {
     const roots = new Set();
+    const reverseTree = toReverseTree(whyData, pkg);
     function walk(node) {
         if (node.depField) {
             roots.add(node.name);
@@ -1825,7 +2075,7 @@ function extractWorkspaceRoots(whyData) {
             for (const dep of node.dependents) walk(dep);
         }
     }
-    for (const entry of whyData) {
+    for (const entry of reverseTree) {
         if (entry.dependents) {
             for (const dep of entry.dependents) walk(dep);
         }
@@ -1952,7 +2202,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 
     // ── Line 1: Identity ─────────────────────────────────────────────────
     if (!patched) {
-        const noPatchVersions = getResolvedVersions(whyData);
+        const noPatchVersions = getResolvedVersions(whyData, pkg);
         const installedStr =
             noPatchVersions.length > 0
                 ? noPatchVersions.map((v) => clr.versionBad(v)).join(", ")
@@ -1971,7 +2221,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     }
 
     // For strategies that need action: show version gap
-    const uniqueVersions = getResolvedVersions(whyData);
+    const uniqueVersions = getResolvedVersions(whyData, pkg);
     const vulnVersions = uniqueVersions.filter((v) => semver.lt(v, patched));
     const versionGap = vulnVersions
         .map((v) => clr.versionBad(`\u2717 ${v}`))
@@ -1993,7 +2243,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 
     // ── "Used by" — which workspace packages are affected ─────────────
     if (!isSimpleUpdate(entry)) {
-        const wsRoots = extractWorkspaceRoots(whyData);
+        const wsRoots = extractWorkspaceRoots(whyData, pkg);
         if (wsRoots.length > 0) {
             const rootsStr =
                 wsRoots
@@ -2277,13 +2527,19 @@ async function analyzeVulnerabilities(byPackage) {
                     }
 
                     if (!patched) {
-                        const noPatchVersions = getResolvedVersions(whyData);
+                        const noPatchVersions = getResolvedVersions(
+                            whyData,
+                            pkg,
+                        );
                         e.currentVersion =
                             noPatchVersions.length > 0
                                 ? noPatchVersions[0]
                                 : null;
                     } else {
-                        const uniqueVersions = getResolvedVersions(whyData);
+                        const uniqueVersions = getResolvedVersions(
+                            whyData,
+                            pkg,
+                        );
                         const vulnVersions = uniqueVersions.filter((v) =>
                             semver.lt(v, patched),
                         );
@@ -2349,6 +2605,160 @@ async function executeResolutions(analyses) {
     };
 
     /**
+     * Read the current `pnpm.overrides[pkg]` spec from the workspace root
+     * package.json, if any.
+     * @param {string} pkg
+     * @returns {string|undefined}
+     */
+    function readExistingOverride(pkg) {
+        try {
+            const pkgJson = JSON.parse(
+                readFileSync(resolve(ROOT, "package.json"), "utf-8"),
+            );
+            return pkgJson?.pnpm?.overrides?.[pkg];
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * True if `spec` is satisfied by some version below `patched` — i.e. the
+     * existing override is wide enough to keep the vulnerable version pinned.
+     */
+    function overrideAllowsVulnerable(spec, patched) {
+        if (!spec || typeof spec !== "string") return false;
+        try {
+            const min = semver.minVersion(spec);
+            return min ? semver.lt(min.version, patched) : false;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Build the raised pnpm.overrides spec.
+     *
+     * Naively returning `>=${patched}` discards any existing upper bound
+     * (e.g. `^12.2.0` becomes `>=12.5.0`), which can silently broaden the
+     * override into a major-version-spanning range and change resolution
+     * behaviour for unrelated dependencies.
+     *
+     * Instead, AND-combine the existing range with `>=${patched}` so the
+     * upper bound (if any) is preserved. If the combined range would be
+     * empty (existing range is capped below patched), fall back to
+     * `>=${patched}` and warn — there's no way to honour both.
+     */
+    function raiseOverrideSpec(existing, patched) {
+        const fallback = `>=${patched}`;
+        if (!existing || typeof existing !== "string") return fallback;
+        // Compound specs we already warn about elsewhere; keep simple here.
+        try {
+            // If patched is greater than every version satisfying existing,
+            // intersecting would yield an empty range. Drop the upper bound
+            // explicitly and warn.
+            if (semver.gtr(patched, existing)) {
+                warn(
+                    `Existing override "${existing}" caps below patched ${patched}; widening to "${fallback}" — review manually`,
+                );
+                return fallback;
+            }
+            const combined = `${existing} ${fallback}`;
+            if (!semver.validRange(combined)) {
+                return fallback;
+            }
+            return combined;
+        } catch {
+            return fallback;
+        }
+    }
+
+    /**
+     * Snapshot package.json (and pnpm-lock.yaml if present) so the
+     * override-raise path can roll back cleanly when the second verify
+     * still fails. Without this, a failed raise leaves the modified
+     * override + lockfile on disk, polluting subsequent package fixes
+     * in the same run and producing a dirty working tree for what we
+     * report as a "blocked" outcome.
+     */
+    function snapshotRoot() {
+        const pkgJsonPath = resolve(ROOT, "package.json");
+        const lockPath = resolve(ROOT, "pnpm-lock.yaml");
+        const snap = { pkgJson: readFileSync(pkgJsonPath, "utf-8") };
+        try {
+            snap.lock = readFileSync(lockPath, "utf-8");
+        } catch {
+            snap.lock = null;
+        }
+        return snap;
+    }
+
+    async function restoreRoot(snap) {
+        const pkgJsonPath = resolve(ROOT, "package.json");
+        const lockPath = resolve(ROOT, "pnpm-lock.yaml");
+        writeFileSync(pkgJsonPath, snap.pkgJson, "utf-8");
+        if (snap.lock !== null) writeFileSync(lockPath, snap.lock, "utf-8");
+        // Re-run install so the in-memory state of node_modules matches the
+        // restored lockfile before the next package's analysis kicks in.
+        try {
+            await runCmdAsync("pnpm", ["install"], {
+                timeout: 180000,
+                nothrow: true,
+            });
+        } catch {
+            /* best-effort */
+        }
+    }
+
+    /**
+     * Try raising a stale `pnpm.overrides[pkg]` entry that allows the
+     * vulnerable version, then `pnpm install` and re-verify. Returns
+     *   { outcome: "ok" }     – raise + install + verify all succeeded
+     *   { outcome: "blocked", check } – raise applied but still unfixed
+     *   { outcome: "noop" }   – no stale override; nothing attempted
+     *   { outcome: "failed", error } – raise install threw
+     * Always restores package.json + lockfile if anything goes wrong.
+     */
+    async function tryRaiseStaleOverride(a) {
+        const existing = readExistingOverride(a.pkg);
+        if (!existing || !overrideAllowsVulnerable(existing, a.patched)) {
+            return { outcome: "noop" };
+        }
+        const newSpec = raiseOverrideSpec(existing, a.patched);
+        verbose(
+            `Stale override pnpm.overrides["${a.pkg}"] = "${existing}" allows vulnerable versions — raising to "${newSpec}"`,
+        );
+        const snap = snapshotRoot();
+        addOverrides(new Map([[a.pkg, newSpec]]));
+        let check;
+        try {
+            // Use --no-frozen-lockfile because we just mutated
+            // pnpm.overrides; in CI (CI=true) pnpm install defaults to
+            // --frozen-lockfile and will refuse to proceed with
+            // ERR_PNPM_LOCKFILE_CONFIG_MISMATCH because the new override
+            // doesn't match what's recorded in pnpm-lock.yaml. Updating
+            // the lockfile is exactly the intent of the raise.
+            await runCmdAsync("pnpm", ["install", "--no-frozen-lockfile"], {
+                timeout: 180000,
+            });
+            check = await verifyAllVersionsFixed(a.pkg, a.patched);
+        } catch (e) {
+            await restoreRoot(snap);
+            return { outcome: "failed", error: e, existing, newSpec };
+        }
+        if (check.ok) {
+            ok(
+                `Raised pnpm.overrides["${a.pkg}"] from "${existing}" to "${newSpec}" — all versions fixed: ${check.versions.join(", ")}`,
+            );
+            return { outcome: "ok" };
+        }
+        warn(
+            `Raised pnpm.overrides["${a.pkg}"] to "${newSpec}" but still unfixed: ${check.unfixed.join(", ")} — rolling back`,
+        );
+        await restoreRoot(snap);
+        return { outcome: "blocked", check, existing, newSpec };
+    }
+
+    /**
      * Run `pnpm update <pkg> -r` and verify all versions are fixed.
      * Returns "ok" | "blocked" | "failed".
      */
@@ -2357,13 +2767,33 @@ async function executeResolutions(analyses) {
             await runCmdAsync("pnpm", ["update", a.pkg, "-r"], {
                 timeout: 120000,
             });
-            const check = await verifyAllVersionsFixed(a.pkg, a.patched);
+            let check = await verifyAllVersionsFixed(a.pkg, a.patched);
             if (check.ok) {
                 ok(
                     `Updated ${a.pkg} — all versions fixed: ${check.versions.join(", ")}`,
                 );
                 return "ok";
             }
+
+            // pnpm update couldn't move past an existing pnpm.overrides[pkg]
+            // entry that's wider than `>=patched`. Raise the override and
+            // re-run install + verify. Without this, packages whose only
+            // remaining vulnerability gate is a stale override (e.g. an
+            // earlier security bump that has since been superseded by a new
+            // advisory) get classified as blocked.
+            const raised = await tryRaiseStaleOverride(a);
+            if (raised.outcome === "ok") return "ok";
+            if (raised.outcome === "failed") {
+                fail(
+                    `Override raise install failed for ${a.pkg}: ${raised.error.message}`,
+                );
+                a.error = raised.error.message;
+                return "failed";
+            }
+            if (raised.outcome === "blocked") {
+                check = raised.check;
+            }
+
             warn(
                 `pnpm update left unfixed versions of ${a.pkg}: ${check.unfixed.join(", ")} (need >=${a.patched})`,
             );
@@ -2372,6 +2802,21 @@ async function executeResolutions(analyses) {
             );
             return "blocked";
         } catch (e) {
+            // pnpm update threw — most often a stale `pnpm.overrides[pkg]`
+            // entry whose lower bound now excludes any non-vulnerable version
+            // makes pnpm refuse to resolve the install entirely. Try the
+            // same override-raise recovery path before giving up.
+            const raised = await tryRaiseStaleOverride(a);
+            if (raised.outcome === "ok") return "ok";
+            if (raised.outcome === "blocked") {
+                a.blockingReasons.push(
+                    `pnpm update threw and raised override still leaves unfixed versions: ${raised.check.unfixed.join(", ")}`,
+                );
+                return "blocked";
+            }
+            // Either no stale override was found (noop) or the raised
+            // install also threw (failed) — surface the original update
+            // error since that's the actionable signal.
             fail(`pnpm update failed for ${a.pkg}: ${e.message}`);
             a.error = e.message;
             return "failed";
@@ -2383,7 +2828,20 @@ async function executeResolutions(analyses) {
 
         if (isSimpleUpdate(a)) {
             if (DRY_RUN) {
-                ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
+                const existing = readExistingOverride(a.pkg);
+                if (existing && overrideAllowsVulnerable(existing, a.patched)) {
+                    // The real path tries `pnpm update` first and only falls
+                    // back to raising the override when update alone leaves
+                    // unfixed versions. Mirror that sequence in the dry-run
+                    // message so reviewers don't think we're skipping the
+                    // cheap `update` attempt.
+                    const newSpec = raiseOverrideSpec(existing, a.patched);
+                    ok(
+                        `${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}; if still unfixed, raise pnpm.overrides["${a.pkg}"] from "${existing}" to "${newSpec}" + pnpm install`,
+                    );
+                } else {
+                    ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
+                }
             } else {
                 const outcome = await runUpdateAndVerify(a);
                 if (outcome === "blocked") {

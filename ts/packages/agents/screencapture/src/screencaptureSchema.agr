@@ -1,0 +1,146 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Generated grammar for screencaptureSchema
+// Types: wildcard = 1+ words, word = exactly 1 word
+//
+// Convention: rules where `target` is omitted denote full-screen capture.
+// The handler also treats target values like "screen", "desktop",
+// "the screen", "the desktop", "everything" as full-screen requests.
+
+// takeScreenshot - full screen / monitor
+<TakeScreenshotFull> = take a screenshot -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+}
+  | take a screenshot of (the)? screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+}
+  | take a screenshot of (the)? desktop -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+}
+  | (can you)? capture (the)? screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+}
+  | screenshot the screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+}
+  | screenshot the desktop -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+};
+
+// takeScreenshot - target a window by name
+<TakeScreenshotTarget> = take a screenshot of $(target:wildcard) -> {
+    actionName: "takeScreenshot",
+    parameters: {
+        target
+    }
+}
+  | (can you)? capture $(target:wildcard) -> {
+    actionName: "takeScreenshot",
+    parameters: {
+        target
+    }
+}
+  | screenshot $(target:wildcard) -> {
+    actionName: "takeScreenshot",
+    parameters: {
+        target
+    }
+};
+
+// startRecording - full screen
+<StartRecordingFull> = start recording -> {
+    actionName: "startRecording",
+    parameters: {}
+}
+  | start a screen recording -> {
+    actionName: "startRecording",
+    parameters: {}
+}
+  | (can you)? begin recording (the)? screen -> {
+    actionName: "startRecording",
+    parameters: {}
+}
+  | record (the)? screen -> {
+    actionName: "startRecording",
+    parameters: {}
+}
+  | record (the)? desktop -> {
+    actionName: "startRecording",
+    parameters: {}
+};
+
+// startRecording - target a window by name
+<StartRecordingTarget> = start recording $(target:wildcard) -> {
+    actionName: "startRecording",
+    parameters: {
+        target
+    }
+}
+  | (can you)? begin recording $(target:wildcard) -> {
+    actionName: "startRecording",
+    parameters: {
+        target
+    }
+}
+  | record $(target:wildcard) -> {
+    actionName: "startRecording",
+    parameters: {
+        target
+    }
+};
+
+// stopRecording
+<StopRecording> = stop recording -> {
+    actionName: "stopRecording",
+    parameters: {}
+}
+  | stop the recording -> {
+    actionName: "stopRecording",
+    parameters: {}
+}
+  | end recording -> {
+    actionName: "stopRecording",
+    parameters: {}
+}
+  | finish recording -> {
+    actionName: "stopRecording",
+    parameters: {}
+};
+
+// listWindows
+<ListWindows> = list windows -> {
+    actionName: "listWindows",
+    parameters: {}
+}
+  | list (the)? open windows -> {
+    actionName: "listWindows",
+    parameters: {}
+}
+  | show me (the)? open windows -> {
+    actionName: "listWindows",
+    parameters: {}
+}
+  | what windows are open -> {
+    actionName: "listWindows",
+    parameters: {}
+}
+  | what programs are running -> {
+    actionName: "listWindows",
+    parameters: {}
+};
+
+import { ScreencaptureAction } from "./screencaptureSchema.ts";
+
+<Start> : ScreencaptureAction = <TakeScreenshotFull>
+  | <TakeScreenshotTarget>
+  | <StartRecordingFull>
+  | <StartRecordingTarget>
+  | <StopRecording>
+  | <ListWindows>;

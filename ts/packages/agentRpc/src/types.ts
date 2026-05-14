@@ -4,6 +4,7 @@
 import {
     ActionResult,
     ActivityContext,
+    AgentMessageKind,
     AppAction,
     AppAgentEvent,
     AppAgentInitSettings,
@@ -25,6 +26,7 @@ import {
     ResolveEntityResult,
     SchemaContent,
     GrammarContent,
+    ReadinessReport,
 } from "@typeagent/agent-sdk";
 import { AgentInterfaceFunctionName } from "./server.js";
 
@@ -35,6 +37,27 @@ export type AgentContextCallFunctions = {
         message: string | DisplayContent,
         notificationId?: string,
     ): void;
+    // Agent-initiated thread lifecycle. The agent-side shim mints a threadId
+    // (UUID) per beginAgentThread() call and routes setDisplay/appendDisplay/
+    // complete through it; the dispatcher side caches the real handle by
+    // threadId.
+    agentThreadBegin: (
+        contextId: number,
+        threadId: string,
+        kind: AgentMessageKind,
+    ) => void;
+    agentThreadSetDisplay: (
+        contextId: number,
+        threadId: string,
+        content: DisplayContent,
+    ) => void;
+    agentThreadAppendDisplay: (
+        contextId: number,
+        threadId: string,
+        content: DisplayContent,
+        mode: DisplayAppendMode,
+    ) => void;
+    agentThreadComplete: (contextId: number, threadId: string) => void;
     setDisplay: (param: {
         actionContextId: number;
         content: DisplayContent;
@@ -125,6 +148,15 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         port: number;
     }) => Promise<void>;
+    registerPort: (param: {
+        contextId: number;
+        role: string;
+        port: number;
+    }) => Promise<{ regId: string }>;
+    releasePort: (param: {
+        regId: string;
+        contextId?: number;
+    }) => Promise<void>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
     reloadAgentSchema: (param: { contextId: number }) => Promise<void>;
     popupQuestion: (param: {
@@ -184,6 +216,8 @@ export type AgentInvokeFunctions = {
         },
     ) => Promise<DynamicDisplay>;
     closeAgentContext: (param: Partial<ContextParams>) => Promise<void>;
+    startBackgroundTasks: (param: Partial<ContextParams>) => Promise<void>;
+    stopBackgroundTasks: (param: Partial<ContextParams>) => Promise<void>;
     getCommands: (param: Partial<ContextParams>) => Promise<CommandDescriptors>;
     getCommandCompletion(
         param: Partial<ContextParams> & {
@@ -198,7 +232,7 @@ export type AgentInvokeFunctions = {
             commands: string[];
             params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
-    ): Promise<void>;
+    ): Promise<ActionResult | undefined>;
     resolveEntity(
         param: Partial<ContextParams> & {
             type: string;
@@ -237,6 +271,10 @@ export type AgentInvokeFunctions = {
     getDynamicGrammar(
         param: Partial<ContextParams> & { schemaName: string },
     ): Promise<GrammarContent | undefined>;
+    checkReadiness(param: Partial<ContextParams>): Promise<ReadinessReport>;
+    setup(
+        param: Partial<ActionContextParams>,
+    ): Promise<ActionResult | undefined>;
 };
 
 export type ContextParams = {
@@ -244,6 +282,7 @@ export type ContextParams = {
     hasInstanceStorage: boolean;
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
+    sessionContextId: string;
 };
 
 export type ActionContextParams = ContextParams & {

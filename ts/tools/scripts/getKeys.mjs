@@ -893,6 +893,7 @@ const commands = ["push", "pull", "help"];
         }
 
         if (arg === "--commit") {
+            // Explicit no-op; commit is the default.
             paramCommit = true;
             continue;
         }

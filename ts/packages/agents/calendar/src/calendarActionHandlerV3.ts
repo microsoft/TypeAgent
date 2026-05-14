@@ -6,6 +6,7 @@ import {
     AppAgent,
     ActionContext,
     ActionResult,
+    ReadinessReport,
     SessionContext,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
@@ -23,6 +24,7 @@ import {
 import {
     createActionResultFromHtmlDisplay,
     createActionResultFromError,
+    createActionResultFromTextDisplay,
     createYesNoChoiceResult,
     createMultiChoiceResult,
     ChoiceManager,
@@ -33,8 +35,10 @@ import {
     ICalendarProvider,
     CalendarProviderType,
     createCalendarProviderFromConfig,
+    evaluateGraphReadiness,
     getAvailableProviders,
     GoogleCalendarClient,
+    probeGraphConfig,
 } from "graph-utils";
 import {
     getNWeeksDateRangeISO,
@@ -81,18 +85,34 @@ export class CalendarClientLoginCommandHandler
             context,
         );
 
-        const success = await provider.login(
-            (userCode, verificationUri, message) => {
-                displayStatus(message, context);
-            },
-        );
+        const success = await provider.login((prompt) => {
+            if (prompt.kind === "error") {
+                displayWarn(prompt.message, context);
+            } else {
+                // Both deviceCode and browser surface the message as-is; the
+                // device-code message contains the URL+code, the browser
+                // message says "opening your browser..." (the SDK auto-opens
+                // the system browser via the open package).
+                displayStatus(prompt.message, context);
+            }
+        });
 
         if (success) {
             const user = await provider.getUser();
+            const name = user.displayName || "Unknown";
+            const email = user.email || "Unknown";
             displaySuccess(
-                `Successfully logged in as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
+                `Successfully logged in as ${name} <${email}>`,
                 context,
             );
+            // Hidden marker the chat-ui / shell scan for after each agent
+            // message. Lifts the signed-in identity into UI state so the
+            // user-letter avatar shows the real initial and stops triggering
+            // login on click.
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}" hidden></span>`,
+            });
         } else {
             displayWarn(
                 "Login failed. If using Google Calendar, you can also try '@calendar google-auth <code>' with a manual authorization code.",
@@ -112,11 +132,20 @@ export class CalendarClientLogoutCommandHandler
         if (provider === undefined) {
             throw new Error("Calendar provider not initialized");
         }
-        if (provider.logout()) {
+        const wasLoggedIn = provider.logout();
+        if (wasLoggedIn) {
             displaySuccess("Successfully logged out", context);
         } else {
             displayWarn("Already logged out", context);
         }
+        // Emit the signed-out marker regardless of whether logout() found a
+        // live in-memory client — the user clicked logout, so the UI should
+        // reflect signed-out state even if the client was already cleared
+        // by an earlier action (e.g. logout from the email agent first).
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: `<span class="typeagent-user-signed-out" hidden></span>`,
+        });
     }
 }
 
@@ -307,6 +336,14 @@ function formatEventsAsText(events: any[]): string {
     return lines.join("\n");
 }
 
+// HH:MM timestamp prefix for setup status updates — same convention used by
+// screencapture / desktop runInstall + runDotnetBuild so progress reads
+// consistently across agents.
+function ts(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 // Calendar action handler V3 - with multi-provider calendar integration
 export class CalendarActionHandlerV3 implements AppAgent {
     public choiceManager = new ChoiceManager();
@@ -316,6 +353,44 @@ export class CalendarActionHandlerV3 implements AppAgent {
             calendarProvider: undefined,
             providerType: undefined,
         };
+    }
+
+    // Cheap probe: env-var read + (optional) provider.isAuthenticated().
+    // Doesn't trigger any network call — providers cache their tokens on
+    // disk, so a fresh provider can answer isAuthenticated() purely from
+    // local state. See graphUtils/readiness.ts for the decision logic.
+    public async checkReadiness(
+        context: SessionContext<CalendarActionContext>,
+    ): Promise<ReadinessReport> {
+        const config = probeGraphConfig(process.env);
+        // Prefer the agentContext's provider when available (already set
+        // up by updateAgentContext on enable). Fall back to a fresh
+        // provider when the agent was disabled or env vars were set after
+        // the last enable — token cache on disk means the fresh instance
+        // still reports isAuthenticated() correctly.
+        let provider = context.agentContext?.calendarProvider;
+        if (
+            !provider &&
+            (config.msGraphConfigured || config.googleConfigured)
+        ) {
+            provider = createCalendarProviderFromConfig();
+        }
+        return evaluateGraphReadiness("calendar", {
+            ...config,
+            isAuthenticated: provider?.isAuthenticated() === true,
+            providerName: provider?.providerName,
+        });
+    }
+
+    // setup hook — drives the device-code / OAuth login flow via the same
+    // provider.login() path as @calendar login, but routed through a yes/no
+    // choice card so the user can confirm before we open browsers / show
+    // device codes. Manual-config (env vars missing) is surfaced as an
+    // error — there's nothing setup() can automate for that.
+    public async setup(
+        actionContext: ActionContext<CalendarActionContext>,
+    ): Promise<ActionResult> {
+        return offerCalendarLogin(actionContext, this.choiceManager);
     }
 
     public async updateAgentContext(
@@ -1091,6 +1166,109 @@ export class CalendarActionHandlerV3 implements AppAgent {
     }
 }
 
+// Builds the yes/no card for sign-in. Manual-config cases (no env vars)
+// are returned as a plain error — the choice card is only useful when
+// there's a flow we can actually drive. Already-authenticated case
+// short-circuits with a confirmation message.
+async function offerCalendarLogin(
+    actionContext: ActionContext<CalendarActionContext>,
+    choiceManager: ChoiceManager,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const config = probeGraphConfig(process.env);
+    if (!config.msGraphConfigured && !config.googleConfigured) {
+        return createActionResultFromError(
+            "No calendar provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh calendar`.",
+        );
+    }
+    if (!ctx.calendarProvider) {
+        ctx.calendarProvider = createCalendarProviderFromConfig();
+        if (ctx.calendarProvider) {
+            ctx.providerType = ctx.calendarProvider
+                .providerName as CalendarProviderType;
+        }
+    }
+    const provider = ctx.calendarProvider;
+    if (!provider) {
+        return createActionResultFromError(
+            "Calendar env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+        );
+    }
+    if (provider.isAuthenticated()) {
+        return createActionResultFromTextDisplay(
+            "Already signed in to calendar.",
+        );
+    }
+    const providerLabel =
+        ctx.providerType === "google" ? "Google Calendar" : "Microsoft 365";
+    return createYesNoChoiceResult(
+        choiceManager,
+        `Sign in to ${providerLabel}? You'll be shown a device code (or browser link) to complete the flow. Sign-in usually takes under a minute — I'll post the result here.`,
+        async (confirmed, liveActionContext) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Sign-in skipped. Run `@calendar login` later to sign in.",
+                );
+            }
+            return runCalendarLogin(
+                liveActionContext as ActionContext<CalendarActionContext>,
+            );
+        },
+    );
+}
+
+// Drives provider.login() in the choice callback. Streams device-code
+// instructions as they arrive from the provider, so the user sees the URL
+// + code as soon as the provider issues them. Exported for unit tests.
+export async function runCalendarLogin(
+    actionContext: ActionContext<CalendarActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const provider = ctx.calendarProvider;
+    if (!provider) {
+        return createActionResultFromError(
+            "Calendar provider not initialized.",
+        );
+    }
+    actionContext.actionIO.appendDisplay(
+        {
+            type: "text",
+            content: `[${ts()}] Starting sign-in…`,
+            kind: "status",
+        },
+        "block",
+    );
+    try {
+        const success = await provider.login((prompt) => {
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${ts()}] ${prompt.message}`,
+                    kind: "status",
+                },
+                "block",
+            );
+        });
+        if (!success) {
+            const tip =
+                ctx.providerType === "google"
+                    ? " You can also try `@calendar google-auth <code>` with a manual authorization code."
+                    : "";
+            return createActionResultFromError(
+                `[${ts()}] Sign-in failed.${tip}`,
+            );
+        }
+        const user = await provider.getUser();
+        return createActionResultFromTextDisplay(
+            `[${ts()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your calendar command — readiness was re-checked automatically.`,
+        );
+    } catch (e: any) {
+        return createActionResultFromError(
+            `[${ts()}] Sign-in failed: ${e?.message ?? e}`,
+        );
+    }
+}
+
 // Instantiate function required by the agent loader
 export function instantiate(): AppAgent {
     const handler = new CalendarActionHandlerV3();
@@ -1107,8 +1285,12 @@ export function instantiate(): AppAgent {
         handleChoice: (
             choiceId: string,
             response: boolean | number[],
-            _context: ActionContext<CalendarActionContext>,
-        ) => handler.choiceManager.handleChoice(choiceId, response),
+            context: ActionContext<CalendarActionContext>,
+        ) => handler.choiceManager.handleChoice(choiceId, response, context),
+        checkReadiness: (context: SessionContext<CalendarActionContext>) =>
+            handler.checkReadiness(context),
+        setup: (context: ActionContext<CalendarActionContext>) =>
+            handler.setup(context),
         ...getCommandInterface(handlers),
     };
 }

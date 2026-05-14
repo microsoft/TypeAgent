@@ -39,7 +39,7 @@ export type JsonSchemaString = {
 };
 
 export type JsonSchemaNumber = {
-    type: "number";
+    type: "number" | "integer";
     description?: string;
 };
 

@@ -8,6 +8,6 @@
     "types": ["node"]
   },
   "include": ["./**/*", "../common/searchProvider.mts"],
-  "exclude": ["./backup/**/*"],
+  "exclude": ["./backup/**/*", "./webFlows/webFlowSandbox.d.ts"],
   "references": [{ "path": "../common" }]
 }

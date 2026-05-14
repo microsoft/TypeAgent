@@ -1,0 +1,84 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
+ *
+ * Fallback theme tokens for browser and shell hosts. VS Code webviews
+ * already set the --vscode-* properties; this file provides sensible
+ * defaults for hosts that don't.
+ */
+
+:root {
+  /* Detect color scheme */
+  color-scheme: light dark;
+}
+
+/* Dark theme (default) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --vscode-font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+      sans-serif;
+    --vscode-font-size: 13px;
+    --vscode-foreground: #cccccc;
+    --vscode-editor-background: #1e1e1e;
+    --vscode-editor-foreground: #d4d4d4;
+    --vscode-input-background: #3c3c3c;
+    --vscode-input-foreground: #cccccc;
+    --vscode-input-border: #3c3c3c;
+    --vscode-input-placeholderForeground: #a6a6a6;
+    --vscode-button-background: #0e639c;
+    --vscode-button-foreground: #ffffff;
+    --vscode-button-hoverBackground: #1177bb;
+    --vscode-button-secondaryBackground: #3a3d41;
+    --vscode-button-secondaryForeground: #cccccc;
+    --vscode-list-hoverBackground: #2a2d2e;
+    --vscode-list-activeSelectionBackground: #094771;
+    --vscode-list-activeSelectionForeground: #ffffff;
+    --vscode-panel-border: #80808059;
+    --vscode-editorWidget-background: #252526;
+    --vscode-editorWidget-foreground: #cccccc;
+    --vscode-badge-background: #4d4d4d;
+    --vscode-badge-foreground: #ffffff;
+    --vscode-errorForeground: #f48771;
+    --vscode-editorWarning-foreground: #cca700;
+    --vscode-editorInfo-foreground: #3794ff;
+    --vscode-textLink-foreground: #3794ff;
+    --vscode-focusBorder: #007fd4;
+    --vscode-descriptionForeground: #9d9d9d;
+  }
+}
+
+/* Light theme */
+@media (prefers-color-scheme: light) {
+  :root {
+    --vscode-font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+      sans-serif;
+    --vscode-font-size: 13px;
+    --vscode-foreground: #616161;
+    --vscode-editor-background: #ffffff;
+    --vscode-editor-foreground: #333333;
+    --vscode-input-background: #ffffff;
+    --vscode-input-foreground: #616161;
+    --vscode-input-border: #cecece;
+    --vscode-input-placeholderForeground: #767676;
+    --vscode-button-background: #007acc;
+    --vscode-button-foreground: #ffffff;
+    --vscode-button-hoverBackground: #0062a3;
+    --vscode-button-secondaryBackground: #5f6a79;
+    --vscode-button-secondaryForeground: #ffffff;
+    --vscode-list-hoverBackground: #e8e8e8;
+    --vscode-list-activeSelectionBackground: #0060c0;
+    --vscode-list-activeSelectionForeground: #ffffff;
+    --vscode-panel-border: #80808059;
+    --vscode-editorWidget-background: #f3f3f3;
+    --vscode-editorWidget-foreground: #616161;
+    --vscode-badge-background: #c4c4c4;
+    --vscode-badge-foreground: #333333;
+    --vscode-errorForeground: #e51400;
+    --vscode-editorWarning-foreground: #bf8803;
+    --vscode-editorInfo-foreground: #1a85ff;
+    --vscode-textLink-foreground: #006ab1;
+    --vscode-focusBorder: #0090f1;
+    --vscode-descriptionForeground: #717171;
+  }
+}

@@ -2,21 +2,33 @@
 // Licensed under the MIT License.
 
 import {
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgentEvent,
     AppAgent,
     AppAgentManifest,
+    DisplayAppendMode,
     SessionContext,
     DisplayContent,
+    type GrammarValidationRequest,
+    type GrammarValidationResult,
 } from "@typeagent/agent-sdk";
+import { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { IndexData } from "image-memory";
 import { IndexManager } from "../context/indexManager.js";
+import { validateGrammarPatternsImpl } from "../validation/grammarValidationService.mjs";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:dispatcher:sessionContext");
+import { randomUUID } from "node:crypto";
 
 export function createSessionContext<T = unknown>(
     name: string,
     agentContext: T,
     context: CommandHandlerContext,
     allowDynamicAgent: boolean,
+    sessionContextId: string,
 ): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storageProvider = context.storageProvider;
@@ -90,12 +102,50 @@ export function createSessionContext<T = unknown>(
         get instanceStorage() {
             return instanceStorage;
         },
+        get sessionContextId() {
+            return sessionContextId;
+        },
         notify(
             event: AppAgentEvent,
             message: string | DisplayContent,
             notificationId?: string,
         ) {
             context.clientIO.notify(notificationId, event, message, name);
+        },
+        beginAgentThread(kind: AgentMessageKind): AgentThreadHandle {
+            const clientRequestId = `agent-${name}-${randomUUID()}`;
+            const requestId: RequestId = {
+                requestId: "",
+                clientRequestId,
+            };
+            let completed = false;
+            const buildMessage = (content: DisplayContent): IAgentMessage => ({
+                message: content,
+                requestId,
+                source: name,
+                kind,
+            });
+            const completedError = () =>
+                new Error(
+                    `Agent thread ${clientRequestId} is completed; call beginAgentThread() to start a new thread.`,
+                );
+            return {
+                kind,
+                setDisplay(content: DisplayContent) {
+                    if (completed) throw completedError();
+                    context.clientIO.setDisplay(buildMessage(content));
+                },
+                appendDisplay(
+                    content: DisplayContent,
+                    mode: DisplayAppendMode = "block",
+                ) {
+                    if (completed) throw completedError();
+                    context.clientIO.appendDisplay(buildMessage(content), mode);
+                },
+                complete() {
+                    completed = true;
+                },
+            };
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {
@@ -144,6 +194,18 @@ export function createSessionContext<T = unknown>(
         setLocalHostPort(port: number) {
             context.agents.setLocalHostPort(name, port);
         },
+        registerPort(role: string, port: number) {
+            const regId = context.portRegistrar.register(
+                name,
+                role,
+                port,
+                sessionContextId,
+            );
+            return {
+                release: () =>
+                    context.portRegistrar.release(regId, sessionContextId),
+            };
+        },
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {
                 const iidx: IndexData[] =
@@ -169,6 +231,23 @@ export function createSessionContext<T = unknown>(
         },
         async reloadAgentSchema(): Promise<void> {
             await context.agents.reloadAgentSchema(name, context);
+        },
+        async validateGrammarPatterns(
+            request: GrammarValidationRequest,
+        ): Promise<GrammarValidationResult> {
+            debug(
+                `[${name}] Validating ${request.patterns.length} patterns for "${request.actionName}"`,
+            );
+
+            // Use command lock for thread safety
+            return context.commandLock(async () => {
+                return await validateGrammarPatternsImpl(
+                    name,
+                    request,
+                    context.agentGrammarRegistry,
+                    context.agentCache,
+                );
+            });
         },
     };
 

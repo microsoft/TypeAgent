@@ -3,6 +3,12 @@
 
 import type { Storage } from "@typeagent/agent-sdk";
 import type { ScriptRecipe } from "../types/recipe.js";
+import {
+    generateGrammarRuleText,
+    assembleDynamicGrammar,
+    generateFlowActionTypes,
+    buildUnionType,
+} from "@typeagent/agent-flows";
 
 import registerDebug from "debug";
 
@@ -55,29 +61,7 @@ export interface TaskFlowDefinition {
     script?: string;
 }
 
-// ── Grammar generation ──────────────────────────────────────────────────────
-
-export function generateGrammarRuleText(
-    actionName: string,
-    grammarPatterns: string[],
-): string {
-    const rules: string[] = [];
-
-    for (const pattern of grammarPatterns) {
-        const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
-            (m) => m[1],
-        );
-        const paramJson =
-            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
-
-        rules.push(
-            `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
-        );
-    }
-
-    return rules.join("\n");
-}
+// ── Grammar generation (uses @typeagent/workflow) ──────────────────────────
 
 // ── Recipe → FlowDefinition conversion ──────────────────────────────────────
 
@@ -333,32 +317,24 @@ export class TaskFlowStore {
     // ── Dynamic grammar ────────────────────────────────────────────────
 
     getDynamicGrammarText(): string {
-        const ruleNames: string[] = [
+        const builtInRuleNames = [
             "listTaskFlows",
             "deleteTaskFlow",
             "createTaskFlow",
             "editTaskFlow",
         ];
-        const ruleTexts: string[] = [
+        const builtInRuleTexts = [
             '<listTaskFlows> = (show | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows" };',
             '<deleteTaskFlow> [spacing=optional] = (delete | remove) (the)? task flow $(name:wildcard) -> { actionName: "deleteTaskFlow", parameters: { name } };',
             '<createTaskFlow> [spacing=optional] = create (a)? (new)? task flow (named | called)? $(name:wildcard) -> { actionName: "createTaskFlow", parameters: { name } };',
             '<editTaskFlow> [spacing=optional] = (edit | update | modify) (the)? task flow $(name:wildcard) -> { actionName: "editTaskFlow", parameters: { name } };',
         ];
 
-        for (const entry of Object.values(this.index.flows)) {
-            if (!entry.enabled || !entry.grammarRuleText) continue;
-            ruleTexts.push(entry.grammarRuleText);
-            for (const line of entry.grammarRuleText.split("\n")) {
-                const m = line.match(/^<(\w+)>/);
-                if (m && !ruleNames.includes(m[1])) {
-                    ruleNames.push(m[1]);
-                }
-            }
-        }
-
-        const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
-        return `${startRule}\n\n${ruleTexts.join("\n\n")}`;
+        return assembleDynamicGrammar(
+            Object.values(this.index.flows),
+            builtInRuleNames,
+            builtInRuleTexts,
+        );
     }
 
     async writeDynamicGrammarFile(): Promise<void> {
@@ -374,7 +350,7 @@ export class TaskFlowStore {
             (e) => e.enabled,
         );
 
-        const lines: string[] = [
+        const builtInTypes = [
             "// Lists all registered task flows",
             "export type ListTaskFlows = {",
             '    actionName: "listTaskFlows";',
@@ -421,55 +397,26 @@ export class TaskFlowStore {
             "        grammarPatterns?: string;",
             "    };",
             "};",
+        ].join("\n");
+
+        const { typeDefinitions, typeNames } =
+            generateFlowActionTypes(enabledFlows);
+
+        const allTypeNames = [
+            "ListTaskFlows",
+            "DeleteTaskFlow",
+            "CreateTaskFlow",
+            "EditTaskFlow",
+            ...typeNames,
         ];
 
-        const flowTypeNames: string[] = [];
-        for (const entry of enabledFlows) {
-            const typeName =
-                entry.actionName.charAt(0).toUpperCase() +
-                entry.actionName.slice(1) +
-                "Action";
-            flowTypeNames.push(typeName);
-
-            lines.push("");
-            lines.push(`// ${entry.description}`);
-            lines.push(`export type ${typeName} = {`);
-            lines.push(`    actionName: "${entry.actionName}";`);
-
-            if ((entry.parameters ?? []).length > 0) {
-                lines.push("    parameters: {");
-                for (const p of entry.parameters ?? []) {
-                    const tsType =
-                        p.type === "number"
-                            ? "number"
-                            : p.type === "boolean"
-                              ? "boolean"
-                              : "string";
-                    const opt = p.required ? "" : "?";
-                    if (p.description) {
-                        lines.push(`        // ${p.description}`);
-                    }
-                    lines.push(`        ${p.name}${opt}: ${tsType};`);
-                }
-                lines.push("    };");
-            }
-
-            lines.push("};");
-        }
-
-        lines.push("");
-        lines.push("export type TaskFlowActions =");
-        lines.push("    | ListTaskFlows");
-        lines.push("    | DeleteTaskFlow");
-        lines.push("    | CreateTaskFlow");
-        lines.push("    | EditTaskFlow");
-        for (const typeName of flowTypeNames) {
-            lines.push(`    | ${typeName}`);
-        }
-        lines.push(";");
-        lines.push("");
-
-        return lines.join("\n");
+        return [
+            builtInTypes,
+            typeDefinitions,
+            "",
+            buildUnionType("TaskFlowActions", allTypeNames),
+            "",
+        ].join("\n");
     }
 
     // ── Internal ───────────────────────────────────────────────────────

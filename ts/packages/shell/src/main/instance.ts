@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 import { app, BrowserWindow, dialog, ipcMain, Notification } from "electron";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
     debugShell,
     debugShellCleanup,
@@ -649,6 +652,44 @@ export function initializeInstance(
     let cleanupConversationIpc =
         registerConversationIpcHandlers(conversationBackend);
 
+    // Watch user-settings.json so that changes made via @settings (e.g. from the
+    // CLI or NL) hot-reload shell settings immediately without a restart.
+    // The file may not exist yet if the user has never changed a setting.
+    const userSettingsPath = path.join(
+        os.homedir(),
+        ".typeagent",
+        "user-settings.json",
+    );
+    let userSettingsWatcher: fs.FSWatcher | undefined;
+    const startUserSettingsWatcher = () => {
+        userSettingsWatcher?.close();
+        userSettingsWatcher = undefined;
+        if (!fs.existsSync(userSettingsPath)) {
+            return;
+        }
+        userSettingsWatcher = fs.watch(userSettingsPath, () => {
+            try {
+                const updated = loadUserSettings();
+                shellWindow.setUserSettingValue(
+                    "partialCompletion",
+                    updated.ui.autoComplete,
+                );
+            } catch {
+                // Ignore transient read errors during file write
+            }
+        });
+    };
+    startUserSettingsWatcher();
+    // Watch the directory too so we catch the file being created for the first time
+    const userSettingsDirWatcher = fs.watch(
+        path.join(os.homedir(), ".typeagent"),
+        (event, filename) => {
+            if (filename === "user-settings.json" && event === "rename") {
+                startUserSettingsWatcher();
+            }
+        },
+    );
+
     // Set up notification callback for browser agent IPC early,
     // so messages queued during tab restoration can trigger notifications
     BrowserAgentIpc.getinstance().onSendNotification = (
@@ -828,6 +869,8 @@ export function initializeInstance(
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
         cleanupConversationIpc();
+        userSettingsWatcher?.close();
+        userSettingsDirWatcher.close();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);
     });
 

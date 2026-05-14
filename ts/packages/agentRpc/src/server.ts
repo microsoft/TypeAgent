@@ -3,6 +3,8 @@
 
 import {
     ActionContext,
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgent,
     SessionContext,
     Storage,
@@ -167,6 +169,18 @@ export function createAgentRpcServer(
             unregisterAgentContext(param.agentContextId!);
             return result;
         },
+        async startBackgroundTasks(param): Promise<void> {
+            if (agent.startBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of startBackgroundTasks");
+            }
+            await agent.startBackgroundTasks(getSessionContextShim(param));
+        },
+        async stopBackgroundTasks(param): Promise<void> {
+            if (agent.stopBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of stopBackgroundTasks");
+            }
+            await agent.stopBackgroundTasks(getSessionContextShim(param));
+        },
 
         async getCommands(param): Promise<any> {
             if (agent.getCommands === undefined) {
@@ -265,6 +279,18 @@ export function createAgentRpcServer(
                 getSessionContextShim(param),
                 param.schemaName,
             );
+        },
+        async checkReadiness(param) {
+            if (agent.checkReadiness === undefined) {
+                throw new Error("Invalid invocation of checkReadiness");
+            }
+            return agent.checkReadiness(getSessionContextShim(param));
+        },
+        async setup(param) {
+            if (agent.setup === undefined) {
+                throw new Error("Invalid invocation of setup");
+            }
+            return agent.setup(getActionContextShim(param));
         },
     };
 
@@ -412,6 +438,7 @@ export function createAgentRpcServer(
         contextId: number,
         hasInstanceStorage: boolean,
         hasSessionStorage: boolean,
+        sessionContextId: string,
         context: any,
     ): SessionContext<any> {
         const dynamicAgentRpcServer = new Map<string, () => void>();
@@ -424,12 +451,52 @@ export function createAgentRpcServer(
             instanceStorage: hasInstanceStorage
                 ? getStorage(contextId, false)
                 : undefined,
+            sessionContextId,
             notify: (
                 event: AppAgentEvent,
                 message: string | DisplayContent,
                 notificationId?: string,
             ): void => {
                 rpc.send("notify", contextId, event, message, notificationId);
+            },
+            beginAgentThread: (kind: AgentMessageKind): AgentThreadHandle => {
+                const threadId = globalThis.crypto.randomUUID();
+                let completed = false;
+                const completedError = () =>
+                    new Error(
+                        `Agent thread ${threadId} is completed; call beginAgentThread() to start a new thread.`,
+                    );
+                rpc.send("agentThreadBegin", contextId, threadId, kind);
+                return {
+                    kind,
+                    setDisplay(content: DisplayContent) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadSetDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                        );
+                    },
+                    appendDisplay(
+                        content: DisplayContent,
+                        mode: DisplayAppendMode = "block",
+                    ) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadAppendDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                            mode,
+                        );
+                    },
+                    complete() {
+                        if (completed) return;
+                        completed = true;
+                        rpc.send("agentThreadComplete", contextId, threadId);
+                    },
+                };
             },
             popupQuestion: async (
                 message: string,
@@ -463,6 +530,32 @@ export function createAgentRpcServer(
                 void rpc
                     .invoke("setLocalHostPort", { contextId, port })
                     .catch();
+            },
+            registerPort(role: string, port: number) {
+                // Fire-and-forget the invoke; resolve the regId lazily so
+                // release() waits for the round-trip if it gets called
+                // before the registration response arrives.
+                const regIdPromise: Promise<string> = rpc
+                    .invoke("registerPort", { contextId, role, port })
+                    .then((r: { regId: string }) => r.regId);
+                regIdPromise.catch(() => {
+                    // Swallow registration failures here — they're logged
+                    // on the dispatcher side via the registrar; throwing
+                    // synchronously from registerPort would force every
+                    // agent caller to add try/catch around the bind path.
+                });
+                return {
+                    release: () => {
+                        void regIdPromise
+                            .then((regId) =>
+                                rpc.invoke("releasePort", {
+                                    regId,
+                                    contextId,
+                                }),
+                            )
+                            .catch();
+                    },
+                };
             },
             addDynamicAgent: async (
                 name: string,
@@ -573,6 +666,7 @@ export function createAgentRpcServer(
             contextId,
             hasInstanceStorage,
             hasSessionStorage,
+            sessionContextId,
             agentContextId,
         } = param;
         if (contextId === undefined) {
@@ -586,6 +680,9 @@ export function createAgentRpcServer(
         if (hasSessionStorage === undefined) {
             throw new Error("Invalid context param: missing hasSessionStorage");
         }
+        if (sessionContextId === undefined) {
+            throw new Error("Invalid context param: missing sessionContextId");
+        }
 
         const agentContext =
             agentContextId !== undefined
@@ -596,6 +693,7 @@ export function createAgentRpcServer(
             contextId,
             hasInstanceStorage,
             hasSessionStorage,
+            sessionContextId,
             agentContext,
         );
     }

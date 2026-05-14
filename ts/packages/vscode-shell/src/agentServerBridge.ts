@@ -4,213 +4,33 @@
 import * as vscode from "vscode";
 import * as os from "os";
 import { connectAgentServer } from "@typeagent/agent-server-client";
+import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
+import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
+
+import {
+    wrapLegacy,
+    type LegacyAgentServerConnection,
+    type SessionDispatcher,
+} from "./bridge/shim.js";
 import type {
-    AgentServerConnection,
-    ConversationDispatcher,
-    ConversationInfo,
-    DispatcherConnectOptions,
-} from "@typeagent/agent-server-client";
-import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
-import type { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
-import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
-import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
-import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
-
-// The agent-server client API was renamed `*Session` -> `*Conversation` in
-// PR #2289 (post-merge). Rather than rename every call site in the bridge
-// (and every webview message field), expose a thin compatibility shim that
-// preserves the old `*Session` shape.
-type SessionInfo = ConversationInfo & { sessionId: string };
-type SessionDispatcher = {
-    dispatcher: Dispatcher;
-    sessionId: string;
-    name: string;
-};
-type LegacyConnectOptions = Omit<DispatcherConnectOptions, "conversationId"> & {
-    sessionId?: string;
-};
-type LegacyAgentServerConnection = {
-    joinSession(
-        clientIO: ClientIO,
-        options?: LegacyConnectOptions,
-    ): Promise<SessionDispatcher>;
-    leaveSession(sessionId: string): Promise<void>;
-    createSession(name: string): Promise<SessionInfo>;
-    listSessions(name?: string): Promise<SessionInfo[]>;
-    renameSession(sessionId: string, newName: string): Promise<void>;
-    deleteSession(sessionId: string): Promise<void>;
-    shutdown(): Promise<void>;
-    close(): Promise<void>;
-};
-function adaptInfo(c: ConversationInfo): SessionInfo {
-    return { ...c, sessionId: c.conversationId };
-}
-function wrapLegacy(c: AgentServerConnection): LegacyAgentServerConnection {
-    return {
-        async joinSession(io, opts) {
-            const { sessionId, ...rest } = opts ?? {};
-            const r = await c.joinConversation(io, {
-                ...rest,
-                conversationId: sessionId,
-            });
-            return {
-                dispatcher: r.dispatcher,
-                sessionId: r.conversationId,
-                name: r.name,
-            };
-        },
-        leaveSession: (id) => c.leaveConversation(id),
-        createSession: async (n) => adaptInfo(await c.createConversation(n)),
-        listSessions: async (n) =>
-            (await c.listConversations(n)).map(adaptInfo),
-        renameSession: (id, n) => c.renameConversation(id, n),
-        deleteSession: (id) => c.deleteConversation(id),
-        shutdown: () => c.shutdown(),
-        close: () => c.close(),
-    };
-}
-
-/**
- * Coerce a RequestId (server-side `{requestId, clientRequestId}` shape) or
- * already-string identifier down to the plain client request id used
- * throughout the webview. Returns undefined if no usable id is present.
- *
- * The webview never deals in `RequestId` objects — every outgoing bridge
- * message normalizes through this helper so `main.ts` can use plain string
- * comparisons / map keys.
- */
-function clientIdOf(rid: RequestId | string | undefined): string | undefined {
-    if (rid === undefined || rid === null) return undefined;
-    if (typeof rid === "string") return rid;
-    return (rid as { clientRequestId?: string }).clientRequestId;
-}
-
-/**
- * Messages from extension host → webview
- */
-export type BridgeToWebviewMessage =
-    | {
-          type: "status";
-          connected: boolean;
-          sessionId?: string;
-          sessionName?: string;
-      }
-    | { type: "sessionChanged"; sessionId: string; sessionName: string }
-    | {
-          type: "setDisplay";
-          message: IAgentMessage;
-          requestId?: string;
-          seq?: number;
-          timestamp?: number;
-      }
-    | {
-          type: "appendDisplay";
-          message: IAgentMessage;
-          requestId?: string;
-          mode: DisplayAppendMode;
-          seq?: number;
-          timestamp?: number;
-      }
-    | {
-          type: "setDisplayInfo";
-          requestId?: string;
-          source: string;
-          actionIndex?: number;
-          action?: TypeAgentAction | string[];
-          seq?: number;
-      }
-    | {
-          type: "setUserRequest";
-          requestId?: string;
-          command: string;
-          seq?: number;
-          timestamp?: number;
-      }
-    | { type: "clear"; requestId?: string }
-    | {
-          type: "notify";
-          event: string;
-          data: any;
-          source: string;
-          seq?: number;
-          requestId?: string;
-      }
-    | { type: "commandResult"; requestId: string; result: any }
-    | { type: "commandComplete"; requestId: string; result: any }
-    | { type: "peerMetrics"; requestId: string; result: any }
-    | { type: "pcState"; state?: CompletionState }
-    | { type: "error"; message: string; requestId?: string }
-    | {
-          // Single in-place reconnect status shown in the connection
-          // ribbon. `phase: "waiting"` means a backoff timer is running
-          // and `secondsRemaining` is the live countdown. `connecting`
-          // means an attempt is in progress. `cleared` means we're back
-          // online and any reconnect UI should disappear.
-          type: "reconnectStatus";
-          phase: "waiting" | "connecting" | "cleared";
-          attempt?: number;
-          secondsRemaining?: number;
-          error?: string;
-      }
-    | { type: "switching"; switching: boolean; targetName?: string }
-    | { type: "userInfo"; name: string }
-    | { type: "setActive"; active: boolean }
-    | {
-          type: "demoState";
-          running: boolean;
-          paused: boolean;
-          message?: string;
-      }
-    | { type: "demoTypeAndSend"; command: string; requestId: string }
-    | { type: "demoCancelTyping" }
-    | { type: "historyLoading"; loading: boolean }
-    | {
-          type: "historyReplay";
-          entries: Array<{
-              type: string;
-              seq: number;
-              timestamp?: number;
-              // user-request
-              command?: string;
-              // set-display / append-display
-              message?: IAgentMessage;
-              mode?: DisplayAppendMode;
-              // set-display-info
-              source?: string;
-              action?: TypeAgentAction | string[];
-              actionIndex?: number;
-              requestId?: string;
-              // command-result
-              metrics?: any;
-              tokenUsage?: any;
-          }>;
-      };
+    BridgeFromWebviewMessage,
+    BridgeToWebviewMessage,
+} from "./bridge/messages.js";
+import { createBridgeClientIO } from "./bridge/clientIO.js";
+import { clientIdOf } from "./bridge/requestIds.js";
+import { toHistoryReplayMessage } from "./bridge/historyReplay.js";
 
 import {
     createCompletionController,
     type CompletionController,
-    type CompletionState,
 } from "agent-dispatcher/helpers/completion";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 
-/**
- * Messages from webview → extension host
- */
-export type BridgeFromWebviewMessage =
-    | { type: "sendCommand"; command: string; requestId?: string }
-    | { type: "cancelCommand"; requestId: string }
-    | { type: "openExternal"; href: string }
-    | { type: "connect" }
-    | { type: "disconnect" }
-    | { type: "getStatus" }
-    | { type: "focus"; focused: boolean }
-    | { type: "pcUpdate"; input: string; direction: CompletionDirection }
-    | { type: "pcAccept" }
-    | { type: "pcDismiss"; input: string; direction: CompletionDirection }
-    | { type: "pcHide" }
-    | { type: "pcDispose" }
-    | { type: "demoCommand"; action: "continue" | "cancel" }
-    | { type: "demoLineCancelled"; requestId: string };
+// Internal-only message type unions; re-export for any future consumers.
+export type {
+    BridgeToWebviewMessage,
+    BridgeFromWebviewMessage,
+} from "./bridge/messages.js";
 
 /**
  * Manages the RPC connection to the agent server from the extension host
@@ -254,6 +74,18 @@ export class AgentServerBridge {
     private joinInFlight: Promise<void> | undefined;
     private session: SessionDispatcher | undefined;
     private webviews: Set<vscode.Webview> = new Set();
+    /**
+     * Per-webview buffer for live broadcasts that arrive while the webview
+     * is being hydrated (history fetch in flight). Without this buffer,
+     * live setDisplay/appendDisplay events fired by the dispatcher during
+     * the `await getDisplayHistory()` window would be applied immediately
+     * by the webview, but the historyReplay message arrives later and is
+     * applied on top — yielding out-of-order or duplicated transcripts.
+     */
+    private hydratingWebviews = new Map<
+        vscode.Webview,
+        BridgeToWebviewMessage[]
+    >();
     private statusBarItem: vscode.StatusBarItem;
     private isConnected = false;
     private reconnectTimer: NodeJS.Timeout | undefined;
@@ -394,16 +226,22 @@ export class AgentServerBridge {
             // os.userInfo() can throw on some configurations; ignore
         }
 
-        // Send current status
+        // Send current status. Note: the webview's message listener may
+        // not be wired up yet at this point (especially during VSIX
+        // hot-reload, where the webview is restored from cache before
+        // its bundle re-runs). The webview re-requests this state by
+        // posting `connect` once it's ready — see hydrateWebview().
         this.postToWebview(webview, {
             type: "status",
             connected: this.isConnected,
             sessionId: this.session?.sessionId,
+            sessionName: this.session ? this.getDisplayName() : undefined,
         });
 
         return {
             dispose: () => {
                 this.webviews.delete(webview);
+                this.hydratingWebviews.delete(webview);
                 if (this.completionWebview === webview) {
                     this.disposeCompletionController();
                 }
@@ -440,7 +278,7 @@ export class AgentServerBridge {
         const config = vscode.workspace.getConfiguration("typeagent");
         const serverUrl = config.get<string>(
             "serverUrl",
-            "ws://localhost:8999",
+            AGENT_SERVER_DEFAULT_URL,
         );
 
         try {
@@ -998,63 +836,82 @@ export class AgentServerBridge {
         // Send the whole history as a single message — avoids slow per-entry
         // postMessage round trips and prevents live events from being
         // interleaved mid-replay.
-        const replayMsg: BridgeToWebviewMessage = {
-            type: "historyReplay",
-            entries: entries.map((e) => {
-                switch (e.type) {
-                    case "user-request":
-                        return {
-                            type: "user-request",
-                            seq: e.seq,
-                            timestamp: e.timestamp,
-                            requestId: clientIdOf(e.requestId),
-                            command: e.command,
-                        };
-                    case "set-display":
-                        return {
-                            type: "set-display",
-                            seq: e.seq,
-                            timestamp: e.timestamp,
-                            message: e.message,
-                            requestId: clientIdOf(e.message?.requestId),
-                        };
-                    case "append-display":
-                        return {
-                            type: "append-display",
-                            seq: e.seq,
-                            timestamp: e.timestamp,
-                            message: e.message,
-                            mode: e.mode,
-                            requestId: clientIdOf(e.message?.requestId),
-                        };
-                    case "set-display-info":
-                        return {
-                            type: "set-display-info",
-                            seq: e.seq,
-                            timestamp: e.timestamp,
-                            requestId: clientIdOf(e.requestId),
-                            source: e.source,
-                            actionIndex: e.actionIndex,
-                            action: e.action,
-                        };
-                    case "command-result":
-                        return {
-                            type: "command-result",
-                            seq: e.seq,
-                            timestamp: e.timestamp,
-                            requestId: clientIdOf(e.requestId),
-                            metrics: e.metrics,
-                            tokenUsage: (e as any).tokenUsage,
-                        };
-                    default:
-                        return { type: "skip", seq: e.seq };
-                }
-            }),
-        };
         // historyReplay is not in REPLAY_BUFFERED_TYPES so this passes
         // through immediately.
-        this.broadcastToWebviews(replayMsg);
+        this.broadcastToWebviews(toHistoryReplayMessage(entries));
         this.flushReplayBuffer();
+    }
+
+    /**
+     * Re-send userInfo, current status, and replayed history to a single
+     * webview that has just (re-)attached its message listener. Triggered
+     * by the webview posting `connect` while the bridge is already
+     * connected — typically a VSIX hot-reload or webview restore where
+     * the webview missed the eager broadcasts from registerWebview().
+     *
+     * Posts directly to the requesting webview only so peer webviews
+     * don't see duplicate userInfo/status/history messages.
+     */
+    private hydrateWebview(webview: vscode.Webview): void {
+        try {
+            const name = os.userInfo().username;
+            if (name) {
+                this.postToWebview(webview, { type: "userInfo", name });
+            }
+        } catch {
+            // os.userInfo() can throw on some configurations; ignore
+        }
+
+        this.postToWebview(webview, {
+            type: "status",
+            connected: this.isConnected,
+            sessionId: this.session?.sessionId,
+            sessionName: this.session ? this.getDisplayName() : undefined,
+        });
+
+        const session = this.session;
+        if (!session) return;
+
+        // Fire-and-forget: fetch history and post to this webview only.
+        // We deliberately do NOT engage the global replay buffer here —
+        // peers are mid-conversation and shouldn't have their live events
+        // paused for a single webview's reload hydration. Instead we
+        // queue live broadcasts destined for THIS webview only via
+        // `hydratingWebviews`, draining the queue after historyReplay
+        // is posted so the transcript stays ordered.
+        this.hydratingWebviews.set(webview, []);
+        void (async () => {
+            this.postToWebview(webview, {
+                type: "historyLoading",
+                loading: true,
+            });
+            try {
+                const entries = await session.dispatcher.getDisplayHistory();
+                if (entries.length > 0) {
+                    this.postToWebview(
+                        webview,
+                        toHistoryReplayMessage(entries),
+                    );
+                }
+            } catch (e) {
+                console.warn(
+                    "[agentServerBridge] hydrateWebview replay failed:",
+                    e,
+                );
+            } finally {
+                this.postToWebview(webview, {
+                    type: "historyLoading",
+                    loading: false,
+                });
+                // Drain any live broadcasts that arrived during hydration
+                // and stop intercepting future broadcasts for this webview.
+                const queued = this.hydratingWebviews.get(webview) ?? [];
+                this.hydratingWebviews.delete(webview);
+                for (const m of queued) {
+                    this.postToWebview(webview, m);
+                }
+            }
+        })();
     }
 
     private flushReplayBuffer(): void {
@@ -1106,7 +963,17 @@ export class AgentServerBridge {
                 }
                 break;
             case "connect":
-                await this.connect();
+                // The webview posts `connect` once it has wired up its
+                // message listener — this is also our cue that it's ready
+                // to receive state. On a webview reload the bridge is
+                // already connected, so connect() is a no-op; we still
+                // need to (re-)hydrate the just-loaded webview with
+                // userInfo, current status, and replayed history.
+                if (this.isConnected && this.session) {
+                    this.hydrateWebview(_webview);
+                } else {
+                    await this.connect();
+                }
                 break;
             case "disconnect":
                 await this.disconnect();
@@ -1417,139 +1284,37 @@ export class AgentServerBridge {
      * Create a ClientIO implementation that forwards calls to the webview.
      */
     private createClientIO(): ClientIO {
-        return {
-            question: async (
-                _requestId: RequestId | undefined,
-                message: string,
-                choices: string[],
-                _defaultId?: number,
-                _source?: string,
-            ): Promise<number> => {
-                // Show VS Code quick pick for questions
-                const items = choices.map((c, i) => ({
-                    label: c,
-                    index: i,
-                }));
-                const pick = await vscode.window.showQuickPick(items, {
-                    placeHolder: message,
-                });
-                return pick?.index ?? 0;
+        return createBridgeClientIO({
+            broadcast: (msg) => this.broadcastToWebviews(msg),
+            rememberServerRequestId: (clientId, serverId) => {
+                this.clientToServerRequestId.set(clientId, serverId);
             },
-            proposeAction: async (
-                _requestId: RequestId,
-                _actionTemplates: TemplateEditConfig,
-                _source: string,
-            ): Promise<unknown> => {
-                return undefined;
-            },
-            openLocalView: async () => {},
-            closeLocalView: async () => {},
+            handleShellAction: (requestId, data) =>
+                this.handleShellAction(requestId, data),
+        });
+    }
 
-            // ClientIO call functions (fire-and-forget notifications)
-            clear: (requestId: RequestId) => {
-                this.broadcastToWebviews({
-                    type: "clear",
-                    requestId: clientIdOf(requestId),
-                });
-            },
-            exit: (_requestId: RequestId) => {
-                // No-op in extension context
-            },
-            setUserRequest: (
-                requestId: RequestId,
-                command: string,
-                seq?: number,
-            ) => {
-                // Record client→server requestId translation so the stop
-                // button (which posts the client id) can be turned into
-                // the dispatcher's server id for cancelCommand().
-                const clientId = clientIdOf(requestId);
-                if (
-                    typeof clientId === "string" &&
-                    typeof requestId?.requestId === "string"
-                ) {
-                    this.clientToServerRequestId.set(
-                        clientId,
-                        requestId.requestId,
-                    );
-                }
-                this.broadcastToWebviews({
-                    type: "setUserRequest",
-                    requestId: clientId,
-                    command,
-                    seq,
-                });
-            },
-            setDisplayInfo: (
-                requestId: RequestId,
-                source: string,
-                actionIndex?: number,
-                action?: TypeAgentAction | string[],
-                seq?: number,
-            ) => {
-                this.broadcastToWebviews({
-                    type: "setDisplayInfo",
-                    requestId: clientIdOf(requestId),
-                    source,
-                    actionIndex,
-                    action,
-                    seq,
-                });
-            },
-            setDisplay: (message: IAgentMessage, seq?: number) => {
-                this.broadcastToWebviews({
-                    type: "setDisplay",
-                    message,
-                    requestId: clientIdOf(message.requestId),
-                    seq,
-                });
-            },
-            appendDisplay: (
-                message: IAgentMessage,
-                mode: DisplayAppendMode,
-                seq?: number,
-            ) => {
-                this.broadcastToWebviews({
-                    type: "appendDisplay",
-                    message,
-                    requestId: clientIdOf(message.requestId),
-                    mode,
-                    seq,
-                });
-            },
-            appendDiagnosticData: () => {},
-            setDynamicDisplay: () => {},
-            notify: (
-                notificationId: string | RequestId | undefined,
-                event: string,
-                data: any,
-                source: string,
-                seq?: number,
-            ) => {
-                this.broadcastToWebviews({
-                    type: "notify",
-                    event,
-                    data,
-                    source,
-                    seq,
-                    requestId: clientIdOf(notificationId),
-                });
-            },
-            requestChoice: () => {},
-            requestInteraction: (_interaction: PendingInteractionRequest) => {},
-            interactionResolved: () => {},
-            interactionCancelled: () => {},
-            takeAction: (_requestId, action, data) => {
-                if (action === "vscode-shell-action") {
-                    this.handleShellAction(data).catch((e: any) => {
-                        vscode.window.showErrorMessage(
-                            `Shell action failed: ${e?.message ?? String(e)}`,
-                        );
-                    });
-                }
-            },
-            shutdown: () => {},
-        };
+    /**
+     * Overwrite the action bubble's body for `requestId` with an error
+     * message. Used when the bridge detects that the user-visible outcome
+     * differs from the optimistic message returned by the action handler
+     * (e.g. "create" colliding with an existing name, "delete" of the
+     * current conversation).
+     */
+    private overwriteActionBubble(
+        requestId: any,
+        markdown: string,
+        source: string = "code.code-vscode-shell",
+    ): void {
+        this.broadcastToWebviews({
+            type: "setDisplay",
+            requestId: clientIdOf(requestId),
+            message: {
+                message: markdown,
+                source,
+                requestId,
+            } as any,
+        });
     }
 
     /**
@@ -1557,7 +1322,7 @@ export class AgentServerBridge {
      * to the originating client by the agent server's takeAction routing,
      * so only this bridge (the originator's bridge) receives it.
      */
-    private async handleShellAction(data: any): Promise<void> {
+    private async handleShellAction(requestId: any, data: any): Promise<void> {
         if (!data || typeof data !== "object") return;
         const actionName = data.actionName as string | undefined;
         const params = (data.parameters ?? {}) as {
@@ -1567,7 +1332,7 @@ export class AgentServerBridge {
 
         switch (actionName) {
             case "newConversation":
-                await this.newConversationFromAgent(params.name);
+                await this.newConversationFromAgent(requestId, params.name);
                 break;
             case "renameConversation":
                 if (params.newName) {
@@ -1579,6 +1344,9 @@ export class AgentServerBridge {
             case "switchConversation":
                 await this.switchConversationFromAgent(params.name);
                 break;
+            case "deleteConversation":
+                await this.deleteConversationFromAgent(requestId, params.name);
+                break;
         }
     }
 
@@ -1586,7 +1354,10 @@ export class AgentServerBridge {
      * Create a new conversation programmatically (from a chat-issued
      * action). If `name` is omitted, falls back to the interactive prompt.
      */
-    private async newConversationFromAgent(name?: string): Promise<void> {
+    private async newConversationFromAgent(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
         if (!this.connection) {
             vscode.window.showWarningMessage("Not connected to agent server.");
             return;
@@ -1604,6 +1375,10 @@ export class AgentServerBridge {
         if (existing) {
             vscode.window.showWarningMessage(
                 `A conversation named "${trimmed}" already exists; switching to it.`,
+            );
+            this.overwriteActionBubble(
+                requestId,
+                `A conversation named "${trimmed}" already exists. Switching to it instead of creating a new one.`,
             );
             await this.joinSpecificSession(existing.sessionId, existing.name);
             return;
@@ -1658,7 +1433,9 @@ export class AgentServerBridge {
 
     /**
      * Switch to a conversation by display name (from chat). Falls back to
-     * the interactive picker if no name was provided or no match found.
+     * the interactive picker if no name was provided. If a name is given
+     * but no conversation matches, creates a new conversation with that
+     * name and switches to it.
      */
     private async switchConversationFromAgent(name?: string): Promise<void> {
         if (!this.connection) {
@@ -1676,8 +1453,12 @@ export class AgentServerBridge {
             (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
         );
         if (!match) {
-            vscode.window.showWarningMessage(
-                `No conversation named "${trimmed}" found.`,
+            // Create-on-switch: user asked to switch to a conversation
+            // that doesn't exist yet, so create it and switch to it.
+            const info = await this.connection.createSession(trimmed);
+            await this.joinSpecificSession(info.sessionId, trimmed);
+            vscode.window.showInformationMessage(
+                `Created and switched to new conversation "${trimmed}".`,
             );
             return;
         }
@@ -1685,6 +1466,71 @@ export class AgentServerBridge {
             return;
         }
         await this.joinSpecificSession(match.sessionId, match.name);
+    }
+
+    /**
+     * Delete a conversation by display name (from chat). Prompts the user
+     * for confirmation before deleting. Falls back to the interactive
+     * picker if no name was provided. Refuses to delete the currently
+     * active conversation.
+     */
+    private async deleteConversationFromAgent(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+        if (!name || !name.trim()) {
+            await this.deleteSession();
+            return;
+        }
+
+        const trimmed = name.trim();
+        const sessions = await this.connection.listSessions();
+        const match = sessions.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (!match) {
+            vscode.window.showWarningMessage(
+                `No conversation named "${trimmed}" found.`,
+            );
+            this.overwriteActionBubble(
+                requestId,
+                `No conversation named "${trimmed}" found to delete.`,
+            );
+            return;
+        }
+        if (match.sessionId === this.session?.sessionId) {
+            vscode.window.showWarningMessage(
+                `Cannot delete the currently active conversation "${trimmed}".`,
+            );
+            this.overwriteActionBubble(
+                requestId,
+                `Cannot delete the currently active conversation "${match.name}". Switch to a different conversation first.`,
+            );
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete conversation "${match.name}"? This cannot be undone.`,
+            { modal: true },
+            "Delete",
+        );
+        if (confirm !== "Delete") {
+            this.overwriteActionBubble(
+                requestId,
+                `Delete of conversation "${match.name}" was cancelled.`,
+            );
+            return;
+        }
+
+        await this.connection.deleteSession(match.sessionId);
+        vscode.window.showInformationMessage(
+            `Deleted conversation "${match.name}".`,
+        );
+        this.onStatusChanged?.();
     }
 
     public notifyDemoState(
@@ -1742,6 +1588,13 @@ export class AgentServerBridge {
             return;
         }
         for (const webview of this.webviews) {
+            // If this webview is mid-hydration, queue the live message
+            // until history replay has been delivered (see hydrateWebview).
+            const queue = this.hydratingWebviews.get(webview);
+            if (queue !== undefined) {
+                queue.push(msg);
+                continue;
+            }
             this.postToWebview(webview, msg);
         }
     }

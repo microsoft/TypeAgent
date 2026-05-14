@@ -151,6 +151,11 @@ export async function resolveURLWithHistory(
             sessionStorage: undefined,
             instanceStorage: undefined,
             notify: () => {},
+            beginAgentThread: () => {
+                throw new Error(
+                    "beginAgentThread is not supported on this minimal SessionContext stub",
+                );
+            },
             popupQuestion: async () => 0,
             toggleTransientAgent: async () => {},
             addDynamicAgent: async () => {},
@@ -158,6 +163,10 @@ export async function resolveURLWithHistory(
             forceCleanupDynamicAgent: async () => {},
             getSharedLocalHostPort: async () => 0,
             setLocalHostPort: (_port: number) => {},
+            registerPort: (_role: string, _port: number) => ({
+                release: () => {},
+            }),
+            sessionContextId: "websiteMemory-mock",
             indexes: async () => [],
             reloadAgentSchema: async () => {},
         };

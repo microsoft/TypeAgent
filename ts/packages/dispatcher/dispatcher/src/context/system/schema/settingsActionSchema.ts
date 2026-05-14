@@ -4,7 +4,8 @@
 export type UserSettingsAction =
     | SetServerHiddenAction
     | SetIdleTimeoutAction
-    | SetConversationResumeAction;
+    | SetConversationResumeAction
+    | SetAutoCompleteAction;
 
 // Set whether the agent server starts as a hidden background process.
 // Use when the user says things like "start the server hidden", "run the server in the background",
@@ -35,6 +36,17 @@ export type SetConversationResumeAction = {
     actionName: "setConversationResume";
     parameters: {
         // true = resume the last conversation on startup; false = always start with the default conversation
+        enable: boolean;
+    };
+};
+
+// Enable or disable inline autocomplete suggestions in the CLI input.
+// Use when the user says things like "turn off autocomplete", "disable tab completion",
+// "stop showing completions", "enable autocomplete", "turn on inline suggestions".
+export type SetAutoCompleteAction = {
+    actionName: "setAutoComplete";
+    parameters: {
+        // true = show inline completions as the user types; false = disable autocomplete
         enable: boolean;
     };
 };
