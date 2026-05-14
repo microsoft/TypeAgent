@@ -54,52 +54,6 @@ function sealObjects(schema: JSONSchema): JSONSchema {
     return copy;
 }
 
-export const intAdd: TaskDefinition<
-    { a: number; b: number },
-    { result: number }
-> = {
-    name: "int.add",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["a", "b"],
-        properties: { a: { type: "integer" }, b: { type: "integer" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "integer" } },
-    },
-    async execute(input) {
-        console.warn("DEPRECATED: int.add is deprecated, use math.add instead");
-        return { kind: "ok", output: { result: input.a + input.b } };
-    },
-};
-
-export const intLessThan: TaskDefinition<
-    { a: number; b: number },
-    { result: boolean }
-> = {
-    name: "int.lessThan",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["a", "b"],
-        properties: { a: { type: "integer" }, b: { type: "integer" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "boolean" } },
-    },
-    async execute(input) {
-        console.warn(
-            "DEPRECATED: int.lessThan is deprecated, use compare.lessThan instead",
-        );
-        return { kind: "ok", output: { result: input.a < input.b } };
-    },
-};
-
 export const listLength: TaskDefinition<
     { list: unknown[] },
     { length: number }
@@ -762,8 +716,6 @@ export const fileWrite: TaskDefinition<
 
 /** The 5 standard-library tasks (pure, no IO). */
 export const standardLibraryTasks: TaskDefinition[] = [
-    intAdd,
-    intLessThan,
     listLength,
     listElementAt,
     listAppend,
@@ -1048,12 +1000,6 @@ export const mathDivide: TaskDefinition<
         properties: { result: { type: "number" } },
     },
     async execute(input) {
-        if (input.right === 0) {
-            return {
-                kind: "fail",
-                error: { message: "Division by zero" },
-            };
-        }
         return { kind: "ok", output: { result: input.left / input.right } };
     },
 };
@@ -1075,12 +1021,6 @@ export const mathModulo: TaskDefinition<
         properties: { result: { type: "number" } },
     },
     async execute(input) {
-        if (input.right === 0) {
-            return {
-                kind: "fail",
-                error: { message: "Modulo by zero" },
-            };
-        }
         return { kind: "ok", output: { result: input.left % input.right } };
     },
 };
@@ -1103,6 +1043,62 @@ export const mathNegate: TaskDefinition<{ value: number }, { result: number }> =
             return { kind: "ok", output: { result: -input.value } };
         },
     };
+
+export const mathFloor: TaskDefinition<{ value: number }, { result: number }> =
+    {
+        name: "math.floor",
+        sideEffects: false,
+        inputSchema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: { type: "number" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["result"],
+            properties: { result: { type: "integer" } },
+        },
+        async execute(input) {
+            return { kind: "ok", output: { result: Math.floor(input.value) } };
+        },
+    };
+
+export const mathRound: TaskDefinition<{ value: number }, { result: number }> =
+    {
+        name: "math.round",
+        sideEffects: false,
+        inputSchema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: { type: "number" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["result"],
+            properties: { result: { type: "integer" } },
+        },
+        async execute(input) {
+            return { kind: "ok", output: { result: Math.round(input.value) } };
+        },
+    };
+
+export const mathCeil: TaskDefinition<{ value: number }, { result: number }> = {
+    name: "math.ceil",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: { type: "number" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["result"],
+        properties: { result: { type: "integer" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { result: Math.ceil(input.value) } };
+    },
+};
 
 // ---- noop (merge/join point for branches) ----
 
@@ -1182,6 +1178,9 @@ export const v2StandardLibraryTasks: TaskDefinition[] = [
     mathDivide,
     mathModulo,
     mathNegate,
+    mathFloor,
+    mathRound,
+    mathCeil,
     errorFail,
     noop,
     identity,

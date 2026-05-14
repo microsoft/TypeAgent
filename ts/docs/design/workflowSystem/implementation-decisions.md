@@ -4,6 +4,96 @@ Decisions made during implementation that were not explicitly specified in
 [dsl-v2.md](dsl/dsl-v2.md), [ir-v2.md](ir/ir-v2.md), or
 [implementation-plan.md](implementation-plan.md). Organized by phase.
 
+This is a temporary reconciliation document. Once the relevant decisions are
+folded back into the main spec and plan docs, this file should be deleted.
+
+## Review Procedure
+
+For each item in this file, review it in the following order:
+
+1. Confirm the current reality: verify whether the item still matches the
+   current code and tests, or whether later changes have already made it
+   stale.
+2. Classify the item: decide whether it is primarily:
+
+- intended behavior that should be made explicit in the main spec/docs
+- a bug or implementation gap that should be fixed in code
+- a spec/implementation mismatch that needs a decision
+- an intentional limitation or scope boundary to document
+- technical debt or future work to track elsewhere
+
+3. Consider alternatives: list the plausible options, including keeping the
+   current behavior, changing implementation, or changing the spec.
+4. Compare pros and cons: evaluate semantics, implementation complexity,
+   user clarity, compatibility, and testing impact.
+5. Decide the disposition: record what we want to do with the item in the
+   Review Tracking table.
+6. Capture the destination:
+
+- if it is the intended long-term behavior, fold it into the main spec or
+  plan docs
+- if it is a bug or gap, create a fix task or issue
+- if it is future work, track it outside this file
+- if it is obsolete, remove it from this file
+
+Goal for each item: end with a clear outcome, not just a description.
+
+## Review Tracking
+
+Use this table to record both how each item should be reviewed and what we
+decide to do with it. The goal is to avoid losing track of whether an item
+should become spec text, a code fix, a cleanup task, or an explicit open
+question.
+
+| Item | Review as                                                                                                                                            | Outcome                                                                                                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0.1  | Specify current runtime semantics in main spec docs.                                                                                                 | Keep current behavior. Make the main spec explicit that parallel/fork scheduling order is undefined when `maxConcurrency > 1`.                                                       |
+| 0.2  | Decide whether this heuristic should be part of the runtime contract or replaced with explicit output rules.                                         | Replace stale heuristic note with the current explicit-output contract: fork branch output is resolved from `branch.scope.output` in branch scope.                                   |
+| 0.3  | Review as an implementation gap against the plan/spec. Decide whether to fix behavior or reduce the documented contract.                             | Option D: reduce spec to match current code (error only). Planned future: partial + trigger + abort signal + wait/fail-fast policy. See `ir/future/fork-error-partial-injection.md`. |
+| 0.4  | Specify the runtime error contract for divide-by-zero.                                                                                               | All math uses JS number semantics. Division/modulo by zero returns Infinity/NaN, not a task failure. `int.*` deprecated. Added `math.floor/round/ceil` for integer conversion.       |
+| 0.5  | Decide whether comparison semantics should intentionally follow JavaScript or become stricter/more explicit.                                         | TBD                                                                                                                                                                                  |
+| 0.6  | Decide whether non-short-circuit boolean tasks are an acceptable language limitation or need a separate control-flow form.                           | TBD                                                                                                                                                                                  |
+| 1.1  | Specify parser precedence and associativity in the language docs.                                                                                    | TBD                                                                                                                                                                                  |
+| 1.2  | Decide whether parse-time builtin reservation is the intended language rule or whether naming should be made more explicit/less ambiguous.           | TBD                                                                                                                                                                                  |
+| 1.3  | Specify the arrow-body disambiguation rule.                                                                                                          | TBD                                                                                                                                                                                  |
+| 1.4  | Specify the restriction and confirm the error behavior is the one we want.                                                                           | TBD                                                                                                                                                                                  |
+| 1.5  | Specify the error strategy for banned operators and confirm the diagnostic wording approach.                                                         | TBD                                                                                                                                                                                  |
+| 2.1  | Decide whether `unknown` should remain universally compatible or become stricter.                                                                    | TBD                                                                                                                                                                                  |
+| 2.2  | Specify numeric compatibility rules.                                                                                                                 | TBD                                                                                                                                                                                  |
+| 2.3  | Review as an unsupported/runtime gap. Decide whether to detect this statically or document it as unsupported.                                        | TBD                                                                                                                                                                                  |
+| 2.4  | Specify array-element type propagation rules.                                                                                                        | TBD                                                                                                                                                                                  |
+| 2.5  | Decide whether ternary mismatches should stay as errors or grow into a union-type feature later.                                                     | TBD                                                                                                                                                                                  |
+| 3.1  | Review as a real implementation bug to fix, not a behavior to bless.                                                                                 | TBD                                                                                                                                                                                  |
+| 3.2  | Decide whether hard-coded iteration limits are acceptable and, if so, where they should be documented/configured.                                    | TBD                                                                                                                                                                                  |
+| 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | TBD                                                                                                                                                                                  |
+| 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | TBD                                                                                                                                                                                  |
+| 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | TBD                                                                                                                                                                                  |
+| 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | TBD                                                                                                                                                                                  |
+| 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | TBD                                                                                                                                                                                  |
+| 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | TBD                                                                                                                                                                                  |
+| 3.9  | Decide whether identity-wrapping is the intended lowering pattern for literal arms or whether the IR should grow a cleaner representation.           | TBD                                                                                                                                                                                  |
+| 3.10 | Specify whether implicit termination via missing `next` is the intended node contract.                                                               | TBD                                                                                                                                                                                  |
+| 3.11 | Decide whether root-level identity wrapping is canonical lowering that belongs in the spec.                                                          | TBD                                                                                                                                                                                  |
+| 3.12 | Decide whether shared-bind normalization is the standard lowering rule for branch-produced values.                                                   | TBD                                                                                                                                                                                  |
+| 3.13 | Specify loop semantics for `map`/`filter` as part of the emitted/runtime contract.                                                                   | TBD                                                                                                                                                                                  |
+| 3.14 | Decide whether integer builtins are the intentional long-term infrastructure for iteration.                                                          | TBD                                                                                                                                                                                  |
+| 3.15 | Specify that output projection comes from canonical scope-ref lowering, not ad hoc ref construction.                                                 | TBD                                                                                                                                                                                  |
+| 3.16 | Decide whether `noop` / `identity` should be documented as required lowering primitives in the compiler/runtime contract.                            | TBD                                                                                                                                                                                  |
+| 3.17 | Review as temporary technical debt. Keep coverage, but track validator work needed to remove the bypass.                                             | TBD                                                                                                                                                                                  |
+| 3.18 | Review as an explicit scope boundary. Decide whether to preserve current limits or plan later language expansion.                                    | TBD                                                                                                                                                                                  |
+| 4.1  | Decide whether color choices belong in durable documentation or should stay as implementation/theme details.                                         | TBD                                                                                                                                                                                  |
+| 4.2  | Decide whether this visual convention is part of the product language or just local styling.                                                         | TBD                                                                                                                                                                                  |
+| 4.3  | Decide whether groups-as-edge-sources is the intended graph model contract.                                                                          | TBD                                                                                                                                                                                  |
+| 4.4  | Decide whether extraction order matters semantically or should remain an internal implementation detail.                                             | TBD                                                                                                                                                                                  |
+| 4.5  | Specify destructuring/binding lookup behavior in the graph extractor if it is meant to be stable.                                                    | TBD                                                                                                                                                                                  |
+| 5.1  | Review as a migration behavior change. Decide whether to accept it, mitigate it, or document it prominently.                                         | TBD                                                                                                                                                                                  |
+| 5.2  | Revisit after retry semantics are fixed, then document the final migration story.                                                                    | TBD                                                                                                                                                                                  |
+| 5.3  | Confirm this is just a correctness fix and capture it in migration notes if needed.                                                                  | TBD                                                                                                                                                                                  |
+| 5.4  | Decide on the deprecation signaling policy (`console.warn`, debug tracing, structured diagnostics, etc.).                                            | TBD                                                                                                                                                                                  |
+| 5.5  | Decide whether equivalent v2 coverage is sufficient or whether some removed edge cases need to be restored explicitly.                               | TBD                                                                                                                                                                                  |
+| 5.6  | Review as test scaffolding cleanup/documentation, not core language design.                                                                          | TBD                                                                                                                                                                                  |
+| 5.7  | Decide whether to fix test schemas so validation can run, or explicitly accept this as a temporary validation gap.                                   | TBD                                                                                                                                                                                  |
+
 ---
 
 ## Phase 0: IR Model + Engine
@@ -14,16 +104,24 @@ The plan said "start all branches (up to maxConcurrency), collect outputs
 into keyed object, cancel-on-first-failure." The implementation uses
 `Promise.race()` with a sliding window over a `Set<Promise<void>>`. This
 means branches actually execute concurrently (interleaved at `await`
-boundaries), not sequentially. This is correct behavior, but means task
-execution ordering is non-deterministic when `maxConcurrency > 1`.
+boundaries), not sequentially. We are keeping this behavior as the intended
+default semantics.
+
+Decision: fork/parallel branch scheduling order is intentionally undefined
+when `maxConcurrency > 1`. Output association is deterministic, but branch
+start/completion order is not. Users should not rely on relative timing of
+side effects across parallel branches.
 
 ### 0.2 Fork branch output collection fallback
 
-When a fork branch's terminal node has `bind`, the runner uses that binding
-as the branch output. When it doesn't, the runner falls back to collecting
-all new bindings the branch produced (bindings not in the outer scope). If
-exactly one new binding exists, it unwraps it; otherwise it returns an object
-of all new bindings. This heuristic was not specified.
+Current state: the old fallback heuristic is stale. The runner now resolves
+fork branch output directly from each branch's explicit output template
+(`branch.scope.output`) against the branch scope after execution.
+
+Decision: keep explicit branch output resolution as the runtime contract.
+Do not infer branch outputs from terminal bind names or from "new bindings"
+discovery. This keeps branch output shape predictable and aligned with
+branch scope declarations.
 
 ### 0.3 ForkMap error handling has no `partial` injection
 
@@ -33,12 +131,15 @@ into onError but does not inject `partial` (the array of completed results
 so far). ForkMap similarly does not pass `partial`. Only the basic
 `buildErrorObject()` is used.
 
-### 0.4 Division by zero in math.divide
+### 0.4 Arithmetic tasks use JavaScript number semantics
 
-`math.divide` throws `EngineError("Division by zero")` when the right
-operand is zero. This is a runtime error, not a special return value. The
-plan just said `left / right (error on zero)` without specifying the
-mechanism.
+All `math.*` tasks use JavaScript number semantics. `NaN` and `Infinity`
+are valid output values. Division and modulo by zero produce `Infinity`
+or `NaN` respectively, not task failures.
+
+`int.add` and `int.lessThan` are deprecated (retained temporarily for
+emitter loop counter compatibility). Integer conversion is available via
+`math.floor`, `math.round`, and `math.ceil`.
 
 ### 0.5 Comparison operators use JavaScript semantics
 
@@ -137,6 +238,7 @@ be registered in the engine).
 ### 2.4 Array element type tracking
 
 The type checker infers array element types from context:
+
 - `map(coll, (item) => { ... })` - `item` gets the element type of `coll`
 - `filter(coll, (item) => { ... })` - same
 - Array literals are not supported in the DSL, so there's no array literal
@@ -159,10 +261,11 @@ for simplicity (no union types in the type system).
 ### 3.1 Retry runs body N times even on success (BUG)
 
 The retry emitter produces: body tasks -> step_attempt -> compare(attempt
->= count) -> branch(true: @exit, false: @iterate). There is no early-exit
-on first success. If `retry(3, ...)` and the body succeeds on attempt 0,
-the loop increments attempt to 1, checks 1 >= 3 (false), and iterates
-again. The body runs exactly `count` times before exiting on success.
+
+> = count) -> branch(true: @exit, false: @iterate). There is no early-exit
+> on first success. If `retry(3, ...)` and the body succeeds on attempt 0,
+> the loop increments attempt to 1, checks 1 >= 3 (false), and iterates
+> again. The body runs exactly `count` times before exiting on success.
 
 Intended semantics: try once, retry up to N times on failure, exit on first
 success. Actual semantics: run body N times regardless. On failure, the
@@ -170,17 +273,18 @@ loop's `onError` triggers and re-enters, but the attempt counter only
 increments on the success path, so error retries don't consume attempts.
 
 This means:
+
 - Success path: body runs `count` times (wasteful, possibly wrong)
 - Failure path: body retries indefinitely (attempt never increments on error),
   up to `maxIterations: 100` safety limit
 
 ### 3.2 maxIterations values are hard-coded
 
-| Built-in | maxIterations | Rationale |
-|----------|--------------|-----------|
-| retry    | 100          | Safety limit for retry loops |
-| map      | 10,000       | Allow large collections |
-| filter   | 10,000       | Same as map |
+| Built-in | maxIterations | Rationale                    |
+| -------- | ------------- | ---------------------------- |
+| retry    | 100           | Safety limit for retry loops |
+| map      | 10,000        | Allow large collections      |
+| filter   | 10,000        | Same as map                  |
 
 The plan and spec did not specify these values. They are safety limits to
 prevent infinite loops. If a workflow operates on a collection with 10,001
@@ -238,6 +342,7 @@ it enforces the full branch sub-scope contract.
 
 When a loop body (map, filter, retry, parallelMap) references an
 outer-scope binding, the `captureOuterRefs` helper:
+
 1. Scans all nodes in the body for `$from: "scope"` templates
 2. Checks if the referenced name exists as a node in the body scope
 3. If not (it's an outer reference), rewrites `$from` from `"scope"` to
@@ -277,26 +382,117 @@ in JS). This means the runner will stop execution at this node (no next
 node to follow), which is correct behavior, but different from explicitly
 signaling "this path terminates."
 
+### 3.11 Pure-literal workflows are normalized through identity
+
+When a workflow returns a literal and otherwise emits no executable nodes,
+the emitter now inserts an `identity` node and returns its `result` field
+instead of emitting a zero-node workflow. This gives the engine a concrete
+entry point for literal-only programs and makes their IR shape match normal
+workflow execution.
+
+This is more than a bug fix: it establishes that executable workflows
+should have a real starting node even when the source program is only a
+literal return.
+
+### 3.12 Branch-returning control flow normalizes through a shared bind
+
+When both branches of an `if/else` return values, the emitter does not
+propagate branch-local bind names directly. Instead, each branch now writes
+through an `identity` node to a common bind name before control flow
+merges. Ternary lowering already used the same pattern.
+
+This defines a canonical lowering rule for "a value produced by divergent
+control flow": normalize branch-local outputs into one shared post-merge
+binding rather than depending on matching branch internals.
+
+### 3.13 Map/filter loops use pre-check semantics
+
+The original emitted loop shape effectively behaved like a post-check loop,
+which caused the last iteration's state update to be lost. The emitter now
+structures `map` and `filter` as pre-check loops: test the index against
+the collection length first, then run the body, then advance state.
+
+This means `map` and `filter` now have an explicit while-style execution
+model in the emitted IR. That semantic choice matters for empty collections,
+final-state commits, and any future loop-like built-ins that want to follow
+the same pattern.
+
+### 3.14 Loop indices lower through integer builtins
+
+The emitter now uses `int.add` and `int.lessThan` for loop counters, with
+their native `a` / `b` input names, instead of `math.add` and
+`compare.lessThan`. The type checker already treats `integer` and `number`
+as compatible, but emitted collection loops now deliberately model indices
+as integer operations.
+
+This makes integer builtins part of the emitter's expected lowering path
+for iteration infrastructure, even though those tasks are marked deprecated
+elsewhere.
+
+### 3.15 Output projection must use canonical scope refs
+
+The `parallel` and `parallelMap` fixes showed that manually constructing
+`{ $from: "scope", name }` references is not equivalent to using the
+emitter's normal scope-ref path derivation. Single-property output
+projection only happens when references are built through the canonical
+lowering helpers.
+
+This is an implementation decision about ownership of output shaping: the
+emitter should derive projection paths centrally rather than having each
+construct rebuild them by hand.
+
+### 3.16 `noop` and `identity` are required lowering primitives
+
+`noop` and `identity` were originally emitted as synthetic helper tasks, but
+the latest changes make them part of the normal lowering strategy for merge
+points, branch normalization, ternary literals, filter state normalization,
+and pure-literal workflows. They are no longer incidental helpers.
+
+In practice, this means these tasks are part of the compiler/runtime
+contract. Changing their availability or signature would break emitted IR.
+
+### 3.17 Some emitter coverage intentionally bypasses IR validation
+
+The integration tests for certain branch-return patterns compile with
+`NO_VALIDATE` and run with `skipValidation: true` because the current IR
+validator's domination analysis rejects workflows that execute correctly in
+the runner. The tests were kept to preserve behavioral coverage while
+accepting the validator gap.
+
+This is a temporary implementation decision: runtime behavior is treated as
+authoritative for these cases until the validator is brought in line.
+
+### 3.18 Composition coverage stays within current parser/type-checker limits
+
+One integration test that combined a task call, binary operator, and ternary
+was rewritten to avoid unsupported chained/property-composition and mixed-arm
+typing patterns instead of expanding the parser or type checker in the same
+commit.
+
+That means the current language boundary was intentionally preserved here.
+The commit improves emitter/runtime correctness without broadening DSL
+expression semantics.
+
 ---
 
 ## Phase 4: Graph Extractor + Visualizer
 
 ### 4.1 Color assignments
 
-| Group/Node kind | Color | Justification |
-|----------------|-------|---------------|
-| retry          | orange | "warning/retry" association |
-| map            | indigo | Arbitrary |
-| filter         | purple | Arbitrary |
-| parallel       | teal | Arbitrary |
-| parallelMap    | green-teal | Arbitrary |
-| switch         | deep purple | Arbitrary |
-| switch-case    | light gray | Subordinate to switch |
-| switch-default | lighter gray | Subordinate to switch |
-| operator       | light blue | Computation |
-| branch         | yellow | Decision point |
-| error          | red | Error/danger |
-| workflowCall   | cyan | External reference |
+| Group/Node kind | Color        | Justification               |
+| --------------- | ------------ | --------------------------- |
+| retry           | orange       | "warning/retry" association |
+| map             | indigo       | Arbitrary                   |
+| filter          | purple       | Arbitrary                   |
+| parallel        | teal         | Arbitrary                   |
+| parallelMap     | green-teal   | Arbitrary                   |
+| switch          | deep purple  | Arbitrary                   |
+| switch-case     | light gray   | Subordinate to switch       |
+| switch-default  | lighter gray | Subordinate to switch       |
+| operator        | light blue   | Computation                 |
+| branch          | yellow       | Decision point              |
+| error           | red          | Error/danger                |
+| workflowCall    | cyan         | External reference          |
 
 No design spec for colors. These are aesthetic choices.
 
@@ -383,13 +579,21 @@ emitter generates. A proper test would include these schemas and validate.
 
 ## Summary of items that may need action
 
-| # | Issue | Severity | Phase |
-|---|-------|----------|-------|
-| 1 | Retry runs body N times on success (3.1) | Bug | 3 |
-| 2 | `noop` and `identity` not registered in engine (3.3) | Bug | 3 |
-| 3 | Sub-workflow calls don't inline, need engine support (3.4) | Incomplete | 3 |
-| 4 | Parallel branch names are synthetic, not from destructuring (3.5) | Design gap | 3 |
-| 5 | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3 |
-| 6 | bool.and/bool.or not short-circuit (0.6) | Design limitation | 0 |
-| 7 | Fork/ForkMap onError lacks `partial` injection (0.3) | Incomplete | 0 |
-| 8 | d8 retry exhaustion now throws instead of silent fallthrough (5.1) | Behavioral change | 5 |
+| #   | Issue                                                                  | Severity                    | Phase |
+| --- | ---------------------------------------------------------------------- | --------------------------- | ----- |
+| 1   | Retry runs body N times on success (3.1)                               | Bug                         | 3     |
+| 2   | `noop` and `identity` not registered in engine (3.3)                   | Bug                         | 3     |
+| 3   | Sub-workflow calls don't inline, need engine support (3.4)             | Incomplete                  | 3     |
+| 4   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3     |
+| 5   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3     |
+| 6   | bool.and/bool.or not short-circuit (0.6)                               | Design limitation           | 0     |
+| 7   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0     |
+| 8   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5     |
+| 9   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3     |
+| 10  | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3     |
+| 11  | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3     |
+| 12  | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3     |
+| 13  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3     |
+| 14  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3     |
+| 15  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3     |
+| 16  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3     |

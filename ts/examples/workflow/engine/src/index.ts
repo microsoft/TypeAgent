@@ -5,8 +5,6 @@ export { TaskRegistry } from "./taskRegistry.js";
 export { WorkflowEngine, RunResult, RunOptions } from "./runner.js";
 export { WorkflowEvent, WorkflowEventListener } from "./events.js";
 export {
-    intAdd,
-    intLessThan,
     listLength,
     listElementAt,
     listAppend,
@@ -33,6 +31,10 @@ export {
     mathMultiply,
     mathDivide,
     mathModulo,
+    mathNegate,
+    mathFloor,
+    mathRound,
+    mathCeil,
     errorFail,
     standardLibraryTasks,
     v2StandardLibraryTasks,

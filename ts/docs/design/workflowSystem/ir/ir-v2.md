@@ -141,24 +141,27 @@ sub-scope (same contract as loop bodies in v1).
 | `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                               |
 | `maxConcurrency` | no       | Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                                    |
 | `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                           |
-| `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error`, `trigger`, and `partial` (completed branches' outputs).                       |
+| `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error` and empty `trigger`.                                                           |
 | `bind`           | no       | Bound output name for scope visibility.                                                                                                                       |
 
 **Execution semantics:**
 
 1. All branches start concurrently (up to `maxConcurrency` if specified;
    excess branches are queued and started as running branches complete).
+   When `maxConcurrency > 1`, branch scheduling and completion order are
+   intentionally undefined.
 2. Each branch executes its sub-scope independently (no data flow between branches).
 3. The fork completes when all branches complete.
-4. The fork's output is an object keyed by branch name, each value being that branch's output.
-5. If any branch fails, the engine cancels remaining running branches.
-6. If `onError` is specified, the error handler runs. The engine injects
-   three fields into the handler's inputs (extending v1's `error` +
-   `trigger` pattern): `error` (the failure value, same as v1 §3.8.1),
-   `trigger` (the failing branch's inputs), and `partial` (an object
-   keyed by branch name, containing completed branches' outputs; failed
-   or cancelled branches are absent). The handler can return a
-   substitute value or propagate the error.
+4. The fork's output is an object keyed by branch name, each value resolved
+   from that branch sub-scope's explicit `output` template.
+   Branch outputs are not inferred from terminal bind names or by scanning
+   branch-local bindings.
+5. If any branch fails, the error propagates immediately. Other in-flight
+   branches are not yet explicitly cancelled (no branch-level abort signal).
+6. If `onError` is specified, the error handler runs. The handler receives
+   a structured `error` object (code, message, source, task, node,
+   scopePath) and an empty `trigger` (unlike task/loop error handlers,
+   fork does not yet populate trigger with the failing branch's inputs).
 7. If no `onError`, the error propagates to the enclosing scope.
 
 **Validation rules (additive to v1):**
@@ -236,7 +239,7 @@ is a closed sub-scope. Unlike `loop`, there is no `iterateState`
 | `maxIterations`    | no       | Safety cap (same semantics as v1 loop's `maxIterations`).                                                                                                                   |
 | `maxConcurrency`   | no       | Max concurrent iterations. Engine queues excess. Defaults to unbounded.                                                                                                     |
 | `next`             | no       | Next node ID, or `null` / sentinel.                                                                                                                                         |
-| `onError`          | no       | Error handler node ID. Handler receives `error`, `trigger`, and `partial` (completed iterations' outputs).                                                                  |
+| `onError`          | no       | Error handler node ID. Handler receives `error` and empty `trigger` (same contract as fork).                                                                                |
 | `bind`             | no       | Bound output name for scope visibility.                                                                                                                                     |
 
 **Execution semantics:**
@@ -245,12 +248,10 @@ is a closed sub-scope. Unlike `loop`, there is no `iterateState`
 2. N body instances start concurrently, each receiving one element.
 3. The forkMap completes when all N instances complete.
 4. The forkMap's output is an array of body outputs, preserving the order of the input collection.
-5. If any iteration fails, the engine cancels remaining running
-   iterations. Error handling follows the same rules as `fork`:
-   `onError` handler receives `error`, `trigger`, and `partial` (an
-   array of completed iterations' outputs, with `null` entries for
-   failed/cancelled iterations, preserving index correspondence with
-   the input collection).
+5. If any iteration fails, the error propagates immediately. Other
+   in-flight iterations are not yet explicitly cancelled. Error
+   handling follows the same contract as `fork`: the `onError` handler
+   receives a structured `error` object and an empty `trigger`.
 
 **Key difference from `loop`:** No `iterateState`. Loop carries state from
 iteration N to iteration N+1, which forces sequential execution. ForkMap
@@ -295,13 +296,21 @@ standard-library tasks available to the engine.
 
 ### 3.3 `math` namespace
 
-| Task            | Input schema                      | Output schema        | Notes                             |
-| --------------- | --------------------------------- | -------------------- | --------------------------------- |
-| `math.add`      | `{ left: number, right: number }` | `{ result: number }` | `+` in DSL. Overlaps v1 `int.add` |
-| `math.subtract` | `{ left: number, right: number }` | `{ result: number }` | `-` in DSL                        |
-| `math.multiply` | `{ left: number, right: number }` | `{ result: number }` | `*` in DSL                        |
-| `math.divide`   | `{ left: number, right: number }` | `{ result: number }` | `/` in DSL                        |
-| `math.modulo`   | `{ left: number, right: number }` | `{ result: number }` | `%` in DSL                        |
+All `math.*` tasks use JavaScript number semantics. `NaN` and `Infinity`
+are valid output values. Division and modulo by zero produce `Infinity` or
+`NaN` respectively, not task failures.
+
+| Task            | Input schema                      | Output schema         | Notes                                                   |
+| --------------- | --------------------------------- | --------------------- | ------------------------------------------------------- |
+| `math.add`      | `{ left: number, right: number }` | `{ result: number }`  | `+` in DSL. Overlaps v1 `int.add`                       |
+| `math.subtract` | `{ left: number, right: number }` | `{ result: number }`  | `-` in DSL                                              |
+| `math.multiply` | `{ left: number, right: number }` | `{ result: number }`  | `*` in DSL                                              |
+| `math.divide`   | `{ left: number, right: number }` | `{ result: number }`  | `/` in DSL. Returns `Infinity` or `NaN` on zero divisor |
+| `math.modulo`   | `{ left: number, right: number }` | `{ result: number }`  | `%` in DSL. Returns `NaN` on zero divisor               |
+| `math.negate`   | `{ value: number }`               | `{ result: number }`  | Unary `-` in DSL                                        |
+| `math.floor`    | `{ value: number }`               | `{ result: integer }` | `Math.floor()`. Use for integer conversion              |
+| `math.round`    | `{ value: number }`               | `{ result: integer }` | `Math.round()`                                          |
+| `math.ceil`     | `{ value: number }`               | `{ result: integer }` | `Math.ceil()`                                           |
 
 ### 3.4 `error` namespace
 
@@ -331,15 +340,13 @@ on the enclosing loop node.
 ### 3.6 Overlap with v1 standard library
 
 v1 defines `int.lessThan` and `int.add`. These overlap with
-`compare.lessThan` and `math.add`. Options:
+`compare.lessThan` and `math.add`.
 
-1. **Deprecate `int.*` in favor of `compare.*` / `math.*`.** Cleaner namespacing.
-2. **Keep both as aliases.** No breaking change, but two names for one thing (violates §1.2).
-3. **Keep `int.*` for v1 IR, use `compare.*` / `math.*` for v2 IR.** Version-scoped.
-
-Recommendation: option 1. The v1 emitter already generates these; updating
-it to emit `compare.lessThan` and `math.add` instead is mechanical. The
-engine registers both names during the transition period.
+Decision: `int.*` tasks are deprecated. They are retained temporarily for
+emitter loop counter compatibility but will be removed once the emitter
+migrates to `math.add` / `compare.lessThan`. The engine registers both
+names during the transition period. For integer conversion, use
+`math.floor`, `math.round`, or `math.ceil`.
 
 ---
 

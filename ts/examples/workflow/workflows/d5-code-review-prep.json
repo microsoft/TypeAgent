@@ -514,19 +514,19 @@
           },
           "stepIndex": {
             "kind": "task",
-            "task": "int.add",
+            "task": "math.add",
             "inputSchema": {
               "type": "object",
               "required": [
-                "a",
-                "b"
+                "left",
+                "right"
               ],
               "properties": {
-                "a": {
-                  "type": "integer"
+                "left": {
+                  "type": "number"
                 },
-                "b": {
-                  "type": "integer"
+                "right": {
+                  "type": "number"
                 }
               }
             },
@@ -537,16 +537,16 @@
               ],
               "properties": {
                 "result": {
-                  "type": "integer"
+                  "type": "number"
                 }
               }
             },
             "inputs": {
-              "a": {
+              "left": {
                 "$from": "state",
                 "name": "i"
               },
-              "b": 1
+              "right": 1
             },
             "next": "computeLength",
             "bind": "stepped"
@@ -587,19 +587,19 @@
           },
           "compareIndex": {
             "kind": "task",
-            "task": "int.lessThan",
+            "task": "compare.lessThan",
             "inputSchema": {
               "type": "object",
               "required": [
-                "a",
-                "b"
+                "left",
+                "right"
               ],
               "properties": {
-                "a": {
-                  "type": "integer"
+                "left": {
+                  "type": "number"
                 },
-                "b": {
-                  "type": "integer"
+                "right": {
+                  "type": "number"
                 }
               }
             },
@@ -615,14 +615,14 @@
               }
             },
             "inputs": {
-              "a": {
+              "left": {
                 "$from": "scope",
                 "name": "stepped",
                 "path": [
                   "result"
                 ]
               },
-              "b": {
+              "right": {
                 "$from": "scope",
                 "name": "fileCount",
                 "path": [

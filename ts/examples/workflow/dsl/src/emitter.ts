@@ -1268,13 +1268,13 @@ export class Emitter {
         const compareId = this.freshId("compare");
         bodyScope.nodes[compareId] = {
             kind: "task",
-            task: "int.lessThan",
+            task: "compare.lessThan",
             inputSchema: {
                 type: "object",
-                required: ["a", "b"],
+                required: ["left", "right"],
                 properties: {
-                    a: { type: "integer" },
-                    b: { type: "integer" },
+                    left: { type: "number" },
+                    right: { type: "number" },
                 },
             },
             outputSchema: {
@@ -1283,11 +1283,11 @@ export class Emitter {
                 properties: { result: { type: "boolean" } },
             },
             inputs: {
-                a: {
+                left: {
                     $from: "state",
                     name: "i",
                 } as unknown as Template,
-                b: {
+                right: {
                     $from: "scope",
                     name: lengthId,
                     path: ["length"],
@@ -1380,23 +1380,23 @@ export class Emitter {
         const stepId = this.freshId("step_i");
         bodyScope.nodes[stepId] = {
             kind: "task",
-            task: "int.add",
+            task: "math.add",
             inputSchema: {
                 type: "object",
-                required: ["a", "b"],
+                required: ["left", "right"],
                 properties: {
-                    a: { type: "integer" },
-                    b: { type: "integer" },
+                    left: { type: "number" },
+                    right: { type: "number" },
                 },
             },
             outputSchema: {
                 type: "object",
                 required: ["result"],
-                properties: { result: { type: "integer" } },
+                properties: { result: { type: "number" } },
             },
             inputs: {
-                a: { $from: "state", name: "i" } as unknown as Template,
-                b: 1,
+                left: { $from: "state", name: "i" } as unknown as Template,
+                right: 1,
             },
             next: "@iterate",
             bind: stepId,
@@ -1486,13 +1486,13 @@ export class Emitter {
         const compareId = this.freshId("compare");
         bodyScope.nodes[compareId] = {
             kind: "task",
-            task: "int.lessThan",
+            task: "compare.lessThan",
             inputSchema: {
                 type: "object",
-                required: ["a", "b"],
+                required: ["left", "right"],
                 properties: {
-                    a: { type: "integer" },
-                    b: { type: "integer" },
+                    left: { type: "number" },
+                    right: { type: "number" },
                 },
             },
             outputSchema: {
@@ -1501,11 +1501,11 @@ export class Emitter {
                 properties: { result: { type: "boolean" } },
             },
             inputs: {
-                a: {
+                left: {
                     $from: "state",
                     name: "i",
                 } as unknown as Template,
-                b: {
+                right: {
                     $from: "scope",
                     name: lengthId,
                     path: ["length"],
@@ -1670,23 +1670,23 @@ export class Emitter {
         // Increment i, then @iterate back to condition check
         bodyScope.nodes[stepId] = {
             kind: "task",
-            task: "int.add",
+            task: "math.add",
             inputSchema: {
                 type: "object",
-                required: ["a", "b"],
+                required: ["left", "right"],
                 properties: {
-                    a: { type: "integer" },
-                    b: { type: "integer" },
+                    left: { type: "number" },
+                    right: { type: "number" },
                 },
             },
             outputSchema: {
                 type: "object",
                 required: ["result"],
-                properties: { result: { type: "integer" } },
+                properties: { result: { type: "number" } },
             },
             inputs: {
-                a: { $from: "state", name: "i" } as unknown as Template,
-                b: 1,
+                left: { $from: "state", name: "i" } as unknown as Template,
+                right: 1,
             },
             next: "@iterate",
             bind: stepId,

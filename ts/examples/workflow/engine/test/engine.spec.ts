@@ -20,7 +20,6 @@ import {
     WorkflowEngine,
     WorkflowEvent,
     RunOptions,
-    standardLibraryTasks,
     allBuiltinTasks,
     compareEquals,
     compareNotEquals,
@@ -36,6 +35,10 @@ import {
     mathMultiply,
     mathDivide,
     mathModulo,
+    mathNegate,
+    mathFloor,
+    mathRound,
+    mathCeil,
     errorFail,
 } from "../src/index.js";
 import { readFileSync, unlinkSync, existsSync } from "node:fs";
@@ -223,7 +226,7 @@ function makeA4IR(): WorkflowIR {
         },
         outputSchema: { type: "string" },
         constants: {
-            one: { schema: { type: "integer" }, value: 1 },
+            one: { schema: { type: "number" }, value: 1 },
         },
         nodes: {
             // Calendar
@@ -551,23 +554,23 @@ function makeA4IR(): WorkflowIR {
                         },
                         stepIndex: {
                             kind: "task",
-                            task: "int.add",
+                            task: "math.add",
                             inputSchema: {
                                 type: "object",
-                                required: ["a", "b"],
+                                required: ["left", "right"],
                                 properties: {
-                                    a: { type: "integer" },
-                                    b: { type: "integer" },
+                                    left: { type: "number" },
+                                    right: { type: "number" },
                                 },
                             },
                             outputSchema: {
                                 type: "object",
                                 required: ["result"],
-                                properties: { result: { type: "integer" } },
+                                properties: { result: { type: "number" } },
                             },
                             inputs: {
-                                a: { $from: "state", name: "i" },
-                                b: 1,
+                                left: { $from: "state", name: "i" },
+                                right: 1,
                             },
                             next: "computeLength",
                             bind: "stepped",
@@ -593,13 +596,13 @@ function makeA4IR(): WorkflowIR {
                         },
                         compareIndex: {
                             kind: "task",
-                            task: "int.lessThan",
+                            task: "compare.lessThan",
                             inputSchema: {
                                 type: "object",
-                                required: ["a", "b"],
+                                required: ["left", "right"],
                                 properties: {
-                                    a: { type: "integer" },
-                                    b: { type: "integer" },
+                                    left: { type: "number" },
+                                    right: { type: "number" },
                                 },
                             },
                             outputSchema: {
@@ -608,12 +611,12 @@ function makeA4IR(): WorkflowIR {
                                 properties: { result: { type: "boolean" } },
                             },
                             inputs: {
-                                a: {
+                                left: {
                                     $from: "scope",
                                     name: "stepped",
                                     path: ["result"],
                                 },
-                                b: {
+                                right: {
                                     $from: "scope",
                                     name: "repoCount",
                                     path: ["length"],
@@ -723,7 +726,7 @@ describe("WorkflowEngine (IR v1)", () => {
     let engine: WorkflowEngine;
 
     beforeEach(() => {
-        registry = makeRegistry(...standardLibraryTasks, ...domainTasks);
+        registry = makeRegistry(...allBuiltinTasks, ...domainTasks);
         engine = new WorkflowEngine(registry);
     });
 
@@ -831,7 +834,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks,
                 ...domainTasks.filter((t) => t.name !== "calendar.today"),
                 failingCalendar,
             );
@@ -876,7 +879,7 @@ describe("WorkflowEngine (IR v1)", () => {
     });
 
     describe("standard-library tasks", () => {
-        it("int.add computes correctly", async () => {
+        it("math.add computes correctly", async () => {
             const ir: WorkflowIR = {
                 kind: "workflow",
                 name: "addTest",
@@ -892,23 +895,23 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     add: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: { $from: "input", name: "a" } as Template,
-                            b: { $from: "input", name: "b" } as Template,
+                            left: { $from: "input", name: "a" } as Template,
+                            right: { $from: "input", name: "b" } as Template,
                         },
                         bind: "sum",
                     },
@@ -985,40 +988,40 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     onYes: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 1 as Template },
+                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
                     },
                     onNo: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 0 as Template, b: 0 as Template },
+                        inputs: { left: 0 as Template, right: 0 as Template },
                         bind: "answer",
                     },
                 },
@@ -1050,7 +1053,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("rejects IR with unregistered task", async () => {
-            const minimalRegistry = makeRegistry(...standardLibraryTasks);
+            const minimalRegistry = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(minimalRegistry);
 
             const result = await eng.run(makeA4IR(), {
@@ -1493,13 +1496,8 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks.filter((t) => t.name !== "shell.exec"),
                 mockShellExec,
-                ...allBuiltinTasks.filter(
-                    (t) =>
-                        t.name !== "shell.exec" &&
-                        !standardLibraryTasks.some((s) => s.name === t.name),
-                ),
             );
             const eng = new WorkflowEngine(reg);
 
@@ -1612,15 +1610,11 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks.filter(
+                    (t) => t.name !== "shell.exec" && t.name !== "llm.generate",
+                ),
                 mockShellExec,
                 mockLlmGenerate,
-                ...allBuiltinTasks.filter(
-                    (t) =>
-                        t.name !== "shell.exec" &&
-                        t.name !== "llm.generate" &&
-                        !standardLibraryTasks.some((s) => s.name === t.name),
-                ),
             );
             const eng = new WorkflowEngine(reg);
 
@@ -1849,15 +1843,11 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks.filter(
+                    (t) => t.name !== "shell.exec" && t.name !== "llm.generate",
+                ),
                 mockShellExec,
                 mockLlmGenerate,
-                ...allBuiltinTasks.filter(
-                    (t) =>
-                        t.name !== "shell.exec" &&
-                        t.name !== "llm.generate" &&
-                        !standardLibraryTasks.some((s) => s.name === t.name),
-                ),
             );
             const eng = new WorkflowEngine(reg);
 
@@ -1915,13 +1905,8 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks.filter((t) => t.name !== "http.get"),
                 mockHttpGet,
-                ...allBuiltinTasks.filter(
-                    (t) =>
-                        t.name !== "http.get" &&
-                        !standardLibraryTasks.some((s) => s.name === t.name),
-                ),
             );
             const eng = new WorkflowEngine(reg);
 
@@ -2174,17 +2159,15 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
-                mockHttpGet,
-                mockLlm,
-                mockFileWrite,
                 ...allBuiltinTasks.filter(
                     (t) =>
                         t.name !== "http.get" &&
                         t.name !== "llm.generate" &&
-                        t.name !== "file.write" &&
-                        !standardLibraryTasks.some((s) => s.name === t.name),
+                        t.name !== "file.write",
                 ),
+                mockHttpGet,
+                mockLlm,
+                mockFileWrite,
             );
             const eng = new WorkflowEngine(reg);
 
@@ -2287,17 +2270,15 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
-                mockHttpGet,
-                mockLlm,
-                mockFileWrite,
                 ...allBuiltinTasks.filter(
                     (t) =>
                         t.name !== "http.get" &&
                         t.name !== "llm.generate" &&
-                        t.name !== "file.write" &&
-                        !standardLibraryTasks.some((s) => s.name === t.name),
+                        t.name !== "file.write",
                 ),
+                mockHttpGet,
+                mockLlm,
+                mockFileWrite,
             );
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
@@ -2453,7 +2434,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            // int.add has no sideEffects, should run even with no approve fn
+            // math.add has no sideEffects, should run even with no approve fn
             const ir: WorkflowIR = {
                 kind: "workflow",
                 name: "pureTest",
@@ -2463,23 +2444,23 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     add: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
                             properties: {
-                                result: { type: "integer" },
+                                result: { type: "number" },
                             },
                         },
-                        inputs: { a: 2 as Template, b: 3 as Template },
+                        inputs: { left: 2 as Template, right: 3 as Template },
                         bind: "result",
                     },
                 },
@@ -2508,23 +2489,23 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     add: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
                             properties: {
-                                result: { type: "integer" },
+                                result: { type: "number" },
                             },
                         },
-                        inputs: { a: 10 as Template, b: 20 as Template },
+                        inputs: { left: 10 as Template, right: 20 as Template },
                         bind: "result",
                     },
                 },
@@ -2566,7 +2547,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, badTask);
+            const reg = makeRegistry(...allBuiltinTasks, badTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -2614,7 +2595,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, goodTask);
+            const reg = makeRegistry(...allBuiltinTasks, goodTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -2661,47 +2642,47 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     producer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         next: "consumer",
                         bind: "data",
                     },
                     consumer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "scope",
                                 name: "data",
                                 path: ["nonexistent"],
                             } as Template,
-                            b: 1 as Template,
+                            right: 1 as Template,
                         },
                         bind: "final",
                     },
@@ -2710,7 +2691,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "final" } as Template,
             };
 
-            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
             expect(validation.errors[0].message).toContain("nonexistent");
@@ -2731,47 +2712,47 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     producer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         next: "consumer",
                         bind: "data",
                     },
                     consumer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "scope",
                                 name: "data",
                                 path: ["result"],
                             } as Template,
-                            b: 1 as Template,
+                            right: 1 as Template,
                         },
                         bind: "final",
                     },
@@ -2780,7 +2761,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "final" } as Template,
             };
 
-            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(true);
         });
@@ -2810,25 +2791,25 @@ describe("WorkflowEngine (IR v1)", () => {
                             nodes: {
                                 step: {
                                     kind: "task",
-                                    task: "int.add",
+                                    task: "math.add",
                                     inputSchema: {
                                         type: "object",
-                                        required: ["a", "b"],
+                                        required: ["left", "right"],
                                         properties: {
-                                            a: { type: "integer" },
-                                            b: { type: "integer" },
+                                            left: { type: "number" },
+                                            right: { type: "number" },
                                         },
                                     },
                                     outputSchema: {
                                         type: "object",
                                         required: ["result"],
                                         properties: {
-                                            result: { type: "integer" },
+                                            result: { type: "number" },
                                         },
                                     },
                                     inputs: {
-                                        a: 1 as Template,
-                                        b: 1 as Template,
+                                        left: 1 as Template,
+                                        right: 1 as Template,
                                     },
                                     next: "done",
                                     bind: "stepped",
@@ -2859,7 +2840,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as Template,
             };
 
-            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
             expect(validation.errors[0].message).toContain("nonexistent");
@@ -2884,23 +2865,23 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: { $from: "input", name: "count" } as Template,
-                            b: 1 as Template,
+                            left: { $from: "input", name: "count" } as Template,
+                            right: 1 as Template,
                         },
                         bind: "result",
                     },
@@ -2941,7 +2922,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: null as Template,
             };
 
-            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
             expect(validation.errors.length).toBeGreaterThanOrEqual(2);
@@ -2969,40 +2950,40 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     onTrue: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 1 as Template },
+                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
                     },
                     onFalse: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 0 as Template, b: 0 as Template },
+                        inputs: { left: 0 as Template, right: 0 as Template },
                         bind: "answer",
                     },
                 },
@@ -3043,7 +3024,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, failTask);
+            const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3085,21 +3066,21 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     recover: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 99 as Template, b: 1 as Template },
+                        inputs: { left: 99 as Template, right: 1 as Template },
                         bind: "recovered",
                     },
                 },
@@ -3143,7 +3124,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, slowTask);
+            const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3184,7 +3165,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("does not interfere when task completes before timeout", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3196,23 +3177,23 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     add: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: 1 as Template,
-                            b: 2 as Template,
+                            left: 1 as Template,
+                            right: 2 as Template,
                         },
                         bind: "result",
                     },
@@ -3425,7 +3406,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, mockHttpGet);
+            const reg = makeRegistry(
+                ...allBuiltinTasks.filter((t) => t.name !== "http.get"),
+                mockHttpGet,
+            );
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3476,7 +3460,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("branch without matching case or default", () => {
         it("fails when selector resolves to unmatched case with no default", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3497,40 +3481,40 @@ describe("WorkflowEngine (IR v1)", () => {
                     } as any, // no default field
                     onYes: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 1 as Template },
+                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
                     },
                     onNo: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 0 as Template, b: 0 as Template },
+                        inputs: { left: 0 as Template, right: 0 as Template },
                         bind: "answer",
                     },
                 },
@@ -3546,7 +3530,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("constant schema validation", () => {
         it("rejects constant that violates its declared schema", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3564,21 +3548,21 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
                 },
@@ -3594,7 +3578,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("passes when constant matches its declared schema", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3612,26 +3596,26 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "constant",
                                 name: "offset",
                             } as Template,
-                            b: 8 as Template,
+                            right: 8 as Template,
                         },
                         bind: "result",
                     },
@@ -3721,7 +3705,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, slowTask);
+            const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3774,7 +3758,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, counterTask);
+            const reg = makeRegistry(...allBuiltinTasks, counterTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3864,7 +3848,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("loop edge cases", () => {
         it("fails when maxIterations is exceeded", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3889,28 +3873,28 @@ describe("WorkflowEngine (IR v1)", () => {
                             nodes: {
                                 add: {
                                     kind: "task",
-                                    task: "int.add",
+                                    task: "math.add",
                                     inputSchema: {
                                         type: "object",
-                                        required: ["a", "b"],
+                                        required: ["left", "right"],
                                         properties: {
-                                            a: { type: "integer" },
-                                            b: { type: "integer" },
+                                            left: { type: "number" },
+                                            right: { type: "number" },
                                         },
                                     },
                                     outputSchema: {
                                         type: "object",
                                         required: ["result"],
                                         properties: {
-                                            result: { type: "integer" },
+                                            result: { type: "number" },
                                         },
                                     },
                                     inputs: {
-                                        a: {
+                                        left: {
                                             $from: "state",
                                             name: "i",
                                         } as Template,
-                                        b: 1 as Template,
+                                        right: 1 as Template,
                                     },
                                     bind: "next",
                                     next: "cont",
@@ -3952,7 +3936,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("accesses constants inside loop bodies", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -3960,7 +3944,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "loopConstantTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "integer" },
+                outputSchema: { type: "number" },
                 constants: {
                     step: {
                         schema: { type: "integer" },
@@ -3987,28 +3971,28 @@ describe("WorkflowEngine (IR v1)", () => {
                             nodes: {
                                 addStep: {
                                     kind: "task",
-                                    task: "int.add",
+                                    task: "math.add",
                                     inputSchema: {
                                         type: "object",
-                                        required: ["a", "b"],
+                                        required: ["left", "right"],
                                         properties: {
-                                            a: { type: "integer" },
-                                            b: { type: "integer" },
+                                            left: { type: "number" },
+                                            right: { type: "number" },
                                         },
                                     },
                                     outputSchema: {
                                         type: "object",
                                         required: ["result"],
                                         properties: {
-                                            result: { type: "integer" },
+                                            result: { type: "number" },
                                         },
                                     },
                                     inputs: {
-                                        a: {
+                                        left: {
                                             $from: "state",
                                             name: "total",
                                         } as Template,
-                                        b: {
+                                        right: {
                                             $from: "constant",
                                             name: "step",
                                         } as Template,
@@ -4018,28 +4002,28 @@ describe("WorkflowEngine (IR v1)", () => {
                                 },
                                 incIter: {
                                     kind: "task",
-                                    task: "int.add",
+                                    task: "math.add",
                                     inputSchema: {
                                         type: "object",
-                                        required: ["a", "b"],
+                                        required: ["left", "right"],
                                         properties: {
-                                            a: { type: "integer" },
-                                            b: { type: "integer" },
+                                            left: { type: "number" },
+                                            right: { type: "number" },
                                         },
                                     },
                                     outputSchema: {
                                         type: "object",
                                         required: ["result"],
                                         properties: {
-                                            result: { type: "integer" },
+                                            result: { type: "number" },
                                         },
                                     },
                                     inputs: {
-                                        a: {
+                                        left: {
                                             $from: "state",
                                             name: "iter",
                                         } as Template,
-                                        b: 1 as Template,
+                                        right: 1 as Template,
                                     },
                                     bind: "nextIter",
                                     next: "check",
@@ -4051,7 +4035,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                         name: "nextIter",
                                         path: ["result"],
                                     } as Template,
-                                    selectorSchema: { type: "integer" },
+                                    selectorSchema: { type: "number" },
                                     cases: { 2: "@exit" },
                                     default: "@iterate",
                                 },
@@ -4061,7 +4045,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "sum",
                                 path: ["result"],
                             } as Template,
-                            outputSchema: { type: "integer" },
+                            outputSchema: { type: "number" },
                         },
                         iterateState: {
                             total: {
@@ -4114,11 +4098,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(
-                ...standardLibraryTasks,
-                failTask,
-                noopTask,
-            );
+            const reg = makeRegistry(...allBuiltinTasks, failTask, noopTask);
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
@@ -4175,7 +4155,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, failTask);
+            const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
@@ -4219,21 +4199,21 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "r",
                     },
                 },
@@ -4257,7 +4237,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("listener management", () => {
         it("off() removes a listener so it no longer fires", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const events1: WorkflowEvent[] = [];
@@ -4277,21 +4257,21 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "r",
                     },
                 },
@@ -4319,7 +4299,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("binding overwrites", () => {
         it("later task overrides an earlier binding with the same name", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -4331,41 +4311,41 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     first: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "firstAnswer",
                         next: "second",
                     },
                     second: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 10 as Template, b: 20 as Template },
+                        inputs: { left: 10 as Template, right: 20 as Template },
                         bind: "answer",
                     },
                 },
@@ -4408,7 +4388,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks,
                 failTask,
                 failRecovery,
             );
@@ -4464,7 +4444,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, echoTask);
+            const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -4523,7 +4503,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, echoTask);
+            const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -4707,7 +4687,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, echoTask);
+            const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5047,11 +5027,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(
-                ...standardLibraryTasks,
-                failTask,
-                captureTask,
-            );
+            const reg = makeRegistry(...allBuiltinTasks, failTask, captureTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5119,7 +5095,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const reg = makeRegistry(
-                ...standardLibraryTasks,
+                ...allBuiltinTasks,
                 throwTask,
                 captureTask,
             );
@@ -5205,27 +5181,27 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     consumer: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "scope",
                                 name: "data",
                                 path: ["label"],
                             } as Template,
-                            b: 1 as Template,
+                            right: 1 as Template,
                         },
                         bind: "final",
                     },
@@ -5265,25 +5241,25 @@ describe("WorkflowEngine (IR v1)", () => {
                             nodes: {
                                 step: {
                                     kind: "task",
-                                    task: "int.add",
+                                    task: "math.add",
                                     inputSchema: {
                                         type: "object",
-                                        required: ["a", "b"],
+                                        required: ["left", "right"],
                                         properties: {
-                                            a: { type: "integer" },
-                                            b: { type: "integer" },
+                                            left: { type: "number" },
+                                            right: { type: "number" },
                                         },
                                     },
                                     outputSchema: {
                                         type: "object",
                                         required: ["result"],
                                         properties: {
-                                            result: { type: "integer" },
+                                            result: { type: "number" },
                                         },
                                     },
                                     inputs: {
-                                        a: 1 as Template,
-                                        b: 1 as Template,
+                                        left: 1 as Template,
+                                        right: 1 as Template,
                                     },
                                     bind: "r",
                                 },
@@ -5317,26 +5293,26 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "scope",
                                 name: "doesNotExist",
                             } as Template,
-                            b: 1 as Template,
+                            right: 1 as Template,
                         },
                         bind: "result",
                     },
@@ -5363,26 +5339,26 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "magic",
                                 name: "x",
                             } as Template,
-                            b: 1 as Template,
+                            right: 1 as Template,
                         },
                         bind: "result",
                     },
@@ -5413,7 +5389,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, numTask);
+            const reg = makeRegistry(...allBuiltinTasks, numTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5438,27 +5414,27 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     second: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
                         inputs: {
-                            a: {
+                            left: {
                                 $from: "scope",
                                 name: "data",
                                 path: ["value", "nested"],
                             } as Template,
-                            b: 1 as Template,
+                            right: 1 as Template,
                         },
                         bind: "result",
                     },
@@ -5489,7 +5465,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(...standardLibraryTasks, failTask);
+            const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5525,7 +5501,7 @@ describe("WorkflowEngine (IR v1)", () => {
             // We don't actually wait 60s; instead we test a task that
             // completes in 10ms with no explicit timeout and verify it
             // succeeds (proving the default timeout didn't interfere).
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5537,21 +5513,21 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     add: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
                 },
@@ -5609,7 +5585,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("workflow input validation", () => {
         it("rejects input that violates inputSchema", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5625,21 +5601,21 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
                 },
@@ -5654,7 +5630,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("rejects when no input provided but schema has required fields", async () => {
-            const reg = makeRegistry(...standardLibraryTasks);
+            const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -5670,21 +5646,21 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     step: {
                         kind: "task",
-                        task: "int.add",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["a", "b"],
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: {
                             type: "object",
                             required: ["result"],
-                            properties: { result: { type: "integer" } },
+                            properties: { result: { type: "number" } },
                         },
-                        inputs: { a: 1 as Template, b: 2 as Template },
+                        inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
                 },
@@ -5985,11 +5961,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(
-                ...standardLibraryTasks,
-                failTask,
-                cleanupTask,
-            );
+            const reg = makeRegistry(...allBuiltinTasks, failTask, cleanupTask);
             const eng = new WorkflowEngine(reg);
 
             // step fails -> cleanup runs (binds "cleanupResult")
@@ -6064,11 +6036,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(
-                ...standardLibraryTasks,
-                failTask,
-                recoverTask,
-            );
+            const reg = makeRegistry(...allBuiltinTasks, failTask, recoverTask);
             const eng = new WorkflowEngine(reg);
 
             // step fails -> recover runs and binds "result"
@@ -6135,11 +6103,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const reg = makeRegistry(
-                ...standardLibraryTasks,
-                failTask,
-                noopTask,
-            );
+            const reg = makeRegistry(...allBuiltinTasks, failTask, noopTask);
             const eng = new WorkflowEngine(reg);
 
             const ir: WorkflowIR = {
@@ -6318,12 +6282,15 @@ describe("WorkflowEngine (IR v1)", () => {
             ).toEqual({ kind: "ok", output: { result: 5 } });
         });
 
-        it("math.divide fails on zero", async () => {
+        it("math.divide returns Infinity on zero divisor", async () => {
             const result = await mathDivide.execute(
                 { left: 5, right: 0 },
                 {} as any,
             );
-            expect(result.kind).toBe("fail");
+            expect(result).toEqual({
+                kind: "ok",
+                output: { result: Infinity },
+            });
         });
 
         it("math.modulo computes remainder", async () => {
@@ -6332,12 +6299,40 @@ describe("WorkflowEngine (IR v1)", () => {
             ).toEqual({ kind: "ok", output: { result: 2 } });
         });
 
-        it("math.modulo fails on zero", async () => {
+        it("math.modulo returns NaN on zero divisor", async () => {
             const result = await mathModulo.execute(
                 { left: 5, right: 0 },
                 {} as any,
             );
-            expect(result.kind).toBe("fail");
+            expect(result).toEqual({ kind: "ok", output: { result: NaN } });
+        });
+
+        it("math.negate negates", async () => {
+            expect(await mathNegate.execute({ value: 7 }, {} as any)).toEqual({
+                kind: "ok",
+                output: { result: -7 },
+            });
+        });
+
+        it("math.floor floors", async () => {
+            expect(await mathFloor.execute({ value: 3.7 }, {} as any)).toEqual({
+                kind: "ok",
+                output: { result: 3 },
+            });
+        });
+
+        it("math.round rounds", async () => {
+            expect(await mathRound.execute({ value: 3.5 }, {} as any)).toEqual({
+                kind: "ok",
+                output: { result: 4 },
+            });
+        });
+
+        it("math.ceil ceils", async () => {
+            expect(await mathCeil.execute({ value: 3.1 }, {} as any)).toEqual({
+                kind: "ok",
+                output: { result: 4 },
+            });
         });
     });
 
