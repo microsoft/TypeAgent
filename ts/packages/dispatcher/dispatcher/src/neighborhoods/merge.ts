@@ -9,6 +9,10 @@
 
 import type { ActionCluster } from "../translation/actionSimilarity.js";
 import type {
+    TranslationProbeFile,
+    TranslationProbeRow,
+} from "../translation/translationProbeRunner.js";
+import type {
     MisrouteEdge,
     MisrouteEdgeEvidence,
     Neighborhood,
@@ -566,4 +570,219 @@ export function buildNeighborhoodPreview(
         sources,
         neighborhoods,
     };
+}
+
+// ---------------------------------------------------------------------------
+// Public API: translator-only construction
+// ---------------------------------------------------------------------------
+
+export interface BuildNeighborhoodsFromTranslatorOptions {
+    /** The translator probe corpus to derive misroute edges from. */
+    translationResults: TranslationProbeFile;
+    /** Drop edges below this count (default 2). */
+    minMisrouteCount?: number;
+    /** Include same-schema misroute edges (e.g. email.send + email.reply).
+     *  Default true. */
+    includeSameSchema?: boolean;
+    /** Path the translation-results came from (stamped onto sources). */
+    translatorCorpusFile?: string | undefined;
+    /** Per-category cap on edge samples. Default unlimited
+     *  (Number.MAX_SAFE_INTEGER). */
+    samplesPerCategoryCap?: number;
+}
+
+/**
+ * Build neighborhoods directly from translator misroute edges. No similarity
+ * scan, no embedding-probe corpus. Each MISROUTE row in `translationResults`
+ * contributes an (expected → chosen) edge; edges are aggregated by tuple,
+ * filtered by `minMisrouteCount`, turned into 2-member pseudo-candidates,
+ * and merged via the same machinery as `buildNeighborhoodPreview`.
+ *
+ * Sibling to `buildNeighborhoodPreview` — shares the merge/sort/slug
+ * helpers but builds candidates from translator data only. Used by
+ * `@collision neighborhoods` (post-Phase-1 collapse) and downstream by the
+ * `@collision optimize` command set for case selection.
+ *
+ * Tags candidate `sources` as `["corpus"]` — the translator probe is a
+ * corpus signal source. Populates `evidence.translatorMisrouteEdges`
+ * (NOT `misrouteEdges`, which is reserved for embedding-probe data) so
+ * downstream code that cross-tabulates ranker × translator can still
+ * distinguish.
+ */
+export function buildNeighborhoodsFromTranslator(
+    opts: BuildNeighborhoodsFromTranslatorOptions,
+): NeighborhoodPreview {
+    const minMisrouteCount = Math.max(1, opts.minMisrouteCount ?? 2);
+    const includeSameSchema = opts.includeSameSchema ?? true;
+    const samplesCap =
+        opts.samplesPerCategoryCap ?? DEFAULT_SAMPLES_PER_CATEGORY_CAP;
+
+    const candidates = translatorEdgesToCandidates(
+        opts.translationResults.results,
+        {
+            minMisrouteCount,
+            includeSameSchema,
+        },
+    );
+
+    const merged = mergeCandidates(candidates, samplesCap);
+
+    const usedSlugs = new Set<string>();
+    const neighborhoods: Neighborhood[] = merged.map((c) => {
+        let slug = neighborhoodSlug(c.members);
+        let suffix = 0;
+        while (usedSlugs.has(slug)) {
+            suffix++;
+            slug = `${neighborhoodSlug(c.members)}_${suffix}`;
+        }
+        usedSlugs.add(slug);
+        return {
+            id: slug,
+            kind: deriveKind(c.members),
+            members: c.members,
+            evidence: c.evidence,
+            sources: [...c.sources].sort(),
+        };
+    });
+
+    // Sort by translator misroute volume (members count broken first), then
+    // by translatorMisrouteEdges total count desc, then by id.
+    neighborhoods.sort((a, b) => {
+        if (b.members.length !== a.members.length) {
+            return b.members.length - a.members.length;
+        }
+        const ca = totalEdgeCount(a.evidence.translatorMisrouteEdges);
+        const cb = totalEdgeCount(b.evidence.translatorMisrouteEdges);
+        if (cb !== ca) return cb - ca;
+        return a.id.localeCompare(b.id);
+    });
+
+    // similarityStrategy / similarityThreshold are required fields on the
+    // shared NeighborhoodPreviewSources type but they don't drive
+    // translator-only construction. Stamp them with markers so consumers
+    // can tell the preview came from the translator path.
+    const sources: NeighborhoodPreviewSources = {
+        similarityStrategy: "translator-only",
+        similarityThreshold: 0,
+        translatorCorpusFile: opts.translatorCorpusFile,
+        minMisrouteCount,
+        includeSameSchema,
+        samplesPerCategoryCap: samplesCap,
+    };
+
+    return {
+        builtAt: new Date().toISOString(),
+        sources,
+        neighborhoods,
+    };
+}
+
+function totalEdgeCount(
+    edges: MisrouteEdgeEvidence[] | undefined,
+): number {
+    if (!edges) return 0;
+    let total = 0;
+    for (const e of edges) total += e.count;
+    return total;
+}
+
+interface TranslatorEdgeAccum {
+    expected: NeighborhoodMember;
+    chosen: NeighborhoodMember;
+    count: number;
+    samples: PhraseSample[];
+    countsByStyle: Map<string, number>;
+}
+
+function translatorEdgesToCandidates(
+    rows: readonly TranslationProbeRow[],
+    opts: {
+        minMisrouteCount: number;
+        includeSameSchema: boolean;
+    },
+): Candidate[] {
+    // Aggregate MISROUTE rows by (expected, chosen) tuple.
+    const edgeMap = new Map<string, TranslatorEdgeAccum>();
+    for (const r of rows) {
+        if (r.outcome !== "MISROUTE") continue;
+        if (!r.chosenSchema || !r.chosenAction) continue;
+        if (
+            !opts.includeSameSchema &&
+            r.expectedSchema === r.chosenSchema
+        ) {
+            continue;
+        }
+        // Skip self-edges (shouldn't happen for MISROUTE but be defensive).
+        if (
+            r.expectedSchema === r.chosenSchema &&
+            r.expectedAction === r.chosenAction
+        ) {
+            continue;
+        }
+        const expected: NeighborhoodMember = {
+            schemaName: r.expectedSchema,
+            actionName: r.expectedAction,
+        };
+        const chosen: NeighborhoodMember = {
+            schemaName: r.chosenSchema,
+            actionName: r.chosenAction,
+        };
+        const key = `${memberKey(expected)}->${memberKey(chosen)}`;
+        let accum = edgeMap.get(key);
+        if (!accum) {
+            accum = {
+                expected,
+                chosen,
+                count: 0,
+                samples: [],
+                countsByStyle: new Map(),
+            };
+            edgeMap.set(key, accum);
+        }
+        accum.count++;
+        const src = r.phraseSources?.[0];
+        const style = src?.style;
+        if (style) {
+            accum.countsByStyle.set(
+                style,
+                (accum.countsByStyle.get(style) ?? 0) + 1,
+            );
+        }
+        accum.samples.push({
+            phrase: r.phraseText,
+            model: src?.model,
+            style,
+        });
+    }
+
+    const filtered = [...edgeMap.values()].filter(
+        (e) => e.count >= opts.minMisrouteCount,
+    );
+
+    return filtered.map((edge) => {
+        const countsByStyle: NonNullable<
+            MisrouteEdgeEvidence["countsByStyle"]
+        > = {};
+        for (const [style, count] of edge.countsByStyle) {
+            countsByStyle[style] = { count };
+        }
+        const evidence: NeighborhoodEvidence = {
+            translatorMisrouteEdges: [
+                {
+                    from: memberKey(edge.expected),
+                    to: memberKey(edge.chosen),
+                    count: edge.count,
+                    samples: edge.samples.length > 0 ? edge.samples : undefined,
+                    ...(edge.countsByStyle.size > 0 && { countsByStyle }),
+                },
+            ],
+        };
+        return {
+            members: membersToSortedArray(
+                new Set([memberKey(edge.expected), memberKey(edge.chosen)]),
+            ),
+            evidence,
+            sources: new Set<NeighborhoodSource>(["corpus"]),
+        };
+    });
 }

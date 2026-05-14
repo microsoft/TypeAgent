@@ -48,6 +48,7 @@ export type {
 } from "./translation/translationProbeRunner.js";
 export type { UserContext } from "./translation/userContext.js";
 export { resolveUserContextFromSchema } from "./translation/userContext.js";
+export { schemaGuidelines } from "./translation/schemaGuidelines.js";
 export { tryGetActionSchema } from "./translation/actionSchemaFileCache.js";
 export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
 export { getAllActionConfigProvider } from "./context/inlineAgentProvider.js";

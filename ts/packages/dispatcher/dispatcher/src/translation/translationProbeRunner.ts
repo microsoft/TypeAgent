@@ -27,11 +27,23 @@ import type { ActionContext } from "@typeagent/agent-sdk";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { changeContextConfig } from "../context/commandHandlerContext.js";
 import type { CollisionStrategy } from "../context/session.js";
+import type { ActionConfigProvider } from "./actionConfigProvider.js";
 import { translateRequest } from "./translateRequest.js";
 import {
     resolveUserContextFromSchema,
     type UserContext,
 } from "./userContext.js";
+
+/** Predicate applied to each task before the LLM is called. Receives a
+ *  structural subset of the internal Task type so callers can filter by
+ *  expected schema/action or phrase text without depending on internal
+ *  fields. Used by the optimizer to scope probes to a single
+ *  neighborhood's phrases. */
+export type TranslationProbePhraseFilter = (phrase: {
+    expectedSchema: string;
+    expectedAction: string;
+    phraseText: string;
+}) => boolean;
 
 // =============================================================================
 // Types
@@ -117,6 +129,18 @@ export interface TranslationProbeOpts {
     userContextMode?: UserContextMode;
     /** Used only when `userContextMode === "fixed"`. Ignored otherwise. */
     fixedUserContext?: UserContext;
+    /** Override the ActionConfigProvider used by the translator. When set,
+     *  the LLM sees schemas/descriptions from this provider instead of the
+     *  live `systemContext.agents`. Used by the optimize loop to probe
+     *  sandbox edits. When undefined, falls back to the live agent
+     *  manager. Schemas are also enumerated from the override (via
+     *  `getActionConfigs()`) so the corpus's expected schemas are visible
+     *  even when they aren't enabled in the current session. */
+    actionConfigProvider?: ActionConfigProvider;
+    /** Filter applied to the flattened task list before probing. Used by
+     *  the optimize loop to scope a probe to a single neighborhood's
+     *  phrases. Applied before `maxPhrases` slicing. */
+    phraseFilter?: TranslationProbePhraseFilter;
 }
 
 export interface TranslationProbeSummary {
@@ -264,10 +288,19 @@ export async function runTranslationProbe(
             });
         }
     }
+    const filtered = opts.phraseFilter
+        ? tasks.filter((t) =>
+              opts.phraseFilter!({
+                  expectedSchema: t.expectedSchema,
+                  expectedAction: t.expectedAction,
+                  phraseText: t.phraseText,
+              }),
+          )
+        : tasks;
     const limited =
-        opts.maxPhrases && opts.maxPhrases < tasks.length
-            ? tasks.slice(0, opts.maxPhrases)
-            : tasks;
+        opts.maxPhrases && opts.maxPhrases < filtered.length
+            ? filtered.slice(0, opts.maxPhrases)
+            : filtered;
 
     // INVALID classification (translator emits a name not in any registered
     // schema) is reserved for a follow-up; enumerating loaded actions
@@ -281,7 +314,15 @@ export async function runTranslationProbe(
     // from whatever the current session has enabled — typically a smaller
     // subset — and the corpus's expected schemas may be invisible. Mirrors
     // the embedding probe's `() => true` filter.
-    const allSchemas = systemContext.agents.getSchemaNames();
+    //
+    // When an override provider is supplied (sandbox runs), enumerate
+    // schemas from the override so optimizer-edited schemas show up even
+    // if the live agent manager doesn't know about them.
+    const allSchemas = opts.actionConfigProvider
+        ? opts.actionConfigProvider
+              .getActionConfigs()
+              .map((c) => c.schemaName)
+        : systemContext.agents.getSchemaNames();
 
     const t0 = Date.now();
     let strategyChanged = false;
@@ -314,6 +355,7 @@ export async function runTranslationProbe(
                         allSchemas,
                         undefined, // usageCallback
                         t.userContext,
+                        opts.actionConfigProvider,
                     );
                     const actions = out.requestAction.actions;
                     const elapsedMs = Date.now() - startMs;
