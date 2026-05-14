@@ -77,14 +77,15 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
     if (overrides.length > 0) {
         // Render with bare-word keys to match the legacy format.
         const body = overrides
-            .map((o) =>
-                "{" +
-                Object.entries(o)
-                    .map(([k, v]) =>
-                        typeof v === "string" ? `${k}:${v}` : `${k}:${v}`,
-                    )
-                    .join(",") +
-                "}",
+            .map(
+                (o) =>
+                    "{" +
+                    Object.entries(o)
+                        .map(([k, v]) =>
+                            typeof v === "string" ? `${k}:${v}` : `${k}:${v}`,
+                        )
+                        .join(",") +
+                    "}",
             )
             .join(",");
         out[`AZURE_OPENAI_POOL_${suffix}`] = `[${body}]`;

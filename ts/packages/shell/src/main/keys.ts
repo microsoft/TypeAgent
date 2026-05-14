@@ -33,10 +33,7 @@ type ParsedKeys = dotenv.DotenvParseOutput;
  * `KEY=value` shape that dotenv would have produced. Falls back to
  * `dotenv.parse` for everything else (including extensionless `.env`).
  */
-function parseConfigFileContent(
-    fileName: string,
-    content: string,
-): ParsedKeys {
+function parseConfigFileContent(fileName: string, content: string): ParsedKeys {
     const ext = path.extname(fileName).toLowerCase();
     if (ext === ".yaml" || ext === ".yml") {
         const tree = yaml.load(content, { filename: fileName });
@@ -44,9 +41,7 @@ function parseConfigFileContent(
             return {};
         }
         if (typeof tree !== "object" || Array.isArray(tree)) {
-            throw new Error(
-                `${fileName}: top level must be a YAML mapping.`,
-            );
+            throw new Error(`${fileName}: top level must be a YAML mapping.`);
         }
         const flat = flattenYamlConfig(tree as ConfigTree);
         // dotenv.populate (used downstream) accepts a plain object of
@@ -282,9 +277,7 @@ export function tryLoadYamlConfig(envFile?: string): boolean {
         const result = loadConfigSync(opts);
         const keyCount = Object.keys(result.env).length;
         if (keyCount > 0) {
-            debugShell(
-                "Loaded " + keyCount + " config keys from YAML",
-            );
+            debugShell("Loaded " + keyCount + " config keys from YAML");
             initRuntimeConfigFromProcessEnv();
             return true;
         }

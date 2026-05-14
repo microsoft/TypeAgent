@@ -22,12 +22,7 @@ export type ConfigScalar = string | number | boolean;
  * are dropped during flattening).
  */
 export type ConfigTree = {
-    [key: string]:
-        | ConfigScalar
-        | ConfigTree
-        | string[]
-        | ConfigTree[]
-        | null;
+    [key: string]: ConfigScalar | ConfigTree | string[] | ConfigTree[] | null;
 };
 
 /**

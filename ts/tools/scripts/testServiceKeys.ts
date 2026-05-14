@@ -90,8 +90,10 @@ function discoverAzureOpenAIConfigs(): ServiceKeyConfig[] {
             if (!ep.endpoint) continue;
             const suffix = name === "default" ? "" : `_${name.toUpperCase()}`;
             // Add region suffix if the deployment has multiple endpoints
-            const regionSuffix = dep.endpoints.length > 1 && ep.region
-                ? `_${ep.region.toUpperCase()}` : "";
+            const regionSuffix =
+                dep.endpoints.length > 1 && ep.region
+                    ? `_${ep.region.toUpperCase()}`
+                    : "";
             const keyVar = `AZURE_OPENAI_API_KEY${suffix}${regionSuffix}`;
             const endVar = `AZURE_OPENAI_ENDPOINT${suffix}${regionSuffix}`;
             const label = regionSuffix ? `${name} (${ep.region})` : name;
@@ -106,8 +108,16 @@ function discoverAzureOpenAIConfigs(): ServiceKeyConfig[] {
                     [keyVar]: "<key> or 'identity'",
                 },
                 testFunction: isEmbedding
-                    ? () => testEmbeddingEndpointDynamic(ep.endpoint, process.env[keyVar])
-                    : () => testAzureOpenAIEndpointDynamic(ep.endpoint, process.env[keyVar]),
+                    ? () =>
+                          testEmbeddingEndpointDynamic(
+                              ep.endpoint,
+                              process.env[keyVar],
+                          )
+                    : () =>
+                          testAzureOpenAIEndpointDynamic(
+                              ep.endpoint,
+                              process.env[keyVar],
+                          ),
             });
         }
     }
@@ -122,7 +132,10 @@ async function testAzureOpenAIEndpointDynamic(
 ): Promise<TestResult> {
     try {
         const headers = await getAuthHeaders(apiKey);
-        const commonHeaders = { ...headers, "Content-Type": "application/json" };
+        const commonHeaders = {
+            ...headers,
+            "Content-Type": "application/json",
+        };
         const messages = [{ role: "user", content: "Say 'test'" }];
 
         // Try max_completion_tokens first (newer models), fall back to max_tokens
@@ -152,7 +165,8 @@ async function testAzureOpenAIEndpointDynamic(
 
         if (response.ok) {
             const data = await response.json();
-            const auth = apiKey?.toLowerCase() === "identity" ? " (keyless)" : "";
+            const auth =
+                apiKey?.toLowerCase() === "identity" ? " (keyless)" : "";
             return {
                 success: true,
                 message: `Connected${auth}`,
@@ -166,7 +180,11 @@ async function testAzureOpenAIEndpointDynamic(
             details: errorText.substring(0, 200),
         };
     } catch (error: any) {
-        return { success: false, message: "Connection failed", details: error.message };
+        return {
+            success: false,
+            message: "Connection failed",
+            details: error.message,
+        };
     }
 }
 
@@ -187,7 +205,8 @@ async function testEmbeddingEndpointDynamic(
         if (response.ok) {
             const data = await response.json();
             const dim = data.data?.[0]?.embedding?.length;
-            const auth = apiKey?.toLowerCase() === "identity" ? " (keyless)" : "";
+            const auth =
+                apiKey?.toLowerCase() === "identity" ? " (keyless)" : "";
             return {
                 success: true,
                 message: `Connected${auth}`,
@@ -201,15 +220,24 @@ async function testEmbeddingEndpointDynamic(
             details: errorText.substring(0, 200),
         };
     } catch (error: any) {
-        return { success: false, message: "Connection failed", details: error.message };
+        return {
+            success: false,
+            message: "Connection failed",
+            details: error.message,
+        };
     }
 }
 
 /** Build auth headers — identity-based or API key */
-async function getAuthHeaders(apiKey: string | undefined): Promise<Record<string, string>> {
+async function getAuthHeaders(
+    apiKey: string | undefined,
+): Promise<Record<string, string>> {
     if (!apiKey || apiKey.toLowerCase() === "identity") {
         const token = await getAzureAccessToken();
-        if (!token) throw new Error("Failed to get Azure access token. Run 'az login'.");
+        if (!token)
+            throw new Error(
+                "Failed to get Azure access token. Run 'az login'.",
+            );
         return { Authorization: `Bearer ${token}` };
     }
     return { "api-key": apiKey };
@@ -225,7 +253,11 @@ const staticServiceConfigs: ServiceKeyConfig[] = [
         name: "OpenAI (Chat)",
         description: "Alternative to Azure OpenAI for request translation",
         requiredKeys: ["OPENAI_API_KEY", "OPENAI_ENDPOINT"],
-        optionalKeys: ["OPENAI_ORGANIZATION", "OPENAI_MODEL", "OPENAI_RESPONSE_FORMAT"],
+        optionalKeys: [
+            "OPENAI_ORGANIZATION",
+            "OPENAI_MODEL",
+            "OPENAI_RESPONSE_FORMAT",
+        ],
         expectedFormats: {
             OPENAI_API_KEY: "sk-<alphanumeric string>",
             OPENAI_ENDPOINT: "https://api.openai.com/v1/chat/completions",
@@ -239,7 +271,8 @@ const staticServiceConfigs: ServiceKeyConfig[] = [
         optionalKeys: ["OPENAI_API_KEY_EMBEDDING"],
         expectedFormats: {
             OPENAI_ENDPOINT_EMBEDDING: "https://api.openai.com/v1/embeddings",
-            OPENAI_MODEL_EMBEDDING: "text-embedding-ada-002, text-embedding-3-small, etc.",
+            OPENAI_MODEL_EMBEDDING:
+                "text-embedding-ada-002, text-embedding-3-small, etc.",
         },
         testFunction: testOpenAIEmbeddings,
     },
@@ -519,8 +552,7 @@ async function testSpeechSDK(): Promise<TestResult> {
 
         // Build the token issuing URL
         const baseUrl =
-            endpoint ||
-            `https://${region}.api.cognitive.microsoft.com`;
+            endpoint || `https://${region}.api.cognitive.microsoft.com`;
         const tokenEndpoint = baseUrl.endsWith("/")
             ? `${baseUrl}sts/v1.0/issuetoken`
             : `${baseUrl}/sts/v1.0/issuetoken`;
@@ -794,7 +826,9 @@ async function runTests() {
             printWarning(
                 `Skipped - Missing required keys: ${missingKeys.join(", ")}`,
             );
-            console.log("\n  Add the following to your config.local.yaml (see config.sample.yaml):");
+            console.log(
+                "\n  Add the following to your config.local.yaml (see config.sample.yaml):",
+            );
             for (const key of missingKeys) {
                 printKeyExample(key, config.expectedFormats[key] || "<value>");
             }

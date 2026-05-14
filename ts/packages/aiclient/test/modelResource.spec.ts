@@ -27,9 +27,7 @@ describe("getChatModelNames: typed-Config-driven enumeration", () => {
         const names = await getChatModelNames();
         // Filter ollama additions out — those depend on a live HTTP probe.
         const azure = names.filter((n) => !n.startsWith("ollama:"));
-        expect(azure.sort()).toEqual(
-            ["GPT_4_O", "GPT_4_O_MINI", "O3"].sort(),
-        );
+        expect(azure.sort()).toEqual(["GPT_4_O", "GPT_4_O_MINI", "O3"].sort());
     });
 
     test("OpenAI named variants from extras surface as openai:<NAME>", async () => {

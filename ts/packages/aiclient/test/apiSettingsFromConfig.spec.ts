@@ -41,11 +41,7 @@ describe("apiSettingsFromConfig: typed-config path equivalence", () => {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o",
             AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "identity",
         });
-        const s = azureApiSettingsFromConfig(
-            config,
-            ModelType.Chat,
-            "gpt_4_o",
-        );
+        const s = azureApiSettingsFromConfig(config, ModelType.Chat, "gpt_4_o");
         expect(s.apiKey).toBe("identity");
         expect(s.tokenProvider).toBeDefined();
     });
@@ -55,11 +51,7 @@ describe("apiSettingsFromConfig: typed-config path equivalence", () => {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o",
             AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "sk-real-key",
         });
-        const s = azureApiSettingsFromConfig(
-            config,
-            ModelType.Chat,
-            "gpt_4_o",
-        );
+        const s = azureApiSettingsFromConfig(config, ModelType.Chat, "gpt_4_o");
         expect(s.apiKey).toBe("sk-real-key");
         expect(s.tokenProvider).toBeUndefined();
     });
@@ -72,11 +64,7 @@ describe("apiSettingsFromConfig: typed-config path equivalence", () => {
                 "https://4o-sw-ptu",
             AZURE_OPENAI_API_KEY_GPT_4_O_SWEDENCENTRAL_PTU: "identity",
         });
-        const s = azureApiSettingsFromConfig(
-            config,
-            ModelType.Chat,
-            "gpt_4_o",
-        );
+        const s = azureApiSettingsFromConfig(config, ModelType.Chat, "gpt_4_o");
         expect(s.endpoint).toBe("https://4o-sw-ptu");
     });
 
@@ -148,8 +136,9 @@ describe("apiSettingsFromConfig: typed-config path equivalence", () => {
         const dep = getDeployment(config, "gpt_4_o");
         expect(dep).toBeDefined();
         expect(dep!.endpoints.length).toBe(2);
-        expect(getDeploymentEndpoint(config, "gpt_4_o", "westus")?.endpoint)
-            .toBe("https://westus");
+        expect(
+            getDeploymentEndpoint(config, "gpt_4_o", "westus")?.endpoint,
+        ).toBe("https://westus");
         expect(getDeployment(config, "missing")).toBeUndefined();
     });
 

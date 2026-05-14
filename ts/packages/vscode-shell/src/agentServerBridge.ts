@@ -1175,9 +1175,7 @@ export class AgentServerBridge {
      */
     public cancelAllInFlight(): void {
         if (!this.session) return;
-        const ids = Array.from(
-            new Set(this.clientToServerRequestId.values()),
-        );
+        const ids = Array.from(new Set(this.clientToServerRequestId.values()));
         for (const serverId of ids) {
             try {
                 this.session.dispatcher.cancelCommand(serverId);

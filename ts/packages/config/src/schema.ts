@@ -22,13 +22,7 @@ const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
 ]);
 
 const treeSchema: z.ZodType<unknown> = z.lazy(() =>
-    z.record(
-        z.union([
-            scalarSchema,
-            treeSchema,
-            z.array(treeSchema),
-        ]),
-    ),
+    z.record(z.union([scalarSchema, treeSchema, z.array(treeSchema)])),
 );
 
 export const configTreeSchema = treeSchema;

@@ -11,4 +11,3 @@ azureOpenAI:
 reasoning:
   timeoutMs: 1200000
   copilotModel: claude-sonnet-4.5
-  

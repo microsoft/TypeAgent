@@ -158,11 +158,7 @@ async function initializeKeys(appPath: string) {
     }
 
     // Legacy fallback: .env file + DPAPI-encrypted key cache.
-    await loadKeys(
-        instanceDir,
-        parsedArgs.reset || parsedArgs.clean,
-        envFile,
-    );
+    await loadKeys(instanceDir, parsedArgs.reset || parsedArgs.clean, envFile);
 }
 
 // This method will be called when Electron has finished

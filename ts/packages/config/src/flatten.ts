@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ConfigTree, FlatEnv } from "./types.js";
-import {
-    isTypedSectionKey,
-    typedSectionToFlat,
-} from "./runtime/tree.js";
+import { isTypedSectionKey, typedSectionToFlat } from "./runtime/tree.js";
 
 /**
  * Top-level keys whose contents are passed through verbatim into the

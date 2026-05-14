@@ -114,8 +114,7 @@ describe("buildConfig: Azure OpenAI defaults", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o-east",
             AZURE_OPENAI_ENDPOINT_GPT_4_O_WESTUS: "https://4o-west",
-            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_LARGE_EASTUS:
-                "https://emb-east",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_LARGE_EASTUS: "https://emb-east",
             AZURE_OPENAI_ENDPOINT_EMBEDDING_3_LARGE_SWEDENCENTRAL:
                 "https://emb-sweden",
         };
@@ -142,9 +141,9 @@ describe("buildConfig: Azure OpenAI defaults", () => {
         );
         // Suffixed variant still becomes a deployment
         expect(
-            config.azureOpenAI.deployments.get("embedding")?.endpoints.find(
-                (e) => e.region === "eastus",
-            )?.endpoint,
+            config.azureOpenAI.deployments
+                .get("embedding")
+                ?.endpoints.find((e) => e.region === "eastus")?.endpoint,
         ).toBe("https://ada-east");
     });
 

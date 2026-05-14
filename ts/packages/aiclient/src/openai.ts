@@ -1138,9 +1138,7 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
                 body: form,
             });
         } catch (e) {
-            return error(
-                `Image edit request failed: ${(e as Error).message}`,
-            );
+            return error(`Image edit request failed: ${(e as Error).message}`);
         }
         if (!response.ok) {
             const body = await response.text().catch(() => "");
@@ -1286,8 +1284,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         if (!response.success) return response;
 
         try {
-            const jobJson =
-                (await response.data.json()) as VideoGenerationJob;
+            const jobJson = (await response.data.json()) as VideoGenerationJob;
             return success({
                 endpoint: new URL(settings.endpoint),
                 headers: {},

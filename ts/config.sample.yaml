@@ -24,12 +24,12 @@
 # Endpoints inherit from deployment, deployments inherit from section.
 
 azureOpenAI:
-  defaultAuth: identity            # "identity" or an API key string
-  defaultCapacity: 150             # TPM capacity shared by all endpoints
-  maxConcurrency: 40               # max parallel requests to Azure OpenAI
-  maxTimeoutMs: 60000              # per-request timeout in milliseconds
-  maxRetryAttempts: 3              # retries on transient failures
-  responseFormat: true             # send response_format: json_object
+  defaultAuth: identity # "identity" or an API key string
+  defaultCapacity: 150 # TPM capacity shared by all endpoints
+  maxConcurrency: 40 # max parallel requests to Azure OpenAI
+  maxTimeoutMs: 60000 # per-request timeout in milliseconds
+  maxRetryAttempts: 3 # retries on transient failures
+  responseFormat: true # send response_format: json_object
 
   # Named model deployments.  Each deployment has one or more regional
   # endpoints that form a routing pool.
@@ -105,7 +105,7 @@ openAI:
   # Ollama / local OpenAI-compatible endpoint.
   # Also emits OLLAMA_ENDPOINT for backward compatibility.
   local:
-    apiKey: None                   # Ollama doesn't require a key
+    apiKey: None # Ollama doesn't require a key
     endpoint: http://localhost:11434/v1/chat/completions
     model: phi3
 
@@ -154,7 +154,7 @@ googleCalendar:
 spotify:
   clientId: your-spotify-client-id
   clientSecret: your-spotify-client-secret
-  port: 9998                       # local callback port for OAuth flow
+  port: 9998 # local callback port for OAuth flow
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure AI Foundry / Bing with Grounding                         ║
@@ -225,8 +225,8 @@ wikipedia:
 # Tuning knobs for the reasoning loop (Claude / Copilot backends).
 
 reasoning:
-  timeoutMs: 1200000               # reasoning-loop timeout (0 = disabled)
-  copilotModel: claude-sonnet-4.5  # override default Copilot reasoning model
+  timeoutMs: 1200000 # reasoning-loop timeout (0 = disabled)
+  copilotModel: claude-sonnet-4.5 # override default Copilot reasoning model
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║

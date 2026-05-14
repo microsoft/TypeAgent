@@ -244,8 +244,7 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
         synthAnyChat();
     const finalDefaultEmbedding =
         defaultEmbedding ?? synthDefault(["embedding", "embedding_3_large"]);
-    const finalDefaultImage =
-        defaultImage ?? synthDefault(["gpt_image_1_5"]);
+    const finalDefaultImage = defaultImage ?? synthDefault(["gpt_image_1_5"]);
     const finalDefaultVideo = defaultVideo ?? synthDefault(["sora_2"]);
 
     return {
@@ -257,7 +256,9 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
         enableModelRequestLogging,
         ...(maxPromptChars !== undefined ? { maxPromptChars } : {}),
         ...(finalDefaultChat ? { defaultChat: finalDefaultChat } : {}),
-        ...(finalDefaultEmbedding ? { defaultEmbedding: finalDefaultEmbedding } : {}),
+        ...(finalDefaultEmbedding
+            ? { defaultEmbedding: finalDefaultEmbedding }
+            : {}),
         ...(finalDefaultImage ? { defaultImage: finalDefaultImage } : {}),
         ...(finalDefaultVideo ? { defaultVideo: finalDefaultVideo } : {}),
         deployments,
@@ -333,7 +334,9 @@ interface PoolOverride {
  * Returns the parsed entries, or `undefined` if the value is missing
  * or unparseable.
  */
-function parsePoolOverride(raw: string | undefined): PoolOverride[] | undefined {
+function parsePoolOverride(
+    raw: string | undefined,
+): PoolOverride[] | undefined {
     if (raw === undefined) return undefined;
     // The legacy format is near-JSON with bare-word keys *and* bare-word
     // string values, e.g. `[{suffix:GPT_4_O_EASTUS,region:eastus,mode:PAYG}]`.
@@ -352,7 +355,11 @@ function parsePoolOverride(raw: string | undefined): PoolOverride[] | undefined 
     if (!Array.isArray(parsed)) return undefined;
     const out: PoolOverride[] = [];
     for (const e of parsed) {
-        if (e && typeof e === "object" && typeof (e as any).suffix === "string") {
+        if (
+            e &&
+            typeof e === "object" &&
+            typeof (e as any).suffix === "string"
+        ) {
             const o = e as Record<string, unknown>;
             const ov: PoolOverride = { suffix: o.suffix as string };
             if (typeof o.region === "string" && isRegion(o.region))
@@ -456,8 +463,7 @@ function collectDeployments(
         for (const partial of group.bySuffix.values()) {
             if (!partial.endpoint) continue;
             // Last-ditch region derivation from URL host.
-            const region =
-                partial.region ?? regionFromUrl(partial.endpoint);
+            const region = partial.region ?? regionFromUrl(partial.endpoint);
             if (!region) {
                 // Restore raw keys so the value isn't lost.
                 const orig = partialKeys.get(partial) ?? [];
@@ -541,11 +547,7 @@ function buildOpenAIVariant(flat: Map<string, string>, suffix: string) {
     const modelEmbedding = popString(flat, `OPENAI_MODEL_EMBEDDING${suffix}`);
     const organization = popString(flat, `OPENAI_ORGANIZATION${suffix}`);
     const responseFormat = popBool(flat, `OPENAI_RESPONSE_FORMAT${suffix}`);
-    const maxConcurrency = popInt(
-        flat,
-        `OPENAI_MAX_CONCURRENCY${suffix}`,
-        4,
-    )!;
+    const maxConcurrency = popInt(flat, `OPENAI_MAX_CONCURRENCY${suffix}`, 4)!;
     const maxTimeoutMs = popInt(flat, `OPENAI_MAX_TIMEOUT${suffix}`, 60_000)!;
     const maxRetryAttempts = popInt(
         flat,
@@ -785,7 +787,8 @@ function buildAzureFoundry(flat: Map<string, string>) {
 function buildReasoning(flat: Map<string, string>) {
     const timeoutRaw = popString(flat, "TYPEAGENT_REASONING_TIMEOUT_MS");
     const copilotModel = popString(flat, "COPILOT_REASONING_MODEL");
-    if (timeoutRaw === undefined && copilotModel === undefined) return undefined;
+    if (timeoutRaw === undefined && copilotModel === undefined)
+        return undefined;
     const timeoutMs =
         timeoutRaw !== undefined ? parseInt(timeoutRaw, 10) : undefined;
     return {

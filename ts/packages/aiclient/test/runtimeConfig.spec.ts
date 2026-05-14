@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    _resetRuntimeConfigForTests,
-} from "../src/runtimeConfig.js";
+import { _resetRuntimeConfigForTests } from "../src/runtimeConfig.js";
 import {
     getRuntimeConfig,
     initRuntimeConfigFromProcessEnv,

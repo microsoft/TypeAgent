@@ -176,10 +176,8 @@ async function handleEditImage(
     // prior createImageAction/editImageAction calls live under
     // `generated_images/`. Try both, plus the raw path as supplied.
     const fileName = sourceImage.substring(
-        Math.max(
-            sourceImage.lastIndexOf("\\"),
-            sourceImage.lastIndexOf("/"),
-        ) + 1,
+        Math.max(sourceImage.lastIndexOf("\\"), sourceImage.lastIndexOf("/")) +
+            1,
     );
     const candidates: string[] = [];
     // If the LLM gave us an explicit relative path, honor it first.
@@ -193,11 +191,10 @@ async function handleEditImage(
     let resolvedPath: string | undefined;
     for (const candidate of candidates) {
         try {
-            const data =
-                await photoContext.sessionContext.sessionStorage?.read(
-                    candidate,
-                    "base64",
-                );
+            const data = await photoContext.sessionContext.sessionStorage?.read(
+                candidate,
+                "base64",
+            );
             if (data) {
                 b64 = data;
                 resolvedPath = candidate;
@@ -241,9 +238,7 @@ async function handleEditImage(
     photoContext.actionIO.setDisplay({ type: "html", content: "" });
 
     if (!r.success) {
-        return createActionResult(
-            `Failed to edit the image. ${r.message}`,
-        );
+        return createActionResult(`Failed to edit the image. ${r.message}`);
     }
 
     const urls: string[] = [];

@@ -203,9 +203,7 @@ export function configToTree(config: Config): ConfigTree {
             const depDefaults = [...ao.deployments.values()].map((d) =>
                 pickDefaultCapacity(d.endpoints.map((e) => e.capacity)),
             );
-            sectionDefaultCapacity = pickDefaultCapacity(
-                depDefaults,
-            );
+            sectionDefaultCapacity = pickDefaultCapacity(depDefaults);
         }
         if (sectionDefaultCapacity !== undefined) {
             azure.defaultCapacity = sectionDefaultCapacity;
@@ -214,7 +212,11 @@ export function configToTree(config: Config): ConfigTree {
         const sortedNames = [...ao.deployments.keys()].sort();
         for (const name of sortedNames) {
             const d = ao.deployments.get(name)!;
-            deployments[name] = deploymentToYaml(d, ao.defaultAuth, sectionDefaultCapacity);
+            deployments[name] = deploymentToYaml(
+                d,
+                ao.defaultAuth,
+                sectionDefaultCapacity,
+            );
         }
         azure.deployments = deployments;
     }
@@ -250,13 +252,12 @@ export function configToTree(config: Config): ConfigTree {
             if (l.model !== undefined) local.model = l.model;
             if (l.modelEmbedding !== undefined)
                 local.modelEmbedding = l.modelEmbedding;
-            if (l.organization !== undefined) local.organization = l.organization;
+            if (l.organization !== undefined)
+                local.organization = l.organization;
             // Only emit non-default tunables to keep YAML quiet.
             if (l.responseFormat) local.responseFormat = l.responseFormat;
-            if (l.maxConcurrency !== 4)
-                local.maxConcurrency = l.maxConcurrency;
-            if (l.maxTimeoutMs !== 60_000)
-                local.maxTimeoutMs = l.maxTimeoutMs;
+            if (l.maxConcurrency !== 4) local.maxConcurrency = l.maxConcurrency;
+            if (l.maxTimeoutMs !== 60_000) local.maxTimeoutMs = l.maxTimeoutMs;
             if (l.maxRetryAttempts !== 3)
                 local.maxRetryAttempts = l.maxRetryAttempts;
             openAI.local = local;
@@ -269,7 +270,8 @@ export function configToTree(config: Config): ConfigTree {
             auth: authToYaml(config.speech.auth),
             region: config.speech.region,
         };
-        if (config.speech.endpoint !== undefined) s.endpoint = config.speech.endpoint;
+        if (config.speech.endpoint !== undefined)
+            s.endpoint = config.speech.endpoint;
         tree.speech = s;
     }
 
@@ -310,12 +312,10 @@ export function configToTree(config: Config): ConfigTree {
 
     if (config.wikipedia) {
         const w: ConfigTree = {};
-        if (config.wikipedia.clientId)
-            w.clientId = config.wikipedia.clientId;
+        if (config.wikipedia.clientId) w.clientId = config.wikipedia.clientId;
         if (config.wikipedia.clientSecret)
             w.clientSecret = config.wikipedia.clientSecret;
-        if (config.wikipedia.endpoint)
-            w.endpoint = config.wikipedia.endpoint;
+        if (config.wikipedia.endpoint) w.endpoint = config.wikipedia.endpoint;
         tree.wikipedia = w;
     }
 
@@ -431,9 +431,7 @@ function asObject(node: unknown, where: string): Record<string, unknown> {
 
 function asString(node: unknown, where: string): string {
     if (typeof node !== "string") {
-        throw new Error(
-            `Expected a string at '${where}', got ${typeof node}.`,
-        );
+        throw new Error(`Expected a string at '${where}', got ${typeof node}.`);
     }
     return node;
 }
@@ -488,8 +486,7 @@ function readEndpointEntry(
     } else if (obj.capacity !== undefined) {
         out.capacity = asNumber(obj.capacity, `${where}.capacity`);
     }
-    if (obj.tpm !== undefined)
-        out.tpm = asNumber(obj.tpm, `${where}.tpm`);
+    if (obj.tpm !== undefined) out.tpm = asNumber(obj.tpm, `${where}.tpm`);
     return out;
 }
 
@@ -600,8 +597,7 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                 } else {
                     capacity = defaultCapacity;
                 }
-                const region =
-                    ep.region ?? regionFromUrl(ep.endpoint);
+                const region = ep.region ?? regionFromUrl(ep.endpoint);
                 if (!region) {
                     throw new Error(
                         `Could not derive region for ${ewhere}; ` +
@@ -638,12 +634,13 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
             }
             if (overrides.length > 0) {
                 const body = overrides
-                    .map((o) =>
-                        "{" +
-                        Object.entries(o)
-                            .map(([k, v]) => `${k}:${v}`)
-                            .join(",") +
-                        "}",
+                    .map(
+                        (o) =>
+                            "{" +
+                            Object.entries(o)
+                                .map(([k, v]) => `${k}:${v}`)
+                                .join(",") +
+                            "}",
                     )
                     .join(",");
                 out[`AZURE_OPENAI_POOL_${upperName}`] = `[${body}]`;
@@ -661,7 +658,10 @@ function emitOpenAI(node: unknown, out: FlatEnv): void {
         // Emit OLLAMA_ENDPOINT alias so consumers reading that legacy
         // env var pick up the openAI.local endpoint automatically.
         if (lo.endpoint !== undefined)
-            out.OLLAMA_ENDPOINT = asString(lo.endpoint, "openAI.local.endpoint");
+            out.OLLAMA_ENDPOINT = asString(
+                lo.endpoint,
+                "openAI.local.endpoint",
+            );
     }
 }
 
@@ -765,7 +765,10 @@ function emitSpotify(node: unknown, out: FlatEnv): void {
     if (s.clientId !== undefined)
         out.SPOTIFY_APP_CLI = asString(s.clientId, "spotify.clientId");
     if (s.clientSecret !== undefined)
-        out.SPOTIFY_APP_CLISEC = asString(s.clientSecret, "spotify.clientSecret");
+        out.SPOTIFY_APP_CLISEC = asString(
+            s.clientSecret,
+            "spotify.clientSecret",
+        );
     if (s.port !== undefined)
         out.SPOTIFY_APP_PORT = String(asNumber(s.port, "spotify.port"));
 }
@@ -834,10 +837,7 @@ function emitStorage(node: unknown, out: FlatEnv): void {
     if (s.elastic !== undefined) {
         const e = asObject(s.elastic, "storage.elastic");
         if (e.apiKey !== undefined)
-            out.ELASTIC_API_KEY = asString(
-                e.apiKey,
-                "storage.elastic.apiKey",
-            );
+            out.ELASTIC_API_KEY = asString(e.apiKey, "storage.elastic.apiKey");
         if (e.uri !== undefined)
             out.ELASTIC_URI = asString(e.uri, "storage.elastic.uri");
     }

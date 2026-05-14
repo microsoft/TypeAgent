@@ -80,12 +80,8 @@ describe("discoverEndpointPoolFromConfig: typed-Config endpoint pool", () => {
             ModelType.Chat,
             "gpt_4_o",
         );
-        const ptu = pool.members.find(
-            (m) => m.region === "eastus",
-        )!;
-        const sweden = pool.members.find(
-            (m) => m.region === "swedencentral",
-        )!;
+        const ptu = pool.members.find((m) => m.region === "eastus")!;
+        const sweden = pool.members.find((m) => m.region === "swedencentral")!;
         expect(ptu).toBeDefined();
         expect(sweden).toBeDefined();
         // Override flipped mode PTU -> PAYG and set priority=3
@@ -221,8 +217,6 @@ describe("discoverEndpointPoolFromConfig: typed-Config endpoint pool", () => {
         );
         // pool.members order matches dep.pool which is sorted by priority.
         expect(pool.members[0].mode).toBe("PTU");
-        expect(pool.members[0].priority).toBeLessThan(
-            pool.members[1].priority,
-        );
+        expect(pool.members[0].priority).toBeLessThan(pool.members[1].priority);
     });
 });
