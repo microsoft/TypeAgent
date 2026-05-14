@@ -6227,10 +6227,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
         it("compare.lessThan works", async () => {
             expect(
-                await compareLessThan.execute(
-                    { left: 2, right: 7 },
-                    {} as any,
-                ),
+                await compareLessThan.execute({ left: 2, right: 7 }, {} as any),
             ).toEqual({ kind: "ok", output: { result: true } });
         });
 
@@ -6268,41 +6265,31 @@ describe("WorkflowEngine (IR v1)", () => {
     describe("v2 bool tasks", () => {
         it("bool.and returns true only when both true", async () => {
             expect(
-                await boolAnd.execute(
-                    { left: true, right: true },
-                    {} as any,
-                ),
+                await boolAnd.execute({ left: true, right: true }, {} as any),
             ).toEqual({ kind: "ok", output: { result: true } });
             expect(
-                await boolAnd.execute(
-                    { left: true, right: false },
-                    {} as any,
-                ),
+                await boolAnd.execute({ left: true, right: false }, {} as any),
             ).toEqual({ kind: "ok", output: { result: false } });
         });
 
         it("bool.or returns true when either true", async () => {
             expect(
-                await boolOr.execute(
-                    { left: false, right: true },
-                    {} as any,
-                ),
+                await boolOr.execute({ left: false, right: true }, {} as any),
             ).toEqual({ kind: "ok", output: { result: true } });
             expect(
-                await boolOr.execute(
-                    { left: false, right: false },
-                    {} as any,
-                ),
+                await boolOr.execute({ left: false, right: false }, {} as any),
             ).toEqual({ kind: "ok", output: { result: false } });
         });
 
         it("bool.not negates", async () => {
-            expect(
-                await boolNot.execute({ value: true }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: false } });
-            expect(
-                await boolNot.execute({ value: false }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: true } });
+            expect(await boolNot.execute({ value: true }, {} as any)).toEqual({
+                kind: "ok",
+                output: { result: false },
+            });
+            expect(await boolNot.execute({ value: false }, {} as any)).toEqual({
+                kind: "ok",
+                output: { result: true },
+            });
         });
     });
 
@@ -6512,7 +6499,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 name,
                 sideEffects: false,
                 inputSchema: { type: "object" as const },
-                outputSchema: { type: "object" as const, properties: { v: { type: "number" as const } } },
+                outputSchema: {
+                    type: "object" as const,
+                    properties: { v: { type: "number" as const } },
+                },
                 async execute() {
                     currentConcurrent++;
                     maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
@@ -7310,9 +7300,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 skipValidation: true,
             });
 
-            const forkStarted = events.filter(
-                (e) => e.type === "forkStarted",
-            );
+            const forkStarted = events.filter((e) => e.type === "forkStarted");
             expect(forkStarted).toHaveLength(1);
             if (forkStarted[0].type === "forkStarted") {
                 expect(forkStarted[0].branchNames).toEqual(

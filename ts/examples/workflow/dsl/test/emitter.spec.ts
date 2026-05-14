@@ -463,7 +463,7 @@ describe("Emitter v2", () => {
 
     // ---- Retry built-in ----
 
-    test("retry lowers to loop node", () => {
+    test("retry lowers to loop node with attempt state", () => {
         const ir = compileOk(`
             workflow test(url: string): any {
                 return retry(3, () => {
@@ -474,6 +474,107 @@ describe("Emitter v2", () => {
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
         expect(loopNode.state).toHaveProperty("attempt");
+        expect(loopNode.state!.attempt.initial).toBe(0);
+    });
+
+    test("retry body: last task has next @exit", () => {
+        const ir = compileOk(`
+            workflow test(url: string): any {
+                return retry(3, () => {
+                    const result = web.fetch(url)
+                    return result
+                })
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+        // Find the last node in the body's main chain (from entry)
+        const entryNode = body.nodes[body.entry] as TaskNode;
+        expect(entryNode).toBeDefined();
+        // The last body task should have next: "@exit"
+        expect(entryNode.next).toBe("@exit");
+    });
+
+    test("retry body: task nodes have onError pointing to step_attempt", () => {
+        const ir = compileOk(`
+            workflow test(url: string): any {
+                return retry(3, () => {
+                    const result = web.fetch(url)
+                    return result
+                })
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+        const entryNode = body.nodes[body.entry] as TaskNode;
+        expect(entryNode.onError).toBeDefined();
+        // The onError target should be a step_attempt node
+        const stepNode = body.nodes[entryNode.onError!] as TaskNode;
+        expect(stepNode).toBeDefined();
+        expect(stepNode.task).toBe("math.add");
+    });
+
+    test("retry body: error path chains step -> check -> branch -> exhaust", () => {
+        const ir = compileOk(`
+            workflow test(url: string): any {
+                return retry(3, () => {
+                    const result = web.fetch(url)
+                    return result
+                })
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+        const entryNode = body.nodes[body.entry] as TaskNode;
+
+        // Follow the error path: step_attempt -> check_done -> retry_check
+        const stepNode = body.nodes[entryNode.onError!] as TaskNode;
+        expect(stepNode.task).toBe("math.add");
+
+        const checkNode = body.nodes[stepNode.next!] as TaskNode;
+        expect(checkNode.task).toBe("compare.greaterOrEqual");
+
+        const branchNode = body.nodes[checkNode.next!] as BranchNode;
+        expect(branchNode.kind).toBe("branch");
+        expect(branchNode.default).toBe("@iterate");
+
+        // The true case should point to the exhaust node
+        const exhaustId = branchNode.cases["true"] as string;
+        const exhaustNode = body.nodes[exhaustId] as TaskNode;
+        expect(exhaustNode.task).toBe("error.fail");
+    });
+
+    test("retry infrastructure nodes are not in the main body chain", () => {
+        const ir = compileOk(`
+            workflow test(url: string): any {
+                return retry(3, () => {
+                    const result = web.fetch(url)
+                    return result
+                })
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+
+        // Walk the body's main chain from entry via next pointers
+        const mainChain = new Set<string>();
+        let nodeId: string | undefined = body.entry;
+        while (nodeId && nodeId !== "@exit" && nodeId !== "@iterate") {
+            mainChain.add(nodeId);
+            const node: WorkflowNode = body.nodes[nodeId];
+            nodeId = node.kind !== "branch" ? (node as TaskNode).next ?? undefined : undefined;
+        }
+
+        // None of the retry infrastructure nodes (math.add, compare.greaterOrEqual,
+        // error.fail, branch) should be in the main chain
+        for (const [id, node] of Object.entries(body.nodes)) {
+            if (!mainChain.has(id) && node.kind === "task") {
+                // These are error-path-only nodes
+                expect(["math.add", "compare.greaterOrEqual", "error.fail"]).toContain(
+                    (node as TaskNode).task,
+                );
+            }
+        }
     });
 
     // ---- Object return ----

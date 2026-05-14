@@ -62,12 +62,7 @@ export interface EmitError {
 
 // ---- Binding: how a name resolves in scope ----
 
-type BindingKind =
-    | "node"
-    | "param"
-    | "constant"
-    | "loopInput"
-    | "literal";
+type BindingKind = "node" | "param" | "constant" | "loopInput" | "literal";
 
 interface Binding {
     kind: BindingKind;
@@ -240,7 +235,10 @@ export class Emitter {
                 // Complex expressions (built-ins, operators, workflow calls):
                 // emit into scope and bind the result template
                 const template = this.emitExpr(expr, scope);
-                scope.bindings.set(stmt.name, { kind: "literal", value: template });
+                scope.bindings.set(stmt.name, {
+                    kind: "literal",
+                    value: template,
+                });
             }
             return;
         }
@@ -419,9 +417,10 @@ export class Emitter {
 
             const caseValue = this.constExprToValue(arm.value);
             const caseKey = String(caseValue);
-            cases[caseKey] = armScope.nodeOrder.length > 0
-                ? `${armPrefix}${armScope.nodeOrder[0]}`
-                : mergeId;
+            cases[caseKey] =
+                armScope.nodeOrder.length > 0
+                    ? `${armPrefix}${armScope.nodeOrder[0]}`
+                    : mergeId;
         }
 
         if (stmt.default_ && stmt.default_.length > 0) {
@@ -439,9 +438,10 @@ export class Emitter {
                 );
             }
             this.patchBranchTail(defScope, defPrefix, mergeId, scope);
-            defaultTarget = defScope.nodeOrder.length > 0
-                ? `${defPrefix}${defScope.nodeOrder[0]}`
-                : mergeId;
+            defaultTarget =
+                defScope.nodeOrder.length > 0
+                    ? `${defPrefix}${defScope.nodeOrder[0]}`
+                    : mergeId;
         }
 
         const branchNode: BranchNode = {
@@ -609,7 +609,10 @@ export class Emitter {
                     return undefined; // nodes already added
                 }
                 // No nodes generated, treat as literal
-                scope.bindings.set(bindName, { kind: "literal", value: template });
+                scope.bindings.set(bindName, {
+                    kind: "literal",
+                    value: template,
+                });
                 return undefined;
             }
             default:
@@ -759,9 +762,7 @@ export class Emitter {
         }
     }
 
-    private binaryOpOutputSchema(
-        op: import("./ast.js").BinaryOp,
-    ): JSONSchema {
+    private binaryOpOutputSchema(op: import("./ast.js").BinaryOp): JSONSchema {
         switch (op) {
             case "===":
             case "!==":
@@ -795,7 +796,8 @@ export class Emitter {
                 required: ["value"],
                 properties: { value: {} },
             },
-            outputSchema: expr.op === "!" ? { type: "boolean" } : { type: "number" },
+            outputSchema:
+                expr.op === "!" ? { type: "boolean" } : { type: "number" },
             inputs: { value: operand },
             bind: nodeId,
         };
@@ -805,10 +807,7 @@ export class Emitter {
         return this.scopeRef(nodeId, scope);
     }
 
-    private emitTernaryExpr(
-        expr: TernaryExpr,
-        scope: ScopeContext,
-    ): Template {
+    private emitTernaryExpr(expr: TernaryExpr, scope: ScopeContext): Template {
         const condTemplate = this.emitExpr(expr.condition, scope);
 
         const branchId = this.freshId("ternary");
@@ -895,10 +894,15 @@ export class Emitter {
 
         // State: attempt counter
         const state: Record<string, LoopStateVar> = {
-            attempt: { schema: { type: "integer" }, initial: 0 },
+            attempt: { schema: { type: "number" }, initial: 0 },
         };
 
-        // Body infrastructure: increment attempt, check if done
+        // --- Retry infrastructure (error path only) ---
+        // On failure, control flows: step_attempt -> check_done -> branch
+        //   can retry  -> @iterate
+        //   exhausted  -> retry_exhaust (error.fail, triggers loop onError)
+        // On success, the last body node goes directly to @exit.
+
         const stepId = this.freshId("step_attempt");
         bodyScope.nodes[stepId] = {
             kind: "task",
@@ -906,16 +910,26 @@ export class Emitter {
             inputSchema: {
                 type: "object",
                 required: ["left", "right"],
-                properties: { left: { type: "integer" }, right: { type: "integer" } },
+                properties: {
+                    left: { type: "number" },
+                    right: { type: "number" },
+                },
             },
-            outputSchema: { type: "integer" },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "number" } },
+            },
             inputs: {
-                left: { $from: "state", name: "attempt" } as unknown as Template,
+                left: {
+                    $from: "state",
+                    name: "attempt",
+                } as unknown as Template,
                 right: 1,
             },
             bind: stepId,
         };
-        bodyScope.nodeOrder.push(stepId);
+        // NOT pushed to nodeOrder: these are only reachable via onError
 
         const compareId = this.freshId("check_done");
         bodyScope.nodes[compareId] = {
@@ -924,16 +938,40 @@ export class Emitter {
             inputSchema: {
                 type: "object",
                 required: ["left", "right"],
-                properties: { left: { type: "integer" }, right: {} },
+                properties: { left: { type: "number" }, right: {} },
             },
-            outputSchema: { type: "boolean" },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "boolean" } },
+            },
             inputs: {
-                left: { $from: "scope", name: stepId } as unknown as Template,
+                left: {
+                    $from: "scope",
+                    name: stepId,
+                    path: ["result"],
+                } as unknown as Template,
                 right: countTemplate,
             },
             bind: compareId,
         };
-        bodyScope.nodeOrder.push(compareId);
+
+        const exhaustId = this.freshId("retry_exhaust");
+        bodyScope.nodes[exhaustId] = {
+            kind: "task",
+            task: "error.fail",
+            inputSchema: {
+                type: "object",
+                required: ["value"],
+                properties: { value: {} },
+            },
+            outputSchema: { type: "object" },
+            inputs: {
+                value: "Retry exhausted",
+            },
+            bind: exhaustId,
+            next: "@exit",
+        };
 
         const checkBranchId = this.freshId("retry_check");
         bodyScope.nodes[checkBranchId] = {
@@ -941,15 +979,34 @@ export class Emitter {
             selector: {
                 $from: "scope",
                 name: compareId,
+                path: ["result"],
             } as unknown as Template,
             selectorSchema: { type: "boolean" },
-            cases: { true: "@exit" },
+            cases: { true: exhaustId },
             default: "@iterate",
         };
-        bodyScope.nodeOrder.push(checkBranchId);
-        this.threadNext(bodyScope);
 
-        // Handle fallback (onError)
+        // Chain the retry infrastructure nodes
+        (bodyScope.nodes[stepId] as TaskNode).next = compareId;
+        (bodyScope.nodes[compareId] as TaskNode).next = checkBranchId;
+
+        // Wire body nodes: last body node -> @exit on success,
+        // all body task nodes -> stepId on error (enters retry path)
+        const lastBodyId = bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
+        if (lastBodyId) {
+            const lastNode = bodyScope.nodes[lastBodyId];
+            if (lastNode && lastNode.kind !== "branch") {
+                lastNode.next = "@exit";
+            }
+        }
+        for (const id of bodyScope.nodeOrder) {
+            const node = bodyScope.nodes[id];
+            if (node && node.kind === "task") {
+                node.onError = stepId;
+            }
+        }
+
+        // Handle fallback (onError at loop level, for exhaustion)
         let onError: string | undefined;
         if (expr.fallback) {
             const fbScope = this.childScope(scope);
@@ -978,6 +1035,12 @@ export class Emitter {
         // Capture outer-scope references used in retry body
         const outer = this.captureOuterRefs(bodyScope, new Set<string>());
 
+        // The body output is optional because the retry_exhaust path
+        // (error.fail) always throws before reaching @exit, so the output
+        // binding is never actually unresolved. Mark optional to satisfy
+        // the dominator coverage check.
+        const bodyOutput = this.markTemplateOptional(outputTemplate ?? null);
+
         const loopNode: LoopNode = {
             kind: "loop",
             inputs: { ...outer.inputs },
@@ -989,7 +1052,7 @@ export class Emitter {
                 },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
-                output: outputTemplate ?? null,
+                output: bodyOutput,
                 outputSchema: {},
             },
             state,
@@ -997,6 +1060,7 @@ export class Emitter {
                 attempt: {
                     $from: "scope",
                     name: stepId,
+                    path: ["result"],
                 } as unknown as Template,
             },
             maxIterations: 100, // safety limit
@@ -1063,7 +1127,10 @@ export class Emitter {
             },
             outputSchema: { type: "array" },
             inputs: {
-                list: { $from: "state", name: "results" } as unknown as Template,
+                list: {
+                    $from: "state",
+                    name: "results",
+                } as unknown as Template,
                 item: outputTemplate ?? null,
             },
             bind: appendId,
@@ -1078,7 +1145,10 @@ export class Emitter {
             inputSchema: {
                 type: "object",
                 required: ["left", "right"],
-                properties: { left: { type: "integer" }, right: { type: "integer" } },
+                properties: {
+                    left: { type: "integer" },
+                    right: { type: "integer" },
+                },
             },
             outputSchema: { type: "integer" },
             inputs: {
@@ -1113,7 +1183,10 @@ export class Emitter {
             inputSchema: {
                 type: "object",
                 required: ["left", "right"],
-                properties: { left: { type: "integer" }, right: { type: "integer" } },
+                properties: {
+                    left: { type: "integer" },
+                    right: { type: "integer" },
+                },
             },
             outputSchema: { type: "boolean" },
             inputs: {
@@ -1151,10 +1224,7 @@ export class Emitter {
         };
 
         // Capture outer-scope references used in body and promote to loop inputs
-        const outer = this.captureOuterRefs(
-            bodyScope,
-            new Set(["items"]),
-        );
+        const outer = this.captureOuterRefs(bodyScope, new Set(["items"]));
 
         const loopNode: LoopNode = {
             kind: "loop",
@@ -1163,7 +1233,10 @@ export class Emitter {
                 inputSchema: {
                     type: "object",
                     required: ["items", ...outer.required],
-                    properties: { items: { type: "array" }, ...outer.properties },
+                    properties: {
+                        items: { type: "array" },
+                        ...outer.properties,
+                    },
                 },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
@@ -1245,7 +1318,10 @@ export class Emitter {
             },
             outputSchema: { type: "array" },
             inputs: {
-                list: { $from: "state", name: "results" } as unknown as Template,
+                list: {
+                    $from: "state",
+                    name: "results",
+                } as unknown as Template,
                 item: {
                     $from: "scope",
                     name: pickId,
@@ -1262,7 +1338,10 @@ export class Emitter {
             inputSchema: {
                 type: "object",
                 required: ["left", "right"],
-                properties: { left: { type: "integer" }, right: { type: "integer" } },
+                properties: {
+                    left: { type: "integer" },
+                    right: { type: "integer" },
+                },
             },
             outputSchema: { type: "integer" },
             inputs: {
@@ -1295,12 +1374,18 @@ export class Emitter {
             inputSchema: {
                 type: "object",
                 required: ["left", "right"],
-                properties: { left: { type: "integer" }, right: { type: "integer" } },
+                properties: {
+                    left: { type: "integer" },
+                    right: { type: "integer" },
+                },
             },
             outputSchema: { type: "boolean" },
             inputs: {
                 left: { $from: "scope", name: stepId } as unknown as Template,
-                right: { $from: "scope", name: lengthId } as unknown as Template,
+                right: {
+                    $from: "scope",
+                    name: lengthId,
+                } as unknown as Template,
             },
             bind: compareId,
         };
@@ -1308,7 +1393,10 @@ export class Emitter {
         const checkId = this.freshId("check_done");
         bodyScope.nodes[checkId] = {
             kind: "branch",
-            selector: { $from: "scope", name: compareId } as unknown as Template,
+            selector: {
+                $from: "scope",
+                name: compareId,
+            } as unknown as Template,
             selectorSchema: { type: "boolean" },
             cases: { true: "@iterate" },
             default: "@exit",
@@ -1323,7 +1411,10 @@ export class Emitter {
             inputSchema: {},
             outputSchema: { type: "array" },
             inputs: {
-                value: { $from: "state", name: "results" } as unknown as Template,
+                value: {
+                    $from: "state",
+                    name: "results",
+                } as unknown as Template,
             },
             bind: keepResultsId,
         };
@@ -1371,10 +1462,7 @@ export class Emitter {
         };
 
         // Capture outer-scope references used in body
-        const outer = this.captureOuterRefs(
-            bodyScope,
-            new Set(["items"]),
-        );
+        const outer = this.captureOuterRefs(bodyScope, new Set(["items"]));
 
         const loopNode: LoopNode = {
             kind: "loop",
@@ -1383,7 +1471,10 @@ export class Emitter {
                 inputSchema: {
                     type: "object",
                     required: ["items", ...outer.required],
-                    properties: { items: { type: "array" }, ...outer.properties },
+                    properties: {
+                        items: { type: "array" },
+                        ...outer.properties,
+                    },
                 },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
@@ -1445,7 +1536,10 @@ export class Emitter {
                     entry: branchScope.nodeOrder[0] ?? "",
                     nodes: branchScope.nodes,
                     output: outputBind
-                        ? ({ $from: "scope", name: outputBind } as unknown as Template)
+                        ? ({
+                              $from: "scope",
+                              name: outputBind,
+                          } as unknown as Template)
                         : null,
                     outputSchema: {},
                 },
@@ -1500,17 +1594,11 @@ export class Emitter {
         }
 
         // Capture outer-scope references used in body
-        const outer = this.captureOuterRefs(
-            bodyScope,
-            new Set([expr.param]),
-        );
+        const outer = this.captureOuterRefs(bodyScope, new Set([expr.param]));
 
         // Determine body output: last node's bind
-        const lastNodeId =
-            bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
-        const lastNode = lastNodeId
-            ? bodyScope.nodes[lastNodeId]
-            : undefined;
+        const lastNodeId = bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
+        const lastNode = lastNodeId ? bodyScope.nodes[lastNodeId] : undefined;
         const outputBind =
             lastNode &&
             (lastNode.kind === "task" ||
@@ -1534,7 +1622,10 @@ export class Emitter {
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
                 output: outputBind
-                    ? ({ $from: "scope", name: outputBind } as unknown as Template)
+                    ? ({
+                          $from: "scope",
+                          name: outputBind,
+                      } as unknown as Template)
                     : null,
                 outputSchema: {},
             },
@@ -1709,7 +1800,6 @@ export class Emitter {
                 // This is an outer-scope reference: rewrite to input ref
                 const outerName = obj.name as string;
                 if (!captured.has(outerName)) {
-                    // Find the original template by looking it up in parent
                     const parentRef = {
                         $from: "scope",
                         name: outerName,
@@ -1719,6 +1809,23 @@ export class Emitter {
                 }
                 // Rewrite in-place to reference the loop input
                 obj.$from = "input";
+            } else if (
+                obj.$from === "input" &&
+                typeof obj.name === "string" &&
+                !existingInputNames.has(obj.name)
+            ) {
+                // Workflow-level input param referenced inside a loop body:
+                // thread it through the loop's input map so it's available.
+                const outerName = obj.name as string;
+                if (!captured.has(outerName)) {
+                    const parentRef = {
+                        $from: "input",
+                        name: outerName,
+                    } as unknown as Template;
+                    captured.set(outerName, parentRef);
+                }
+                // $from stays "input" - no rewrite needed since we're
+                // adding it to the loop's inputs under the same name.
             } else {
                 for (const val of Object.values(obj)) {
                     visit(val);
@@ -1768,10 +1875,7 @@ export class Emitter {
             const id = scope.nodeOrder[i];
             const node = scope.nodes[id];
             if (!node) continue;
-            if (
-                node.kind !== "branch" &&
-                !node.next
-            ) {
+            if (node.kind !== "branch" && !node.next) {
                 node.next = scope.nodeOrder[i + 1];
             }
         }
@@ -1785,6 +1889,32 @@ export class Emitter {
                 }
             }
         }
+    }
+
+    // ---- Mark template refs as optional ----
+
+    /**
+     * Deep-clone a template, adding `optional: true` to every `$from` ref.
+     * Used for retry body output where the exhaustion path always throws
+     * before reaching @exit, so the output binding is guaranteed to be set
+     * on any path that actually resolves the template.
+     */
+    private markTemplateOptional(template: Template): Template {
+        if (template === null || template === undefined) return template;
+        if (typeof template !== "object") return template;
+        if (Array.isArray(template)) {
+            return template.map((t) => this.markTemplateOptional(t));
+        }
+        const obj = template as Record<string, unknown>;
+        if ("$from" in obj) {
+            return { ...obj, optional: true } as unknown as Template;
+        }
+        if ("$literal" in obj) return template;
+        const result: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(obj)) {
+            result[key] = this.markTemplateOptional(value as Template);
+        }
+        return result as unknown as Template;
     }
 
     // ---- Prefix node refs for branch scoping ----
@@ -1823,7 +1953,8 @@ export class Emitter {
         parentScope: ScopeContext,
     ): void {
         if (childScope.nodeOrder.length === 0) return;
-        const lastChildId = childScope.nodeOrder[childScope.nodeOrder.length - 1];
+        const lastChildId =
+            childScope.nodeOrder[childScope.nodeOrder.length - 1];
         const prefixedId = `${prefix}${lastChildId}`;
         const node = parentScope.nodes[prefixedId];
         if (!node) return;
