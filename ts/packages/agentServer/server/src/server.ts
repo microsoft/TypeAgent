@@ -180,7 +180,7 @@ async function main() {
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
-                dblogging: false,
+                dblogging: true,
                 traceId,
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,

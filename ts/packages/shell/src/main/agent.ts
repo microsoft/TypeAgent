@@ -50,6 +50,24 @@ class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+class ShellTrashRestoreCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Restore agent messages from the trash (un-hide everything that was sent to the bin via the trash icon).";
+    public async run(context: ActionContext<ShellContext>) {
+        context.actionIO.takeAction("trash-restore");
+        displaySuccess("Restoring trashed messages…", context);
+    }
+}
+
+class ShellTrashFlushCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Permanently delete every message currently in the trash. They stay hidden and can no longer be restored.";
+    public async run(context: ActionContext<ShellContext>) {
+        context.actionIO.takeAction("trash-flush");
+        displaySuccess("Flushing trashed messages permanently…", context);
+    }
+}
+
 class ShellShowHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell help";
     public async run(context: ActionContext<ShellContext>) {
@@ -362,6 +380,14 @@ const handlers: CommandHandlerTable = {
             },
         },
         break: new ShellBreakDemoCommandHandler(),
+        trash: {
+            description:
+                "Manage the trash bin of agent messages hidden via the trash icon",
+            commands: {
+                restore: new ShellTrashRestoreCommandHandler(),
+                flush: new ShellTrashFlushCommandHandler(),
+            },
+        },
         topmost: new ShellSetTopMostCommandHandler(),
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),

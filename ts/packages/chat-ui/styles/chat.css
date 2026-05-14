@@ -933,3 +933,245 @@ span.ansi-bright-white-fg {
 .chat-input-history-loading .user-textarea {
   opacity: 0.6;
 }
+
+/* =========================================================================
+   Feedback widget — mirrors packages/shell/src/renderer/assets/styles.less.
+   Keep both in sync when changing class names or layout.
+   ========================================================================= */
+
+.chat-message-container-agent.chat-message-trashed > .chat-timestamp-agent,
+.chat-message-container-agent.chat-message-trashed > .agent-icon,
+.chat-message-container-agent.chat-message-trashed > .chat-message-body,
+.chat-message-container-agent.chat-message-trashed
+  > .chat-message-body-hide-metrics,
+.chat-message-container-agent.chat-message-trashed > .chat-message-actions,
+.chat-message-container-user.chat-message-trashed > .chat-timestamp-user,
+.chat-message-container-user.chat-message-trashed > .user-icon,
+.chat-message-container-user.chat-message-trashed > .chat-message-body,
+.chat-message-container-user.chat-message-trashed
+  > .chat-message-body-hide-metrics {
+  display: none;
+}
+.chat-message-container-agent.chat-message-trashed,
+.chat-message-container-user.chat-message-trashed {
+  animation: chat-trashed-collapse 6s linear forwards;
+}
+.chat-message-container-agent.chat-message-trashed::after,
+.chat-message-container-user.chat-message-trashed::after {
+  content: "🗑  message hidden";
+  display: block;
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  padding: 4px 0;
+  animation: chat-trashed-fade 6s linear forwards;
+}
+.chat-message-container-agent.chat-message-trashed::after {
+  margin-left: 40px;
+}
+.chat-message-container-user.chat-message-trashed::after {
+  text-align: right;
+  margin-right: 40px;
+}
+@keyframes chat-trashed-fade {
+  0%,
+  66.67% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes chat-trashed-collapse {
+  0%,
+  99.99% {
+  }
+  100% {
+    display: none;
+  }
+}
+
+.chat-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: #8a8a8a;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+}
+.chat-action-button i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.chat-action-button i svg {
+  width: 16px;
+  height: 16px;
+}
+.chat-action-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+.chat-action-button:focus-visible {
+  outline: 2px solid #1f6feb;
+  outline-offset: 1px;
+}
+.chat-action-button.feedback-selected {
+  color: #1f6feb;
+}
+.chat-action-button[data-action="thumbs-down"].feedback-selected {
+  color: #c83e3e;
+}
+.chat-action-button.feedback-copied {
+  color: #2e8b57;
+}
+
+.chat-message-actions {
+  display: flex;
+  gap: 2px;
+  margin: 2px 0 6px 40px;
+  align-items: center;
+  opacity: 0.65;
+  transition: opacity 0.15s ease;
+}
+.chat-message-container-agent:hover .chat-message-actions,
+.chat-message-container-agent.feedback-rated .chat-message-actions {
+  opacity: 1;
+}
+
+/* Dropdown menu */
+.chat-feedback-menu {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 220px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+.chat-feedback-menu-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  color: #222;
+}
+.chat-feedback-menu-item:hover {
+  background: #f3f5f7;
+}
+
+/* Popover card */
+.chat-feedback-popover {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
+  padding: 14px 16px;
+  width: 340px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #222;
+}
+.chat-feedback-popover-heading {
+  font-weight: 600;
+  font-size: 14px;
+}
+.chat-feedback-popover-subtitle {
+  color: #555;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.chat-feedback-popover-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+.chat-feedback-popover-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  padding: 6px 8px;
+  font: inherit;
+}
+.chat-feedback-popover-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.chat-feedback-popover-fieldset legend {
+  font-weight: 500;
+  font-size: 12px;
+  padding: 0 0 4px 0;
+  color: #444;
+}
+.chat-feedback-popover-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.chat-feedback-popover-share {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: #444;
+  line-height: 1.4;
+}
+.chat-feedback-popover-share input {
+  margin-top: 2px;
+}
+.chat-feedback-popover-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chat-feedback-popover-button {
+  border: 1px solid #d0d7de;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: #222;
+}
+.chat-feedback-popover-button:hover {
+  background: #f3f5f7;
+}
+.chat-feedback-popover-button.submit {
+  background: #1f6feb;
+  color: #fff;
+  border-color: #1f6feb;
+}
+.chat-feedback-popover-button.submit:hover {
+  background: #1860d3;
+}
+.chat-feedback-popover-button.clear {
+  color: #a23737;
+  border-color: transparent;
+}

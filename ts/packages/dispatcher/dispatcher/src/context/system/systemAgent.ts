@@ -36,6 +36,7 @@ import { UserSettingsAction } from "./schema/settingsActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
+import { getFeedbackCommandHandlers } from "./handlers/feedbackCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
@@ -69,6 +70,7 @@ export const systemHandlers: CommandHandlerTable = {
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
+        feedback: getFeedbackCommandHandlers(),
         display: new DisplayCommandHandler(),
         trace: new TraceCommandHandler(),
         help: new HelpCommandHandler(),

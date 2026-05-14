@@ -145,6 +145,12 @@ async function initializeChatHistory(chatView: ChatView) {
 
             // TODO: wire up any other functionality (player agent?)
         }
+
+        // Reattach feedback widgets on restored agent bubbles. Each
+        // container that was saved with a data-feedback-request-id gets
+        // a fresh widget wired to a dispatcher-backed controller so the
+        // copy / 👍 / 👎 / ⋯ buttons work again.
+        chatView.rewireHistoricalFeedback();
     }
 }
 
@@ -493,6 +499,22 @@ function registerClient(
                 switch (action) {
                     case "show-camera": {
                         cameraView.show();
+                        break;
+                    }
+                    case "trash-restore": {
+                        chatView.dispatcher
+                            ?.restoreAllHidden()
+                            .catch((e: any) =>
+                                console.error("restoreAllHidden failed", e),
+                            );
+                        break;
+                    }
+                    case "trash-flush": {
+                        chatView.dispatcher
+                            ?.flushHidden()
+                            .catch((e: any) =>
+                                console.error("flushHidden failed", e),
+                            );
                         break;
                     }
                     case "set-alarm": {
@@ -920,6 +942,12 @@ function registerClient(
                 console.log(e);
             }
         },
+        onUserFeedback: (entry) => {
+            chatView.applyFeedback(entry);
+        },
+        onUserHide: (entry) => {
+            chatView.applyHide(entry);
+        },
     };
 
     const client: Client = {
@@ -1184,6 +1212,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
+    // Settings / Metrics / Help dialogs live in TabView; they overlay the
+    // chat (z-index 1000) when shown via @shell show settings. The tabs
+    // container itself was never appended to the wrapper, so `showTab`
+    // was a no-op visually.
+    wrapper.appendChild(tabs.getContainer());
 
     chatView.chatInput!.camButton.onclick = () => {
         cameraView.toggleVisibility();
