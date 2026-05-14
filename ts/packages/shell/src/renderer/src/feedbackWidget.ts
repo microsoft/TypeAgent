@@ -189,7 +189,7 @@ export class FeedbackWidget {
                 run: () => void this.controller.submit("up"),
             },
             {
-                label: "Wrong agent picked",
+                label: "Wrong agent/action selected",
                 run: () => void this.controller.submit("down", "wrong-agent"),
             },
             {
@@ -337,7 +337,7 @@ function makeIconButton(
 function formatCategory(c: UserFeedbackCategory): string {
     switch (c) {
         case "wrong-agent":
-            return "wrong agent";
+            return "wrong agent/action selected";
         case "didnt-understand":
             return "didn't understand";
         case "bad-response":
@@ -430,7 +430,7 @@ class FeedbackPopover {
         catFieldset.appendChild(catLegend);
 
         const choices: { value: UserFeedbackCategory; label: string }[] = [
-            { value: "wrong-agent", label: "Wrong agent picked" },
+            { value: "wrong-agent", label: "Wrong agent/action selected" },
             { value: "didnt-understand", label: "Didn't understand my request" },
             {
                 value: "bad-response",
