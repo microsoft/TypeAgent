@@ -49,6 +49,28 @@ function authToken(auth: AuthMode): {
 }
 
 /**
+ * Pick the highest-capacity endpoint from a deployment, falling back
+ * to the first endpoint when no entry has an explicit capacity. Used
+ * to auto-select a default embedding deployment when the config does
+ * not declare `azureOpenAI.defaultEmbedding`.
+ */
+function pickHighestCapacityEndpoint(
+    deployment: Deployment | undefined,
+): DeploymentEndpoint | undefined {
+    if (!deployment || deployment.endpoints.length === 0) return undefined;
+    let best: DeploymentEndpoint | undefined;
+    let bestCapacity = -Infinity;
+    for (const ep of deployment.endpoints) {
+        const cap = ep.capacity ?? 0;
+        if (cap > bestCapacity) {
+            best = ep;
+            bestCapacity = cap;
+        }
+    }
+    return best ?? deployment.endpoints[0];
+}
+
+/**
  * Look up a deployment's endpoint by name, optionally pinned to a
  * specific region. When `region` is omitted, returns the highest-
  * priority pool member (PTU before PAYG; insertion order otherwise).
@@ -106,7 +128,11 @@ export function azureApiSettingsFromConfig(
                 endpoint = ao.defaultChat;
                 break;
             case ModelType.Embedding:
-                endpoint = ao.defaultEmbedding;
+                endpoint =
+                    ao.defaultEmbedding ??
+                    pickHighestCapacityEndpoint(
+                        ao.deployments.get("embedding"),
+                    );
                 break;
             case ModelType.Image:
                 endpoint = ao.defaultImage;
