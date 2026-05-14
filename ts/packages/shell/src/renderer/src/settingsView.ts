@@ -11,10 +11,6 @@ import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 import { DisplayType } from "@typeagent/agent-sdk";
 import { getClientAPI } from "./main";
 import type { ReadonlyDeep } from "type-fest";
-import {
-    FEEDBACK_VARIANTS,
-    type FeedbackUIVariant,
-} from "./feedbackWidget.js";
 
 function addOption(
     select: HTMLSelectElement,
@@ -102,7 +98,6 @@ export class SettingsView {
     private devUICheckBox: HTMLInputElement;
     private saveChatHistoryCheckBox: HTMLInputElement;
     private voiceModeCheckBox: HTMLInputElement;
-    private feedbackVariantSelect: HTMLSelectElement;
 
     public set shellSettings(value: ShellUserSettings) {
         this._shellSettings = value;
@@ -114,13 +109,6 @@ export class SettingsView {
         this.devUICheckBox.checked = !value.ui.dev;
         this.saveChatHistoryCheckBox.checked = value.chatHistory;
         this.voiceModeCheckBox.checked = value.ui.voiceMode ?? false;
-        // Defend against stale/legacy variant keys lingering in saved settings
-        // (e.g. "footer-hover", "inline-header", "flag-menu" were retired).
-        const storedVariant = value.ui.feedbackUIVariant;
-        this.feedbackVariantSelect.value =
-            storedVariant && FEEDBACK_VARIANTS.includes(storedVariant)
-                ? storedVariant
-                : "footer-always";
         this.updateFromSettings();
     }
 
@@ -289,12 +277,6 @@ export class SettingsView {
             await updateTTSSelections();
             updateInputs();
             updateVoiceMode();
-            const stored = this._shellSettings.ui.feedbackUIVariant;
-            chatView.setFeedbackUIVariant(
-                stored && FEEDBACK_VARIANTS.includes(stored)
-                    ? stored
-                    : "footer-always",
-            );
         };
 
         try {
@@ -349,28 +331,6 @@ export class SettingsView {
             chatView.setVoiceMode(this.voiceModeCheckBox.checked);
             this.saveSettings();
         });
-
-        // Feedback UI variant — temporary toggle to let us audition all
-        // four placements live. Once the user picks one, the others go.
-        this.feedbackVariantSelect = this.addSelect(
-            "Feedback UI",
-            "feedbackUIVariant",
-            () => {
-                const v = this.feedbackVariantSelect.value as FeedbackUIVariant;
-                this._shellSettings.ui.feedbackUIVariant = v;
-                chatView.setFeedbackUIVariant(v);
-            },
-        );
-        const variantLabels: Record<FeedbackUIVariant, string> = {
-            "footer-always": "Below the bubble",
-            "bubble-corner": "Top-right inside the bubble",
-        };
-        for (const v of FEEDBACK_VARIANTS) {
-            const opt = new Option(variantLabels[v], v);
-            this.feedbackVariantSelect.add(opt);
-        }
-        this.feedbackVariantSelect.value =
-            this._shellSettings.ui.feedbackUIVariant ?? "footer-always";
     }
 
     getContainer() {

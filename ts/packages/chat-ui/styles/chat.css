@@ -939,6 +939,58 @@ span.ansi-bright-white-fg {
    Keep both in sync when changing class names or layout.
    ========================================================================= */
 
+.chat-message-container-agent.chat-message-trashed > .chat-timestamp-agent,
+.chat-message-container-agent.chat-message-trashed > .agent-icon,
+.chat-message-container-agent.chat-message-trashed > .chat-message-body,
+.chat-message-container-agent.chat-message-trashed
+  > .chat-message-body-hide-metrics,
+.chat-message-container-agent.chat-message-trashed > .chat-message-actions,
+.chat-message-container-user.chat-message-trashed > .chat-timestamp-user,
+.chat-message-container-user.chat-message-trashed > .user-icon,
+.chat-message-container-user.chat-message-trashed > .chat-message-body,
+.chat-message-container-user.chat-message-trashed
+  > .chat-message-body-hide-metrics {
+  display: none;
+}
+.chat-message-container-agent.chat-message-trashed,
+.chat-message-container-user.chat-message-trashed {
+  animation: chat-trashed-collapse 6s linear forwards;
+}
+.chat-message-container-agent.chat-message-trashed::after,
+.chat-message-container-user.chat-message-trashed::after {
+  content: "🗑  message hidden";
+  display: block;
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  padding: 4px 0;
+  animation: chat-trashed-fade 6s linear forwards;
+}
+.chat-message-container-agent.chat-message-trashed::after {
+  margin-left: 40px;
+}
+.chat-message-container-user.chat-message-trashed::after {
+  text-align: right;
+  margin-right: 40px;
+}
+@keyframes chat-trashed-fade {
+  0%,
+  66.67% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes chat-trashed-collapse {
+  0%,
+  99.99% {
+  }
+  100% {
+    display: none;
+  }
+}
+
 .chat-action-button {
   display: inline-flex;
   align-items: center;
@@ -992,54 +1044,6 @@ span.ansi-bright-white-fg {
 .chat-message-container-agent:hover .chat-message-actions,
 .chat-message-container-agent.feedback-rated .chat-message-actions {
   opacity: 1;
-}
-
-/* Variant: bubble-corner */
-.chat-message-container-agent.feedback-variant-bubble-corner
-  .chat-message-content {
-  position: relative;
-  padding-right: 60px;
-}
-.chat-message-container-agent.feedback-variant-bubble-corner
-  .chat-message-actions-corner {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  margin: 0;
-  padding: 1px 2px;
-  gap: 0;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 6px;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 4;
-}
-.chat-message-container-agent.feedback-variant-bubble-corner
-  .chat-message-actions-corner
-  .chat-action-button {
-  width: 22px;
-  height: 22px;
-}
-.chat-message-container-agent.feedback-variant-bubble-corner:hover
-  .chat-message-actions-corner,
-.chat-message-container-agent.feedback-variant-bubble-corner.feedback-rated
-  .chat-message-actions-corner {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.chat-message-container-agent.feedback-variant-avatar-hover .agent-icon {
-  cursor: pointer;
-}
-.chat-message-container-agent.feedback-variant-avatar-hover.feedback-rated
-  .agent-icon {
-  box-shadow: 0 0 0 2px #1f6feb;
-}
-.chat-message-container-agent.feedback-variant-avatar-hover.feedback-rated:has(
-    .chat-action-button[data-action="thumbs-down"].feedback-selected
-  )
-  .agent-icon {
-  box-shadow: 0 0 0 2px #c83e3e;
 }
 
 /* Dropdown menu */

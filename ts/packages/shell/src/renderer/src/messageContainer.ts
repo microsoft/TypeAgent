@@ -18,7 +18,12 @@ import {
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chat/chatView";
-import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
+import {
+    iconCheckMarkCircle,
+    iconRoadrunner,
+    iconTrash,
+    iconX,
+} from "./icon";
 import { TemplateEditor } from "./templateEditor";
 import { SettingsView } from "./settingsView";
 import { FeedbackController, FeedbackWidget } from "./feedbackWidget";
@@ -111,6 +116,7 @@ export class MessageContainer {
     private defaultSource?: string;
     private action?: TypeAgentAction | string[];
     private feedbackWidget?: FeedbackWidget;
+    private trashButton?: HTMLButtonElement;
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
@@ -350,15 +356,66 @@ export class MessageContainer {
             controller,
             this.chatView.feedbackUIVariant,
         );
+        this.attachTrashButton(controller);
+    }
+
+    /**
+     * Attach a trash button to this bubble that moves the entire
+     * message group to the trash bin via `controller.setHidden(true)`.
+     *
+     *   - Agent bubbles get the trash anchored absolute top-right
+     *     inside the bubble body (hidden until hover).
+     *   - User bubbles get the trash as an inline child of the message
+     *     content, inserted *before* the roadrunner so the roadrunner
+     *     stays at the trailing edge.
+     *
+     * Wired both from `attachFeedbackController` (agent path) and from
+     * MessageGroup directly (user path).
+     */
+    public attachTrashButton(controller: FeedbackController) {
+        if (this.trashButton !== undefined) return;
+        if (controller.setHidden === undefined) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-action-button chat-message-trash";
+        btn.title = "Move to trash";
+        btn.setAttribute("aria-label", "Move to trash");
+        btn.dataset.action = "trash";
+        btn.appendChild(iconTrash());
+        // Trash on a user bubble hides only the user bubble; trash on
+        // an agent bubble hides only that agent response. The user can
+        // delete one side without affecting the other.
+        //
+        // We optimistically toggle the .chat-message-trashed class on
+        // the container right away — the dispatcher roundtrip would
+        // otherwise insert a noticeable delay before the placeholder
+        // appears. The class is also re-applied via the broadcast on
+        // success (idempotent toggle) and removed if the call fails.
+        const target: "user" | "agent" = this.classNameSuffix;
+        btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            this.div.classList.add("chat-message-trashed");
+            try {
+                await controller.setHidden!(true, target);
+            } catch (e) {
+                this.div.classList.remove("chat-message-trashed");
+                console.error("recordUserHide failed", e);
+            }
+        });
+        this.trashButton = btn;
+
+        // Anchored top-right of the bubble body (works for both user
+        // and agent). Placing it as a sibling of the message content
+        // keeps it outside the text flow — earlier attempts to put it
+        // inline in the user bubble had it wrap to a new line because
+        // the user-text span renders trailing newlines literally
+        // (`white-space: break-spaces`). The roadrunner stays inline
+        // in the content and lives "below/left" of the trash visually.
+        this.messageBodyDiv.appendChild(btn);
     }
 
     public setFeedbackState(entry: UserFeedbackEntry | null) {
         this.feedbackWidget?.setFeedbackState(entry);
-    }
-
-    /** Switch the feedback widget variant in place (settings change). */
-    public setFeedbackVariant(variant: import("./feedbackWidget").FeedbackUIVariant) {
-        this.feedbackWidget?.setVariant(variant);
     }
 
     public setMessage(

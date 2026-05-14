@@ -22,6 +22,7 @@ import {
     RequestId,
     TemplateEditConfig,
     UserFeedbackEntry,
+    UserMessageHiddenEntry,
 } from "agent-dispatcher";
 
 import { PartialCompletion } from "../partial";
@@ -34,6 +35,7 @@ import {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "../feedbackWidget";
+import { iconTrash } from "../icon";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 
@@ -73,7 +75,6 @@ export class ChatView {
 
     private hideMetrics = true;
     private isScrolling = false;
-    private _feedbackUIVariant: FeedbackUIVariant = "footer-always";
 
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
@@ -180,7 +181,7 @@ export class ChatView {
     }
 
     public get feedbackUIVariant(): FeedbackUIVariant {
-        return this._feedbackUIVariant;
+        return "footer-always";
     }
 
     /**
@@ -198,10 +199,13 @@ export class ChatView {
         // every node restored from saved chat-history HTML by
         // initializeChatHistory in main.ts. Live JS-managed bubbles
         // don't have it, so they're left alone.
-        const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+
+        // Agent bubbles get the full feedback widget rebuilt AND the
+        // trash button re-wired.
+        const agentContainers = this.messageDiv.querySelectorAll<HTMLElement>(
             ".chat-message-container-agent.history",
         );
-        for (const container of Array.from(containers)) {
+        for (const container of Array.from(agentContainers)) {
             const reqId = container.dataset.feedbackRequestId;
             const clientReqId = container.dataset.feedbackClientRequestId;
             if (!reqId && !clientReqId) continue;
@@ -233,8 +237,73 @@ export class ChatView {
             new FeedbackWidget(
                 { container, bodyDiv, headerDiv, messageDiv },
                 controller,
-                this._feedbackUIVariant,
+                "footer-always",
             );
+            // Rebuild the trash button (saved HTML has it without
+            // any click handler attached).
+            this.wireHistoricalTrash(container, requestId, "agent");
+        }
+
+        // User bubbles only get the trash button — no feedback widget.
+        const userContainers = this.messageDiv.querySelectorAll<HTMLElement>(
+            ".chat-message-container-user.history",
+        );
+        for (const container of Array.from(userContainers)) {
+            const reqId = container.dataset.feedbackRequestId;
+            const clientReqId = container.dataset.feedbackClientRequestId;
+            if (!reqId && !clientReqId) continue;
+            const requestId: RequestId = {
+                requestId: reqId ?? "",
+                clientRequestId: clientReqId,
+            };
+            this.wireHistoricalTrash(container, requestId, "user");
+        }
+    }
+
+    /**
+     * Replace any (saved, handler-less) trash button inside the
+     * container with a fresh one that calls dispatcher.recordUserHide.
+     * Also applies the optimistic-hide / undo-on-error semantics used
+     * by live trash clicks.
+     */
+    private wireHistoricalTrash(
+        container: HTMLElement,
+        requestId: RequestId,
+        target: "user" | "agent",
+    ) {
+        container
+            .querySelectorAll(".chat-message-trash")
+            .forEach((el) => el.remove());
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-action-button chat-message-trash";
+        btn.title = "Move to trash";
+        btn.setAttribute("aria-label", "Move to trash");
+        btn.dataset.action = "trash";
+        btn.appendChild(iconTrash());
+        btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            container.classList.add("chat-message-trashed");
+            const dispatcher = this._dispatcher;
+            if (!dispatcher) return;
+            try {
+                await dispatcher.recordUserHide(requestId, true, target);
+            } catch (e) {
+                container.classList.remove("chat-message-trashed");
+                console.error("recordUserHide failed", e);
+            }
+        });
+
+        // Anchor in the body element (.chat-message-agent or
+        // .chat-message-user) which matches how live bubbles are
+        // built. Without the body element we can't position the
+        // trash; skip.
+        const body = container.querySelector<HTMLElement>(
+            target === "agent" ? ".chat-message-agent" : ".chat-message-user",
+        );
+        if (body) {
+            body.appendChild(btn);
         }
     }
 
@@ -261,40 +330,23 @@ export class ChatView {
                     console.error("recordUserFeedback failed", e);
                 }
             },
+            setHidden: async (
+                hidden: boolean,
+                target?: "user" | "agent",
+            ) => {
+                const dispatcher = this._dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserHide(
+                        requestId,
+                        hidden,
+                        target,
+                    );
+                } catch (e) {
+                    console.error("recordUserHide failed", e);
+                }
+            },
         };
-    }
-
-    /**
-     * Switch the feedback widget variant for every existing agent bubble
-     * in this view. JS-managed messages get their widgets rebuilt; for
-     * messages restored from the saved chat-history HTML (no JS state)
-     * we at least update the .feedback-variant-* CSS class so the
-     * placement stays visually consistent.
-     */
-    public setFeedbackUIVariant(variant: FeedbackUIVariant) {
-        if (this._feedbackUIVariant === variant) return;
-        const oldClass = `feedback-variant-${this._feedbackUIVariant}`;
-        const newClass = `feedback-variant-${variant}`;
-        this._feedbackUIVariant = variant;
-        for (const mg of this.idToMessageGroup.values()) {
-            mg.setFeedbackVariant(variant);
-        }
-        for (const mg of this.pendingLocalGroups.values()) {
-            mg.setFeedbackVariant(variant);
-        }
-        for (const mg of this.clientMessageGroups.values()) {
-            mg.setFeedbackVariant(variant);
-        }
-        // Apply the CSS class to every agent-message container in the DOM
-        // — this includes historical messages restored from saved HTML
-        // which don't have a backing JS MessageContainer.
-        const all = this.messageDiv.querySelectorAll(
-            ".chat-message-container-agent",
-        );
-        all.forEach((el) => {
-            el.classList.remove(oldClass);
-            el.classList.add(newClass);
-        });
     }
 
     public initializeDispatcher(dispatcher: Dispatcher) {
@@ -934,6 +986,45 @@ export class ChatView {
      */
     applyFeedback(entry: UserFeedbackEntry) {
         this.getMessageGroup(entry.requestId)?.applyFeedback(entry);
+    }
+
+    /**
+     * Apply a hide / restore to the matching agent message bubble.
+     * Routes to the live MessageGroup if one exists; otherwise (e.g.
+     * the bubble was restored from saved chat-history HTML) toggles
+     * the CSS class directly on the matching container by data
+     * attribute.
+     */
+    applyHide(entry: UserMessageHiddenEntry) {
+        const mg = this.getMessageGroup(entry.requestId);
+        if (mg) {
+            mg.applyHide(entry);
+            return;
+        }
+        // Fallback: locate historical containers by data attribute. We
+        // walk both user and agent containers since hide is per-side.
+        const key =
+            entry.requestId.requestId ||
+            (entry.requestId.clientRequestId as string | undefined);
+        if (!key) return;
+        const selectors: string[] = [];
+        if (entry.target === undefined || entry.target === "user") {
+            selectors.push(".chat-message-container-user");
+        }
+        if (entry.target === undefined || entry.target === "agent") {
+            selectors.push(".chat-message-container-agent");
+        }
+        const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+            selectors.join(", "),
+        );
+        containers.forEach((c) => {
+            if (
+                c.dataset.feedbackRequestId === key ||
+                c.dataset.feedbackClientRequestId === key
+            ) {
+                c.classList.toggle("chat-message-trashed", entry.hidden);
+            }
+        });
     }
 
     private getNotificationMessageGroupId(

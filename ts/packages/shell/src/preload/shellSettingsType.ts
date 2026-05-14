@@ -17,7 +17,6 @@ export type UISettings = {
     inlineCompletions: boolean;
     voiceMode: boolean;
     wakeWord: string;
-    feedbackUIVariant?: "footer-always" | "bubble-corner";
 };
 export type ShellUserSettings = {
     microphoneId: string | undefined;
@@ -61,7 +60,6 @@ export const defaultUserSettings: ShellUserSettings = {
         inlineCompletions: true,
         voiceMode: false,
         wakeWord: "type agent",
-        feedbackUIVariant: "footer-always",
     },
     partialCompletion: true,
     disallowedDisplayType: "",

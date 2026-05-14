@@ -15,19 +15,13 @@ import {
 } from "./icon";
 
 /**
- * Visual placement variants. The DOM, popover, and click handlers are
- * shared across variants — only DOM placement and CSS reveal differ.
- *
- *  - `footer-always` — icon row always visible below the message bubble.
- *  - `bubble-corner` — two outline thumbs anchored to the top-right inside
- *                     the bubble body itself.
+ * Visual placement of the feedback action row — currently a single
+ * variant: an icon row below the message bubble. (Kept as a union so a
+ * future placement option can be added without breaking the API.)
  */
-export type FeedbackUIVariant = "footer-always" | "bubble-corner";
+export type FeedbackUIVariant = "footer-always";
 
-export const FEEDBACK_VARIANTS: FeedbackUIVariant[] = [
-    "footer-always",
-    "bubble-corner",
-];
+export const FEEDBACK_VARIANTS: FeedbackUIVariant[] = ["footer-always"];
 
 export type FeedbackController = {
     getCurrentFeedback(): UserFeedbackEntry | null;
@@ -37,6 +31,14 @@ export type FeedbackController = {
         comment?: string,
         includeContext?: boolean,
     ): Promise<void>;
+    /**
+     * Move this bubble to the trash bin (or restore it). `target`
+     * selects which side of the request is affected — "user" hides
+     * just the user bubble, "agent" hides just the agent response(s),
+     * undefined hides both. Optional — hosts that don't expose a
+     * dispatcher may omit.
+     */
+    setHidden?(hidden: boolean, target?: "user" | "agent"): Promise<void>;
 };
 
 type FeedbackHost = {
@@ -63,7 +65,6 @@ export class FeedbackWidget {
     private controller: FeedbackController;
     private host: FeedbackHost;
     private actionRow?: ActionRow; // footer-always
-    private cornerRow?: ActionRow; // bubble-corner
     private flagMenu?: HTMLElement; // ⋯-dropdown
     private popover?: FeedbackPopover;
 
@@ -101,8 +102,6 @@ export class FeedbackWidget {
     private teardown() {
         this.actionRow?.root.remove();
         this.actionRow = undefined;
-        this.cornerRow?.root.remove();
-        this.cornerRow = undefined;
         this.flagMenu?.remove();
         this.flagMenu = undefined;
         this.popover?.dispose();
@@ -110,20 +109,8 @@ export class FeedbackWidget {
     }
 
     private build() {
-        switch (this.variant) {
-            case "footer-always":
-                this.actionRow = this.buildActionRow(true);
-                this.host.container.appendChild(this.actionRow.root);
-                break;
-            case "bubble-corner":
-                // Thumbs anchored top-right inside the message bubble body.
-                this.cornerRow = this.buildActionRow(false);
-                this.cornerRow.root.classList.add(
-                    "chat-message-actions-corner",
-                );
-                this.host.bodyDiv.appendChild(this.cornerRow.root);
-                break;
-        }
+        this.actionRow = this.buildActionRow(true);
+        this.host.container.appendChild(this.actionRow.root);
     }
 
     private buildActionRow(withExtras: boolean): ActionRow {
@@ -185,10 +172,7 @@ export class FeedbackWidget {
         }
         // thumbs-down
         const targetAnchor =
-            anchor ??
-            this.actionRow?.thumbsDown ??
-            this.cornerRow?.thumbsDown ??
-            this.host.container;
+            anchor ?? this.actionRow?.thumbsDown ?? this.host.container;
         this.openPopover(targetAnchor, current ?? undefined);
     }
 
@@ -330,7 +314,6 @@ export class FeedbackWidget {
             }
         };
         apply(this.actionRow);
-        apply(this.cornerRow);
     }
 }
 

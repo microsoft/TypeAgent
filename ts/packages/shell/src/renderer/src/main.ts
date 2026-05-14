@@ -501,6 +501,22 @@ function registerClient(
                         cameraView.show();
                         break;
                     }
+                    case "trash-restore": {
+                        chatView.dispatcher
+                            ?.restoreAllHidden()
+                            .catch((e: any) =>
+                                console.error("restoreAllHidden failed", e),
+                            );
+                        break;
+                    }
+                    case "trash-flush": {
+                        chatView.dispatcher
+                            ?.flushHidden()
+                            .catch((e: any) =>
+                                console.error("flushHidden failed", e),
+                            );
+                        break;
+                    }
                     case "set-alarm": {
                         getAndroidAPI()?.setAlarm(d.time);
                         break;
@@ -928,6 +944,9 @@ function registerClient(
         },
         onUserFeedback: (entry) => {
             chatView.applyFeedback(entry);
+        },
+        onUserHide: (entry) => {
+            chatView.applyHide(entry);
         },
     };
 

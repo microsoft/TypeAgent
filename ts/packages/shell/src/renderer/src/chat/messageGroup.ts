@@ -8,6 +8,7 @@ import {
     NotifyExplainedData,
     RequestId,
     UserFeedbackEntry,
+    UserMessageHiddenEntry,
 } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
@@ -77,6 +78,11 @@ export class MessageGroup {
                 agentMessage?.attachFeedbackController(controller);
                 agentMessage && stampRequestIdOn(agentMessage.div, requestId);
             }
+            // User-message bubble gets a trash button only (no feedback
+            // row) so the user can soft-delete their request alongside
+            // its agent responses.
+            this.userMessage.attachTrashButton(controller);
+            stampRequestIdOn(this.userMessage.div, requestId);
         }
         if (this._currentFeedback !== null) {
             this.applyFeedback(this._currentFeedback);
@@ -106,6 +112,18 @@ export class MessageGroup {
                     );
                 } catch (e) {
                     console.error("recordUserFeedback failed", e);
+                }
+            },
+            setHidden: async (
+                hidden: boolean,
+                target?: "user" | "agent",
+            ) => {
+                const dispatcher = this.chatView.dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserHide(reqId, hidden, target);
+                } catch (e) {
+                    console.error("recordUserHide failed", e);
                 }
             },
         };
@@ -373,13 +391,27 @@ export class MessageGroup {
         return this.agentMessages[index];
     }
 
-    /** Switch the feedback widget variant on every bubble in the group. */
-    public setFeedbackVariant(
-        variant: import("../feedbackWidget").FeedbackUIVariant,
-    ) {
-        this.statusMessage?.setFeedbackVariant(variant);
-        for (const agentMessage of this.agentMessages) {
-            agentMessage?.setFeedbackVariant(variant);
+    /**
+     * Hide (or restore) the side of this group identified by
+     * `entry.target` — "user" affects only the user bubble, "agent"
+     * affects the status + every agent response, undefined (legacy
+     * entries) affects everything. The bubbles stay in DOM so
+     * `@shell trash restore` brings them back in place.
+     */
+    public applyHide(entry: UserMessageHiddenEntry) {
+        const hide = entry.hidden;
+        const apply = (mc: MessageContainer | undefined) => {
+            if (!mc) return;
+            mc.div.classList.toggle("chat-message-trashed", hide);
+        };
+        if (entry.target === undefined || entry.target === "user") {
+            apply(this.userMessage);
+        }
+        if (entry.target === undefined || entry.target === "agent") {
+            apply(this.statusMessage);
+            for (const agentMessage of this.agentMessages) {
+                apply(agentMessage);
+            }
         }
     }
 

@@ -21,12 +21,9 @@ import {
     iconThumbsUp,
 } from "./icons.js";
 
-export type FeedbackUIVariant = "footer-always" | "bubble-corner";
+export type FeedbackUIVariant = "footer-always";
 
-export const FEEDBACK_VARIANTS: FeedbackUIVariant[] = [
-    "footer-always",
-    "bubble-corner",
-];
+export const FEEDBACK_VARIANTS: FeedbackUIVariant[] = ["footer-always"];
 
 export type FeedbackController = {
     getCurrentFeedback(): UserFeedbackEntry | null;
@@ -36,6 +33,7 @@ export type FeedbackController = {
         comment?: string,
         includeContext?: boolean,
     ): Promise<void>;
+    setHidden?(hidden: boolean, target?: "user" | "agent"): Promise<void>;
 };
 
 type FeedbackHost = {
@@ -56,7 +54,6 @@ export class FeedbackWidget {
     private controller: FeedbackController;
     private host: FeedbackHost;
     private actionRow?: ActionRow;
-    private cornerRow?: ActionRow;
     private flagMenu?: HTMLElement;
     private popover?: FeedbackPopover;
 
@@ -92,8 +89,6 @@ export class FeedbackWidget {
     private teardown() {
         this.actionRow?.root.remove();
         this.actionRow = undefined;
-        this.cornerRow?.root.remove();
-        this.cornerRow = undefined;
         this.flagMenu?.remove();
         this.flagMenu = undefined;
         this.popover?.dispose();
@@ -101,19 +96,8 @@ export class FeedbackWidget {
     }
 
     private build() {
-        switch (this.variant) {
-            case "footer-always":
-                this.actionRow = this.buildActionRow(true);
-                this.host.container.appendChild(this.actionRow.root);
-                break;
-            case "bubble-corner":
-                this.cornerRow = this.buildActionRow(false);
-                this.cornerRow.root.classList.add(
-                    "chat-message-actions-corner",
-                );
-                this.host.bodyDiv.appendChild(this.cornerRow.root);
-                break;
-        }
+        this.actionRow = this.buildActionRow(true);
+        this.host.container.appendChild(this.actionRow.root);
     }
 
     private buildActionRow(withExtras: boolean): ActionRow {
@@ -172,10 +156,7 @@ export class FeedbackWidget {
             return;
         }
         const targetAnchor =
-            anchor ??
-            this.actionRow?.thumbsDown ??
-            this.cornerRow?.thumbsDown ??
-            this.host.container;
+            anchor ?? this.actionRow?.thumbsDown ?? this.host.container;
         this.openPopover(targetAnchor, current ?? undefined);
     }
 
@@ -311,7 +292,6 @@ export class FeedbackWidget {
             }
         };
         apply(this.actionRow);
-        apply(this.cornerRow);
     }
 }
 
