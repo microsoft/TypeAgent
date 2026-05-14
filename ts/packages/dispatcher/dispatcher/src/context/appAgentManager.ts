@@ -220,6 +220,15 @@ export class AppAgentManager implements ActionConfigProvider {
         return this.readiness.get(appAgentName) ?? { state: "ready" };
     }
 
+    // True iff we have an actual cached readiness report for this agent.
+    // Distinguishes "agent reports ready" from "we never probed it"
+    // (disabled agent, agent that doesn't implement checkReadiness, or
+    // session context not yet initialized). UI surfaces use this to show
+    // an "unknown" indicator instead of conflating with `ready`.
+    public hasReadinessEntry(appAgentName: string): boolean {
+        return this.readiness.has(appAgentName);
+    }
+
     // Returns the most recent load failure for this agent, or undefined if
     // it loaded cleanly. See `loadErrors` field comment for lifecycle.
     public getLoadError(appAgentName: string): Error | undefined {
