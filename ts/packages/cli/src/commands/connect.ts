@@ -20,6 +20,7 @@ import {
     connectAgentServer,
     ensureAgentServer,
     AgentServerConnection,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
 import * as crypto from "crypto";
@@ -95,7 +96,7 @@ export default class Connect extends Command {
         port: Flags.integer({
             char: "p",
             description: "Port for type agent server",
-            default: 8999,
+            default: AGENT_SERVER_DEFAULT_PORT,
         }),
         resume: Flags.boolean({
             char: "r",

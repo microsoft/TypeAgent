@@ -5,6 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import {
     connectAgentServer,
     ensureAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import {
     ChatHistoryInput,
@@ -57,7 +58,7 @@ export default class ReplayCommand extends Command {
         port: Flags.integer({
             char: "p",
             description: "Port for type agent server",
-            default: 8999,
+            default: AGENT_SERVER_DEFAULT_PORT,
         }),
         show: Flags.boolean({
             description:

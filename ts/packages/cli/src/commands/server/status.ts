@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { Command, Flags } from "@oclif/core";
-import { isServerRunning } from "@typeagent/agent-server-client";
+import {
+    isServerRunning,
+    AGENT_SERVER_DEFAULT_PORT,
+} from "@typeagent/agent-server-client";
 
 export default class ServerStatus extends Command {
     static description = "Show whether the TypeAgent server is running";
@@ -10,7 +13,7 @@ export default class ServerStatus extends Command {
         port: Flags.integer({
             char: "p",
             description: "Port to check",
-            default: 8999,
+            default: AGENT_SERVER_DEFAULT_PORT,
         }),
     };
     async run(): Promise<void> {
