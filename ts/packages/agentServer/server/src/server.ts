@@ -34,7 +34,7 @@ import {
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
 import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
-import dotenv from "dotenv";
+import { loadConfig } from "@typeagent/config";
 import {
     writeServerPid,
     removeServerPid,
@@ -43,8 +43,9 @@ import registerDebug from "debug";
 import os from "node:os";
 import { DefaultAzureCredential } from "@azure/identity";
 
-const envPath = new URL("../../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+// Load config from YAML layers + Key Vault (replacing legacy dotenv).
+// vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
+await loadConfig({ keyVault: {}, strict: false });
 
 const debugStartup = registerDebug("agent-server:startup");
 

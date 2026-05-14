@@ -4,34 +4,24 @@
 /**
  * Service Keys Verification Tool for TypeAgent
  *
- * This script tests the service keys configured in the .env file.
- * It validates each service separately and provides helpful error messages
- * with expected formats for missing or invalid keys.
+ * This script tests the service keys configured in config.local.yaml (or legacy .env).
+ * It discovers all Azure OpenAI deployments and endpoints dynamically from the
+ * structured config, then validates each service with a live connectivity test.
  *
  * Usage:
- *   npx ts-node tools/scripts/testServiceKeys.ts
+ *   npx tsx tools/scripts/testServiceKeys.ts
  *   OR
  *   npm run test:keys
  */
 
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import dotenv from "dotenv";
+import { loadConfigSync, buildConfig } from "@typeagent/config";
 import { DefaultAzureCredential } from "@azure/identity";
 
-// Load .env file from the ts directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const envPath = path.resolve(__dirname, "../../.env");
+loadConfigSync();
 
-if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
-    console.log(`✓ Loaded .env file from: ${envPath}\n`);
-} else {
-    console.log(`⚠ No .env file found at: ${envPath}`);
-    console.log("  Create a .env file with your service keys.\n");
-}
+// Build the typed config to discover all deployments/endpoints dynamically
+const typedConfig = buildConfig(process.env as Record<string, string>);
 
 // ============================================================================
 // Service Key Definitions
@@ -87,45 +77,178 @@ function printHeader(msg: string) {
 }
 
 // ============================================================================
-// Service Configurations
+// Dynamic Azure OpenAI discovery from typed config
 // ============================================================================
 
-const serviceConfigs: ServiceKeyConfig[] = [
-    // Azure OpenAI - Chat Model
-    {
-        name: "Azure OpenAI (Chat)",
-        description: "LLM for request translation (GPT-4 or equivalent)",
-        requiredKeys: ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"],
-        optionalKeys: ["AZURE_OPENAI_RESPONSE_FORMAT"],
-        expectedFormats: {
-            AZURE_OPENAI_API_KEY:
-                "<32-character hex string> or 'identity' for keyless access",
-            AZURE_OPENAI_ENDPOINT:
-                "https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>/chat/completions?api-version=2024-02-01",
-            AZURE_OPENAI_RESPONSE_FORMAT: "1 (to enable JSON response format)",
-        },
-        testFunction: testAzureOpenAIChat,
-    },
+function discoverAzureOpenAIConfigs(): ServiceKeyConfig[] {
+    const configs: ServiceKeyConfig[] = [];
+    const ao = typedConfig.azureOpenAI;
 
-    // Azure OpenAI - Embeddings
-    {
-        name: "Azure OpenAI (Embeddings)",
-        description:
-            "Text embeddings for conversation memory and fuzzy matching",
-        requiredKeys: [
-            "AZURE_OPENAI_API_KEY_EMBEDDING",
-            "AZURE_OPENAI_ENDPOINT_EMBEDDING",
-        ],
-        expectedFormats: {
-            AZURE_OPENAI_API_KEY_EMBEDDING:
-                "<32-character hex string> or 'identity' for keyless access",
-            AZURE_OPENAI_ENDPOINT_EMBEDDING:
-                "https://<resource-name>.openai.azure.com/openai/deployments/<embedding-deployment>/embeddings?api-version=2024-02-01",
-        },
-        testFunction: testAzureOpenAIEmbeddings,
-    },
+    // Test each deployment (chat models) — deployments is a Map
+    for (const [name, dep] of ao.deployments) {
+        for (const ep of dep.endpoints) {
+            if (!ep.endpoint) continue;
+            const suffix = name === "default" ? "" : `_${name.toUpperCase()}`;
+            // Add region suffix if the deployment has multiple endpoints
+            const regionSuffix =
+                dep.endpoints.length > 1 && ep.region
+                    ? `_${ep.region.toUpperCase()}`
+                    : "";
+            const keyVar = `AZURE_OPENAI_API_KEY${suffix}${regionSuffix}`;
+            const endVar = `AZURE_OPENAI_ENDPOINT${suffix}${regionSuffix}`;
+            const label = regionSuffix ? `${name} (${ep.region})` : name;
+            const isEmbedding = name.toLowerCase().includes("embedding");
+            configs.push({
+                name: `Azure OpenAI — ${label}`,
+                description: `${dep.model ?? name} (${ep.endpoint.split(".")[0].replace("https://", "")})`,
+                requiredKeys: [endVar],
+                optionalKeys: [keyVar],
+                expectedFormats: {
+                    [endVar]: "https://<resource>.openai.azure.com/...",
+                    [keyVar]: "<key> or 'identity'",
+                },
+                testFunction: isEmbedding
+                    ? () =>
+                          testEmbeddingEndpointDynamic(
+                              ep.endpoint,
+                              process.env[keyVar],
+                          )
+                    : () =>
+                          testAzureOpenAIEndpointDynamic(
+                              ep.endpoint,
+                              process.env[keyVar],
+                          ),
+            });
+        }
+    }
 
-    // OpenAI - Chat Model
+    return configs;
+}
+
+/** Test a chat deployment/endpoint with a minimal request */
+async function testAzureOpenAIEndpointDynamic(
+    endpoint: string,
+    apiKey: string | undefined,
+): Promise<TestResult> {
+    try {
+        const headers = await getAuthHeaders(apiKey);
+        const commonHeaders = {
+            ...headers,
+            "Content-Type": "application/json",
+        };
+        const messages = [{ role: "user", content: "Say 'test'" }];
+
+        // Try max_completion_tokens first (newer models), fall back to max_tokens
+        let response = await fetch(endpoint, {
+            method: "POST",
+            headers: commonHeaders,
+            body: JSON.stringify({ messages, max_completion_tokens: 5 }),
+        });
+
+        if (response.status === 400) {
+            const body = await response.text();
+            if (body.includes("max_completion_tokens")) {
+                // Model doesn't support max_completion_tokens, retry with max_tokens
+                response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: commonHeaders,
+                    body: JSON.stringify({ messages, max_tokens: 5 }),
+                });
+            } else {
+                return {
+                    success: false,
+                    message: `HTTP 400`,
+                    details: body.substring(0, 200),
+                };
+            }
+        }
+
+        if (response.ok) {
+            const data = await response.json();
+            const auth =
+                apiKey?.toLowerCase() === "identity" ? " (keyless)" : "";
+            return {
+                success: true,
+                message: `Connected${auth}`,
+                details: `Tokens: ${data.usage?.total_tokens ?? "?"}`,
+            };
+        }
+        const errorText = await response.text();
+        return {
+            success: false,
+            message: `HTTP ${response.status}`,
+            details: errorText.substring(0, 200),
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            message: "Connection failed",
+            details: error.message,
+        };
+    }
+}
+
+/** Test an embedding endpoint with a minimal request */
+async function testEmbeddingEndpointDynamic(
+    endpoint: string,
+    apiKey: string | undefined,
+): Promise<TestResult> {
+    try {
+        const headers = await getAuthHeaders(apiKey);
+
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ input: "test" }),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const dim = data.data?.[0]?.embedding?.length;
+            const auth =
+                apiKey?.toLowerCase() === "identity" ? " (keyless)" : "";
+            return {
+                success: true,
+                message: `Connected${auth}`,
+                details: dim ? `Dimensions: ${dim}` : undefined,
+            };
+        }
+        const errorText = await response.text();
+        return {
+            success: false,
+            message: `HTTP ${response.status}`,
+            details: errorText.substring(0, 200),
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            message: "Connection failed",
+            details: error.message,
+        };
+    }
+}
+
+/** Build auth headers — identity-based or API key */
+async function getAuthHeaders(
+    apiKey: string | undefined,
+): Promise<Record<string, string>> {
+    if (!apiKey || apiKey.toLowerCase() === "identity") {
+        const token = await getAzureAccessToken();
+        if (!token)
+            throw new Error(
+                "Failed to get Azure access token. Run 'az login'.",
+            );
+        return { Authorization: `Bearer ${token}` };
+    }
+    return { "api-key": apiKey };
+}
+
+// ============================================================================
+// Static service configs (non-Azure-OpenAI)
+// ============================================================================
+
+const staticServiceConfigs: ServiceKeyConfig[] = [
+    // OpenAI (non-Azure)
     {
         name: "OpenAI (Chat)",
         description: "Alternative to Azure OpenAI for request translation",
@@ -138,14 +261,9 @@ const serviceConfigs: ServiceKeyConfig[] = [
         expectedFormats: {
             OPENAI_API_KEY: "sk-<alphanumeric string>",
             OPENAI_ENDPOINT: "https://api.openai.com/v1/chat/completions",
-            OPENAI_ORGANIZATION: "org-<alphanumeric string>",
-            OPENAI_MODEL: "gpt-4o, gpt-4-turbo, gpt-3.5-turbo, etc.",
-            OPENAI_RESPONSE_FORMAT: "1 (to enable JSON response format)",
         },
         testFunction: testOpenAIChat,
     },
-
-    // OpenAI - Embeddings
     {
         name: "OpenAI (Embeddings)",
         description: "Alternative to Azure OpenAI for text embeddings",
@@ -155,47 +273,9 @@ const serviceConfigs: ServiceKeyConfig[] = [
             OPENAI_ENDPOINT_EMBEDDING: "https://api.openai.com/v1/embeddings",
             OPENAI_MODEL_EMBEDDING:
                 "text-embedding-ada-002, text-embedding-3-small, etc.",
-            OPENAI_API_KEY_EMBEDDING:
-                "sk-<alphanumeric string> (optional if OPENAI_API_KEY is set)",
         },
         testFunction: testOpenAIEmbeddings,
     },
-
-    // Azure OpenAI - GPT-3.5 Turbo
-    {
-        name: "Azure OpenAI (GPT-3.5 Turbo)",
-        description: "Fast chat response and email content generation",
-        requiredKeys: [
-            "AZURE_OPENAI_API_KEY_GPT_35_TURBO",
-            "AZURE_OPENAI_ENDPOINT_GPT_35_TURBO",
-        ],
-        expectedFormats: {
-            AZURE_OPENAI_API_KEY_GPT_35_TURBO:
-                "<32-character hex string> or 'identity' for keyless access",
-            AZURE_OPENAI_ENDPOINT_GPT_35_TURBO:
-                "https://<resource-name>.openai.azure.com/openai/deployments/<gpt-35-turbo-deployment>/chat/completions?api-version=2024-02-01",
-        },
-        testFunction: () => testAzureOpenAIEndpoint("GPT_35_TURBO"),
-    },
-
-    // Azure OpenAI - GPT-4o
-    {
-        name: "Azure OpenAI (GPT-4o)",
-        description: "Browser - Crossword Page functionality",
-        requiredKeys: [
-            "AZURE_OPENAI_API_KEY_GPT_4_O",
-            "AZURE_OPENAI_ENDPOINT_GPT_4_O",
-        ],
-        expectedFormats: {
-            AZURE_OPENAI_API_KEY_GPT_4_O:
-                "<32-character hex string> or 'identity' for keyless access",
-            AZURE_OPENAI_ENDPOINT_GPT_4_O:
-                "https://<resource-name>.openai.azure.com/openai/deployments/<gpt-4o-deployment>/chat/completions?api-version=2024-02-01",
-        },
-        testFunction: () => testAzureOpenAIEndpoint("GPT_4_O"),
-    },
-
-    // Speech SDK
     {
         name: "Azure Speech SDK",
         description: "Voice input for TypeAgent Shell",
@@ -312,6 +392,12 @@ const serviceConfigs: ServiceKeyConfig[] = [
     },
 ];
 
+// Combine dynamic Azure OpenAI + static services
+const serviceConfigs: ServiceKeyConfig[] = [
+    ...discoverAzureOpenAIConfigs(),
+    ...staticServiceConfigs,
+];
+
 // ============================================================================
 // Test Functions
 // ============================================================================
@@ -326,147 +412,6 @@ async function getAzureAccessToken(): Promise<string | null> {
         return tokenResponse?.token || null;
     } catch (error: any) {
         return null;
-    }
-}
-
-async function testAzureOpenAIChat(): Promise<TestResult> {
-    const apiKey = process.env.AZURE_OPENAI_API_KEY;
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-
-    if (!apiKey || !endpoint) {
-        return { success: false, message: "Missing required keys" };
-    }
-
-    // Validate endpoint format
-    if (
-        !endpoint.includes("openai.azure.com") &&
-        apiKey.toLowerCase() !== "identity"
-    ) {
-        return {
-            success: false,
-            message: "Invalid endpoint format",
-            details:
-                "Endpoint should contain 'openai.azure.com' for Azure OpenAI service",
-        };
-    }
-
-    try {
-        let headers: Record<string, string>;
-
-        if (apiKey.toLowerCase() === "identity") {
-            const token = await getAzureAccessToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message:
-                        "Failed to get Azure access token for keyless access",
-                    details:
-                        "Make sure you are logged in with 'az login' and have access to the resource",
-                };
-            }
-            headers = { Authorization: `Bearer ${token}` };
-        } else {
-            headers = { "api-key": apiKey };
-        }
-
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-                ...headers,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                messages: [{ role: "user", content: "Say 'test'" }],
-                max_tokens: 5,
-            }),
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            return {
-                success: true,
-                message:
-                    "Successfully connected to Azure OpenAI Chat" +
-                    (apiKey.toLowerCase() === "identity" ? " (keyless)" : ""),
-                details: `Response received with ${data.usage?.total_tokens || "unknown"} tokens`,
-            };
-        } else {
-            const errorText = await response.text();
-            return {
-                success: false,
-                message: `API returned status ${response.status}`,
-                details: errorText.substring(0, 200),
-            };
-        }
-    } catch (error: any) {
-        return {
-            success: false,
-            message: "Connection failed",
-            details: error.message,
-        };
-    }
-}
-
-async function testAzureOpenAIEmbeddings(): Promise<TestResult> {
-    const apiKey = process.env.AZURE_OPENAI_API_KEY_EMBEDDING;
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING;
-
-    if (!apiKey || !endpoint) {
-        return { success: false, message: "Missing required keys" };
-    }
-
-    try {
-        let headers: Record<string, string>;
-
-        if (apiKey.toLowerCase() === "identity") {
-            const token = await getAzureAccessToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message:
-                        "Failed to get Azure access token for keyless access",
-                    details:
-                        "Make sure you are logged in with 'az login' and have access to the resource",
-                };
-            }
-            headers = { Authorization: `Bearer ${token}` };
-        } else {
-            headers = { "api-key": apiKey };
-        }
-
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-                ...headers,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                input: "test embedding",
-            }),
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const embedding = data.data?.[0]?.embedding;
-            return {
-                success: true,
-                message: "Successfully generated embeddings",
-                details: `Embedding dimension: ${embedding?.length || "unknown"}`,
-            };
-        } else {
-            const errorText = await response.text();
-            return {
-                success: false,
-                message: `API returned status ${response.status}`,
-                details: errorText.substring(0, 200),
-            };
-        }
-    } catch (error: any) {
-        return {
-            success: false,
-            message: "Connection failed",
-            details: error.message,
-        };
     }
 }
 
@@ -572,73 +517,6 @@ async function testOpenAIEmbeddings(): Promise<TestResult> {
     }
 }
 
-async function testAzureOpenAIEndpoint(
-    endpointSuffix: string,
-): Promise<TestResult> {
-    const apiKey = process.env[`AZURE_OPENAI_API_KEY_${endpointSuffix}`];
-    const endpoint = process.env[`AZURE_OPENAI_ENDPOINT_${endpointSuffix}`];
-
-    if (!apiKey || !endpoint) {
-        return { success: false, message: "Missing required keys" };
-    }
-
-    try {
-        let headers: Record<string, string>;
-
-        if (apiKey.toLowerCase() === "identity") {
-            const token = await getAzureAccessToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message:
-                        "Failed to get Azure access token for keyless access",
-                    details:
-                        "Make sure you are logged in with 'az login' and have access to the resource",
-                };
-            }
-            headers = { Authorization: `Bearer ${token}` };
-        } else {
-            headers = { "api-key": apiKey };
-        }
-
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-                ...headers,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                messages: [{ role: "user", content: "Say 'test'" }],
-                max_tokens: 5,
-            }),
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            return {
-                success: true,
-                message:
-                    `Successfully connected to Azure OpenAI (${endpointSuffix})` +
-                    (apiKey.toLowerCase() === "identity" ? " (keyless)" : ""),
-                details: `Tokens used: ${data.usage?.total_tokens || "unknown"}`,
-            };
-        } else {
-            const errorText = await response.text();
-            return {
-                success: false,
-                message: `API returned status ${response.status}`,
-                details: errorText.substring(0, 200),
-            };
-        }
-    } catch (error: any) {
-        return {
-            success: false,
-            message: "Connection failed",
-            details: error.message,
-        };
-    }
-}
-
 async function testSpeechSDK(): Promise<TestResult> {
     const key = process.env.SPEECH_SDK_KEY;
     const endpoint = process.env.SPEECH_SDK_ENDPOINT;
@@ -670,23 +548,41 @@ async function testSpeechSDK(): Promise<TestResult> {
     }
 
     try {
-        // Test token endpoint
-        const tokenEndpoint =
-            endpoint ||
-            `https://${region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
+        const isIdentity = key === "identity";
+
+        // Build the token issuing URL
+        const baseUrl =
+            endpoint || `https://${region}.api.cognitive.microsoft.com`;
+        const tokenEndpoint = baseUrl.endsWith("/")
+            ? `${baseUrl}sts/v1.0/issuetoken`
+            : `${baseUrl}/sts/v1.0/issuetoken`;
+
+        const headers: Record<string, string> = {
+            "Content-Type": "application/x-www-form-urlencoded",
+        };
+
+        if (isIdentity) {
+            // Use Azure Identity (DefaultAzureCredential via az CLI)
+            const { execSync } = await import("child_process");
+            const token = execSync(
+                'az account get-access-token --resource "https://cognitiveservices.azure.com/" --query accessToken -o tsv',
+                { encoding: "utf-8" },
+            ).trim();
+            headers["Authorization"] = `Bearer ${token}`;
+        } else {
+            headers["Ocp-Apim-Subscription-Key"] = key;
+        }
+
         const response = await fetch(tokenEndpoint, {
             method: "POST",
-            headers: {
-                "Ocp-Apim-Subscription-Key": key,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
+            headers,
         });
 
         if (response.ok) {
             return {
                 success: true,
                 message: "Successfully authenticated with Speech SDK",
-                details: `Region: ${region}`,
+                details: `Region: ${region}, Auth: ${isIdentity ? "identity" : "key"}`,
             };
         } else {
             return {
@@ -930,7 +826,9 @@ async function runTests() {
             printWarning(
                 `Skipped - Missing required keys: ${missingKeys.join(", ")}`,
             );
-            console.log("\n  Add the following to your .env file:");
+            console.log(
+                "\n  Add the following to your config.local.yaml (see config.sample.yaml):",
+            );
             for (const key of missingKeys) {
                 printKeyExample(key, config.expectedFormats[key] || "<value>");
             }
@@ -1012,7 +910,7 @@ async function runTests() {
         process.exit(1);
     } else if (passedCount === 0) {
         console.log(
-            `\n${colors.yellow}No services were tested. Add keys to your .env file.${colors.reset}`,
+            `\n${colors.yellow}No services were tested. Add keys to your config.local.yaml (see config.sample.yaml).${colors.reset}`,
         );
     } else {
         console.log(

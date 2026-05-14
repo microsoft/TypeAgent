@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // System imports
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,9 +16,7 @@ import { ChunkyIndex } from "./pdfChunkyIndex.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load env vars (including secrets) from .env
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 // Files will be loaded from the data folder with `-` argument
 const dataFolder = path.join(__dirname, "data");

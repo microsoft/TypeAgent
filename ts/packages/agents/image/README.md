@@ -5,12 +5,12 @@ Image dispatcher agent. This **sample agent** shows how to make calls to varying
 &lt;Deprecated&gt;
 [Bing [Image] Search is being Deprecated August 2025](https://learn.microsoft.com/en-us/microsoftsearch/retirement-microsoft-search-bing).
 
-To experiment with lookups, please add your Bing API key to the root **.env** file with the following key:  
+To experiment with lookups, please add your Bing API key to the root **config.local.yaml** file (under `bing.apiKey`) or the legacy **.env** file with the following key:  
 **BING_API_KEY**
 
 &lt;/Deprecated&gt;
 
-To experiment with image generation models, please add your API key or configure your gpt-image-1 endpoint in the root **.env** file with the following variable names: AZURE_OPENAI_API_KEY_IMAGE, AZURE_OPENAI_ENDPOINT_IMAGE. For identity based authentication to your endpoint specify the key as identity.
+To experiment with image generation models, please add your API key or configure your gpt-image-1 endpoint in the root **config.local.yaml** (under `azureOpenAI.deployments` / `azureOpenAI.endpoints`) or the legacy **.env** file with the following variable names: AZURE_OPENAI_API_KEY_IMAGE, AZURE_OPENAI_ENDPOINT_IMAGE. For identity based authentication to your endpoint specify the key as identity.
 
 ## Trademarks
 

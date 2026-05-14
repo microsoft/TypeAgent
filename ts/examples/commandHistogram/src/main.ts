@@ -1,12 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { MongoClient } from "mongodb";
 
-// Load environment variables from .env file
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 // Run database query to get all issued commands
 const query = {

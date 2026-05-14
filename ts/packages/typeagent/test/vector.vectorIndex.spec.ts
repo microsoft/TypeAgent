@@ -1,11 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 
-dotenv.config({
-    path: new URL("../../../../.env", import.meta.url),
-});
+loadConfigSync();
 
 import { openai, TextEmbeddingModel } from "aiclient";
 import {
