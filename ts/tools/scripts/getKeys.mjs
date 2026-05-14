@@ -722,6 +722,18 @@ async function pullYamlConfig(overallStart) {
     console.log(
         `\nWritten ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.`,
     );
+
+    // If a legacy .env file exists alongside the new YAML config, warn the
+    // user so the two formats don't drift out of sync.
+    if (fs.existsSync(dotenvPath)) {
+        console.warn(
+            chalk.yellowBright(
+                `\nWARNING: Legacy ${chalk.cyanBright(dotenvPath)} still exists.\n` +
+                    `  Only ${chalk.cyanBright(yamlPath)} is used going forward. ` +
+                    `Consider deleting the .env file to avoid confusion.`,
+            ),
+        );
+    }
 }
 
 /**
