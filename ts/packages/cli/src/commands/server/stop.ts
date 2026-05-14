@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { Command, Flags } from "@oclif/core";
-import { stopAgentServer } from "@typeagent/agent-server-client";
+import {
+    stopAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
+} from "@typeagent/agent-server-client";
 
 export default class ServerStop extends Command {
     static description = "Stop the running TypeAgent server";
@@ -10,7 +13,7 @@ export default class ServerStop extends Command {
         port: Flags.integer({
             char: "p",
             description: "Port the agent server is listening on",
-            default: 8999,
+            default: AGENT_SERVER_DEFAULT_PORT,
         }),
         force: Flags.boolean({
             char: "f",

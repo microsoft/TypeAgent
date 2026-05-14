@@ -1,10 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { isServerRunning } from "@typeagent/agent-server-client";
+import {
+    isServerRunning,
+    AGENT_SERVER_DEFAULT_PORT,
+} from "@typeagent/agent-server-client";
 
 const portIdx = process.argv.indexOf("--port");
-const port = portIdx !== -1 ? parseInt(process.argv[portIdx + 1]) : 8999;
+const port =
+    portIdx !== -1
+        ? parseInt(process.argv[portIdx + 1])
+        : AGENT_SERVER_DEFAULT_PORT;
 
 const running = await isServerRunning(`ws://localhost:${port}`);
 if (running) {

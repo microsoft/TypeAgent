@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { connectAgentServer } from "@typeagent/agent-server-client";
+import {
+    connectAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
+} from "@typeagent/agent-server-client";
 import { createInterface } from "readline/promises";
 
 export default class ConversationsDelete extends Command {
@@ -11,7 +14,7 @@ export default class ConversationsDelete extends Command {
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",
-            default: 8999,
+            default: AGENT_SERVER_DEFAULT_PORT,
         }),
         yes: Flags.boolean({
             char: "y",

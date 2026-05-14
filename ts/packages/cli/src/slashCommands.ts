@@ -3,7 +3,10 @@
 
 import registerDebug from "debug";
 import chalk from "chalk";
-import { stopAgentServer } from "@typeagent/agent-server-client";
+import {
+    stopAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
+} from "@typeagent/agent-server-client";
 import type { ConversationCommandContext } from "./conversationCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 
@@ -184,7 +187,7 @@ const slashCommands: SlashCommand[] = [
         name: "shutdown",
         description: "Shut down the agent server",
         handler: async () => {
-            const port = serverPort ?? 8999;
+            const port = serverPort ?? AGENT_SERVER_DEFAULT_PORT;
             console.log(
                 chalk.dim(
                     `Sending shutdown request to server on port ${port}...`,

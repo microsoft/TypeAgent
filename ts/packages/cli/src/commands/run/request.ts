@@ -6,6 +6,7 @@ import {
     connectAgentServer,
     ensureAgentServer,
     AgentServerConnection,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { readFileSync, existsSync } from "fs";
@@ -29,7 +30,7 @@ export default class RequestCommand extends Command {
         port: Flags.integer({
             char: "p",
             description: "Port for type agent server",
-            default: 8999,
+            default: AGENT_SERVER_DEFAULT_PORT,
         }),
         show: Flags.boolean({
             description:

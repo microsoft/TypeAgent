@@ -119,7 +119,7 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
 
 ### Environment
 
-- Requires **Node ≥20**, **pnpm ≥10**
+- Requires **Node ≥22**, **pnpm ≥10**
 - API keys go in `ts/.env` (Azure OpenAI or OpenAI endpoints)
 - User data stored in `~/.typeagent/`
 - Tracing via the `debug` package — enable with `DEBUG=typeagent:*` env var

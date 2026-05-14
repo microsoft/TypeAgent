@@ -4,6 +4,7 @@
 import * as vscode from "vscode";
 import * as os from "os";
 import { connectAgentServer } from "@typeagent/agent-server-client";
+import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 
 import {
@@ -277,7 +278,7 @@ export class AgentServerBridge {
         const config = vscode.workspace.getConfiguration("typeagent");
         const serverUrl = config.get<string>(
             "serverUrl",
-            "ws://localhost:8999",
+            AGENT_SERVER_DEFAULT_URL,
         );
 
         try {
