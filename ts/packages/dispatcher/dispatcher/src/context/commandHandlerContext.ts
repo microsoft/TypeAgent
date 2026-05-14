@@ -790,9 +790,8 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     await grammarStore.setAutoSave(config.cache.autoSave);
 
     // Import getPackageFilePath for resolving schema paths
-    const { getPackageFilePath } = await import(
-        "../utils/getPackageFilePath.js"
-    );
+    const { getPackageFilePath } =
+        await import("../utils/getPackageFilePath.js");
 
     // Configure agent cache with grammar generation support
     context.agentCache.configureGrammarGeneration(

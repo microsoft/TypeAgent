@@ -39,8 +39,7 @@ function reduceToLatest(entries: UserFeedbackEntry[]): UserFeedbackEntry[] {
     const latest = new Map<string, UserFeedbackEntry>();
     for (const e of entries) {
         const key =
-            e.requestId.requestId ||
-            String(e.requestId.clientRequestId ?? "");
+            e.requestId.requestId || String(e.requestId.clientRequestId ?? "");
         if (!key) continue;
         latest.set(key, e);
     }
@@ -166,7 +165,9 @@ class FeedbackTopCommandHandler implements CommandHandler {
             `  cleared:    ${cleared}`,
             "",
             `Top thumbs-down categories (top ${categories.length}):`,
-            ...categories.map(([cat, n]) => `  ${n.toString().padStart(4)}  ${cat}`),
+            ...categories.map(
+                ([cat, n]) => `  ${n.toString().padStart(4)}  ${cat}`,
+            ),
         ];
         displayResult(lines, context);
     }
@@ -198,11 +199,13 @@ class FeedbackFilterCommandHandler implements CommandHandler {
                 type: "string",
             },
             since: {
-                description: "ISO date (YYYY-MM-DD) — entries on/after this date",
+                description:
+                    "ISO date (YYYY-MM-DD) — entries on/after this date",
                 type: "string",
             },
             until: {
-                description: "ISO date (YYYY-MM-DD) — entries on/before this date",
+                description:
+                    "ISO date (YYYY-MM-DD) — entries on/before this date",
                 type: "string",
             },
             limit: {
@@ -228,7 +231,9 @@ class FeedbackFilterCommandHandler implements CommandHandler {
 
         const rating = param.flags.rating?.toLowerCase();
         if (rating !== undefined) {
-            if (!ratingValues.includes(rating as (typeof ratingValues)[number])) {
+            if (
+                !ratingValues.includes(rating as (typeof ratingValues)[number])
+            ) {
                 throw new Error(
                     `Invalid --rating "${rating}". Use one of: ${ratingValues.join(", ")}`,
                 );
