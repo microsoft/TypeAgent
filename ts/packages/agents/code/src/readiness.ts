@@ -9,6 +9,7 @@
 // server — not that we can dial out to a port.
 
 import { spawn } from "child_process";
+import registerDebug from "debug";
 import {
     ActionContext,
     ActionResult,
@@ -20,6 +21,8 @@ import {
     createActionResultFromTextDisplay,
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
+
+const debug = registerDebug("typeagent:code");
 
 // HH:MM timestamp prefix for status updates — same convention used by
 // screencapture / desktop / calendar so progress reads consistently.
@@ -120,7 +123,16 @@ export function resolveCodePortOverride(
     const raw = env.CODE_WEBSOCKET_PORT;
     if (raw === undefined) return undefined;
     const n = parseInt(raw, 10);
-    if (Number.isFinite(n) && n > 0) return n;
+    if (Number.isFinite(n) && n > 0) {
+        debug(
+            `CODE_WEBSOCKET_PORT override active: using port ${n} (set in environment)`,
+        );
+        return n;
+    }
+    debug(
+        `CODE_WEBSOCKET_PORT override ignored: invalid value %o; falling back to OS-assigned port`,
+        raw,
+    );
     return undefined;
 }
 
