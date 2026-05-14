@@ -62,6 +62,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
@@ -107,8 +108,7 @@
     "ws": "^8.17.1",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",
-    "zod": "^4.1.13",
-    "@typeagent/config": "workspace:*"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",

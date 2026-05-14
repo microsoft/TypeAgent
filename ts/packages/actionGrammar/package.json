@@ -48,10 +48,10 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.4.5",
-    "regexp.escape": "^2.0.1",
-    "@typeagent/config": "workspace:*"
+    "regexp.escape": "^2.0.1"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",

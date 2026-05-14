@@ -34,6 +34,7 @@
     "@anthropic-ai/sdk": "^0.91.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
@@ -43,8 +44,7 @@
     "mic": "^2.1.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "openai": "^4.73.0",
-    "zod": "^4.1.13",
-    "@typeagent/config": "workspace:*"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

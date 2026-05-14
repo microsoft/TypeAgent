@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/config",
   "version": "0.0.1",
-  "private": true,
   "description": "Layered YAML configuration loader for TypeAgent (defaults + Key Vault + local overrides + .env fallback).",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
