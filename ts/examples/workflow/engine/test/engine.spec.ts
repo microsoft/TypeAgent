@@ -1351,7 +1351,10 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         inputs: {
                             command: "node",
-                            args: ["-e", "process.exit(1)"] as unknown as Template,
+                            args: [
+                                "-e",
+                                "process.exit(1)",
+                            ] as unknown as Template,
                         },
                         bind: "result",
                     },
