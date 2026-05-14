@@ -109,9 +109,7 @@ function pickDefaultCapacity(
  * endpoints in a raw YAML deployments node. Used to synthesize a default
  * bare embedding endpoint when `azureOpenAI.defaultEmbedding` is absent.
  */
-function pickDefaultEmbeddingEndpoint(
-    deploymentsNode: unknown,
-):
+function pickDefaultEmbeddingEndpoint(deploymentsNode: unknown):
     | {
           endpoint: string;
           auth?: AuthMode;
@@ -138,14 +136,16 @@ function pickDefaultEmbeddingEndpoint(
         const o = item as Record<string, unknown>;
         const ep = o.endpoint;
         if (typeof ep !== "string") continue;
-        const cap =
-            typeof o.capacity === "number" ? o.capacity : (0 as number);
+        const cap = typeof o.capacity === "number" ? o.capacity : (0 as number);
         if (cap > bestCapacity) {
             bestCapacity = cap;
             bestEndpoint = ep;
             bestAuth =
                 o.auth !== undefined
-                    ? readAuth(o.auth, `azureOpenAI.deployments.embedding[${i}].auth`)
+                    ? readAuth(
+                          o.auth,
+                          `azureOpenAI.deployments.embedding[${i}].auth`,
+                      )
                     : undefined;
         }
     }

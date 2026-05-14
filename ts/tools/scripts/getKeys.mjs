@@ -211,7 +211,8 @@ function decodeJwtClaims(token) {
         const [, payload] = token.split(".");
         if (!payload) return undefined;
         const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-        const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+        const pad =
+            b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
         const json = Buffer.from(b64 + pad, "base64").toString("utf8");
         return JSON.parse(json);
     } catch {

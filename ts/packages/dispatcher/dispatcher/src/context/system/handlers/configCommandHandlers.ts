@@ -300,9 +300,7 @@ async function showAgentStatus(
     // no-op — only agents known to implement checkReadiness but not
     // currently loaded get a ❓ badge via hasUnknownReadiness.
     await Promise.all(
-        agents
-            .getAppAgentNames()
-            .map((name) => agents.refreshReadiness(name)),
+        agents.getAppAgentNames().map((name) => agents.refreshReadiness(name)),
     );
 
     const status: StatusRecords = {};
