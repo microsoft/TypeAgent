@@ -132,6 +132,23 @@ export interface ImageModel {
         width: number,
         height: number,
     ): Promise<Result<ImageGeneration>>;
+
+    /**
+     * Edit an existing image with a natural-language prompt. The
+     * source image is supplied as raw bytes (typically the contents
+     * of a PNG / JPG file the user attached). Implementations should
+     * route this to the provider's image-edit endpoint
+     * (e.g. Azure / OpenAI `/images/edits`).
+     */
+    editImage?(
+        sourceImage: Buffer,
+        sourceMimeType: string,
+        sourceFileName: string,
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>>;
 }
 
 export type ImageGeneration = {

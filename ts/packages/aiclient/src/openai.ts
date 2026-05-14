@@ -1029,6 +1029,7 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
               };
     const model: ImageModel = {
         generateImage,
+        editImage,
     };
     return model;
 
@@ -1077,6 +1078,88 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
             });
         });
 
+        return success(retValue);
+    }
+
+    async function editImage(
+        sourceImage: Buffer,
+        sourceMimeType: string,
+        sourceFileName: string,
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>> {
+        if (imageCount !== 1) {
+            throw Error("n MUST equal 1");
+        }
+        // Derive the edits URL from the configured generations URL.
+        // Azure deployments expose `/images/generations` and a parallel
+        // `/images/edits` on the same deployment path; preserve any
+        // `?api-version=...` querystring.
+        const member = pool.members[0];
+        const generationsUrl = member.settings.endpoint;
+        const editsUrl = generationsUrl.replace(
+            "/images/generations",
+            "/images/edits",
+        );
+        if (editsUrl === generationsUrl) {
+            return error(
+                `Configured image endpoint does not contain '/images/generations'; cannot derive edits URL: ${generationsUrl}`,
+            );
+        }
+
+        const headerResult = await createApiHeaders(member.settings);
+        if (!headerResult.success) {
+            return headerResult;
+        }
+        // Strip Content-Type if present; let fetch set the multipart boundary.
+        const headers: Record<string, string> = { ...headerResult.data };
+        delete headers["Content-Type"];
+        delete headers["content-type"];
+
+        const form = new FormData();
+        const blob = new Blob([sourceImage as unknown as ArrayBuffer], {
+            type: sourceMimeType,
+        });
+        form.append("image", blob, sourceFileName);
+        form.append("prompt", prompt);
+        form.append("n", String(imageCount));
+        form.append("size", `${width}x${height}`);
+        if (member.settings.provider !== "azure" && settings.modelName) {
+            form.append("model", settings.modelName);
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(editsUrl, {
+                method: "POST",
+                headers,
+                body: form,
+            });
+        } catch (e) {
+            return error(
+                `Image edit request failed: ${(e as Error).message}`,
+            );
+        }
+        if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            return error(
+                `Image edit request returned ${response.status} ${response.statusText}: ${body}`,
+            );
+        }
+        const data = (await response.json()) as ImageCompletion;
+        const retValue: ImageGeneration = { images: [] };
+        data.data.map((i) => {
+            verifyContentSafety(i);
+            const image_url = i.b64_json
+                ? `data:image/png;base64,${i.b64_json}`
+                : (i.url ?? "");
+            retValue.images.push({
+                revised_prompt: i.revised_prompt ?? prompt,
+                image_url,
+            });
+        });
         return success(retValue);
     }
 
