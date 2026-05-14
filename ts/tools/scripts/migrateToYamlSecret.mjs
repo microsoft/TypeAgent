@@ -96,9 +96,7 @@ async function collectNames() {
         if (!props.enabled) continue;
         const name = props.name;
         if (name === secretName) {
-            console.log(
-                chalk.gray(`  skip existing config secret '${name}'`),
-            );
+            console.log(chalk.gray(`  skip existing config secret '${name}'`));
             continue;
         }
         result.push(name);
@@ -112,9 +110,7 @@ const client = new SecretClient(
     credential,
 );
 
-console.log(
-    `Listing secrets in ${chalk.cyanBright(vaultName)} ...`,
-);
+console.log(`Listing secrets in ${chalk.cyanBright(vaultName)} ...`);
 const names = await listSecretsWithElevation();
 console.log(`Found ${names.length} enabled secret(s).`);
 
@@ -140,9 +136,7 @@ for (let i = 0; i < names.length; i += concurrency) {
 }
 
 if (failures.length) {
-    console.warn(
-        chalk.yellow(`Failed to read ${failures.length} secret(s):`),
-    );
+    console.warn(chalk.yellow(`Failed to read ${failures.length} secret(s):`));
     for (const f of failures) {
         console.warn(chalk.yellow(`  - ${f.name}: ${f.error}`));
     }
@@ -187,7 +181,5 @@ console.log(
 );
 await client.setSecret(secretName, yamlContent);
 console.log(
-    chalk.green(
-        `Secret '${secretName}' updated in vault '${vaultName}'.`,
-    ),
+    chalk.green(`Secret '${secretName}' updated in vault '${vaultName}'.`),
 );
