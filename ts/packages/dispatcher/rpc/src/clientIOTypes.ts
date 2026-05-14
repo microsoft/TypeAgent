@@ -9,6 +9,7 @@ import type {
     TemplateEditConfig,
     PendingInteractionRequest,
     UserFeedbackEntry,
+    UserMessageHiddenEntry,
 } from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
@@ -81,4 +82,5 @@ export type ClientIOCallFunctions = {
     takeAction(requestId: RequestId, action: string, data: unknown): void;
 
     onUserFeedback(entry: UserFeedbackEntry): void;
+    onUserHide(entry: UserMessageHiddenEntry): void;
 };

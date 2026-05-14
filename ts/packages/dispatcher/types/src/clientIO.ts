@@ -9,7 +9,10 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestId, RequestMetrics } from "./dispatcher.js";
-import type { UserFeedbackEntry } from "./displayLogEntry.js";
+import type {
+    UserFeedbackEntry,
+    UserMessageHiddenEntry,
+} from "./displayLogEntry.js";
 import type { PendingInteractionRequest } from "./pendingInteraction.js";
 
 export type TemplateData = {
@@ -145,4 +148,8 @@ export interface ClientIO {
     // their views stay in sync without a full history refetch.
     // Optional: tests and CLI-only implementations may omit it.
     onUserFeedback?(entry: UserFeedbackEntry): void;
+
+    // User-hide broadcast — fanned out when the user trashes or restores
+    // a bubble via the UI, or when @shell trash flush/restore runs.
+    onUserHide?(entry: UserMessageHiddenEntry): void;
 }

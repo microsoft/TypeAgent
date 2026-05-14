@@ -109,6 +109,9 @@ export async function replayDisplayHistory(
                 // each entry in order.
                 clientIO.onUserFeedback?.(entry);
                 break;
+            case "user-message-hidden":
+                clientIO.onUserHide?.(entry);
+                break;
             // pending-interaction, interaction-resolved, interaction-cancelled
             // are not replayed — the Shell does not yet support deferred
             // interactions so there is no UI to display them.

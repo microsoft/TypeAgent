@@ -13,6 +13,7 @@ import type {
     UserFeedbackCategory,
     UserFeedbackEntry,
     UserFeedbackRating,
+    UserMessageHiddenEntry,
 } from "@typeagent/dispatcher-types";
 
 import fs from "node:fs";
@@ -329,6 +330,51 @@ export class DisplayLog {
         this.entries.push(entry);
         this.dirty = true;
         return entry;
+    }
+
+    /**
+     * Append a user-hide entry. Append-only: a later entry with the same
+     * requestId supersedes any earlier one. `permanent` marks a flushed
+     * hide (recoverable only via direct displayLog editing).
+     */
+    logUserHide(
+        requestId: RequestId,
+        hidden: boolean,
+        target?: "user" | "agent",
+        permanent?: boolean,
+    ): UserMessageHiddenEntry {
+        const seq = this.nextSeq++;
+        const entry: UserMessageHiddenEntry = {
+            type: "user-message-hidden",
+            seq,
+            timestamp: Date.now(),
+            requestId,
+            hidden,
+        };
+        if (target !== undefined) entry.target = target;
+        if (permanent === true) entry.permanent = true;
+        this.entries.push(entry);
+        this.dirty = true;
+        return entry;
+    }
+
+    /**
+     * Return the latest hide-entry per (requestId, target) pair. Used
+     * by commands like `@shell trash restore` to find what's currently
+     * in the bin. User-bubble and agent-bubble hides for the same
+     * request are tracked separately.
+     */
+    getCurrentHides(): UserMessageHiddenEntry[] {
+        const latest = new Map<string, UserMessageHiddenEntry>();
+        for (const e of this.entries) {
+            if (e.type !== "user-message-hidden") continue;
+            const reqKey =
+                e.requestId.requestId || String(e.requestId.clientRequestId);
+            if (!reqKey) continue;
+            const key = `${reqKey}::${e.target ?? "all"}`;
+            latest.set(key, e);
+        }
+        return Array.from(latest.values());
     }
 
     /**

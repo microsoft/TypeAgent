@@ -65,6 +65,15 @@ export function createDispatcherRpcServer(
         recordUserFeedback: async (...args) => {
             return dispatcher.recordUserFeedback(...args);
         },
+        recordUserHide: async (...args) => {
+            return dispatcher.recordUserHide(...args);
+        },
+        restoreAllHidden: async () => {
+            return dispatcher.restoreAllHidden();
+        },
+        flushHidden: async () => {
+            return dispatcher.flushHidden();
+        },
     };
 
     createRpc(

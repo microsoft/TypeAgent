@@ -299,4 +299,36 @@ export interface Dispatcher {
         comment?: string,
         includeContext?: boolean,
     ): Promise<void>;
+
+    /**
+     * Move (or restore) one side of a request — `target: "user"` for
+     * the user message bubble, `target: "agent"` for the agent
+     * response(s), or omit `target` to apply to both. Append-only: a
+     * subsequent call with the same (requestId, target) supersedes the
+     * earlier state. `permanent: true` marks the hide as flushed — the
+     * user can't recover it via `@shell trash restore`.
+     *
+     * Persists to displayLog, broadcasts via ClientIO.onUserHide.
+     */
+    recordUserHide(
+        requestId: RequestId,
+        hidden: boolean,
+        target?: "user" | "agent",
+        permanent?: boolean,
+    ): Promise<void>;
+
+    /**
+     * Restore every currently-hidden (non-permanent) bubble. Writes one
+     * `hidden: false` entry per restored request. Returns the count
+     * restored.
+     */
+    restoreAllHidden(): Promise<number>;
+
+    /**
+     * Flush the trash: every currently-hidden (non-permanent) bubble is
+     * re-recorded with `permanent: true`. The bubbles stay hidden, and
+     * `restoreAllHidden` will no longer touch them. Returns the count
+     * flushed.
+     */
+    flushHidden(): Promise<number>;
 }

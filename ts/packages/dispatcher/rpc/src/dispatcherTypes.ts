@@ -75,6 +75,16 @@ export type DispatcherInvokeFunctions = {
         comment?: string,
         includeContext?: boolean,
     ): Promise<void>;
+
+    recordUserHide(
+        requestId: RequestId,
+        hidden: boolean,
+        target?: "user" | "agent",
+        permanent?: boolean,
+    ): Promise<void>;
+
+    restoreAllHidden(): Promise<number>;
+    flushHidden(): Promise<number>;
 };
 
 export type DispatcherCallFunctions = {

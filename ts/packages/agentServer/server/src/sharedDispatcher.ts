@@ -261,6 +261,11 @@ export async function createSharedDispatcher(
                 cio.onUserFeedback?.(entry),
             );
         },
+        onUserHide: (entry) => {
+            broadcast("onUserHide", entry.requestId, (cio) =>
+                cio.onUserHide?.(entry),
+            );
+        },
     };
     const context = await initializeCommandHandlerContext(hostName, {
         ...options,

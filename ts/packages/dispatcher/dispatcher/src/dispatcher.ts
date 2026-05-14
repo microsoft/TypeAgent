@@ -363,6 +363,68 @@ export function createDispatcherFromContext(
                 controller.abort();
             }
         },
+        async recordUserHide(
+            requestId: RequestId,
+            hidden: boolean,
+            target?: "user" | "agent",
+            permanent?: boolean,
+        ): Promise<void> {
+            const entry = context.displayLog.logUserHide(
+                requestId,
+                hidden,
+                target,
+                permanent,
+            );
+            context.displayLog.saveQueued();
+            try {
+                context.clientIO.onUserHide?.(entry);
+            } catch {
+                // best-effort
+            }
+        },
+        async restoreAllHidden(): Promise<number> {
+            const hides = context.displayLog.getCurrentHides();
+            let count = 0;
+            for (const h of hides) {
+                if (h.permanent === true) continue;
+                if (h.hidden !== true) continue;
+                const entry = context.displayLog.logUserHide(
+                    h.requestId,
+                    false,
+                    h.target,
+                );
+                try {
+                    context.clientIO.onUserHide?.(entry);
+                } catch {
+                    // best-effort
+                }
+                count++;
+            }
+            context.displayLog.saveQueued();
+            return count;
+        },
+        async flushHidden(): Promise<number> {
+            const hides = context.displayLog.getCurrentHides();
+            let count = 0;
+            for (const h of hides) {
+                if (h.permanent === true) continue;
+                if (h.hidden !== true) continue;
+                const entry = context.displayLog.logUserHide(
+                    h.requestId,
+                    true,
+                    h.target,
+                    true,
+                );
+                try {
+                    context.clientIO.onUserHide?.(entry);
+                } catch {
+                    // best-effort
+                }
+                count++;
+            }
+            context.displayLog.saveQueued();
+            return count;
+        },
         async recordUserFeedback(
             requestId: RequestId,
             rating,

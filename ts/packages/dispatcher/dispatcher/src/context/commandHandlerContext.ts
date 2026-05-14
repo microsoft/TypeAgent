@@ -249,7 +249,7 @@ async function getAgentCache(
  * Logging options:
  * - metrics: whether to enable collection of timing metrics. Default is false.
  * - collectCommandResult: whether to collect command result in the return for `processCommand`. Default is false.
- * - dblogging: whether to enable database logging. If not specified, no logging is done.
+ * - dblogging: whether to enable database telemetry logging. Default is true; pass false to opt out.
  * - traceId: An optional trace ID to use for logging identification.
  */
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
@@ -277,7 +277,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Logging options
     metrics?: boolean; // default to false
     collectCommandResult?: boolean; // default to false
-    dblogging?: boolean; // default to false
+    dblogging?: boolean; // default to true
     traceId?: string; // optional additional for logging identification
 
     // Additional integration options
@@ -590,7 +590,7 @@ export async function initializeCommandHandlerContext(
             embeddingCacheDir,
             storageProvider,
             explanationAsynchronousMode,
-            dblogging: options?.dblogging ?? false,
+            dblogging: options?.dblogging ?? true,
             clientIO,
 
             // Runtime context

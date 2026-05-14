@@ -1872,7 +1872,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                         "logging",
                         async (context, enable) => {
                             context.sessionContext.agentContext.dblogging =
-                                false;
+                                enable;
                         },
                     ),
                 },

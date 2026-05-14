@@ -123,6 +123,27 @@ export type UserFeedbackEntry = {
     comment?: string;
 };
 
+/**
+ * Tracks user-driven hide/restore of one side of a request — the user
+ * message bubble OR the agent response (independent toggles). Append-
+ * only: a later entry with the same (requestId, target) supersedes the
+ * earlier one. `permanent` marks a flushed hide — `@shell trash
+ * restore` skips these so the user can't recover bubbles they
+ * explicitly flushed.
+ *
+ * `target` is optional for back-compat with entries written before the
+ * split (those hid the whole MessageGroup). New code always sets it.
+ */
+export type UserMessageHiddenEntry = {
+    type: "user-message-hidden";
+    seq: number;
+    timestamp: number;
+    requestId: RequestId;
+    hidden: boolean;
+    permanent?: boolean;
+    target?: "user" | "agent";
+};
+
 export type DisplayLogEntry =
     | SetDisplayEntry
     | AppendDisplayEntry
@@ -133,4 +154,5 @@ export type DisplayLogEntry =
     | InteractionResolvedEntry
     | InteractionCancelledEntry
     | CommandResultEntry
-    | UserFeedbackEntry;
+    | UserFeedbackEntry
+    | UserMessageHiddenEntry;

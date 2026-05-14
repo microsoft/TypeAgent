@@ -77,5 +77,8 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         onUserFeedback(...args): void {
             return rpc.send("onUserFeedback", ...args);
         },
+        onUserHide(...args): void {
+            return rpc.send("onUserHide", ...args);
+        },
     };
 }
