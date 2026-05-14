@@ -1288,8 +1288,11 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         inputs: {
-                            command: "echo",
-                            args: ["hello", "world"] as Template,
+                            command: "node",
+                            args: [
+                                "-e",
+                                "process.stdout.write('hello world')",
+                            ] as unknown as Template,
                         },
                         bind: "result",
                     },
@@ -1331,6 +1334,10 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["command"],
                             properties: {
                                 command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
                             },
                         },
                         outputSchema: {
@@ -1343,7 +1350,8 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         inputs: {
-                            command: "false",
+                            command: "node",
+                            args: ["-e", "process.exit(1)"] as unknown as Template,
                         },
                         bind: "result",
                     },
