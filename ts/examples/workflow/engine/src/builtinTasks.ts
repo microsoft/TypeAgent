@@ -71,9 +71,7 @@ export const intAdd: TaskDefinition<
         properties: { result: { type: "integer" } },
     },
     async execute(input) {
-        console.warn(
-            "DEPRECATED: int.add is deprecated, use math.add instead",
-        );
+        console.warn("DEPRECATED: int.add is deprecated, use math.add instead");
         return { kind: "ok", output: { result: input.a + input.b } };
     },
 };
@@ -1087,6 +1085,61 @@ export const mathModulo: TaskDefinition<
     },
 };
 
+export const mathNegate: TaskDefinition<{ value: number }, { result: number }> =
+    {
+        name: "math.negate",
+        sideEffects: false,
+        inputSchema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: { type: "number" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["result"],
+            properties: { result: { type: "number" } },
+        },
+        async execute(input) {
+            return { kind: "ok", output: { result: -input.value } };
+        },
+    };
+
+// ---- noop (merge/join point for branches) ----
+
+export const noop: TaskDefinition<
+    Record<string, never>,
+    Record<string, never>
+> = {
+    name: "noop",
+    sideEffects: false,
+    inputSchema: { type: "object", properties: {} },
+    outputSchema: { type: "object", properties: {} },
+    async execute() {
+        return { kind: "ok", output: {} };
+    },
+};
+
+// ---- identity (pass-through for literal values in branches) ----
+
+export const identity: TaskDefinition<{ value: unknown }, { result: unknown }> =
+    {
+        name: "identity",
+        sideEffects: false,
+        inputSchema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: {} },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["result"],
+            properties: { result: {} },
+        },
+        async execute(input) {
+            return { kind: "ok", output: { result: input.value } };
+        },
+    };
+
 // ---- v2 error tasks ----
 
 export const errorFail: TaskDefinition<{ value: unknown }, never> = {
@@ -1128,7 +1181,10 @@ export const v2StandardLibraryTasks: TaskDefinition[] = [
     mathMultiply,
     mathDivide,
     mathModulo,
+    mathNegate,
     errorFail,
+    noop,
+    identity,
 ];
 
 /** All builtin tasks: stdlib + v2 stdlib + IO + utility + legacy. */

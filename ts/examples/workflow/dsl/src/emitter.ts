@@ -123,6 +123,38 @@ export class Emitter {
         }
 
         this.threadNext(rootScope);
+
+        // If the workflow has an output but no nodes (pure-literal return),
+        // wrap the return value in an identity node so the engine has an
+        // entry point.
+        if (outputTemplate !== undefined && rootScope.nodeOrder.length === 0) {
+            const wrapId = this.freshId("return");
+            const wrapNode: TaskNode = {
+                kind: "task",
+                task: "identity",
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: {} },
+                },
+                inputs: { value: outputTemplate },
+                bind: wrapId,
+            };
+            rootScope.nodes[wrapId] = wrapNode;
+            rootScope.nodeOrder.push(wrapId);
+            this.referencedNodes.add(wrapId);
+            outputTemplate = {
+                $from: "scope",
+                name: wrapId,
+                path: ["result"],
+            } as unknown as Template;
+        }
+
         this.stripUnreferencedBinds(rootScope);
 
         const ir: WorkflowIR = {
@@ -162,11 +194,9 @@ export class Emitter {
                 this.emitDestructuring(stmt, scope);
                 return undefined;
             case "IfStatement":
-                this.emitIf(stmt, scope);
-                return undefined;
+                return this.emitIf(stmt, scope);
             case "SwitchStatement":
-                this.emitSwitch(stmt, scope);
-                return undefined;
+                return this.emitSwitch(stmt, scope);
             case "ThrowStatement":
                 this.emitThrow(stmt, scope);
                 return undefined;
@@ -318,28 +348,80 @@ export class Emitter {
     private emitIf(
         stmt: import("./ast.js").IfStatement,
         scope: ScopeContext,
-    ): void {
+    ): { output?: Template } | undefined {
         // Emit condition - may produce a node
         const condTemplate = this.emitExpr(stmt.condition, scope);
 
         const branchId = this.freshId("branch");
         const mergeId = this.freshId("merge");
 
-        // Create child scopes for then/else
+        // Create child scopes for then/else, capturing return values
         const thenScope = this.childScope(scope);
+        let thenOutput: Template | undefined;
         for (const s of stmt.then) {
-            this.emitStatement(s, thenScope);
+            const r = this.emitStatement(s, thenScope);
+            if (r?.output !== undefined) thenOutput = r.output;
         }
-        this.threadNext(thenScope);
 
         let elseScope: ScopeContext | undefined;
+        let elseOutput: Template | undefined;
         if (stmt.else_ && stmt.else_.length > 0) {
             elseScope = this.childScope(scope);
             for (const s of stmt.else_) {
-                this.emitStatement(s, elseScope);
+                const r = this.emitStatement(s, elseScope);
+                if (r?.output !== undefined) elseOutput = r.output;
             }
-            this.threadNext(elseScope);
         }
+
+        // When both branches return, normalize through identity nodes
+        // with a common bind name so the scope ref resolves regardless
+        // of which branch actually executes.
+        let resultBind: string | undefined;
+        if (thenOutput !== undefined && elseOutput !== undefined) {
+            resultBind = this.freshId("if_result");
+            this.referencedNodes.add(resultBind);
+
+            const thenWrapId = this.freshId("then_wrap");
+            thenScope.nodes[thenWrapId] = {
+                kind: "task",
+                task: "identity",
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: {} },
+                },
+                inputs: { value: thenOutput },
+                bind: resultBind,
+            };
+            thenScope.nodeOrder.push(thenWrapId);
+
+            const elseWrapId = this.freshId("else_wrap");
+            elseScope!.nodes[elseWrapId] = {
+                kind: "task",
+                task: "identity",
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: {} },
+                },
+                inputs: { value: elseOutput },
+                bind: resultBind,
+            };
+            elseScope!.nodeOrder.push(elseWrapId);
+        }
+
+        this.threadNext(thenScope);
+        if (elseScope) this.threadNext(elseScope);
 
         // Merge then/else nodes into parent with prefixes
         const thenEntry = thenScope.nodeOrder[0];
@@ -382,6 +464,25 @@ export class Emitter {
         scope.nodeOrder.push(branchId);
         scope.nodes[mergeId] = mergeNode;
         scope.nodeOrder.push(mergeId);
+
+        // Propagate return value from branches
+        if (resultBind) {
+            // Both branches wrapped in identity with common bind
+            return {
+                output: {
+                    $from: "scope",
+                    name: resultBind,
+                    path: ["result"],
+                } as unknown as Template,
+            };
+        }
+        if (thenOutput !== undefined) {
+            return { output: thenOutput };
+        }
+        if (elseOutput !== undefined) {
+            return { output: elseOutput };
+        }
+        return undefined;
     }
 
     // ---- Switch statement ----
@@ -389,19 +490,23 @@ export class Emitter {
     private emitSwitch(
         stmt: import("./ast.js").SwitchStatement,
         scope: ScopeContext,
-    ): void {
+    ): { output?: Template } | undefined {
         const discTemplate = this.emitExpr(stmt.discriminant, scope);
         const branchId = this.freshId("switch");
         const mergeId = this.freshId("merge");
 
         const cases: Record<string, string> = {};
         let defaultTarget = mergeId; // fallthrough to merge if no default
+        let branchOutput: Template | undefined;
 
         for (let i = 0; i < stmt.arms.length; i++) {
             const arm = stmt.arms[i];
             const armScope = this.childScope(scope);
             for (const s of arm.body) {
-                this.emitStatement(s, armScope);
+                const r = this.emitStatement(s, armScope);
+                if (r?.output !== undefined && branchOutput === undefined) {
+                    branchOutput = r.output;
+                }
             }
             this.threadNext(armScope);
 
@@ -426,7 +531,10 @@ export class Emitter {
         if (stmt.default_ && stmt.default_.length > 0) {
             const defScope = this.childScope(scope);
             for (const s of stmt.default_) {
-                this.emitStatement(s, defScope);
+                const r = this.emitStatement(s, defScope);
+                if (r?.output !== undefined && branchOutput === undefined) {
+                    branchOutput = r.output;
+                }
             }
             this.threadNext(defScope);
 
@@ -464,6 +572,11 @@ export class Emitter {
         scope.nodeOrder.push(branchId);
         scope.nodes[mergeId] = mergeNode;
         scope.nodeOrder.push(mergeId);
+
+        if (branchOutput !== undefined) {
+            return { output: branchOutput };
+        }
+        return undefined;
     }
 
     // ---- Throw statement ----
@@ -713,15 +826,17 @@ export class Emitter {
         const taskName = this.binaryOpToTask(expr.op);
         const nodeId = this.freshId(taskName.replace(/\./g, "_"));
 
+        const schema = this.taskSchemas.get(taskName);
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: {
+            inputSchema: schema?.inputSchema ?? {
                 type: "object",
                 required: ["left", "right"],
                 properties: { left: {}, right: {} },
             },
-            outputSchema: this.binaryOpOutputSchema(expr.op),
+            outputSchema:
+                schema?.outputSchema ?? this.binaryOpOutputSchema(expr.op),
             inputs: { left, right },
             bind: nodeId,
         };
@@ -788,16 +903,18 @@ export class Emitter {
         const taskName = expr.op === "!" ? "bool.not" : "math.negate";
         const nodeId = this.freshId(taskName.replace(/\./g, "_"));
 
+        const schema = this.taskSchemas.get(taskName);
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: {
+            inputSchema: schema?.inputSchema ?? {
                 type: "object",
                 required: ["value"],
                 properties: { value: {} },
             },
             outputSchema:
-                expr.op === "!" ? { type: "boolean" } : { type: "number" },
+                schema?.outputSchema ??
+                (expr.op === "!" ? { type: "boolean" } : { type: "number" }),
             inputs: { value: operand },
             bind: nodeId,
         };
@@ -811,16 +928,25 @@ export class Emitter {
         const condTemplate = this.emitExpr(expr.condition, scope);
 
         const branchId = this.freshId("ternary");
+        const mergeId = this.freshId("merge");
+        const resultBind = this.freshId("ternary_result");
 
         // Emit consequent and alternate as single-node sub-scopes
         const thenScope = this.childScope(scope);
         const thenResult = this.emitExpr(expr.consequent, thenScope);
-        // If consequent produced nodes, use them; otherwise create a literal node
         let thenEntry: string;
         if (thenScope.nodeOrder.length > 0) {
             this.threadNext(thenScope);
             for (const [id, node] of Object.entries(thenScope.nodes)) {
-                scope.nodes[`then_${id}`] = this.prefixNodeRefs(node, "then_");
+                const prefixed = this.prefixNodeRefs(node, "then_");
+                // Ensure the last node uses the common bind name
+                if (
+                    id === thenScope.nodeOrder[thenScope.nodeOrder.length - 1]
+                ) {
+                    (prefixed as TaskNode).bind = resultBind;
+                    (prefixed as TaskNode).next = mergeId;
+                }
+                scope.nodes[`then_${id}`] = prefixed;
             }
             thenEntry = `then_${thenScope.nodeOrder[0]}`;
         } else {
@@ -829,10 +955,19 @@ export class Emitter {
             scope.nodes[passId] = {
                 kind: "task",
                 task: "identity",
-                inputSchema: {},
-                outputSchema: {},
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: {} },
+                },
                 inputs: { value: thenResult },
-                bind: passId,
+                bind: resultBind,
+                next: mergeId,
             };
             thenEntry = passId;
         }
@@ -843,7 +978,14 @@ export class Emitter {
         if (elseScope.nodeOrder.length > 0) {
             this.threadNext(elseScope);
             for (const [id, node] of Object.entries(elseScope.nodes)) {
-                scope.nodes[`else_${id}`] = this.prefixNodeRefs(node, "else_");
+                const prefixed = this.prefixNodeRefs(node, "else_");
+                if (
+                    id === elseScope.nodeOrder[elseScope.nodeOrder.length - 1]
+                ) {
+                    (prefixed as TaskNode).bind = resultBind;
+                    (prefixed as TaskNode).next = mergeId;
+                }
+                scope.nodes[`else_${id}`] = prefixed;
             }
             elseEntry = `else_${elseScope.nodeOrder[0]}`;
         } else {
@@ -851,10 +993,19 @@ export class Emitter {
             scope.nodes[passId] = {
                 kind: "task",
                 task: "identity",
-                inputSchema: {},
-                outputSchema: {},
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: {} },
+                },
                 inputs: { value: elseResult },
-                bind: passId,
+                bind: resultBind,
+                next: mergeId,
             };
             elseEntry = passId;
         }
@@ -867,11 +1018,23 @@ export class Emitter {
             default: elseEntry,
         };
 
+        const mergeNode: TaskNode = {
+            kind: "task",
+            task: "noop",
+            inputSchema: {},
+            outputSchema: {},
+            inputs: {},
+        };
+
         scope.nodes[branchId] = branchNode;
         scope.nodeOrder.push(branchId);
+        scope.nodes[mergeId] = mergeNode;
+        scope.nodeOrder.push(mergeId);
+        this.referencedNodes.add(resultBind);
         return {
             $from: "scope",
-            name: branchId,
+            name: resultBind,
+            path: ["result"],
         } as unknown as Template;
     }
 
@@ -1079,10 +1242,78 @@ export class Emitter {
 
         // Build body scope: param is the loop element
         const bodyScope = this.childScope(scope);
-        // Element access via list.elementAt
-        // Use param name as both node ID and bind so $from:"scope" refs
-        // match what the validator resolves via buildBindingMap (keyed on bind).
+
+        // --- Loop infrastructure (condition check FIRST) ---
+        const lengthId = this.freshId("length");
+        bodyScope.nodes[lengthId] = {
+            kind: "task",
+            task: "list.length",
+            inputSchema: {
+                type: "object",
+                required: ["list"],
+                properties: { list: { type: "array" } },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["length"],
+                properties: { length: { type: "integer" } },
+            },
+            inputs: {
+                list: { $from: "input", name: "items" } as unknown as Template,
+            },
+            bind: lengthId,
+        };
+        bodyScope.nodeOrder.push(lengthId);
+
+        const compareId = this.freshId("compare");
+        bodyScope.nodes[compareId] = {
+            kind: "task",
+            task: "int.lessThan",
+            inputSchema: {
+                type: "object",
+                required: ["a", "b"],
+                properties: {
+                    a: { type: "integer" },
+                    b: { type: "integer" },
+                },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "boolean" } },
+            },
+            inputs: {
+                a: {
+                    $from: "state",
+                    name: "i",
+                } as unknown as Template,
+                b: {
+                    $from: "scope",
+                    name: lengthId,
+                    path: ["length"],
+                } as unknown as Template,
+            },
+            bind: compareId,
+        };
+        bodyScope.nodeOrder.push(compareId);
+
+        // Branch: true (i < length) → continue to pick, false → @exit
         const pickId = expr.param;
+        const checkId = this.freshId("check_done");
+        bodyScope.nodes[checkId] = {
+            kind: "branch",
+            selector: {
+                $from: "scope",
+                name: compareId,
+                path: ["result"],
+            } as unknown as Template,
+            selectorSchema: { type: "boolean" },
+            cases: { true: pickId },
+            default: "@exit",
+        };
+        bodyScope.nodeOrder.push(checkId);
+
+        // --- Body: pick element, user code, append, increment ---
         bodyScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
@@ -1094,7 +1325,11 @@ export class Emitter {
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {},
+            outputSchema: {
+                type: "object",
+                required: ["element"],
+                properties: { element: {} },
+            },
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1125,7 +1360,11 @@ export class Emitter {
                     item: {},
                 },
             },
-            outputSchema: { type: "array" },
+            outputSchema: {
+                type: "object",
+                required: ["list"],
+                properties: { list: { type: "array" } },
+            },
             inputs: {
                 list: {
                     $from: "state",
@@ -1137,84 +1376,32 @@ export class Emitter {
         };
         bodyScope.nodeOrder.push(appendId);
 
-        // Loop infrastructure: step i, get length, compare, branch
+        // Increment i, then @iterate back to condition check
         const stepId = this.freshId("step_i");
         bodyScope.nodes[stepId] = {
             kind: "task",
-            task: "math.add",
+            task: "int.add",
             inputSchema: {
                 type: "object",
-                required: ["left", "right"],
+                required: ["a", "b"],
                 properties: {
-                    left: { type: "integer" },
-                    right: { type: "integer" },
+                    a: { type: "integer" },
+                    b: { type: "integer" },
                 },
             },
-            outputSchema: { type: "integer" },
-            inputs: {
-                left: { $from: "state", name: "i" } as unknown as Template,
-                right: 1,
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "integer" } },
             },
+            inputs: {
+                a: { $from: "state", name: "i" } as unknown as Template,
+                b: 1,
+            },
+            next: "@iterate",
             bind: stepId,
         };
         bodyScope.nodeOrder.push(stepId);
-
-        const lengthId = this.freshId("length");
-        bodyScope.nodes[lengthId] = {
-            kind: "task",
-            task: "list.length",
-            inputSchema: {
-                type: "object",
-                required: ["list"],
-                properties: { list: { type: "array" } },
-            },
-            outputSchema: { type: "integer" },
-            inputs: {
-                list: { $from: "input", name: "items" } as unknown as Template,
-            },
-            bind: lengthId,
-        };
-        bodyScope.nodeOrder.push(lengthId);
-
-        const compareId = this.freshId("compare");
-        bodyScope.nodes[compareId] = {
-            kind: "task",
-            task: "compare.lessThan",
-            inputSchema: {
-                type: "object",
-                required: ["left", "right"],
-                properties: {
-                    left: { type: "integer" },
-                    right: { type: "integer" },
-                },
-            },
-            outputSchema: { type: "boolean" },
-            inputs: {
-                left: {
-                    $from: "scope",
-                    name: stepId,
-                } as unknown as Template,
-                right: {
-                    $from: "scope",
-                    name: lengthId,
-                } as unknown as Template,
-            },
-            bind: compareId,
-        };
-        bodyScope.nodeOrder.push(compareId);
-
-        const checkId = this.freshId("check_done");
-        bodyScope.nodes[checkId] = {
-            kind: "branch",
-            selector: {
-                $from: "scope",
-                name: compareId,
-            } as unknown as Template,
-            selectorSchema: { type: "boolean" },
-            cases: { true: "@iterate" },
-            default: "@exit",
-        };
-        bodyScope.nodeOrder.push(checkId);
 
         this.threadNext(bodyScope);
 
@@ -1248,10 +1435,15 @@ export class Emitter {
             },
             state,
             iterateState: {
-                i: { $from: "scope", name: stepId } as unknown as Template,
+                i: {
+                    $from: "scope",
+                    name: stepId,
+                    path: ["result"],
+                } as unknown as Template,
                 results: {
                     $from: "scope",
                     name: appendId,
+                    path: ["list"],
                 } as unknown as Template,
             },
             maxIterations: 10000,
@@ -1269,8 +1461,77 @@ export class Emitter {
 
         const bodyScope = this.childScope(scope);
 
-        // Pick element - use param name as node ID to match bind
+        // --- Loop infrastructure (condition check FIRST) ---
+        const lengthId = this.freshId("length");
+        bodyScope.nodes[lengthId] = {
+            kind: "task",
+            task: "list.length",
+            inputSchema: {
+                type: "object",
+                required: ["list"],
+                properties: { list: { type: "array" } },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["length"],
+                properties: { length: { type: "integer" } },
+            },
+            inputs: {
+                list: { $from: "input", name: "items" } as unknown as Template,
+            },
+            bind: lengthId,
+        };
+        bodyScope.nodeOrder.push(lengthId);
+
+        const compareId = this.freshId("compare");
+        bodyScope.nodes[compareId] = {
+            kind: "task",
+            task: "int.lessThan",
+            inputSchema: {
+                type: "object",
+                required: ["a", "b"],
+                properties: {
+                    a: { type: "integer" },
+                    b: { type: "integer" },
+                },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "boolean" } },
+            },
+            inputs: {
+                a: {
+                    $from: "state",
+                    name: "i",
+                } as unknown as Template,
+                b: {
+                    $from: "scope",
+                    name: lengthId,
+                    path: ["length"],
+                } as unknown as Template,
+            },
+            bind: compareId,
+        };
+        bodyScope.nodeOrder.push(compareId);
+
+        // Branch: true (i < length) -> continue to pick, false -> @exit
         const pickId = expr.param;
+        const checkId = this.freshId("check_done");
+        bodyScope.nodes[checkId] = {
+            kind: "branch",
+            selector: {
+                $from: "scope",
+                name: compareId,
+                path: ["result"],
+            } as unknown as Template,
+            selectorSchema: { type: "boolean" },
+            cases: { true: pickId },
+            default: "@exit",
+        };
+        bodyScope.nodeOrder.push(checkId);
+
+        // --- Body: pick element, user code, conditional append, increment ---
         bodyScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
@@ -1282,7 +1543,11 @@ export class Emitter {
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {},
+            outputSchema: {
+                type: "object",
+                required: ["element"],
+                properties: { element: {} },
+            },
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1304,6 +1569,7 @@ export class Emitter {
         // Conditional append: if body returns true, append element to results
         const filterBranchId = this.freshId("filter_check");
         const appendId = this.freshId("append");
+        const stepId = this.freshId("step_i");
 
         bodyScope.nodes[appendId] = {
             kind: "task",
@@ -1316,7 +1582,11 @@ export class Emitter {
                     item: {},
                 },
             },
-            outputSchema: { type: "array" },
+            outputSchema: {
+                type: "object",
+                required: ["list"],
+                properties: { list: { type: "array" } },
+            },
             inputs: {
                 list: {
                     $from: "state",
@@ -1325,117 +1595,65 @@ export class Emitter {
                 item: {
                     $from: "scope",
                     name: pickId,
+                    path: ["element"],
                 } as unknown as Template,
             },
             bind: appendId,
         };
 
-        // Loop infrastructure
-        const stepId = this.freshId("step_i");
-        bodyScope.nodes[stepId] = {
+        // Normalize both paths through identity so both bind "updated_results"
+        // with shape { result: array }, then converge at step_i.
+        const wrapAppendId = this.freshId("wrap_append");
+        bodyScope.nodes[wrapAppendId] = {
             kind: "task",
-            task: "math.add",
+            task: "identity",
             inputSchema: {
                 type: "object",
-                required: ["left", "right"],
-                properties: {
-                    left: { type: "integer" },
-                    right: { type: "integer" },
-                },
+                required: ["value"],
+                properties: { value: {} },
             },
-            outputSchema: { type: "integer" },
-            inputs: {
-                left: { $from: "state", name: "i" } as unknown as Template,
-                right: 1,
-            },
-            bind: stepId,
-        };
-
-        const lengthId = this.freshId("length");
-        bodyScope.nodes[lengthId] = {
-            kind: "task",
-            task: "list.length",
-            inputSchema: {
+            outputSchema: {
                 type: "object",
-                required: ["list"],
-                properties: { list: { type: "array" } },
+                required: ["result"],
+                properties: { result: {} },
             },
-            outputSchema: { type: "integer" },
             inputs: {
-                list: { $from: "input", name: "items" } as unknown as Template,
-            },
-            bind: lengthId,
-        };
-
-        const compareId = this.freshId("compare");
-        bodyScope.nodes[compareId] = {
-            kind: "task",
-            task: "compare.lessThan",
-            inputSchema: {
-                type: "object",
-                required: ["left", "right"],
-                properties: {
-                    left: { type: "integer" },
-                    right: { type: "integer" },
-                },
-            },
-            outputSchema: { type: "boolean" },
-            inputs: {
-                left: { $from: "scope", name: stepId } as unknown as Template,
-                right: {
+                value: {
                     $from: "scope",
-                    name: lengthId,
+                    name: appendId,
+                    path: ["list"],
                 } as unknown as Template,
             },
-            bind: compareId,
+            bind: "updated_results",
+            next: stepId,
         };
 
-        const checkId = this.freshId("check_done");
-        bodyScope.nodes[checkId] = {
-            kind: "branch",
-            selector: {
-                $from: "scope",
-                name: compareId,
-            } as unknown as Template,
-            selectorSchema: { type: "boolean" },
-            cases: { true: "@iterate" },
-            default: "@exit",
-        };
-
-        // Branch on filter condition: true -> append, false -> keep_results
-        // Both paths converge at merge_results, which iterateState references
         const keepResultsId = this.freshId("keep_results");
         bodyScope.nodes[keepResultsId] = {
             kind: "task",
             task: "identity",
-            inputSchema: {},
-            outputSchema: { type: "array" },
+            inputSchema: {
+                type: "object",
+                required: ["value"],
+                properties: { value: {} },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: {} },
+            },
             inputs: {
                 value: {
                     $from: "state",
                     name: "results",
                 } as unknown as Template,
             },
-            bind: keepResultsId,
+            bind: "updated_results",
+            next: stepId,
         };
 
-        // Merge node: whichever of append/keep_results ran, this node
-        // captures the final results list. The engine's scope will have
-        // either appendId or keepResultsId resolved. We use a branch
-        // to merge: the merge just re-reads the state that was just written.
-        // Actually, simplest: use a second branch that picks append or keep_results.
-        // But the engine can't do that without re-evaluating the condition.
-        //
-        // Alternative: use the loop's iterateState to pick based on which node ran.
-        // The engine resolves iterateState refs after the body completes.
-        // Since exactly one of append/keep_results will have run, we need
-        // iterateState to reference the right one.
-        //
-        // Solution: make both paths write to the SAME bind name. The last one
-        // to execute wins. Since only one path runs per iteration, this is safe.
-        (bodyScope.nodes[appendId] as TaskNode).bind = "updated_results";
-        (bodyScope.nodes[keepResultsId] as TaskNode).bind = "updated_results";
-
+        // Branch on filter condition: true -> append -> wrap_append -> step_i
+        //                             false -> keep_results -> step_i
         bodyScope.nodes[filterBranchId] = {
             kind: "branch",
             selector: condTemplate ?? false,
@@ -1444,15 +1662,36 @@ export class Emitter {
             default: keepResultsId,
         };
         bodyScope.nodeOrder.push(filterBranchId);
-        // Append and keep_results both flow to step_i
-        (bodyScope.nodes[appendId] as TaskNode).next = stepId;
+        (bodyScope.nodes[appendId] as TaskNode).next = wrapAppendId;
         bodyScope.nodeOrder.push(appendId);
-        (bodyScope.nodes[keepResultsId] as TaskNode).next = stepId;
+        bodyScope.nodeOrder.push(wrapAppendId);
         bodyScope.nodeOrder.push(keepResultsId);
+
+        // Increment i, then @iterate back to condition check
+        bodyScope.nodes[stepId] = {
+            kind: "task",
+            task: "int.add",
+            inputSchema: {
+                type: "object",
+                required: ["a", "b"],
+                properties: {
+                    a: { type: "integer" },
+                    b: { type: "integer" },
+                },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "integer" } },
+            },
+            inputs: {
+                a: { $from: "state", name: "i" } as unknown as Template,
+                b: 1,
+            },
+            next: "@iterate",
+            bind: stepId,
+        };
         bodyScope.nodeOrder.push(stepId);
-        bodyScope.nodeOrder.push(lengthId);
-        bodyScope.nodeOrder.push(compareId);
-        bodyScope.nodeOrder.push(checkId);
 
         this.threadNext(bodyScope);
 
@@ -1486,10 +1725,15 @@ export class Emitter {
             },
             state,
             iterateState: {
-                i: { $from: "scope", name: stepId } as unknown as Template,
+                i: {
+                    $from: "scope",
+                    name: stepId,
+                    path: ["result"],
+                } as unknown as Template,
                 results: {
                     $from: "scope",
                     name: "updated_results",
+                    path: ["result"],
                 } as unknown as Template,
             },
             maxIterations: 10000,
@@ -1529,6 +1773,10 @@ export class Emitter {
                     ? lastNode.bind
                     : undefined;
 
+            const autoPath = outputBind
+                ? this.getAutoProjectPath(branchScope, outputBind)
+                : undefined;
+
             branches[`branch_${i}`] = {
                 inputs: {},
                 scope: {
@@ -1539,6 +1787,7 @@ export class Emitter {
                         ? ({
                               $from: "scope",
                               name: outputBind,
+                              ...(autoPath ? { path: autoPath } : {}),
                           } as unknown as Template)
                         : null,
                     outputSchema: {},
@@ -1609,6 +1858,10 @@ export class Emitter {
                 ? lastNode.bind
                 : undefined;
 
+        const autoPath = outputBind
+            ? this.getAutoProjectPath(bodyScope, outputBind)
+            : undefined;
+
         const forkMapNode: ForkMapNode = {
             kind: "forkMap",
             collection: collectionTemplate,
@@ -1625,6 +1878,7 @@ export class Emitter {
                     ? ({
                           $from: "scope",
                           name: outputBind,
+                          ...(autoPath ? { path: autoPath } : {}),
                       } as unknown as Template)
                     : null,
                 outputSchema: {},

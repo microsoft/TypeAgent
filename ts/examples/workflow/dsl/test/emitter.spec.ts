@@ -4,7 +4,15 @@
 import { Emitter, TaskSchemaInfo } from "../src/emitter.js";
 import { Parser } from "../src/parser.js";
 import { lex } from "../src/lexer.js";
-import { WorkflowIR, WorkflowNode, TaskNode, BranchNode, LoopNode, ForkNode, ForkMapNode } from "workflow-model";
+import {
+    WorkflowIR,
+    WorkflowNode,
+    TaskNode,
+    BranchNode,
+    LoopNode,
+    ForkNode,
+    ForkMapNode,
+} from "workflow-model";
 
 // Common task schemas for testing
 const taskSchemas: TaskSchemaInfo[] = [
@@ -12,9 +20,15 @@ const taskSchemas: TaskSchemaInfo[] = [
         name: "text.template",
         inputSchema: {
             type: "object",
-            properties: { template: { type: "string" }, vars: { type: "object" } },
+            properties: {
+                template: { type: "string" },
+                vars: { type: "object" },
+            },
         },
-        outputSchema: { type: "object", properties: { text: { type: "string" } } },
+        outputSchema: {
+            type: "object",
+            properties: { text: { type: "string" } },
+        },
     },
     {
         name: "web.fetch",
@@ -23,7 +37,10 @@ const taskSchemas: TaskSchemaInfo[] = [
             required: ["url"],
             properties: { url: { type: "string" } },
         },
-        outputSchema: { type: "object", properties: { body: { type: "string" } } },
+        outputSchema: {
+            type: "object",
+            properties: { body: { type: "string" } },
+        },
     },
     {
         name: "text.summarize",
@@ -32,7 +49,10 @@ const taskSchemas: TaskSchemaInfo[] = [
             required: ["text"],
             properties: { text: { type: "string" } },
         },
-        outputSchema: { type: "object", properties: { summary: { type: "string" } } },
+        outputSchema: {
+            type: "object",
+            properties: { summary: { type: "string" } },
+        },
     },
     {
         name: "list.elementAt",
@@ -131,15 +151,28 @@ const taskSchemas: TaskSchemaInfo[] = [
     },
 ];
 
-function compile(source: string): { ir: WorkflowIR | undefined; errors: { message: string }[] } {
+function compile(source: string): {
+    ir: WorkflowIR | undefined;
+    errors: { message: string }[];
+} {
     const tokens = lex(source);
     if (tokens.errors.length > 0) {
-        return { ir: undefined, errors: tokens.errors.map((e: { message: string }) => ({ message: e.message })) };
+        return {
+            ir: undefined,
+            errors: tokens.errors.map((e: { message: string }) => ({
+                message: e.message,
+            })),
+        };
     }
     const parser = new Parser(tokens.tokens);
     const ast = parser.parse();
     if (ast.errors.length > 0) {
-        return { ir: undefined, errors: ast.errors.map((e: { message: string }) => ({ message: e.message })) };
+        return {
+            ir: undefined,
+            errors: ast.errors.map((e: { message: string }) => ({
+                message: e.message,
+            })),
+        };
     }
     if (ast.workflows.length === 0) {
         return { ir: undefined, errors: [{ message: "No workflow found" }] };
@@ -151,7 +184,9 @@ function compile(source: string): { ir: WorkflowIR | undefined; errors: { messag
 function compileOk(source: string): WorkflowIR {
     const result = compile(source);
     if (result.errors.length > 0) {
-        throw new Error(`Unexpected errors: ${result.errors.map(e => e.message).join(", ")}`);
+        throw new Error(
+            `Unexpected errors: ${result.errors.map((e) => e.message).join(", ")}`,
+        );
     }
     if (!result.ir) {
         throw new Error("No IR produced");
@@ -163,7 +198,9 @@ function getNode(ir: WorkflowIR, id: string): WorkflowNode {
     const node = ir.nodes[id];
     if (!node) {
         const keys = Object.keys(ir.nodes);
-        throw new Error(`Node '${id}' not found. Available: ${keys.join(", ")}`);
+        throw new Error(
+            `Node '${id}' not found. Available: ${keys.join(", ")}`,
+        );
     }
     return node;
 }
@@ -195,19 +232,42 @@ describe("Emitter v2", () => {
     test("minimal workflow with literal return", () => {
         const ir = compileOk(`workflow hello(): string { return "hi" }`);
         expect(ir.name).toBe("hello");
-        expect(ir.output).toBe("hi");
-        expect(ir.inputSchema).toEqual({ type: "object", required: [], properties: {} });
+        // Pure literal returns are wrapped in identity nodes for engine entry
+        expect(ir.output).toEqual({
+            $from: "scope",
+            name: "return_0",
+            path: ["result"],
+        });
+        expect(ir.nodes["return_0"]).toBeDefined();
+        expect((ir.nodes["return_0"] as any).task).toBe("identity");
+        expect((ir.nodes["return_0"] as any).inputs.value).toBe("hi");
+        expect(ir.inputSchema).toEqual({
+            type: "object",
+            required: [],
+            properties: {},
+        });
         expect(ir.outputSchema).toEqual({ type: "string" });
     });
 
     test("workflow with params", () => {
-        const ir = compileOk(`workflow greet(name: string): string { return name }`);
+        const ir = compileOk(
+            `workflow greet(name: string): string { return name }`,
+        );
         expect(ir.inputSchema).toEqual({
             type: "object",
             required: ["name"],
             properties: { name: { type: "string" } },
         });
-        expect(ir.output).toEqual({ $from: "input", name: "name" });
+        // Input-only return is wrapped in identity for engine entry
+        expect(ir.output).toEqual({
+            $from: "scope",
+            name: "return_0",
+            path: ["result"],
+        });
+        expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
+            $from: "input",
+            name: "name",
+        });
     });
 
     // ---- Task calls ----
@@ -263,7 +323,15 @@ describe("Emitter v2", () => {
             schema: { type: "string" },
             value: "hello",
         });
-        expect(ir.output).toEqual({ $from: "constant", name: "greeting" });
+        expect(ir.output).toEqual({
+            $from: "scope",
+            name: "return_0",
+            path: ["result"],
+        });
+        expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
+            $from: "constant",
+            name: "greeting",
+        });
     });
 
     // ---- Template literals ----
@@ -458,7 +526,10 @@ describe("Emitter v2", () => {
         `);
         const [, forkMapNode] = findNodeByKind<ForkMapNode>(ir, "forkMap");
         expect(forkMapNode.elementParam).toBe("url");
-        expect(forkMapNode.collection).toEqual({ $from: "input", name: "urls" });
+        expect(forkMapNode.collection).toEqual({
+            $from: "input",
+            name: "urls",
+        });
     });
 
     // ---- Retry built-in ----
@@ -562,7 +633,10 @@ describe("Emitter v2", () => {
         while (nodeId && nodeId !== "@exit" && nodeId !== "@iterate") {
             mainChain.add(nodeId);
             const node: WorkflowNode = body.nodes[nodeId];
-            nodeId = node.kind !== "branch" ? (node as TaskNode).next ?? undefined : undefined;
+            nodeId =
+                node.kind !== "branch"
+                    ? ((node as TaskNode).next ?? undefined)
+                    : undefined;
         }
 
         // None of the retry infrastructure nodes (math.add, compare.greaterOrEqual,
@@ -570,9 +644,11 @@ describe("Emitter v2", () => {
         for (const [id, node] of Object.entries(body.nodes)) {
             if (!mainChain.has(id) && node.kind === "task") {
                 // These are error-path-only nodes
-                expect(["math.add", "compare.greaterOrEqual", "error.fail"]).toContain(
-                    (node as TaskNode).task,
-                );
+                expect([
+                    "math.add",
+                    "compare.greaterOrEqual",
+                    "error.fail",
+                ]).toContain((node as TaskNode).task);
             }
         }
     });
@@ -629,8 +705,13 @@ describe("Emitter v2", () => {
                 return a
             }
         `);
-        // a is a literal binding resolved to "hello"
-        expect(ir.output).toBe("hello");
+        // a is a literal binding resolved to "hello", wrapped in identity
+        expect(ir.output).toEqual({
+            $from: "scope",
+            name: "return_0",
+            path: ["result"],
+        });
+        expect((ir.nodes["return_0"] as any).inputs.value).toBe("hello");
     });
 
     // ---- Bind stripping ----
@@ -720,7 +801,8 @@ describe("Emitter v2", () => {
         `);
         // Should have at least 2 math nodes (add and multiply)
         const mathNodes = Object.values(ir.nodes).filter(
-            (n) => n.kind === "task" && (n as TaskNode).task.startsWith("math."),
+            (n) =>
+                n.kind === "task" && (n as TaskNode).task.startsWith("math."),
         );
         expect(mathNodes.length).toBe(2);
     });
