@@ -104,6 +104,57 @@ function pickDefaultCapacity(
     return bestCount >= 2 ? best : undefined;
 }
 
+/**
+ * Find the highest-capacity endpoint among the `embedding` deployment's
+ * endpoints in a raw YAML deployments node. Used to synthesize a default
+ * bare embedding endpoint when `azureOpenAI.defaultEmbedding` is absent.
+ */
+function pickDefaultEmbeddingEndpoint(
+    deploymentsNode: unknown,
+):
+    | {
+          endpoint: string;
+          auth?: AuthMode;
+      }
+    | undefined {
+    if (deploymentsNode === null || typeof deploymentsNode !== "object") {
+        return undefined;
+    }
+    const deployments = deploymentsNode as Record<string, unknown>;
+    const node = deployments.embedding;
+    if (node === undefined) return undefined;
+    const arr: unknown = Array.isArray(node)
+        ? node
+        : typeof node === "object" && node !== null
+          ? (node as Record<string, unknown>).endpoints
+          : undefined;
+    if (!Array.isArray(arr) || arr.length === 0) return undefined;
+    let bestEndpoint: string | undefined;
+    let bestAuth: AuthMode | undefined;
+    let bestCapacity = -Infinity;
+    for (let i = 0; i < arr.length; i++) {
+        const item = arr[i];
+        if (item === null || typeof item !== "object") continue;
+        const o = item as Record<string, unknown>;
+        const ep = o.endpoint;
+        if (typeof ep !== "string") continue;
+        const cap =
+            typeof o.capacity === "number" ? o.capacity : (0 as number);
+        if (cap > bestCapacity) {
+            bestCapacity = cap;
+            bestEndpoint = ep;
+            bestAuth =
+                o.auth !== undefined
+                    ? readAuth(o.auth, `azureOpenAI.deployments.embedding[${i}].auth`)
+                    : undefined;
+        }
+    }
+    if (bestEndpoint === undefined) return undefined;
+    return bestAuth !== undefined
+        ? { endpoint: bestEndpoint, auth: bestAuth }
+        : { endpoint: bestEndpoint };
+}
+
 function deploymentToYaml(
     d: Deployment,
     sectionDefaultAuth: AuthMode,
@@ -539,6 +590,21 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
     emitBare("defaultEmbedding", "EMBEDDING");
     emitBare("defaultImage", "GPT_IMAGE_1_5");
     emitBare("defaultVideo", "SORA_2");
+
+    // Auto-synthesize the bare embedding endpoint from the highest-capacity
+    // `embedding` deployment endpoint when no explicit `defaultEmbedding` is
+    // configured. This lets callers that look up the bare
+    // AZURE_OPENAI_ENDPOINT_EMBEDDING env var (legacy path) succeed without
+    // requiring users to repeat the endpoint in `defaultEmbedding:`.
+    if (out.AZURE_OPENAI_ENDPOINT_EMBEDDING === undefined) {
+        const auto = pickDefaultEmbeddingEndpoint(obj.deployments);
+        if (auto !== undefined) {
+            out.AZURE_OPENAI_ENDPOINT_EMBEDDING = auto.endpoint;
+            out.AZURE_OPENAI_API_KEY_EMBEDDING = authToYaml(
+                auto.auth ?? defaultAuth,
+            );
+        }
+    }
 
     // Section-level defaultCapacity — inherited by all deployments
     // that don't specify their own.

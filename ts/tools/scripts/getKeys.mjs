@@ -6,12 +6,13 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { getClient as getPIMClient } from "./lib/pimClient.mjs";
-import { getAzCliLoggedInInfo } from "./lib/azureUtils.mjs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import chalk from "chalk";
-import { exit } from "node:process";
-import { DefaultAzureCredential } from "@azure/identity";
+import {
+    DefaultAzureCredential,
+    InteractiveBrowserCredential,
+} from "@azure/identity";
 import { SecretClient } from "@azure/keyvault-secrets";
 import yaml from "js-yaml";
 
@@ -203,19 +204,76 @@ async function getSecrets(keyVaultClient, vaultName, shared) {
     return { results, failures };
 }
 
+// Decode a JWT (no signature verification — we only want the claims to
+// print friendly identity info).
+function decodeJwtClaims(token) {
+    try {
+        const [, payload] = token.split(".");
+        if (!payload) return undefined;
+        const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+        const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+        const json = Buffer.from(b64 + pad, "base64").toString("utf8");
+        return JSON.parse(json);
+    } catch {
+        return undefined;
+    }
+}
+
+const KEY_VAULT_SCOPE = "https://vault.azure.net/.default";
+
+// Resolve an Azure credential without shelling out to `az`. Tries
+// DefaultAzureCredential first (which already covers az cli, az
+// powershell, VS Code, managed identity, env vars, etc.), and if no
+// silent credential is available, falls back to InteractiveBrowserCredential
+// to force an interactive login. Prints friendly identity info from the
+// access token's claims.
+async function getAzureCredential() {
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const defaultCred = new DefaultAzureCredential(
+        tenantId ? { tenantId } : undefined,
+    );
+    let token;
+    try {
+        token = await defaultCred.getToken(KEY_VAULT_SCOPE);
+    } catch (e) {
+        vlog(`silent credential failed: ${e?.message}`);
+    }
+
+    if (!token) {
+        console.warn(
+            chalk.yellowBright(
+                "No silent Azure credential available — launching interactive browser login...",
+            ),
+        );
+        const interactive = new InteractiveBrowserCredential({
+            ...(tenantId ? { tenantId } : {}),
+            // Allow the credential to acquire tokens for any tenant the
+            // user has access to — Key Vaults often live in a different
+            // tenant than the user's home tenant.
+            additionallyAllowedTenants: ["*"],
+        });
+        token = await interactive.getToken(KEY_VAULT_SCOPE);
+        const claims = decodeJwtClaims(token.token);
+        const who = claims?.upn ?? claims?.preferred_username ?? claims?.name;
+        if (who) console.log(`Logged in as ${chalk.cyanBright(who)}`);
+        // Return the interactive credential directly. Wrapping it in a
+        // ChainedTokenCredential with DefaultAzureCredential causes the
+        // SDK's downstream getToken calls to incorrectly route through
+        // DefaultAzureCredential (which has already failed) instead of
+        // reusing the just-acquired interactive token.
+        return interactive;
+    }
+
+    const claims = decodeJwtClaims(token.token);
+    const who = claims?.upn ?? claims?.preferred_username ?? claims?.name;
+    if (who) console.log(`Logged in as ${chalk.cyanBright(who)}`);
+    return defaultCred;
+}
+
 class SdkKeyVaultClient {
     static async get() {
-        // Print friendly identity info (one az call, like before). The actual
-        // secret operations below use DefaultAzureCredential — no more shell-outs.
-        try {
-            await getAzCliLoggedInInfo();
-        } catch (e) {
-            console.error(
-                "ERROR: User not logged in to Azure CLI. Run 'az login'.",
-            );
-            process.exit(1);
-        }
-        return new SdkKeyVaultClient(new DefaultAzureCredential());
+        const credential = await getAzureCredential();
+        return new SdkKeyVaultClient(credential);
     }
 
     constructor(credential) {
@@ -942,20 +1000,6 @@ const commands = ["push", "pull", "help"];
             throw new Error(`Unknown argument '${process.argv[2]}'`);
     }
 })().catch((e) => {
-    if (
-        e.message.includes(
-            "'az' is not recognized as an internal or external command",
-        )
-    ) {
-        console.error(
-            chalk.red(
-                `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
-            ),
-        );
-        // eslint-disable-next-line no-undef
-        exit(0);
-    }
-
     console.error(chalk.red(`FATAL ERROR: ${e.stack}`));
     process.exit(-1);
 });
