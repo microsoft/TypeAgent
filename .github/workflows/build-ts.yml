@@ -32,7 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [20, 22]
+        version: [22, 24]
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -76,7 +76,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
-          npm run lint          
+          npm run lint
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
