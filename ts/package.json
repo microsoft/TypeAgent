@@ -58,14 +58,14 @@
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
-    "@types/node": "^20.17.28",
+    "@types/node": "^22.0.0",
     "markdown-link-check": "^3.14.2",
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
   "packageManager": "pnpm@10.33.3+sha512.a19744364a7e248b92657a4ca5973f9354d21caf982579674b1c539f32c7420c47138ad8b1254df07aba9bc782d9b3029e3db34d5dbff974326eb74dac8ff489",
   "engines": {
-    "node": ">=20.18.1",
+    "node": ">=22",
     "pnpm": ">=10"
   },
   "pnpm": {
@@ -92,10 +92,9 @@
       "exifreader",
       "keytar",
       "koffi",
-      "node-pty",
-      "protobufjs",
       "puppeteer",
-      "sharp"
+      "sharp",
+      "usocket"
     ],
     "allowedDeprecatedVersions": {
       "@cliqz/adblocker": "*",

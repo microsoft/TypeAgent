@@ -26,3 +26,10 @@ export {
     NotifyExplainedData,
     HistoryEntry,
 } from "./chatPanel.js";
+
+export {
+    FEEDBACK_VARIANTS,
+    FeedbackController,
+    FeedbackUIVariant,
+    FeedbackWidget,
+} from "./feedbackWidget.js";

@@ -114,7 +114,7 @@ class AzPIMClient {
     async getPrincipalId(continueOnFailure = false) {
         try {
             const accountDetails = JSON.parse(
-                await execAsync("az ad signed-in-user show"),
+                await execAsync("az ad signed-in-user show -o json"),
             );
 
             return accountDetails.id;
