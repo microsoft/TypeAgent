@@ -145,6 +145,16 @@ export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
  * @param env Environment variables or arbitrary Record
  * @param endpointName optional suffix to add to env variable names. Lets you target different backends
  * @returns
+ *
+ * @deprecated Use the typed-config entry points instead
+ * (`azureApiSettingsFromConfig` / `openAIApiSettingsFromConfig` in
+ * `apiSettingsFromConfig.ts`). The env-based path bypasses the YAML
+ * config loaded via `@typeagent/config` and will fail when only
+ * suffixed deployments (e.g. `AZURE_OPENAI_ENDPOINT_GPT_4_O`) are
+ * configured without a bare `AZURE_OPENAI_ENDPOINT`. Existing
+ * callers continue to work because this function now consults the
+ * typed config before falling back to env scanning, but new code
+ * should call the typed entry points directly.
  */
 export function apiSettingsFromEnv(
     modelType: ModelType = ModelType.Chat,
