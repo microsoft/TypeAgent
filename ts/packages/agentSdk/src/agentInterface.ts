@@ -311,6 +311,18 @@ export interface SessionContext<T = unknown> {
     // The dispatcher will call getDynamicSchema/getDynamicGrammar to get the updated content.
     reloadAgentSchema(): Promise<void>;
 
+    // Notify the dispatcher that this agent's readiness state may have
+    // changed due to an external event (e.g. an extension client just
+    // connected, an OAuth token was refreshed). The dispatcher re-runs
+    // the agent's `checkReadiness` and updates its cache so the next
+    // pre-flight gate sees the fresh state — without the user having to
+    // run `@config agent refresh <name>`.
+    //
+    // No-op for agents that don't implement `checkReadiness`. Best
+    // effort: errors are swallowed so a transient probe failure doesn't
+    // surface in the trigger path (the next refresh will retry).
+    notifyReadinessChanged(): Promise<void>;
+
     /**
      * Register a port this agent has just bound (typically with
      * `bind(0)` so the OS picks a free ephemeral port). The dispatcher

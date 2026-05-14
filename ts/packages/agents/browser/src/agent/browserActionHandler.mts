@@ -656,11 +656,26 @@ async function updateBrowserContext(
                 // effort — see recordClientSeen for the swallow-on-fail
                 // contract.
                 void recordClientSeen(context.instanceStorage);
+                // Push a readiness refresh so the dispatcher's cached
+                // state flips from "setup-required" (cached at agent
+                // init time, before the extension was running) to
+                // "ready" without the user having to invoke
+                // `@config agent refresh browser` after launching the
+                // browser. notifyReadinessChanged is best-effort and
+                // swallows errors internally — safe to fire-and-forget.
+                void context.notifyReadinessChanged();
             },
             onClientDisconnected: (client: BrowserClient) => {
                 if (client.type === "extension") {
                     debug(`Extension client disconnected: ${client.id}`);
                 }
+                // Mirror onClientConnected: when the last client for
+                // this session goes away, the readiness state flips
+                // back to setup-required. Refresh the cache so the
+                // user gets the friendly "open your browser" message
+                // on the next action instead of a downstream RPC
+                // timeout from a stale "ready" cache.
+                void context.notifyReadinessChanged();
             },
             onWebAgentMessage: async (client: BrowserClient, data: any) => {
                 if (
@@ -762,6 +777,12 @@ async function updateBrowserContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
             context.agentContext.viewProcess = undefined;
+            // Reset to OS-assigned so a subsequent re-enable forks
+            // server.mjs with arg "0" instead of the stale port. The
+            // killed child may still hold the old port for a brief
+            // window (SIGTERM is async on Windows), so re-binding the
+            // same port races with EADDRINUSE.
+            context.agentContext.localHostPort = 0;
         }
 
         await cleanupBrowserSession(context.agentContext);
@@ -779,6 +800,7 @@ async function closeBrowserContext(
     if (context.agentContext.viewProcess) {
         context.agentContext.viewProcess.kill();
         context.agentContext.viewProcess = undefined;
+        context.agentContext.localHostPort = 0;
     }
 }
 

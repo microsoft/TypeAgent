@@ -328,7 +328,13 @@ function setupEventListeners(): void {
         debugWebAgentProxy("Web page connected:", url);
         const handler = async (event: MessageEvent) => {
             const message = event.data;
-            const data = JSON.parse(message);
+            let data;
+            try {
+                data = JSON.parse(message);
+            } catch {
+                // Non-JSON or non-string payload — not a webAgent message.
+                return;
+            }
             if (isWebAgentMessageFromDispatcher(data)) {
                 debugWebAgentProxy(`Dispatcher -> WebAgent (${url})`, data);
                 port.postMessage(data);

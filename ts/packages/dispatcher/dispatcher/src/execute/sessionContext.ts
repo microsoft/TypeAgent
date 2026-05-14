@@ -232,6 +232,17 @@ export function createSessionContext<T = unknown>(
         async reloadAgentSchema(): Promise<void> {
             await context.agents.reloadAgentSchema(name, context);
         },
+        async notifyReadinessChanged(): Promise<void> {
+            // Best-effort: swallow errors so an event-driven trigger
+            // (e.g. WebSocket onClientConnected) never throws into the
+            // event-emitter path. The cache will reconcile on the next
+            // refresh.
+            try {
+                await context.agents.refreshReadiness(name);
+            } catch {
+                // ignore
+            }
+        },
         async validateGrammarPatterns(
             request: GrammarValidationRequest,
         ): Promise<GrammarValidationResult> {
