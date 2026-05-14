@@ -400,6 +400,14 @@ describe("isAllowedAgentOrigin", () => {
         expect(isAllowedAgentOrigin("https://localhost:5173")).toBe(true);
         expect(isAllowedAgentOrigin("http://127.0.0.1:8081")).toBe(true);
     });
+    it("returns true for IPv6 loopback origins", () => {
+        // Browsers running on IPv6-first networks may report the
+        // origin with the bracketed `[::1]` host. Important for the
+        // Electron shell's inline browser when bound to ::1.
+        expect(isAllowedAgentOrigin("http://[::1]")).toBe(true);
+        expect(isAllowedAgentOrigin("http://[::1]:8081")).toBe(true);
+        expect(isAllowedAgentOrigin("https://[::1]:5173")).toBe(true);
+    });
     it("returns true for missing/null Origin", () => {
         expect(isAllowedAgentOrigin(undefined)).toBe(true);
         expect(isAllowedAgentOrigin("")).toBe(true);

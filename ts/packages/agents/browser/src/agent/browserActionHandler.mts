@@ -2477,6 +2477,11 @@ async function createViewServiceHost(
                 });
             } catch (e: any) {
                 console.error(e);
+                // Synchronous fork failure (e.g. ENOENT for server.mjs,
+                // permissions error). Reset the cached port back to OS-
+                // assigned so a subsequent retry doesn't re-use a stale
+                // value — mirrors the disable/close paths.
+                context.agentContext.localHostPort = 0;
                 resolve(undefined);
             }
         },

@@ -8,8 +8,9 @@
  *  - `vscode-webview://...`, `vscode-file://...`, and
  *    `vscode-resource://...` (the VS Code extension host's
  *    sandboxed surfaces).
- *  - `http(s)://localhost(:port)` and `http(s)://127.0.0.1(:port)`
- *    (loopback dev clients).
+ *  - `http(s)://localhost(:port)`, `http(s)://127.0.0.1(:port)`, and
+ *    `http(s)://[::1](:port)` (loopback dev clients on either IPv4 or
+ *    IPv6).
  *  - **No Origin header** — Node `ws` clients (and the VS Code
  *    extension's own `ws` client) don't send Origin. The server
  *    binds to localhost, so this is loopback-restricted at the OS
@@ -42,7 +43,14 @@ export function isAllowedAgentOrigin(origin: string | undefined): boolean {
         if (u.protocol !== "http:" && u.protocol !== "https:") {
             return false;
         }
-        return u.hostname === "localhost" || u.hostname === "127.0.0.1";
+        // Node's URL parser preserves IPv6 brackets in `hostname`
+        // (e.g. `new URL("http://[::1]:8080").hostname === "[::1]"`),
+        // so match the bracketed form.
+        return (
+            u.hostname === "localhost" ||
+            u.hostname === "127.0.0.1" ||
+            u.hostname === "[::1]"
+        );
     } catch {
         return false;
     }
