@@ -20,8 +20,9 @@ jest.unstable_mockModule("../src/context/commandHandlerContext.js", () => ({
 
 // ── Dynamic import after mocks are installed ──────────────────────────────────
 
-const { executeConversationAction } =
-    await import("../src/context/system/action/conversationActionHandler.js");
+const { executeConversationAction } = await import(
+    "../src/context/system/action/conversationActionHandler.js"
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -912,7 +912,9 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigTranslationNumberOfInitialActionsCommandHandler implements CommandHandler {
+class ConfigTranslationNumberOfInitialActionsCommandHandler
+    implements CommandHandler
+{
     public readonly description =
         "Set number of actions to use for initial translation";
     public readonly parameters = {

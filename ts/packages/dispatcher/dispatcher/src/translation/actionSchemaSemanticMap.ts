@@ -149,8 +149,9 @@ function encodeEmbedding(embedding: NormalizedEmbedding): EncodedEmbedding {
 
 function decodeEmbedding(embedding: EncodedEmbedding): NormalizedEmbedding {
     return new Float32Array(
-        Uint8Array.from([...atob(embedding)].map((c) => c.charCodeAt(0)))
-            .buffer,
+        Uint8Array.from(
+            [...atob(embedding)].map((c) => c.charCodeAt(0)),
+        ).buffer,
     );
 }
 
