@@ -71,7 +71,7 @@ question.
 | 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | Keep as-is. Localized mutation in a single helper, runs before nodes are consumed. Internal lowering detail, not a spec concern.                                                       |
 | 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | Rewritten. Description was stale. Both branches now normalize through identity nodes to a shared `updated_results` bind, using the same pattern as 3.12.                               |
-| 3.9  | Decide whether identity-wrapping is the intended lowering pattern for literal arms or whether the IR should grow a cleaner representation.           | TBD                                                                                                                                                                                    |
+| 3.9  | Decide whether identity-wrapping is the intended lowering pattern for literal arms or whether the IR should grow a cleaner representation.           | Keep as-is. Branch targets must be node IDs; identity wrapping is the only correct lowering for literal arms. Both arms bind a shared result name and converge at a noop merge node.   |
 | 3.10 | Specify whether implicit termination via missing `next` is the intended node contract.                                                               | TBD                                                                                                                                                                                    |
 | 3.11 | Decide whether root-level identity wrapping is canonical lowering that belongs in the spec.                                                          | TBD                                                                                                                                                                                    |
 | 3.12 | Decide whether shared-bind normalization is the standard lowering rule for branch-produced values.                                                   | TBD                                                                                                                                                                                    |
@@ -398,9 +398,15 @@ so the merge point has a single, unambiguous source for the next state.
 
 When a ternary arm is a literal (e.g., `cond ? 42 : 0`), the emitter wraps
 it in an `identity` task node because the branch node's `cases` and
-`default` fields point to node IDs, not to literal values. A simpler
-approach would be to emit a constant task or use the value directly, but
-the IR's branch structure requires node references.
+`default` fields point to node IDs, not to literal values. When an arm is
+an expression that emits nodes, the last node in that sub-scope gets the
+shared result bind name directly (no identity wrapper needed). Both paths
+converge at a `noop` merge node.
+
+**Classification:** Correct and necessary lowering. The IR's branch
+structure requires node references as targets; identity wrapping is the
+only way to represent literal values in that model. This also follows the
+shared-bind normalization pattern from 3.12.
 
 ### 3.10 Throw emits error.fail with `next: undefined`
 
