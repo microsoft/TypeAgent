@@ -23,6 +23,8 @@ export function repairOutput(body: string): string {
     let s = body;
     s = repairBareCodeFences(s);
     s = repairAbsoluteLinks(s);
+    s = repairH1Headings(s);
+    s = repairSelfReadmeLinks(s);
     return s;
 }
 
@@ -148,4 +150,61 @@ export function repairAbsoluteLinks(body: string): string {
         (_m, url: string) => `\`${url}\``,
     );
     return s;
+}
+
+/**
+ * Demote any H1 (`# Heading`) to H2 (`## Heading`) outside fenced
+ * code blocks. The validator forbids H1s anywhere in the body
+ * because the file's title is appended deterministically.
+ *
+ * Why a repair: some packages' hand-written READMEs start with
+ * `# Title` and the LLM mirrors that pattern even after being told
+ * not to. Demoting to H2 is mechanical, lossless, and keeps the
+ * section content intact rather than burning a retry attempt.
+ *
+ * Lines inside fenced code blocks are left alone — `# foo` there is
+ * a shell comment, not a heading.
+ */
+export function repairH1Headings(body: string): string {
+    const lines = body.split(/\r?\n/u);
+    let inFence = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+        if (/^\s*```/u.test(line)) {
+            inFence = !inFence;
+            continue;
+        }
+        if (inFence) continue;
+        // Match `# ` exactly (single hash + space), not `## `, `### `, etc.
+        if (/^#\s/u.test(line)) {
+            lines[i] = `#${line}`;
+        }
+    }
+    return lines.join("\n");
+}
+
+/**
+ * Strip markdown links of the form `[anything](./README.md)` to the
+ * plain visible text. The AUTOGEN file's header banner already
+ * provides the canonical pointer to `./README.md` (when one exists),
+ * so body-level self-references add noise and frequently break for
+ * packages that have no `README.md` at all.
+ *
+ * Lines inside fenced code blocks are left alone so the repair
+ * doesn't munge sample markdown shown in code samples.
+ */
+export function repairSelfReadmeLinks(body: string): string {
+    const lines = body.split(/\r?\n/u);
+    let inFence = false;
+    const linkRegex = /\[([^\]]+)\]\(\.\/README\.md(?:\s+"[^"]*")?\)/gu;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+        if (/^\s*```/u.test(line)) {
+            inFence = !inFence;
+            continue;
+        }
+        if (inFence) continue;
+        lines[i] = line.replace(linkRegex, (_m, text: string) => text);
+    }
+    return lines.join("\n");
 }

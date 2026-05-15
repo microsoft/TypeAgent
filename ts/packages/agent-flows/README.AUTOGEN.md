@@ -39,7 +39,7 @@ No additional setup is required beyond installing the package. Simply run:
 pnpm install @typeagent/agent-flows
 ```
 
-## Architecture
+## Key Files
 
 The package is organized into several modules, each responsible for a specific aspect of the workflow infrastructure:
 
@@ -89,6 +89,6 @@ External: `typescript`
 
 ---
 
-_Auto-generated against commit `c52ef52d052f7bc93f52d2a76e7866fff8958079` on `2026-05-15T08:22:20.912Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-flows docs:verify-links` to spot-check._
+_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-flows docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

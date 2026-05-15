@@ -42,8 +42,11 @@ function aiBanner(inputs: PackageInputs): string {
 
 function renderPlaceholder(inputs: PackageInputs): string {
     const lines: string[] = [];
+    const readmeHint = inputs.readmeContext.exists
+        ? `, or read [\`./README.md\`](./README.md) for the hand-written documentation in the meantime`
+        : "";
     lines.push(
-        `> 📝 **Placeholder documentation — not yet AI-authored.** Re-run \`pnpm docs:generate:llm --package ${stripScope(inputs.pkg.name)}\` to populate this file, or read [\`./README.md\`](./README.md) for the hand-written documentation in the meantime. The deterministic Reference section below is already populated.`,
+        `> 📝 **Placeholder documentation — not yet AI-authored.** Re-run \`pnpm docs:generate:llm --package ${stripScope(inputs.pkg.name)}\` to populate this file${readmeHint}. The deterministic Reference section below is already populated.`,
     );
     lines.push("");
     lines.push("## Overview");

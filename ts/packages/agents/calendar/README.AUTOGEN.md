@@ -41,9 +41,9 @@ To set up the calendar agent, you need to configure the Microsoft Graph API acce
    ```
 3. Ensure you have the necessary dependencies installed by running `pnpm install`.
 
-For detailed setup instructions, see [./README.md](./README.md).
+For detailed setup instructions, see the hand-written README.
 
-## Architecture
+## Key Files
 
 The `calendar` package is structured as follows:
 
@@ -99,6 +99,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `c52ef52d052f7bc93f52d2a76e7866fff8958079` on `2026-05-15T08:14:45.438Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

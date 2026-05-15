@@ -4,7 +4,9 @@
 import {
     repairAbsoluteLinks,
     repairBareCodeFences,
+    repairH1Headings,
     repairOutput,
+    repairSelfReadmeLinks,
 } from "../src/repairOutput.js";
 import { validateDocumentation } from "../src/documentationValidation.js";
 
@@ -107,6 +109,91 @@ describe("repairAbsoluteLinks", () => {
             "[Discord Developer Portal](https://discord.com/developers) and <https://aka.ms/foo>.";
         const once = repairAbsoluteLinks(input);
         const twice = repairAbsoluteLinks(once);
+        expect(twice).toBe(once);
+    });
+});
+
+describe("repairH1Headings", () => {
+    it("demotes a leading H1 to H2", () => {
+        const out = repairH1Headings("# Discord Agent\n\nBody text.\n");
+        expect(out).toBe("## Discord Agent\n\nBody text.\n");
+    });
+
+    it("demotes H1s deeper in the body", () => {
+        const out = repairH1Headings(
+            "## Overview\n\nIntro.\n\n# Architecture\n\nDetails.\n",
+        );
+        expect(out).toBe(
+            "## Overview\n\nIntro.\n\n## Architecture\n\nDetails.\n",
+        );
+    });
+
+    it("leaves H2 and deeper headings untouched", () => {
+        const input = "## Overview\n\n### Subsection\n\n#### Even deeper\n";
+        expect(repairH1Headings(input)).toBe(input);
+    });
+
+    it("does not touch `# foo` inside fenced code blocks (shell comments)", () => {
+        const input =
+            "## Overview\n\n```bash\n# install dependencies\npnpm install\n```\n";
+        expect(repairH1Headings(input)).toBe(input);
+    });
+
+    it("does not match `#foo` without a trailing space", () => {
+        const input = "Reference issue #123 for context.";
+        expect(repairH1Headings(input)).toBe(input);
+    });
+
+    it("is idempotent", () => {
+        const input = "# Title\n\n## Section\n\n# Another\n";
+        const once = repairH1Headings(input);
+        const twice = repairH1Headings(once);
+        expect(twice).toBe(once);
+    });
+});
+
+describe("repairSelfReadmeLinks", () => {
+    it("strips `[X](./README.md)` to plain text X", () => {
+        const out = repairSelfReadmeLinks(
+            "See [the hand-written README](./README.md) for setup.",
+        );
+        expect(out).toBe("See the hand-written README for setup.");
+    });
+
+    it("strips the literal `[README.md](./README.md)` self-reference", () => {
+        const out = repairSelfReadmeLinks(
+            "See [README.md](./README.md) for details.",
+        );
+        expect(out).toBe("See README.md for details.");
+    });
+
+    it("leaves links to other README files untouched", () => {
+        const input = "See [calendar README](../calendar/README.md) for that.";
+        expect(repairSelfReadmeLinks(input)).toBe(input);
+    });
+
+    it("leaves links to deeper paths untouched", () => {
+        const input = "See [setup notes](./docs/SETUP.md) for that.";
+        expect(repairSelfReadmeLinks(input)).toBe(input);
+    });
+
+    it("does not touch self-links inside fenced code blocks", () => {
+        const input =
+            "## Overview\n\n```md\nSee [README.md](./README.md) above.\n```\n";
+        expect(repairSelfReadmeLinks(input)).toBe(input);
+    });
+
+    it("handles multiple self-links on the same line", () => {
+        const out = repairSelfReadmeLinks(
+            "[A](./README.md) and [B](./README.md).",
+        );
+        expect(out).toBe("A and B.");
+    });
+
+    it("is idempotent", () => {
+        const input = "See [the README](./README.md) for setup.";
+        const once = repairSelfReadmeLinks(input);
+        const twice = repairSelfReadmeLinks(once);
         expect(twice).toBe(once);
     });
 });

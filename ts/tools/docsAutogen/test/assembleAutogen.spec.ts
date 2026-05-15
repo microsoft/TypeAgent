@@ -125,6 +125,32 @@ describe("assembleAutogenBlock", () => {
         expect(block.body).toContain("## Overview");
     });
 
+    it("placeholder banner OMITS the ./README.md link when no README exists", () => {
+        const block = assembleAutogenBlock(makeInputs(), {
+            headSha: "sha",
+            isoDate: "date",
+        });
+        // The base fixture has readmeContext.exists: false.
+        expect(block.body).toContain("Placeholder documentation");
+        expect(block.body).not.toContain("[`./README.md`](./README.md)");
+    });
+
+    it("placeholder banner INCLUDES the ./README.md link when README exists", () => {
+        const block = assembleAutogenBlock(
+            makeInputs({
+                readmeContext: {
+                    exists: true,
+                    raw: "# Existing\n\nHand-written.",
+                    handAuthored: "# Existing\n\nHand-written.",
+                    wordCount: 3,
+                },
+            }),
+            { headSha: "sha", isoDate: "date" },
+        );
+        expect(block.body).toContain("Placeholder documentation");
+        expect(block.body).toContain("[`./README.md`](./README.md)");
+    });
+
     it("renders the deterministic Actions reference for agent packages", () => {
         const block = assembleAutogenBlock(
             makeInputs({

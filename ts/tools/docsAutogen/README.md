@@ -29,8 +29,8 @@ file at the package root with this structure:
 3. Content hash + `SOURCE` comment pointing back at `./README.md`.
 4. `# <pkg-name> — AI-generated documentation` H1 title.
 5. AI-authored documentation banner.
-6. AI-authored multi-section body (Overview / What it does / Actions /
-   Architecture / How to extend, plus optional sections). Validated for
+6. AI-authored multi-section body (Overview / What it does / Key Files
+   / How to extend, plus optional sections). Validated for
    length, tone, link integrity, and required sections.
 7. Deterministic `## Reference` appendix: entry points, dependencies,
    used-by graph, files of interest, agent surface, and a per-action

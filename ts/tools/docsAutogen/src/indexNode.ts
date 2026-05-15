@@ -94,7 +94,9 @@ export { renderAiDocumentation } from "./renderDocumentation.js";
 export {
     repairAbsoluteLinks,
     repairBareCodeFences,
+    repairH1Headings,
     repairOutput,
+    repairSelfReadmeLinks,
 } from "./repairOutput.js";
 export {
     stripBrokenLinks,

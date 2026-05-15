@@ -25,7 +25,7 @@ export const ACTIONS_REFERENCE_MAX = 30;
  * structural validator hard-rejects anything beyond the cap. Values
  * widened from Phase 4 ("thin AI Overview") to Phase 5 ("full AI
  * documentation"): the model now authors multiple sections (Overview,
- * What it does, Actions intro, Architecture, How to extend) rather
+ * What it does, Actions intro, Key Files, How to extend) rather
  * than a single Overview blurb.
  */
 export const DOCUMENTATION_TARGET_WORDS_MIN = 500;
