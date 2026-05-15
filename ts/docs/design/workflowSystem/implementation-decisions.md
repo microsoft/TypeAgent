@@ -77,22 +77,17 @@ question.
 | 3.12 | Decide whether shared-bind normalization is the standard lowering rule for branch-produced values.                                                   | Keep as-is for v2. Shared-bind normalization is the current canonical lowering for branch-produced values. See `dsl-v2-implementation-gap.md` for the design-principles analysis and future merge / phi alternative.                                                |
 | 3.13 | Specify loop semantics for `map`/`filter` as part of the emitted/runtime contract.                                                                   | Keep as-is. `map` and `filter` lower as pre-check loops: compare index vs length before entering the body, exit immediately on false, then increment and iterate after body work. This is the intended emitted/runtime contract for these builtins in v2.           |
 | 3.14 | Decide whether integer builtins are the intentional long-term infrastructure for iteration.                                                          | Rewritten as stale. Current lowering uses `math.add` and `compare.lessThan`, not deprecated `int.*` builtins. Keep numeric loop infrastructure aligned with JS-number semantics; `integer` remains a type-level/schema distinction, not a separate arithmetic path. |
-| 3.15 | Specify that output projection comes from canonical scope-ref lowering, not ad hoc ref construction.                                                 | TBD                                                                                                                                                                                                                                                                 |
+| 3.15 | Specify that output projection comes from canonical scope-ref lowering, not ad hoc ref construction.                                                 | Resolved. All scope-level output refs now derive single-property projection through the canonical `getAutoProjectPath` helper, including `scopeRef`, fork branch output, forkMap body output, and binding resolution for node refs. No ad hoc bypass remains.       |
 | 3.16 | Decide whether `noop` / `identity` should be documented as required lowering primitives in the compiler/runtime contract.                            | Refer to `dsl-v2-implementation-gap.md` for the design-principles analysis. Current direction: keep `identity` as an accepted lowering primitive; if refined later, split literal materialization from merge normalization.                                         |
-| 3.17 | Review as temporary technical debt. Keep coverage, but track validator work needed to remove the bypass.                                             | TBD                                                                                                                                                                                                                                                                 |
-| 3.18 | Review as an explicit scope boundary. Decide whether to preserve current limits or plan later language expansion.                                    | TBD                                                                                                                                                                                                                                                                 |
-| 4.1  | Decide whether color choices belong in durable documentation or should stay as implementation/theme details.                                         | TBD                                                                                                                                                                                                                                                                 |
-| 4.2  | Decide whether this visual convention is part of the product language or just local styling.                                                         | TBD                                                                                                                                                                                                                                                                 |
-| 4.3  | Decide whether groups-as-edge-sources is the intended graph model contract.                                                                          | TBD                                                                                                                                                                                                                                                                 |
-| 4.4  | Decide whether extraction order matters semantically or should remain an internal implementation detail.                                             | TBD                                                                                                                                                                                                                                                                 |
-| 4.5  | Specify destructuring/binding lookup behavior in the graph extractor if it is meant to be stable.                                                    | TBD                                                                                                                                                                                                                                                                 |
-| 5.1  | Review as a migration behavior change. Decide whether to accept it, mitigate it, or document it prominently.                                         | TBD                                                                                                                                                                                                                                                                 |
-| 5.2  | Revisit after retry semantics are fixed, then document the final migration story.                                                                    | TBD                                                                                                                                                                                                                                                                 |
-| 5.3  | Confirm this is just a correctness fix and capture it in migration notes if needed.                                                                  | TBD                                                                                                                                                                                                                                                                 |
-| 5.4  | Decide on the deprecation signaling policy (`console.warn`, debug tracing, structured diagnostics, etc.).                                            | TBD                                                                                                                                                                                                                                                                 |
-| 5.5  | Decide whether equivalent v2 coverage is sufficient or whether some removed edge cases need to be restored explicitly.                               | TBD                                                                                                                                                                                                                                                                 |
-| 5.6  | Review as test scaffolding cleanup/documentation, not core language design.                                                                          | TBD                                                                                                                                                                                                                                                                 |
-| 5.7  | Decide whether to fix test schemas so validation can run, or explicitly accept this as a temporary validation gap.                                   | TBD                                                                                                                                                                                                                                                                 |
+| 3.17 | Review as temporary technical debt. Keep coverage, but track validator work needed to remove the bypass.                                             | Confirmed as temporary technical debt. See `dsl-v2-implementation-gap.md` for the full analysis of which patterns fail and what the validator needs. Keep tests; fix validator.                                                                                     |
+| 3.18 | Review as an explicit scope boundary. Decide whether to preserve current limits or plan later language expansion.                                    | Keep as intentional v2 scope boundary. See `dsl-v2-implementation-gap.md` for the specific limitations and potential future expansions. Tests were rewritten to stay within current limits.                                                                         |
+| 5.1  | Review as a migration behavior change. Decide whether to accept it, mitigate it, or document it prominently.                                         | Accepted. v2 `retry(n, ...)` with no fallback throws on exhaustion. This is intentional and correct per dsl-v2.md section 3.1. The v1 silent-break behavior was a bug.                                                                                              |
+| 5.2  | Revisit after retry semantics are fixed, then document the final migration story.                                                                    | No discrepancy. `retry(n, ...)` gives n total attempts; v1 `maxRetries = 2` with `nextAttempt < maxRetries` also gave 2 total attempts. The d8 `.wf` correctly uses `retry(2, ...)`. Integration tests confirm `retry(3, ...)` gives 3 attempts.                    |
+| 5.3  | Confirm this is just a correctness fix and capture it in migration notes if needed.                                                                  | Confirmed as correctness fix. `return joined.text` narrows the output to match the declared `string` return type. No behavioral change; the v1 code was returning a wrapped object where a string was intended.                                                     |
+| 5.4  | Decide on the deprecation signaling policy (`console.warn`, debug tracing, structured diagnostics, etc.).                                            | Stale. `int.add` and `int.lessThan` have been fully removed from the codebase. No deprecation signaling is needed because the deprecated tasks no longer exist.                                                                                                     |
+| 5.5  | Decide whether equivalent v2 coverage is sufficient or whether some removed edge cases need to be restored explicitly.                               | Accepted. v2 test suite covers the same semantics through map/retry/branch tests. The removed v1 tests targeted `for..of` and try/catch patterns that no longer exist in the language.                                                                              |
+| 5.6  | Review as test scaffolding cleanup/documentation, not core language design.                                                                          | Accepted. Adding `web.fetch` to test schemas is normal test scaffolding. Not a design concern.                                                                                                                                                                      |
+| 5.7  | Decide whether to fix test schemas so validation can run, or explicitly accept this as a temporary validation gap.                                   | Accept as temporary gap. Adding infrastructure task schemas to the test setup would fix this. Related to G7 in `dsl-v2-implementation-gap.md` (validator convergence patterns).                                                                                     |
 
 ---
 
@@ -131,6 +126,12 @@ into onError but does not inject `partial` (the array of completed results
 so far). ForkMap similarly does not pass `partial`. Only the basic
 `buildErrorObject()` is used.
 
+Decision: reduce spec to match current code. Error handlers currently
+receive only the `error` object. Partial results, trigger context, abort
+signals, and wait/fail-fast policies are deferred to a future iteration.
+When a fork branch fails, the entire fork fails; partial results from
+successful branches are not preserved or surfaced.
+
 ### 0.4 Arithmetic tasks use JavaScript number semantics
 
 All `math.*` tasks use JavaScript number semantics. `NaN` and `Infinity`
@@ -158,6 +159,11 @@ implement short-circuit evaluation:
 
 - `a && b`: branch on `a`; true arm evaluates `b`, false arm returns `false`
 - `a || b`: branch on `a`; true arm returns `true`, false arm evaluates `b`
+
+Both operands must be `boolean` (type error otherwise), and the result
+type is `boolean`. This is stricter than JavaScript/TypeScript: `&&`/`||`
+are pure boolean logic operators, not value-producing short-circuit
+operators. See dsl-v2.md section 2.6 for the full type-rule table.
 
 Both arms bind the same name and merge through a noop node, using the same
 pattern as ternary expressions. The `bool.and` and `bool.or` builtin tasks
@@ -556,9 +562,19 @@ emitter's normal scope-ref path derivation. Single-property output
 projection only happens when references are built through the canonical
 lowering helpers.
 
-This is an implementation decision about ownership of output shaping: the
-emitter should derive projection paths centrally rather than having each
-construct rebuild them by hand.
+Decision: resolved. All scope-level output references now derive
+single-property projection through the canonical `getAutoProjectPath`
+helper. The four construction sites are:
+
+1. `scopeRef` (general node-to-scope reference)
+2. Fork branch output (parallel construct)
+3. ForkMap body output (parallelMap construct)
+4. Binding resolution for `"node"` bindings in `resolveIdent`
+
+Each site calls `getAutoProjectPath`, which inspects the node's
+`outputSchema` and emits a `path: [key]` projection when the schema has
+exactly one property. No ad hoc `{ $from: "scope", name }` construction
+bypasses this logic.
 
 ### 3.16 `noop` and `identity` are required lowering primitives
 
@@ -578,8 +594,34 @@ validator's domination analysis rejects workflows that execute correctly in
 the runner. The tests were kept to preserve behavioral coverage while
 accepting the validator gap.
 
-This is a temporary implementation decision: runtime behavior is treated as
-authoritative for these cases until the validator is brought in line.
+Decision: confirmed as temporary technical debt. The tests are correct and
+should be kept. The validator needs to be improved.
+
+**Where the bypasses are:**
+
+1. `dsl-integration.spec.ts`: four tests use `NO_VALIDATE` + `skipValidation`.
+   The patterns that fail validation are:
+
+   - if/else where both arms return (branch-return with shared-bind
+     normalization through prefixed nodes converging at merge noop)
+   - switch where all arms return (multi-arm shared-bind convergence)
+   - if/else with arithmetic (mixed binary-op + branch lowering)
+   - task call + binary op + ternary (mixed lowering with multiple splits)
+
+2. `engine.spec.ts`: many hand-built IR tests use `skipValidation` for
+   error-handling paths (onError, retry exhaustion, etc.). These are a
+   separate concern: the hand-built IR intentionally exercises edge cases
+   that may not match what the emitter produces.
+
+**What the validator needs:**
+
+The split-point phi check (case c in `isBindingCoveredAtNode`) was added
+for ternary and short-circuit `&&`/`||` patterns and works for those. But
+the emitter's branch-return lowering produces prefixed nodes (e.g.
+`then_taskCall_3`, `else_taskCall_5`) that converge through a merge noop,
+and the current phi check does not trace through the prefix-based
+convergence pattern. The fix is to extend the validator's CFG traversal
+to recognize these convergence shapes, not to change the emitter's output.
 
 ### 3.18 Composition coverage stays within current parser/type-checker limits
 
@@ -588,59 +630,15 @@ was rewritten to avoid unsupported chained/property-composition and mixed-arm
 typing patterns instead of expanding the parser or type checker in the same
 commit.
 
-That means the current language boundary was intentionally preserved here.
-The commit improves emitter/runtime correctness without broadening DSL
-expression semantics.
+Decision: keep as intentional v2 scope boundary. The DSL does not support:
 
----
+- Property access on task call results (e.g. `task.call(args).field`)
+- Chaining task calls (e.g. `a.call(b.call(x))`)
+- Ternary arms with mismatched types
 
-## Phase 4: Graph Extractor + Visualizer
-
-### 4.1 Color assignments
-
-| Group/Node kind | Color        | Justification               |
-| --------------- | ------------ | --------------------------- |
-| retry           | orange       | "warning/retry" association |
-| map             | indigo       | Arbitrary                   |
-| filter          | purple       | Arbitrary                   |
-| parallel        | teal         | Arbitrary                   |
-| parallelMap     | green-teal   | Arbitrary                   |
-| switch          | deep purple  | Arbitrary                   |
-| switch-case     | light gray   | Subordinate to switch       |
-| switch-default  | lighter gray | Subordinate to switch       |
-| operator        | light blue   | Computation                 |
-| branch          | yellow       | Decision point              |
-| error           | red          | Error/danger                |
-| workflowCall    | cyan         | External reference          |
-
-No design spec for colors. These are aesthetic choices.
-
-### 4.2 Dashed stroke for retry groups
-
-The v1 visualizer used dashed borders for `catch` groups. Since v2 replaces
-try/catch with retry, the dashed border was reassigned to retry groups.
-This is a visual continuity choice, not specified.
-
-### 4.3 Groups serve as edge sources
-
-When `return retry(...)` or `const x = parallel(...)` produces a value,
-the group ID appears as `edge.from` in the graph model. This means groups
-and nodes share the same edge namespace. An alternative would be to create
-an explicit "output" node for each group.
-
-### 4.4 `extractReturn` calls `extractExprAsNode` before creating the return node
-
-When a return statement wraps a built-in (e.g., `return retry(...)`), the
-extractor first processes the expression as a node/group, then creates
-the return node with an edge from the group. This means the built-in gets
-its own visual group even when it's the only expression in the workflow.
-
-### 4.5 Destructuring resolves via binding lookup
-
-For `const [a, b] = parallel(...)`, the graph extractor looks up bindings
-for dotted name expressions rather than calling `extractExprAsNode` (which
-returns undefined for simple names). This avoids creating phantom nodes for
-destructured variables.
+These are reasonable limitations for a structured workflow language. If any
+of them are needed later, they would be separate parser/type-checker
+expansions, not corrections to current behavior.
 
 ---
 
@@ -651,48 +649,75 @@ destructured variables.
 The v1 `d8-summarize-url.wf` had while/try/catch/if/continue/break with
 `maxRetries = 2`. On exhaustion, it silently broke out of the loop, leaving
 `pageContent` potentially unset. The v2 `retry(2, ...)` with no fallback
-will throw a runtime error on exhaustion. This is a **behavioral change**.
+will throw a runtime error on exhaustion.
+
+Decision: accepted as intentional. The v2 behavior is correct per
+dsl-v2.md section 3.1. The v1 silent-break was a bug, not a feature.
+Callers that need graceful degradation should provide a fallback argument.
 
 ### 5.2 d8 retry count may differ
 
-The v1 had `maxRetries = 2` used in a manual retry loop with `attempt < maxRetries`
-as the continue condition. This allowed 3 total attempts (initial + 2 retries).
-The v2 `retry(2, ...)` has different semantics due to the bug in 3.1 above:
-on success it runs the body exactly 2 times; on failure the behavior depends
-on how onError interacts with the counter.
+The v1 had `maxRetries = 2` with `nextAttempt < maxRetries` as the
+continue condition, where `nextAttempt = attempt + 1`. Tracing the v1 IR:
+attempt=0 fails, nextAttempt=1, `1 < 2` true, iterate; attempt=1 fails,
+nextAttempt=2, `2 < 2` false, exit. That is **2 total attempts**.
+
+The v2 `retry(n, ...)` emitter initializes `attempt = 0`, increments on
+error, and compares with `greaterOrEqual` against count. For `retry(2, ...)`:
+body fails, attempt=1, `1 >= 2` false, iterate; body fails, attempt=2,
+`2 >= 2` true, exhausted. That is also **2 total attempts**.
+
+Decision: no discrepancy. Both v1 and v2 give 2 total attempts for
+count=2. The d8 `.wf` correctly uses `retry(2, ...)`. The comment
+"Retries fetch once on failure" is accurate (1 initial + 1 retry).
+Integration tests confirm `retry(3, ...)` gives 3 total attempts
+(`callCount === 3`).
+
+Note: the original 5.2 text incorrectly claimed v1 gave "3 total attempts
+(initial + 2 retries)" for `maxRetries = 2`. That was a miscount.
 
 ### 5.3 d1 return type narrowed
 
 The v1 `d1-standup-prep.wf` had `return joined` where `joined` was the result
 of `string.join()`. Since `string.join` returns `{text: string}`, not `string`,
 the v2 uses `return joined.text` to match the declared `string` return type.
-This is a correctness fix, not a semantic change.
+
+Decision: confirmed as correctness fix. No behavioral change.
 
 ### 5.4 Deprecation uses console.warn
 
-`int.add` and `int.lessThan` log deprecation warnings via `console.warn`.
-Could have used the `debug` package (project convention for tracing) or a
-structured deprecation mechanism. `console.warn` was chosen for visibility.
+Decision: stale. `int.add` and `int.lessThan` have been fully removed from
+the codebase (builtinTasks.ts no longer contains them). The deprecation
+warnings went away with the tasks themselves. No policy decision needed.
 
 ### 5.5 Removed v1-only compiler tests entirely
 
 Tests for `for..of` lowering and try/catch single-trigger compliance were
 removed rather than rewritten as v2 equivalents. The v2 test suite has
-equivalent coverage through map lowering and retry tests, but the specific
-edge cases those v1 tests covered may not have direct v2 counterparts.
+equivalent coverage through map lowering and retry tests.
+
+Decision: accepted. The removed tests targeted language constructs that
+no longer exist in v2 (`for..of`, try/catch). v2 coverage supersedes them.
 
 ### 5.6 Added web.fetch to compiler test schemas
 
 The v2 compiler tests needed a `web.fetch` schema for retry/if-else/parallel
-test cases. This was added to the test's `TASK_SCHEMAS` map. Not part of
-the plan.
+test cases. This was added to the test's `TASK_SCHEMAS` map.
+
+Decision: accepted. Normal test scaffolding. Not a design concern.
 
 ### 5.7 Map compiler test skips validation
 
 The "lowers map to a loop node" test compiles without the `VALIDATE` flag
 because the test schemas don't include the infrastructure tasks (`list.elementAt`,
 `list.append`, `math.add`, `compare.lessThan`, `list.length`) that the map
-emitter generates. A proper test would include these schemas and validate.
+emitter generates.
+
+Decision: accept as temporary gap. Two independent issues prevent this
+test from running with validation: (1) missing infrastructure task schemas
+in the test setup, and (2) G7 - the validator does not yet handle the
+convergence patterns that map lowering produces. Fixing (1) alone would
+still fail; both must be addressed.
 
 ---
 

@@ -3,7 +3,7 @@
 Tracked items where the DSL spec (dsl-v2.md) describes features that are
 not yet fully wired end-to-end.
 
-## Sub-workflow calls
+## G1: Sub-workflow calls
 
 **Spec:** dsl-v2.md section 4. Multiple workflows in a single file;
 sub-workflows are called by name and inlined at compile time.
@@ -18,8 +18,9 @@ sub-workflows are called by name and inlined at compile time.
   Cross-workflow calls produce "Unknown workflow" unless the caller
   explicitly provides sibling workflows.
 - Emitter: does not inline. Emits a `TaskNode` with
-  `task: "workflow.<name>"` and empty schemas (see implementation-decisions
-  3.4).
+  `task: "workflow.<name>"` and empty schemas. The current emit strategy
+  was a placeholder: it generates an unregistered task reference rather
+  than inlining the sub-workflow body.
 - Runtime: fails. `workflow.<name>` tasks are not registered in the
   engine.
 
@@ -32,10 +33,18 @@ sub-workflows are called by name and inlined at compile time.
    `workflow.<name>` tasks in the engine at runtime.
 3. Add integration tests that compile and execute a multi-workflow file.
 
-**Related items:** implementation-decisions.md 2.3 (recursive calls),
-3.4 (sub-workflow emit strategy).
+**Related decisions:**
 
-## Parallel branch names are synthetic
+- Recursion is unsupported. The type checker resolves return types from
+  declared signatures (no divergence), but sub-workflow calls emit as
+  unregistered tasks that fail at runtime. Once inlining lands, true
+  recursion is structurally impossible (infinite inlining). A static
+  cycle check would give a better error but is low priority.
+- Sub-workflow emit strategy: the current `workflow.<name>` task-node
+  approach is a placeholder. The intended v2 behavior is compile-time
+  inlining per dsl-v2.md section 4.
+
+## G2: Parallel branch names are synthetic
 
 **Spec:** dsl-v2.md section 3.4. Destructuring bindings become branch
 names: `const [text, image] = parallel(...)` should produce branches
@@ -51,9 +60,13 @@ user-visible destructuring variable names.
    fork branch emitter so branches are named after the user's bindings.
 2. Update fork output resolution to use these names.
 
-**Related items:** implementation-decisions.md 3.5.
+**Related decision:** Branch naming was confirmed as an internal
+implementation detail for now. The emitter uses positional `branch_0`,
+`branch_1` names. The intended spec behavior is to derive branch names
+from destructuring bindings so fork output keys match user-visible
+variable names.
 
-## Parallel branches missing IR schema fields
+## G3: Parallel branches missing IR schema fields
 
 **Spec:** ir-v2.md specifies fork branches have the same sub-scope
 contract as loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`,
@@ -69,9 +82,14 @@ this if it enforces the full branch sub-scope contract.
    fork branch.
 2. Validate that emitted fork IR passes the IR validator.
 
-**Related items:** implementation-decisions.md 3.6.
+**Related decision:** The emitter currently generates minimal branch
+scopes (`{ entry, nodes }`) and optionally `{ inputs, scope: { ... } }`
+for branches that need outer references. The full sub-scope contract
+(matching loop bodies) has not been enforced yet. This is a
+spec/implementation mismatch that needs the emitter to populate the
+missing fields.
 
-## TypeScript-style type definitions
+## G4: TypeScript-style type definitions
 
 **Spec:** TypeScript allows named type aliases (`type Foo = { ... }`) and
 interfaces that can be referenced by name in annotations.
@@ -94,7 +112,7 @@ and inline object literals, but rejects any other identifier as
    should distinguish "did you mean to define a type?" from a typo).
 4. Consider whether types should be exportable across workflows.
 
-## `llm.generateJson` needs generics for output typing
+## G5: `llm.generateJson` needs generics for output typing
 
 **Spec:** `llm.generateJson` produces structured output, but its JSON
 schema is only known at the call site, not from the task's static
@@ -117,7 +135,7 @@ to a variable and pass it opaquely to another task.
    type checker support for resolving generic instantiations, and emitter
    support for threading the resolved type into the schema.
 
-## `identity` is covering two distinct IR gaps
+## G6: `identity` is covering two distinct IR gaps
 
 **Context:** The current emitter uses builtin `identity` nodes in several
 places where the DSL produces a value but the IR only allows control flow
@@ -211,9 +229,83 @@ These are related in the emitter, but they are not the same design problem.
 **What needs to happen:**
 
 1. Decide whether v2 should explicitly document `identity` as an accepted
-   compiler/runtime lowering primitive for these cases. If the main docs
-   absorb this section, they should carry the explicit lowering rules above
-   rather than relying on the temporary implementation-decisions file.
+   compiler/runtime lowering primitive for these cases. The explicit
+   lowering rules above should be carried into the main spec docs or
+   kept here as the durable reference.
 2. If a later cleanup is desired, evaluate `ConstNode` and merge / phi
    support separately rather than treating all `identity` uses as one
    problem.
+
+## G7: Validator does not handle branch-return convergence patterns
+
+**Context:** The IR validator's domination analysis rejects some
+emitter-produced workflows that execute correctly in the runner. Four
+DSL-integration tests and several hand-built engine tests bypass
+validation to preserve behavioral coverage.
+
+**Current state:** The validator has three binding-coverage strategies
+in `isBindingCoveredAtNode`:
+
+- (a) Direct dominator coverage
+- (b) Joint coverage across onError splits
+- (c) Split-point phi coverage for branch nodes where both arms bind
+  the same name
+
+Strategy (c) was added for ternary and short-circuit `&&`/`||` patterns
+and works for those. But the emitter's branch-return lowering produces
+prefixed nodes (e.g. `then_taskCall_3`, `else_taskCall_5`) that converge
+through a merge `noop`, and the current phi check does not trace through
+the prefix-based convergence pattern.
+
+**Patterns that fail validation:**
+
+1. if/else where both arms return (branch-return with shared-bind
+   normalization through prefixed nodes converging at merge noop)
+2. switch where all arms return (multi-arm shared-bind convergence)
+3. if/else with arithmetic (mixed binary-op + branch lowering)
+4. task call + binary op + ternary (mixed lowering with multiple splits)
+
+**What needs to happen:**
+
+1. Extend the validator's CFG traversal to recognize the prefix-based
+   convergence shape the emitter produces for branch-return patterns.
+   The fix belongs in the validator, not the emitter.
+2. Once the validator handles these patterns, remove `NO_VALIDATE` from
+   the four DSL-integration tests and `skipValidation` from their
+   corresponding engine runs.
+3. The hand-built engine tests that use `skipValidation` for
+   error-handling paths are a separate concern and can stay as-is.
+
+## G8: Composition patterns outside current v2 scope
+
+**Context:** The DSL parser and type checker intentionally do not support
+certain expression-composition patterns that would be natural in a
+general-purpose language. An integration test that combined a task call,
+binary operator, and ternary was rewritten to stay within current limits
+rather than expanding the parser.
+
+**Current limitations:**
+
+- Property access on task call results (e.g. `task.call(args).field`)
+- Chaining task calls as arguments (e.g. `a.call(b.call(x))`)
+- Ternary arms with mismatched types
+
+These are reasonable boundaries for a structured workflow language where
+every line should map to a visual node. Property-access chaining would
+create implicit intermediate values with no visual representation, and
+nested calls would obscure the step-by-step execution model.
+
+**What needs to happen:**
+
+1. If any of these patterns become needed, they would require separate
+   parser and/or type-checker expansions.
+2. Property access on task results is the most likely future need. It
+   would require the parser to handle `expr.field` after call expressions
+   and the emitter to produce an intermediate projection node.
+3. Nested task calls would need the emitter to linearize them into
+   sequential nodes with implicit bindings.
+4. Mixed-arm typing would need union types in the type system. The
+   current v2 design requires ternary/if-else arms to have matching
+   types (error if not). There are no union types. This was an
+   intentional simplification: returns the consequent type, rejects
+   mismatches at compile time.
