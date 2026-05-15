@@ -923,7 +923,7 @@ keeps the branch node a pure structural construct.
       /* reference object resolved in body scope at @iterate */
     },
   },
-  "maxIterations": 1000,
+  "maxIterations": 1000, // optional; engine default 10,000
   "next": "<nodeId>", // optional; see section 3.3
   "onError": "<nodeId>", // optional; see section 3.3
   "bind": "<scopeVarName>", // optional; loop output is the resolved `output` value
@@ -958,8 +958,9 @@ Key points:
   built by a tail body node and bound under one name; the loop's
   `output` then references that single name. This keeps every
   value-producing scope (workflow, loop) on one shape.
-- `maxIterations` is required and bounded; if exceeded, the loop fails with
-  a well-known error type (consumable by `onError`).
+- `maxIterations` is optional. If present, must be a positive integer; if
+  exceeded, the loop fails with a well-known error type (consumable by
+  `onError`). If omitted, the engine applies a default safety cap (10,000).
 - `bind` on the loop publishes the resolved `output` value as a scope
   variable in the **outer** scope, just like any other value-producing node.
 
@@ -1422,7 +1423,7 @@ output, and other nodes never reference a branch as a data source.
    outer scope), validating against the variable's schema.
 3. Set iteration counter `i = 0`.
 4. Begin iteration:
-   - If `i >= maxIterations`, fail with `LoopMaxIterationsExceeded`.
+   - If `i >= maxIterations` (or the engine default when omitted), fail with `LoopMaxIterationsExceeded`.
    - Execute body starting at `body.entry`. Inside the body:
      - `$from: "state"` reads see the values established at the start of
        this iteration. State does not change during a body iteration.
@@ -1872,7 +1873,7 @@ reference them.
 | P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                        |
 | P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                              |
 | P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                                                            |
-| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                |
+| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                            |
 
 ---
 

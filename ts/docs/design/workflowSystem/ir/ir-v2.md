@@ -219,7 +219,7 @@ is a closed sub-scope. Unlike `loop`, there is no `iterateState`
     "type": "array",
     "items": { "$ref": "#/types/ProcessedItem" },
   },
-  "maxIterations": 1000,
+  "maxIterations": 1000, // optional; engine default 10,000
   "maxConcurrency": 5,
   "next": "aggregate",
   "bind": "processedItems",
@@ -236,7 +236,7 @@ is a closed sub-scope. Unlike `loop`, there is no `iterateState`
 | `elementParam`     | yes      | Name of the element input injected into each body instance. The engine binds the current element as an input field with this name; body nodes read it via `$from: "input"`. |
 | `body`             | yes      | Sub-scope with the same contract as v1 loop bodies.                                                                                                                         |
 | `outputSchema`     | yes      | Schema of the forkMap's output. Array whose items match the body's output schema.                                                                                           |
-| `maxIterations`    | no       | Safety cap (same semantics as v1 loop's `maxIterations`).                                                                                                                   |
+| `maxIterations`    | no       | Safety cap (same semantics as v1 loop's `maxIterations`). Engine default: 10,000.                                                                                           |
 | `maxConcurrency`   | no       | Max concurrent iterations. Engine queues excess. Defaults to unbounded.                                                                                                     |
 | `next`             | no       | Next node ID, or `null` / sentinel.                                                                                                                                         |
 | `onError`          | no       | Error handler node ID. Handler receives `error` and empty `trigger` (same contract as fork).                                                                                |

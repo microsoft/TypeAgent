@@ -35,28 +35,6 @@ sub-workflows are called by name and inlined at compile time.
 **Related items:** implementation-decisions.md 2.3 (recursive calls),
 3.4 (sub-workflow emit strategy).
 
-## Retry exits on count, not on first success (Bug)
-
-**Spec:** dsl-v2.md section 3.1. Try body once, retry up to N times on
-failure, exit on first success.
-
-**Current state:** The emitter produces a loop that runs the body exactly
-`count` times on the success path (no early exit on first success). On
-the failure path, the attempt counter never increments (it only advances
-on success), so error retries can loop up to the `maxIterations` safety
-limit (100).
-
-**What needs to happen:**
-
-1. Restructure the emitted loop so the success path exits immediately
-   after the first successful body execution.
-2. The failure/onError path should increment the attempt counter and
-   re-enter the loop.
-3. Add integration tests for retry-on-first-success and
-   retry-exhaustion semantics.
-
-**Related items:** implementation-decisions.md 3.1.
-
 ## `noop` and `identity` tasks not registered in engine
 
 **Spec:** These are synthetic tasks the emitter produces for merge points

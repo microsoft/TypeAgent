@@ -87,7 +87,7 @@ export interface LoopNode {
     body: WorkflowScope;
     state: Record<string, LoopStateVar>;
     iterateState: Record<string, Template>;
-    maxIterations: number;
+    maxIterations?: number;
     next?: string;
     onError?: string;
     bind?: string;

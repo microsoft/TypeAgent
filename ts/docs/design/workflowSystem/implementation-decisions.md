@@ -61,10 +61,10 @@ question.
 | 2.1  | Decide whether `unknown` should remain universally compatible or become stricter.                                                                    | Strongly typed. `unknown` is an internal recovery sentinel only: producers emit errors, consumers may continue, and compilation fails if any unknowns are produced.                    |
 | 2.2  | Specify numeric compatibility rules.                                                                                                                 | Keep as-is. `integer` and `number` are bidirectionally compatible (JS has one numeric type). `integer` preserved for JSON Schema fidelity. Document `integer` in dsl-v2 type table.    |
 | 2.3  | Review as an unsupported/runtime gap. Decide whether to detect this statically or document it as unsupported.                                        | Document as limitation. Recursion is unsupported (sub-workflows emit as unregistered tasks). No static cycle check needed now; once inlining lands, recursion is structurally blocked. |
-| 2.4  | Specify array-element type propagation rules.                                                                                                        | TBD                                                                                                                                                                                    |
-| 2.5  | Decide whether ternary mismatches should stay as errors or grow into a union-type feature later.                                                     | TBD                                                                                                                                                                                    |
-| 3.1  | Review as a real implementation bug to fix, not a behavior to bless.                                                                                 | TBD                                                                                                                                                                                    |
-| 3.2  | Decide whether hard-coded iteration limits are acceptable and, if so, where they should be documented/configured.                                    | TBD                                                                                                                                                                                    |
+| 2.4  | Specify array-element type propagation rules.                                                                                                        | Keep as-is. Element types fully propagate: `map`/`parallelMap` extract element from collection, bind to callback param, return `array<body-type>`. `filter` preserves collection type. |
+| 2.5  | Decide whether ternary mismatches should stay as errors or grow into a union-type feature later.                                                     | Keep as-is. Arms must match types (error if not). No union types. Returns consequent type. Correct and intentional.                                                                    |
+| 3.1  | Review as a real implementation bug to fix, not a behavior to bless.                                                                                 | Fixed. Retry now exits on first success. Bug was already addressed before this review.                                                                                                 |
+| 3.2  | Decide whether hard-coded iteration limits are acceptable and, if so, where they should be documented/configured.                                    | Removed from emitter. Engine provides default (10,000). IR `maxIterations` is optional; workflows can override per-node.                                                               |
 | 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | TBD                                                                                                                                                                                    |
 | 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | TBD                                                                                                                                                                                    |
 | 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | TBD                                                                                                                                                                                    |
@@ -300,13 +300,17 @@ but is low priority.
 
 The type checker infers array element types from context:
 
-- `map(coll, (item) => { ... })` - `item` gets the element type of `coll`
-- `filter(coll, (item) => { ... })` - same
-- Array literals are not supported in the DSL, so there's no array literal
-  type inference
+- `map(coll, (item) => { ... })` - `item` gets the element type of `coll`;
+  return type is `array<body-return-type>`
+- `filter(coll, (item) => { ... })` - `item` gets element type; return type
+  is the original collection type (filtering doesn't change element type)
+- `parallelMap` follows the same pattern as `map`
+- When collection type is `any` or `unknown`, callback param falls back to `any`
 
-The plan listed "map/filter -> array<body type>" for return types but didn't
-specify how element types propagate into the body scope.
+**Classification:** Correct implementation. Matches spec. No changes needed.
+
+Minor note: `filter` does not check that its body returns `boolean`. This is
+a validation gap but separate from element-type propagation.
 
 ### 2.5 Ternary arm type mismatch is an error
 
@@ -315,29 +319,20 @@ compile error. The plan listed this as a type error but didn't specify
 whether a union type or an error was the right response. An error was chosen
 for simplicity (no union types in the type system).
 
+**Classification:** Correct design choice. The type system has no unions, so
+requiring matching arms is the right constraint. Returns the consequent type.
+
 ---
 
 ## Phase 3: Emitter
 
 ### 3.1 Retry runs body N times even on success (BUG)
 
-The retry emitter produces: body tasks -> step_attempt -> compare(attempt
+Originally the retry emitter ran the body `count` times on success (no
+early exit) and retried indefinitely on failure (attempt counter only
+incremented on success path).
 
-> = count) -> branch(true: @exit, false: @iterate). There is no early-exit
-> on first success. If `retry(3, ...)` and the body succeeds on attempt 0,
-> the loop increments attempt to 1, checks 1 >= 3 (false), and iterates
-> again. The body runs exactly `count` times before exiting on success.
-
-Intended semantics: try once, retry up to N times on failure, exit on first
-success. Actual semantics: run body N times regardless. On failure, the
-loop's `onError` triggers and re-enters, but the attempt counter only
-increments on the success path, so error retries don't consume attempts.
-
-This means:
-
-- Success path: body runs `count` times (wasteful, possibly wrong)
-- Failure path: body retries indefinitely (attempt never increments on error),
-  up to `maxIterations: 100` safety limit
+**Classification:** Bug, already fixed before this review.
 
 ### 3.2 maxIterations values are hard-coded
 
@@ -347,9 +342,10 @@ This means:
 | map      | 10,000        | Allow large collections      |
 | filter   | 10,000        | Same as map                  |
 
-The plan and spec did not specify these values. They are safety limits to
-prevent infinite loops. If a workflow operates on a collection with 10,001
-elements, the map silently stops at 10,000.
+**Classification:** Removed from emitter. The emitter no longer emits
+`maxIterations`. The engine defaults to 10,000 when omitted. The IR type
+makes `maxIterations` optional on both `LoopNode` and `ForkMapNode`, so
+workflows can still override per-node if needed.
 
 ### 3.3 `noop` and `identity` tasks are not registered in the engine
 
@@ -644,18 +640,17 @@ Items tracked in `dsl/dsl-v2-implementation-gap.md` are omitted here.
 
 | #   | Issue                                                                  | Severity                    | Phase                                |
 | --- | ---------------------------------------------------------------------- | --------------------------- | ------------------------------------ | -------- | --- |
-| 1   | Retry runs body N times on success (3.1)                               | Bug                         | 3                                    |
-| 2   | `noop` and `identity` not registered in engine (3.3)                   | Bug                         | 3                                    |
-| 3   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3                                    |
-| 4   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3                                    |
-| 5   | &&/                                                                    |                             | short-circuit via branch nodes (0.6) | Resolved | 0   |
-| 6   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0                                    |
-| 7   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5                                    |
-| 8   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3                                    |
-| 9   | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3                                    |
-| 10  | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3                                    |
-| 11  | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3                                    |
-| 12  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3                                    |
-| 13  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3                                    |
-| 14  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3                                    |
-| 15  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3                                    |
+| 1   | `noop` and `identity` not registered in engine (3.3)                   | Bug                         | 3                                    |
+| 2   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3                                    |
+| 3   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3                                    |
+| 4   | &&/                                                                    |                             | short-circuit via branch nodes (0.6) | Resolved | 0   |
+| 5   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0                                    |
+| 6   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5                                    |
+| 7   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3                                    |
+| 8   | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3                                    |
+| 9   | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3                                    |
+| 10  | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3                                    |
+| 11  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3                                    |
+| 12  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3                                    |
+| 13  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3                                    |
+| 14  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3                                    |

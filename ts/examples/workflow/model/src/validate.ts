@@ -1209,8 +1209,9 @@ function validateScope(
             }
 
             if (
-                !Number.isInteger(node.maxIterations) ||
-                node.maxIterations < 1
+                node.maxIterations !== undefined &&
+                (!Number.isInteger(node.maxIterations) ||
+                    node.maxIterations < 1)
             ) {
                 errors.push({
                     path: `${path}.maxIterations`,

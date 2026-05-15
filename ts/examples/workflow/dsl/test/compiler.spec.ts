@@ -263,10 +263,10 @@ describe("DSL compiler", () => {
             kind: string;
             body: { entry: string; nodes: Record<string, unknown> };
             state: Record<string, unknown>;
-            maxIterations: number;
+            maxIterations?: number;
         };
         expect(loop.kind).toBe("loop");
-        expect(loop.maxIterations).toBe(10000);
+        expect(loop.maxIterations).toBeUndefined();
         expect(loop.state).toHaveProperty("i");
     });
 

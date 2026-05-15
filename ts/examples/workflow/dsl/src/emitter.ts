@@ -1337,7 +1337,6 @@ export class Emitter {
                     path: ["result"],
                 } as unknown as Template,
             },
-            maxIterations: 100, // safety limit
             ...(onError ? { onError } : {}),
             bind: loopId,
         };
@@ -1557,7 +1556,6 @@ export class Emitter {
                     path: ["list"],
                 } as unknown as Template,
             },
-            maxIterations: 10000,
             bind: loopId,
         };
 
@@ -1847,7 +1845,6 @@ export class Emitter {
                     path: ["result"],
                 } as unknown as Template,
             },
-            maxIterations: 10000,
             bind: loopId,
         };
 

@@ -855,9 +855,10 @@ export class WorkflowEngine {
         }
 
         const bodyScopePath = [...scopePath, `${nodeId}.body`];
+        const maxIter = node.maxIterations ?? 10000;
 
         try {
-            for (let i = 0; i < node.maxIterations; i++) {
+            for (let i = 0; i < maxIter; i++) {
                 if (signal.aborted) {
                     throw new EngineError("Run cancelled");
                 }
@@ -941,7 +942,7 @@ export class WorkflowEngine {
             }
 
             throw new EngineError(
-                `LoopMaxIterationsExceeded at "${nodeId}" (limit: ${node.maxIterations})`,
+                `LoopMaxIterationsExceeded at "${nodeId}" (limit: ${maxIter})`,
             );
         } catch (err) {
             if (node.onError) {
@@ -1183,10 +1184,7 @@ export class WorkflowEngine {
                     constraints,
                 );
 
-                results[index] = resolveTemplate(
-                    node.body.output,
-                    itemScope,
-                );
+                results[index] = resolveTemplate(node.body.output, itemScope);
 
                 this.emit({
                     type: "forkMapIterationCompleted",
