@@ -256,9 +256,12 @@ Embedded inline in conditions and value positions.
 String concatenation uses template literals only: `` `${a}${b}` ``, not `+`.
 This eliminates the primary source of implicit coercion in JS/TS.
 
-**IR lowering:** Each operator emits a task node (e.g., `===` becomes
-`compare.equals`, `+` becomes `math.add`). This is an implementation detail
-invisible to the workflow author.
+**IR lowering:** Most operators emit a task node (e.g., `===` becomes
+`compare.equals`, `+` becomes `math.add`). The exceptions are `&&` and `||`,
+which lower to branch nodes for short-circuit evaluation: the left operand
+is evaluated and used as the branch condition; one arm evaluates the right
+operand, the other returns the short-circuit value directly. This is an
+implementation detail invisible to the workflow author.
 
 **Visual:** Operators appear as inline text on the containing visual element
 (branch label, condition header), not as separate nodes. This is consistent
@@ -845,9 +848,10 @@ Strict rules (deviations from TS):
 
 ### 7.4 Emitter
 
-- BinaryExpr / UnaryExpr: lower to task nodes (e.g., `===` becomes
-  `compare.equals`, `+` becomes `math.add`). Syntactic sugar only;
-  invisible to the workflow author.
+- BinaryExpr / UnaryExpr: most operators lower to task nodes (e.g., `===`
+  becomes `compare.equals`, `+` becomes `math.add`). `&&` and `||` lower
+  to branch nodes for short-circuit evaluation (same pattern as ternary).
+  Syntactic sugar only; invisible to the workflow author.
 - RetryNode: emit loop node with onError edges and attempt counter
   (same machinery as v1's while+try/catch lowering, factored into a
   dedicated emitter method)

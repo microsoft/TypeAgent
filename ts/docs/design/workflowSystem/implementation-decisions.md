@@ -53,11 +53,11 @@ question.
 | 0.4  | Specify the runtime error contract for divide-by-zero.                                                                                               | All math uses JS number semantics. Division/modulo by zero returns Infinity/NaN, not a task failure. `int.*` deprecated. Added `math.floor/round/ceil` for integer conversion.       |
 | 0.5  | Decide whether comparison semantics should intentionally follow JavaScript or become stricter/more explicit.                                         | Keep JS semantics. Ordering operators already restrict inputs to `number`, so string coercion is a non-issue. NaN/Infinity behavior documented in spec section 3.1.                  |
 | 0.6  | Decide whether non-short-circuit boolean tasks are an acceptable language limitation or need a separate control-flow form.                           | Lower `&&`/`                                                                                                                                                                         |     | `to branch nodes for short-circuit evaluation. Remove`bool.and`/`bool.or` builtins. Validator extended with split-point phi coverage to accept bindings on all branch arms. |
-| 1.1  | Specify parser precedence and associativity in the language docs.                                                                                    | TBD                                                                                                                                                                                  |
-| 1.2  | Decide whether parse-time builtin reservation is the intended language rule or whether naming should be made more explicit/less ambiguous.           | TBD                                                                                                                                                                                  |
-| 1.3  | Specify the arrow-body disambiguation rule.                                                                                                          | TBD                                                                                                                                                                                  |
-| 1.4  | Specify the restriction and confirm the error behavior is the one we want.                                                                           | TBD                                                                                                                                                                                  |
-| 1.5  | Specify the error strategy for banned operators and confirm the diagnostic wording approach.                                                         | TBD                                                                                                                                                                                  |
+| 1.1  | Specify parser precedence and associativity in the language docs.                                                                                    | Documented. 9 precedence levels (ternary lowest, member/call highest), all left-associative except ternary (right) and unary prefix (right). Only `===`/`!==` (no loose `==`/`!=`).  |
+| 1.2  | Decide whether parse-time builtin reservation is the intended language rule or whether naming should be made more explicit/less ambiguous.           | Keep parse-time detection. Reservation is narrow (only `name(` triggers it). Builtins need custom syntax parsing. Documented the scope of reservation.                               |
+| 1.3  | Specify the arrow-body disambiguation rule.                                                                                                          | Keep as-is. Standard JS/TS rule: `{` means block body, otherwise expression body (wrapped in synthetic ReturnStatement). No ambiguity.                                               |
+| 1.4  | Specify the restriction and confirm the error behavior is the one we want.                                                                           | Gap: parser accepts `break` anywhere (no `inSwitch` check). Emitter silently ignores it. Should add a diagnostic rejecting `break` outside switch arms.                              |
+| 1.5  | Specify the error strategy for banned operators and confirm the diagnostic wording approach.                                                         | Keep as-is. Lexer rejects `==`/`!=` with clear diagnostic suggesting `===`/`!==`. No token emitted, so parser never sees them. Earliest-possible error.                              |
 | 2.1  | Decide whether `unknown` should remain universally compatible or become stricter.                                                                    | TBD                                                                                                                                                                                  |
 | 2.2  | Specify numeric compatibility rules.                                                                                                                 | TBD                                                                                                                                                                                  |
 | 2.3  | Review as an unsupported/runtime gap. Decide whether to detect this statically or document it as unsupported.                                        | TBD                                                                                                                                                                                  |
@@ -172,52 +172,77 @@ expressions to pass validation without `skipValidation`.
 
 ## Phase 1: Lexer + Parser
 
-### 1.1 Operator precedence levels
+### 1.1 Operator precedence and associativity
 
-The plan said "precedence climbing" but did not specify levels. The
-implementation uses (lowest to highest):
+The plan said "precedence climbing" but did not specify levels or
+associativity. The implementation uses recursive descent with one
+function per level (lowest to highest):
 
-1. `||` (logical or)
-2. `&&` (logical and)
-3. `==`, `!=`, `===`, `!==` (equality)
-4. `<`, `>`, `<=`, `>=` (comparison)
-5. `+`, `-` (additive)
-6. `*`, `/`, `%` (multiplicative)
-7. `!`, unary `-` (unary)
-8. `.` (member access), `()` (call)
+| Level | Operators            | Associativity  |
+| ----- | -------------------- | -------------- |
+| 0     | `?:` (ternary)       | right          |
+| 1     | `\|\|`               | left           |
+| 2     | `&&`                 | left           |
+| 3     | `===`, `!==`         | left           |
+| 4     | `<`, `>`, `<=`, `>=` | left           |
+| 5     | `+`, `-`             | left           |
+| 6     | `*`, `/`, `%`        | left           |
+| 7     | `!`, unary `-`       | right (prefix) |
+| 8     | `.` (member), `()`   | left           |
 
-This matches JavaScript/TypeScript precedence. `?:` (ternary) is parsed as
-a suffix of binary expressions at the lowest precedence level.
+This matches the JavaScript/TypeScript subset the DSL supports. Loose
+equality (`==`, `!=`) is intentionally excluded; the lexer rejects them
+with a diagnostic suggesting `===`/`!==` instead (see 1.5).
+
+The ternary operator uses `parseExpression()` for both the consequent
+and alternate branches, making it right-associative: `a ? b : c ? d : e`
+parses as `a ? b : (c ? d : e)`, matching JS.
 
 ### 1.2 Built-in name detection happens at parse time
 
 When the parser encounters a call expression, it checks the callee name
-against a hard-coded set `{ retry, map, filter, parallel, parallelMap }`.
-If matched, it produces the corresponding dedicated AST node (RetryNode,
-MapNode, etc.) instead of a generic CallExpr. This means these names are
-reserved - you cannot have a task called `retry` or `map`. The plan said
-"built-ins are compiler directives" but didn't specify how ambiguity was
-resolved.
+against a hard-coded set `{ retry, map, filter, parallel, parallelMap }`
+(`BUILTIN_NAMES` in parser.ts line 65). If the name matches **and** the
+next token is `(`, the parser dispatches to a dedicated parsing function
+that understands the builtin's custom syntax (e.g., arrow-function
+arguments). Otherwise the identifier falls through to the normal
+identifier/dotted-name path.
+
+The reservation is narrow: only `name(...)` triggers the builtin path.
+Using the name as a variable reference (`name` alone) or as a dotted
+segment (`obj.name(...)`) is unaffected. You cannot, however, define a
+task or workflow with one of these names and call it - the parser will
+always interpret `map(...)` as the builtin map, not a task call.
+
+This is the right design: builtins have custom argument syntax (arrow
+functions, count expressions) that generic call parsing cannot handle.
+Parse-time detection is the simplest correct approach.
 
 ### 1.3 Arrow function body: block vs expression
 
 Arrow functions with `{ }` produce a block body (statements). Without `{ }`
-they produce a single expression body. The parser decides based on whether
-the next token is `{`. Both forms are accepted for all built-ins. The plan
-mentioned `() => { body }` and `() => expr` but didn't specify disambiguation.
+they produce a single expression body, which the parser wraps in a synthetic
+`ReturnStatement`. The parser decides based on whether the next token is `{`.
+Both forms are accepted for all built-ins. This is standard JS/TS arrow
+function semantics, no ambiguity.
 
 ### 1.4 `break` is only allowed in switch arms
 
-The parser rejects `break` outside of switch arms. It is not a general-purpose
-statement. The plan mentioned this rule but the error message and detection
-mechanism were implementation choices.
+The plan says `break` is only valid in switch arms (not loops, since v2 has
+no loops). However, the parser accepts `break` anywhere - there is no
+`inSwitch` context flag. The emitter silently ignores it (returns `undefined`),
+so a stray `break` at workflow top level compiles without error and produces
+no IR node. This is a minor gap: ideally the compiler should reject `break`
+outside switch arms with a diagnostic.
 
 ### 1.5 `==` and `!=` produce errors, not silent fallback
 
-The lexer recognizes `==` and `!=` as tokens, then the parser rejects them
-with an explicit error: "Use === instead of ==" / "Use !== instead of !=".
-This was listed in the plan but the approach (lex then reject vs. reject
-during lexing) was a choice. The current approach gives better error messages.
+The lexer recognizes `==` and `!=` and pushes an error diagnostic:
+"Use === instead of == (no implicit coercion)" / "Use !== instead of !=
+(no implicit coercion)". No token is emitted, so the parser never sees
+them. This was listed in the plan but the approach (reject during lexing
+vs. lex then reject in parser) was a choice. The current approach gives
+clear diagnostics at the earliest possible point.
 
 ---
 

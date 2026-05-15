@@ -62,7 +62,13 @@ import {
 } from "./ast.js";
 
 /** Names recognized as compiler built-in functions. */
-const BUILTIN_NAMES = new Set(["retry", "map", "filter", "parallel", "parallelMap"]);
+const BUILTIN_NAMES = new Set([
+    "retry",
+    "map",
+    "filter",
+    "parallel",
+    "parallelMap",
+]);
 
 /**
  * Internal placeholder for a parsed arrow function.
@@ -84,6 +90,7 @@ export interface ParseError {
 export class Parser {
     private pos = 0;
     private errors: ParseError[] = [];
+    private inSwitchDepth = 0;
 
     constructor(private tokens: Token[]) {}
 
@@ -410,6 +417,7 @@ export class Parser {
 
     /** Parse statements until we hit another case/default/} */
     private parseSwitchArmBody(): Statement[] {
+        this.inSwitchDepth++;
         const stmts: Statement[] = [];
         while (
             this.peek().kind !== TokenKind.Case &&
@@ -420,6 +428,7 @@ export class Parser {
             const s = this.parseStatement();
             if (s) stmts.push(s);
         }
+        this.inSwitchDepth--;
         return stmts;
     }
 
@@ -434,6 +443,9 @@ export class Parser {
     private parseBreakStmt(): BreakStatement {
         const l = this.loc();
         this.expect(TokenKind.Break);
+        if (this.inSwitchDepth === 0) {
+            this.error("'break' is only allowed inside switch arms");
+        }
         this.optionalSemicolon();
         return { kind: "BreakStatement", loc: l };
     }
@@ -477,7 +489,13 @@ export class Parser {
             const l = left.loc;
             this.advance();
             const right = this.parseLogicalAnd();
-            left = { kind: "BinaryExpr", op: "||" as BinaryOp, left, right, loc: l };
+            left = {
+                kind: "BinaryExpr",
+                op: "||" as BinaryOp,
+                left,
+                right,
+                loc: l,
+            };
         }
         return left;
     }
@@ -488,7 +506,13 @@ export class Parser {
             const l = left.loc;
             this.advance();
             const right = this.parseEquality();
-            left = { kind: "BinaryExpr", op: "&&" as BinaryOp, left, right, loc: l };
+            left = {
+                kind: "BinaryExpr",
+                op: "&&" as BinaryOp,
+                left,
+                right,
+                loc: l,
+            };
         }
         return left;
     }
@@ -723,7 +747,10 @@ export class Parser {
      * Returns an ArrowPlaceholder (not a real AST node) that the built-in
      * parsers extract params/body from.
      */
-    private parseArrowBody(params: string[], _l: SourceLocation): ArrowPlaceholder {
+    private parseArrowBody(
+        params: string[],
+        _l: SourceLocation,
+    ): ArrowPlaceholder {
         if (this.peek().kind === TokenKind.LBrace) {
             this.advance(); // {
             const body = this.parseStatements();
@@ -744,7 +771,10 @@ export class Parser {
         const firstName = this.advance().value; // first identifier
 
         // Check if this is a builtin function call
-        if (BUILTIN_NAMES.has(firstName) && this.peek().kind === TokenKind.LParen) {
+        if (
+            BUILTIN_NAMES.has(firstName) &&
+            this.peek().kind === TokenKind.LParen
+        ) {
             return this.parseBuiltinCall(firstName, l);
         }
 
@@ -866,12 +896,17 @@ export class Parser {
         const bodies: { body: Statement[] }[] = [];
         let maxConcurrency: Expr | undefined;
 
-        while (this.peek().kind !== TokenKind.RParen && this.peek().kind !== TokenKind.EOF) {
+        while (
+            this.peek().kind !== TokenKind.RParen &&
+            this.peek().kind !== TokenKind.EOF
+        ) {
             // Check if this is the options object (last arg, starts with {)
             if (this.peek().kind === TokenKind.LBrace) {
                 const opts = this.parseObjectLiteral();
                 if (opts.kind === "ObjectLiteralExpr") {
-                    const mc = opts.entries.find((e) => e.key === "maxConcurrency");
+                    const mc = opts.entries.find(
+                        (e) => e.key === "maxConcurrency",
+                    );
                     if (mc) maxConcurrency = mc.value;
                 }
                 if (this.peek().kind === TokenKind.Comma) this.advance();
@@ -904,7 +939,9 @@ export class Parser {
             if (this.peek().kind === TokenKind.LBrace) {
                 const opts = this.parseObjectLiteral();
                 if (opts.kind === "ObjectLiteralExpr") {
-                    const mc = opts.entries.find((e) => e.key === "maxConcurrency");
+                    const mc = opts.entries.find(
+                        (e) => e.key === "maxConcurrency",
+                    );
                     if (mc) maxConcurrency = mc.value;
                 }
             }

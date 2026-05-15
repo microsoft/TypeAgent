@@ -68,9 +68,7 @@ describe("parser", () => {
     });
 
     test("parses object return type", () => {
-        const wf = parseWf(
-            "workflow obj(): { name: string, age: number } {}",
-        );
+        const wf = parseWf("workflow obj(): { name: string, age: number } {}");
         expect(wf.returnType.kind).toBe("ObjectType");
         if (wf.returnType.kind === "ObjectType") {
             expect(wf.returnType.fields).toHaveLength(2);
@@ -282,6 +280,17 @@ describe("parser", () => {
         `);
         const s = wf.body[0] as SwitchStatement;
         expect(s.arms[0].body[0].kind).toBe("BreakStatement");
+    });
+
+    test("break outside switch produces error", () => {
+        const { errors } = parse(`
+            workflow test(): string {
+                break
+                return "done"
+            }
+        `);
+        expect(errors.length).toBeGreaterThan(0);
+        expect(errors[0].message).toContain("only allowed inside switch");
     });
 
     // ---- Expression: literals ----
