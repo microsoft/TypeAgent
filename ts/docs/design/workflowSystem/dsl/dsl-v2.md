@@ -586,6 +586,13 @@ const sections = map(repos, (repo) => {
 **IR lowering:** Loop node with index/length/compare/check_done machinery
 (same as v1's for..of, but no explicit accumulator).
 
+**Semantics:** `map` uses pre-check loop semantics. On each iteration, the
+compiler-generated loop first compares the current index against the
+collection length. If the check fails, the body does not run and the loop
+exits immediately. If the check succeeds, the body runs, its result is
+appended to the output array, the index is incremented, and the next
+iteration begins. Empty collections therefore skip the body entirely.
+
 ### 3.3 `filter(collection, body)`
 
 Keep items where body returns truthy.
@@ -606,6 +613,11 @@ The body's last expression must produce a `boolean`. The emitter inserts a
 branch node that checks this result: the true branch appends the element to
 the output array via a `list.append` built-in task; the false branch skips
 (no-op, advances to next iteration). The output is the accumulated array.
+
+**Semantics:** `filter` uses the same pre-check loop shape as `map`: compare
+index vs length before entering the body, exit immediately when the check
+fails, and increment only after the current iteration's keep/drop decision is
+resolved. Empty collections therefore skip the body entirely.
 
 ### 3.4 `parallel(...bodies, options?)`
 

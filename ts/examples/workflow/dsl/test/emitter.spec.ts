@@ -494,6 +494,41 @@ describe("Emitter v2", () => {
         expect(loopNode.inputs).toHaveProperty("items");
     });
 
+    test("map uses pre-check loop shape", () => {
+        const ir = compileOk(`
+            workflow test(urls: string[]): unknown {
+                return map(urls, (url) => {
+                    const result = web.fetch(url)
+                    return result
+                })
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+
+        const lengthNode = body.nodes[body.entry] as TaskNode;
+        expect(lengthNode.task).toBe("list.length");
+
+        const compareNode = body.nodes[lengthNode.next!] as TaskNode;
+        expect(compareNode.task).toBe("compare.lessThan");
+
+        const checkNode = body.nodes[compareNode.next!] as BranchNode;
+        expect(checkNode.kind).toBe("branch");
+        expect(checkNode.default).toBe("@exit");
+
+        const pickId = checkNode.cases["true"];
+        const pickNode = body.nodes[pickId] as TaskNode;
+        expect(pickNode.task).toBe("list.elementAt");
+
+        const stepNode = Object.values(body.nodes).find(
+            (node): node is TaskNode =>
+                node.kind === "task" &&
+                node.task === "math.add" &&
+                node.next === "@iterate",
+        );
+        expect(stepNode).toBeDefined();
+    });
+
     // ---- Filter built-in ----
 
     test("filter lowers to loop node with branch", () => {
@@ -511,6 +546,46 @@ describe("Emitter v2", () => {
         const bodyNodes = Object.values(loopNode.body.nodes);
         const branches = bodyNodes.filter((n) => n.kind === "branch");
         expect(branches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("filter uses pre-check loop shape before body and conditional append", () => {
+        const ir = compileOk(`
+            workflow test(items: string[]): unknown {
+                return filter(items, (item) => {
+                    return item === "keep"
+                })
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+
+        const lengthNode = body.nodes[body.entry] as TaskNode;
+        expect(lengthNode.task).toBe("list.length");
+
+        const compareNode = body.nodes[lengthNode.next!] as TaskNode;
+        expect(compareNode.task).toBe("compare.lessThan");
+
+        const checkNode = body.nodes[compareNode.next!] as BranchNode;
+        expect(checkNode.kind).toBe("branch");
+        expect(checkNode.default).toBe("@exit");
+
+        const pickId = checkNode.cases["true"];
+        const pickNode = body.nodes[pickId] as TaskNode;
+        expect(pickNode.task).toBe("list.elementAt");
+
+        const conditionalBranch = Object.values(body.nodes).find(
+            (node): node is BranchNode =>
+                node.kind === "branch" && node !== checkNode,
+        );
+        expect(conditionalBranch).toBeDefined();
+
+        const stepNode = Object.values(body.nodes).find(
+            (node): node is TaskNode =>
+                node.kind === "task" &&
+                node.task === "math.add" &&
+                node.next === "@iterate",
+        );
+        expect(stepNode).toBeDefined();
     });
 
     // ---- Parallel built-in ----
