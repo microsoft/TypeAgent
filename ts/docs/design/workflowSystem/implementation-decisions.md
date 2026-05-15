@@ -66,7 +66,7 @@ question.
 | 3.1  | Review as a real implementation bug to fix, not a behavior to bless.                                                                                 | Fixed. Retry now exits on first success. Bug was already addressed before this review.                                                                                                 |
 | 3.2  | Decide whether hard-coded iteration limits are acceptable and, if so, where they should be documented/configured.                                    | Removed from emitter. Engine provides default (10,000). IR `maxIterations` is optional; workflows can override per-node.                                                               |
 | 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | Fixed. Both `noop` and `identity` are now registered in `builtinTasks.ts` and exported in `allBuiltinTasks`.                                                                           |
-| 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | TBD                                                                                                                                                                                    |
+| 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | TBD                                                                                                                                                                                    |
 | 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | TBD                                                                                                                                                                                    |
 | 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | TBD                                                                                                                                                                                    |
@@ -360,16 +360,6 @@ The emitter produces two synthetic task types:
 **Classification:** Fixed. Both `noop` and `identity` are now registered in
 `builtinTasks.ts` and included in the `allBuiltinTasks` export. Switch
 statements and ternary expressions with literal arms execute correctly.
-
-### 3.4 Sub-workflow calls emit as task nodes, not inlined
-
-The plan (section 3.2) said `emitWorkflowCall(): inline the sub-workflow
-body into the current scope.` The implementation does not inline. It emits
-a `TaskNode` with `task: "workflow.<name>"` and empty schemas. The engine
-would need a registered task (or a special case in the runner) to execute it.
-
-This means sub-workflow calls currently compile but cannot execute without
-engine support for `workflow.*` task resolution.
 
 ### 3.5 Parallel branch names are synthetic
 
