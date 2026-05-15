@@ -523,10 +523,16 @@ Built-in functions are compiler directives, not runtime functions. The parser
 recognizes them by name and produces dedicated AST nodes. The emitter lowers
 them to IR patterns.
 
+The name reservation is narrow: only `name(` at call position triggers the
+builtin path. Using a reserved name as a variable reference or as a dotted
+segment (e.g., `obj.map(...)`) is unaffected. However, you cannot define a
+task or workflow with a reserved name and call it: `map(...)` will always be
+parsed as the builtin, not a task call.
+
 ### 3.1 `retry(count, body, fallback?)`
 
-Retry the body up to `count` times on error. Optional fallback runs after
-all retries are exhausted.
+Execute the body, retrying on error, for a total of `count` attempts.
+Optional fallback runs after all attempts are exhausted.
 
 ```
 const result = retry(2, () => {
@@ -931,8 +937,20 @@ Add parsing:
   is in `{ retry, map, filter, parallel, parallelMap }`. If so, restructure
   into dedicated AST node.
 - Ternary expressions: `expr ? expr : expr`
-- Binary expressions with precedence: `expr op expr` for comparison, logical,
-  and arithmetic operators. Standard TS precedence rules.
+- Binary expressions with precedence (lowest to highest):
+
+  | Level | Operators            | Associativity  |
+  | ----- | -------------------- | -------------- |
+  | 0     | `?:` (ternary)       | right          |
+  | 1     | `\|\|`               | left           |
+  | 2     | `&&`                 | left           |
+  | 3     | `===`, `!==`         | left           |
+  | 4     | `<`, `>`, `<=`, `>=` | left           |
+  | 5     | `+`, `-`             | left           |
+  | 6     | `*`, `/`, `%`        | left           |
+  | 7     | `!`, unary `-`       | right (prefix) |
+  | 8     | `.` (member), `()`   | left           |
+
 - Unary expressions: `!expr`, `-expr`
 - Switch statement: `switch (expr) { case lit: stmts break ... default: stmts break }`
 - Destructuring const: `const [a, b, c] = expr`

@@ -315,7 +315,7 @@ are valid output values. Division and modulo by zero produce `Infinity` or
 
 | Task            | Input schema                      | Output schema         | Notes                                                   |
 | --------------- | --------------------------------- | --------------------- | ------------------------------------------------------- |
-| `math.add`      | `{ left: number, right: number }` | `{ result: number }`  | `+` in DSL. Overlaps v1 `int.add`                       |
+| `math.add`      | `{ left: number, right: number }` | `{ result: number }`  | `+` in DSL                                              |
 | `math.subtract` | `{ left: number, right: number }` | `{ result: number }`  | `-` in DSL                                              |
 | `math.multiply` | `{ left: number, right: number }` | `{ result: number }`  | `*` in DSL                                              |
 | `math.divide`   | `{ left: number, right: number }` | `{ result: number }`  | `/` in DSL. Returns `Infinity` or `NaN` on zero divisor |
@@ -367,14 +367,13 @@ on the enclosing loop node.
 
 ### 3.6 Overlap with v1 standard library
 
-v1 defines `int.lessThan` and `int.add`. These overlap with
+v1 defined `int.lessThan` and `int.add`. These overlapped with
 `compare.lessThan` and `math.add`.
 
-Decision: `int.*` tasks are deprecated. They are retained temporarily for
-emitter loop counter compatibility but will be removed once the emitter
-migrates to `math.add` / `compare.lessThan`. The engine registers both
-names during the transition period. For integer conversion, use
-`math.floor`, `math.round`, or `math.ceil`.
+Decision: `int.*` tasks have been fully removed from the codebase. The
+emitter uses `math.add` and `compare.lessThan` for loop counter
+infrastructure. The engine no longer registers `int.*` names. For integer
+conversion, use `math.floor`, `math.round`, or `math.ceil`.
 
 ---
 
@@ -412,12 +411,12 @@ extensions. Their status relative to v2:
 1. ~~**Cancellation policy.** When one fork/forkMap branch fails, what happens
    to running branches?~~
    **Resolved:** Cancel remaining branches/iterations on first failure.
-   The `onError` handler determines what to do with partial results. The
-   engine injects a `partial` field alongside `error` and `trigger`
-   (extending v1's §3.8 pattern). For `fork`, `partial` is an object
-   keyed by branch name (only completed branches present). For `forkMap`,
-   `partial` is an array with `null` for failed/cancelled entries. If no
-   `onError`, the error propagates and partial results are discarded.
+   Error handlers currently receive only the `error` object. `partial`
+   (completed results from successful branches/iterations), `trigger`
+   context, abort signals, and wait/fail-fast policies are not yet
+   implemented and are deferred to a future iteration. If no `onError`,
+   the error propagates. In either case, partial results from successful
+   branches are discarded: the entire fork/forkMap fails.
 
 2. ~~**Concurrency limits for forkMap.** Should the IR declare a max-concurrency
    hint (e.g., `"maxConcurrency": 5`)? Useful for rate-limited APIs.~~
