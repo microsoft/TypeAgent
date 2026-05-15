@@ -2954,6 +2954,123 @@ describe("validateWorkflowIR", () => {
                 ),
             ).toBe(true);
         });
+
+        // ---- Top schema ({}) lenient behavior ----
+
+        it("accepts top-schema producer feeding constrained consumer (lenient)", () => {
+            // A task with outputSchema {} (unknown/unconstrained) produces a
+            // value consumed by a task expecting { type: "string" }. The
+            // validator is lenient: can't prove incompatibility from {}.
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "opaque",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
+                        },
+                        inputs: {},
+                        bind: "p",
+                        next: "consumer",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            text: {
+                                $from: "scope",
+                                name: "p",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts top-schema consumer receiving constrained producer", () => {
+            // A task with concrete output feeds into a task expecting {} (top
+            // schema) on an input property. Always valid: anything is a subtype
+            // of the unconstrained top schema.
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "typed",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "p",
+                        next: "consumer",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["data"],
+                            properties: { data: {} },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            data: {
+                                $from: "scope",
+                                name: "p",
+                                path: ["text"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts workflow outputSchema {} with any concrete output", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                outputSchema: {},
+                output: {
+                    $from: "scope",
+                    name: "out",
+                    path: ["text"],
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
     });
 
     // ---- Fork validation ----

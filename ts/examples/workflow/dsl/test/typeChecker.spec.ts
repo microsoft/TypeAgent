@@ -8,7 +8,7 @@ import { TaskSchemaInfo } from "../src/emitter.js";
 
 const TASK_SCHEMAS: TaskSchemaInfo[] = [
     {
-        name: "text.template",
+        name: "test.template",
         inputSchema: {
             type: "object",
             required: ["template", "vars"],
@@ -24,7 +24,7 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
         },
     },
     {
-        name: "shell.exec",
+        name: "test.exec",
         inputSchema: {
             type: "object",
             required: ["command"],
@@ -40,7 +40,7 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
         },
     },
     {
-        name: "math.compute",
+        name: "test.compute",
         inputSchema: {
             type: "object",
             required: ["value"],
@@ -50,6 +50,19 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
             type: "object",
             required: ["result"],
             properties: { result: { type: "number" } },
+        },
+    },
+    {
+        name: "test.generateJson",
+        inputSchema: {
+            type: "object",
+            required: ["prompt"],
+            properties: { prompt: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: {} },
         },
     },
 ];
@@ -116,7 +129,7 @@ describe("type checker", () => {
     test("task call returns typed result", () => {
         expectNoErrors(`
             workflow test(): string {
-                const r = text.template(template: "hi", vars: {})
+                const r = test.template(template: "hi", vars: {})
                 return r.text
             }
         `);
@@ -181,14 +194,11 @@ describe("type checker", () => {
         `);
     });
 
-    test("any type passes all checks", () => {
-        expectNoErrors(`
-            workflow test(x: any): any {
-                const r = x + 1
-                const s = x === "hello"
-                return x
-            }
-        `);
+    test("any is not a valid type keyword", () => {
+        expectError(
+            `workflow test(x: any): string { return "ok" }`,
+            "Unknown type",
+        );
     });
 
     test("map with array collection", () => {
@@ -213,20 +223,21 @@ describe("type checker", () => {
 
     test("parallel returns tuple", () => {
         expectNoErrors(`
-            workflow test(): any {
-                return parallel(
+            workflow test(): string {
+                const [a, b] = parallel(
                     () => { return "a" },
                     () => { return 42 }
                 )
+                return a
             }
         `);
     });
 
     test("retry valid", () => {
         expectNoErrors(`
-            workflow test(): any {
+            workflow test(): { stdout: string, exitCode: integer } {
                 return retry(3, () => {
-                    return shell.exec(command: "echo hi")
+                    return test.exec(command: "echo hi")
                 })
             }
         `);
@@ -255,7 +266,7 @@ describe("type checker", () => {
 
     test("destructuring from parallel (tuple)", () => {
         expectNoErrors(`
-            workflow test(): any {
+            workflow test(): string {
                 const [a, b] = parallel(
                     () => { return "x" },
                     () => { return 42 }
@@ -381,7 +392,7 @@ describe("type checker", () => {
 
     test("ternary arms with different types", () => {
         expectError(
-            `workflow test(x: boolean): any { return x ? "text" : 42 }`,
+            `workflow test(x: boolean): string { return x ? "text" : 42 }`,
             "same type",
         );
     });
@@ -390,7 +401,7 @@ describe("type checker", () => {
 
     test("map on non-array", () => {
         expectError(
-            `workflow test(x: string): any {
+            `workflow test(x: string): string {
                 return map(x, (item) => { return item })
             }`,
             "must be an array",
@@ -399,7 +410,7 @@ describe("type checker", () => {
 
     test("filter on non-array", () => {
         expectError(
-            `workflow test(x: number): any {
+            `workflow test(x: number): number {
                 return filter(x, (item) => { return true })
             }`,
             "must be an array",
@@ -408,7 +419,7 @@ describe("type checker", () => {
 
     test("parallelMap on non-array", () => {
         expectError(
-            `workflow test(x: string): any {
+            `workflow test(x: string): string {
                 return parallelMap(x, (item) => { return item })
             }`,
             "must be an array",
@@ -431,7 +442,7 @@ describe("type checker", () => {
 
     test("destructuring non-array/tuple", () => {
         expectError(
-            `workflow test(x: string): any {
+            `workflow test(x: string): string {
                 const [a, b] = x
                 return a
             }`,
@@ -456,7 +467,7 @@ describe("type checker", () => {
 
     test("retry count must be numeric", () => {
         expectError(
-            `workflow test(): any {
+            `workflow test(): number {
                 return retry("hello", () => { return 1 })
             }`,
             "count must be numeric",
@@ -465,11 +476,12 @@ describe("type checker", () => {
 
     test("maxConcurrency must be numeric", () => {
         expectError(
-            `workflow test(): any {
-                return parallel(
+            `workflow test(): string {
+                const [a] = parallel(
                     () => { return 1 },
                     { maxConcurrency: "fast" }
                 )
+                return "ok"
             }`,
             "maxConcurrency must be numeric",
         );
@@ -525,6 +537,73 @@ describe("type checker", () => {
             workflow test(x: string): boolean {
                 return x === fail()
             }
+        `);
+    });
+
+    // ---- unknown type ----
+
+    test("unknown is accepted as a return type", () => {
+        expectNoErrors(`workflow test(): unknown { return "hello" }`);
+    });
+
+    test("any concrete type is assignable to declared unknown", () => {
+        expectNoErrors(`
+            workflow test(): unknown {
+                const x = 42
+                return x
+            }
+        `);
+    });
+
+    test("unknown source is not assignable to concrete target", () => {
+        expectError(
+            `workflow test(): string {
+                const r = test.generateJson(prompt: "give me json")
+                return r.value
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("field access on unknown type errors", () => {
+        expectError(
+            `workflow test(): unknown {
+                const r = test.generateJson(prompt: "give me json")
+                return r.value.foo
+            }`,
+            "Cannot access property 'foo' on unknown type",
+        );
+    });
+
+    test("=== with unknown operand does not error", () => {
+        expectNoErrors(`
+            workflow test(x: string): boolean {
+                const r = test.generateJson(prompt: "check")
+                return x === r.value
+            }
+        `);
+    });
+
+    test("ternary with unknown and concrete arms reports type mismatch", () => {
+        expectError(
+            `workflow test(flag: boolean): unknown {
+                const r = test.generateJson(prompt: "maybe")
+                return flag ? "ok" : r.value
+            }`,
+            "Ternary arms must have the same type",
+        );
+    });
+
+    test("unknown param is not assignable to concrete return", () => {
+        expectError(
+            `workflow test(x: unknown): string { return x }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("never is assignable to unknown", () => {
+        expectNoErrors(`
+            workflow test(): unknown { throw "boom" }
         `);
     });
 });

@@ -274,7 +274,7 @@ describe("Emitter v2", () => {
 
     test("task call with positional args", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const result = web.fetch(url)
                 return result
             }
@@ -288,7 +288,7 @@ describe("Emitter v2", () => {
 
     test("task call with named args", () => {
         const ir = compileOk(`
-            workflow test(): any {
+            workflow test(): unknown {
                 const result = web.fetch(url: "https://example.com")
                 return result
             }
@@ -299,7 +299,7 @@ describe("Emitter v2", () => {
 
     test("task call chain with next threading", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const fetched = web.fetch(url)
                 const summary = text.summarize(fetched)
                 return summary
@@ -338,7 +338,7 @@ describe("Emitter v2", () => {
 
     test("template literal emits text.template task", () => {
         const ir = compileOk(`
-            workflow test(name: string): any {
+            workflow test(name: string): unknown {
                 const msg = \`Hello \${name}!\`
                 return msg
             }
@@ -352,7 +352,7 @@ describe("Emitter v2", () => {
 
     test("binary === lowers to compare.equals", () => {
         const ir = compileOk(`
-            workflow test(x: integer, y: integer): any {
+            workflow test(x: integer, y: integer): unknown {
                 return x === y
             }
         `);
@@ -363,7 +363,7 @@ describe("Emitter v2", () => {
 
     test("binary + lowers to math.add", () => {
         const ir = compileOk(`
-            workflow test(x: integer): any {
+            workflow test(x: integer): unknown {
                 return x + 1
             }
         `);
@@ -376,7 +376,7 @@ describe("Emitter v2", () => {
 
     test("unary ! lowers to bool.not", () => {
         const ir = compileOk(`
-            workflow test(x: boolean): any {
+            workflow test(x: boolean): unknown {
                 return !x
             }
         `);
@@ -386,7 +386,7 @@ describe("Emitter v2", () => {
 
     test("unary - lowers to math.negate", () => {
         const ir = compileOk(`
-            workflow test(x: integer): any {
+            workflow test(x: integer): unknown {
                 return -x
             }
         `);
@@ -398,7 +398,7 @@ describe("Emitter v2", () => {
 
     test("if/else lowers to branch node", () => {
         const ir = compileOk(`
-            workflow test(x: boolean): any {
+            workflow test(x: boolean): unknown {
                 if (x) {
                     const a = web.fetch("https://a.com")
                 } else {
@@ -416,7 +416,7 @@ describe("Emitter v2", () => {
 
     test("switch lowers to branch node", () => {
         const ir = compileOk(`
-            workflow test(x: string): any {
+            workflow test(x: string): unknown {
                 switch (x) {
                     case "a":
                         const r1 = web.fetch("https://a.com")
@@ -435,7 +435,7 @@ describe("Emitter v2", () => {
 
     test("throw lowers to error.fail task", () => {
         const ir = compileOk(`
-            workflow test(): any {
+            workflow test(): unknown {
                 throw "something went wrong"
                 return "never"
             }
@@ -456,11 +456,20 @@ describe("Emitter v2", () => {
         expect(ir.outputSchema).toEqual({ not: {} });
     });
 
+    test("unknown return type produces {} outputSchema", () => {
+        const ir = compileOk(`
+            workflow test(): unknown {
+                return "anything"
+            }
+        `);
+        expect(ir.outputSchema).toEqual({});
+    });
+
     // ---- Ternary expression ----
 
     test("ternary lowers to branch node", () => {
         const ir = compileOk(`
-            workflow test(x: boolean): any {
+            workflow test(x: boolean): unknown {
                 return x ? "yes" : "no"
             }
         `);
@@ -472,7 +481,7 @@ describe("Emitter v2", () => {
 
     test("map lowers to loop node", () => {
         const ir = compileOk(`
-            workflow test(urls: string[]): any {
+            workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
                     const result = web.fetch(url)
                     return result
@@ -489,7 +498,7 @@ describe("Emitter v2", () => {
 
     test("filter lowers to loop node with branch", () => {
         const ir = compileOk(`
-            workflow test(items: string[]): any {
+            workflow test(items: string[]): unknown {
                 return filter(items, (item) => {
                     return item === "keep"
                 })
@@ -508,7 +517,7 @@ describe("Emitter v2", () => {
 
     test("parallel lowers to fork node", () => {
         const ir = compileOk(`
-            workflow test(): any {
+            workflow test(): unknown {
                 return parallel(
                     () => {
                         const a = web.fetch("https://a.com")
@@ -529,7 +538,7 @@ describe("Emitter v2", () => {
 
     test("parallelMap lowers to forkMap node", () => {
         const ir = compileOk(`
-            workflow test(urls: string[]): any {
+            workflow test(urls: string[]): unknown {
                 return parallelMap(urls, (url) => {
                     const result = web.fetch(url)
                     return result
@@ -548,7 +557,7 @@ describe("Emitter v2", () => {
 
     test("retry lowers to loop node with attempt state", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
                     return result
@@ -562,7 +571,7 @@ describe("Emitter v2", () => {
 
     test("retry body: last task has next @exit", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
                     return result
@@ -580,7 +589,7 @@ describe("Emitter v2", () => {
 
     test("retry body: task nodes have onError pointing to step_attempt", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
                     return result
@@ -599,7 +608,7 @@ describe("Emitter v2", () => {
 
     test("retry body: error path chains step -> check -> branch -> exhaust", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
                     return result
@@ -629,7 +638,7 @@ describe("Emitter v2", () => {
 
     test("retry infrastructure nodes are not in the main body chain", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
                     return result
@@ -669,7 +678,7 @@ describe("Emitter v2", () => {
 
     test("object literal return", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const result = web.fetch(url)
                 return { data: result, source: url }
             }
@@ -685,7 +694,7 @@ describe("Emitter v2", () => {
     test("workflow call emits task node", () => {
         // compile only the main workflow that calls helper
         const ir = compileOk(`
-            workflow main(url: string): any {
+            workflow main(url: string): unknown {
                 const result = helper(url)
                 return result
             }
@@ -699,7 +708,7 @@ describe("Emitter v2", () => {
 
     test("unknown task produces error", () => {
         const result = compile(`
-            workflow test(): any {
+            workflow test(): unknown {
                 const x = unknown.task("hello")
                 return x
             }
@@ -712,7 +721,7 @@ describe("Emitter v2", () => {
 
     test("destructuring literal array", () => {
         const ir = compileOk(`
-            workflow test(): any {
+            workflow test(): unknown {
                 const [a, b] = ["hello", "world"]
                 return a
             }
@@ -730,7 +739,7 @@ describe("Emitter v2", () => {
 
     test("unreferenced task binds are stripped", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const unused = web.fetch(url)
                 return "done"
             }
@@ -748,7 +757,7 @@ describe("Emitter v2", () => {
 
     test("statements after if/else are reachable", () => {
         const ir = compileOk(`
-            workflow test(x: boolean, url: string): any {
+            workflow test(x: boolean, url: string): unknown {
                 if (x) {
                     const a = web.fetch("https://a.com")
                 }
@@ -772,7 +781,7 @@ describe("Emitter v2", () => {
 
     test("switch with default arm", () => {
         const ir = compileOk(`
-            workflow test(x: string): any {
+            workflow test(x: string): unknown {
                 switch (x) {
                     case "a":
                         const r1 = web.fetch("https://a.com")
@@ -792,7 +801,7 @@ describe("Emitter v2", () => {
 
     test("dotted-name access produces path in reference", () => {
         const ir = compileOk(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const result = web.fetch(url)
                 return result.body
             }
@@ -807,7 +816,7 @@ describe("Emitter v2", () => {
 
     test("chained binary operators produce multiple nodes", () => {
         const ir = compileOk(`
-            workflow test(a: integer, b: integer, c: integer): any {
+            workflow test(a: integer, b: integer, c: integer): unknown {
                 return a + b * c
             }
         `);

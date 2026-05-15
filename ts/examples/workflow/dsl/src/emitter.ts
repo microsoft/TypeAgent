@@ -2467,10 +2467,10 @@ export class Emitter {
                         return { type: "integer" };
                     case "boolean":
                         return { type: "boolean" };
-                    case "any":
-                        return {};
                     case "never":
                         return { not: {} };
+                    case "unknown":
+                        return {};
                     default:
                         return { type: t.name as JSONSchema["type"] };
                 }

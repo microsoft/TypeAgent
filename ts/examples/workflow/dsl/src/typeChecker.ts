@@ -8,8 +8,9 @@
  * expressions, validates operator usage, and reports type errors.
  *
  * The type system is simple: primitives (string, number, integer,
- * boolean, any), objects with typed fields, arrays with typed elements,
- * and tuples (from parallel destructuring).
+ * boolean), objects with typed fields, arrays with typed elements,
+ * tuples (from parallel destructuring), never (bottom), and
+ * unknown (from untyped JSON Schema `{}` properties).
  */
 
 import { WorkflowDecl, Statement, Expr, TypeExpr, TaskArg } from "./ast.js";
@@ -23,11 +24,12 @@ export type TypeInfo =
     | ArrayTypeInfo
     | TupleTypeInfo
     | NeverType
-    | UnknownType;
+    | UnknownType
+    | UnresolvedType;
 
 export interface PrimitiveType {
     kind: "primitive";
-    name: "string" | "number" | "integer" | "boolean" | "any";
+    name: "string" | "number" | "integer" | "boolean";
 }
 
 export interface ObjectTypeInfo {
@@ -53,6 +55,11 @@ export interface NeverType {
     kind: "never";
 }
 
+/** Internal error-recovery type. Compatible with everything to prevent cascading errors. */
+export interface UnresolvedType {
+    kind: "unresolved";
+}
+
 export interface TypeError {
     message: string;
     line: number;
@@ -64,31 +71,35 @@ export interface TypeError {
 const STRING: PrimitiveType = { kind: "primitive", name: "string" };
 const NUMBER: PrimitiveType = { kind: "primitive", name: "number" };
 const BOOLEAN: PrimitiveType = { kind: "primitive", name: "boolean" };
-const ANY: PrimitiveType = { kind: "primitive", name: "any" };
 const UNKNOWN: UnknownType = { kind: "unknown" };
 const NEVER: NeverType = { kind: "never" };
+const UNRESOLVED: UnresolvedType = { kind: "unresolved" };
 
 function isNumeric(t: TypeInfo): boolean {
     return (
-        t.kind === "primitive" &&
-        (t.name === "number" || t.name === "integer" || t.name === "any")
+        t.kind === "primitive" && (t.name === "number" || t.name === "integer")
     );
 }
 
 function isBoolean(t: TypeInfo): boolean {
-    return t.kind === "primitive" && (t.name === "boolean" || t.name === "any");
+    return t.kind === "primitive" && t.name === "boolean";
 }
 
-function isAny(t: TypeInfo): boolean {
-    return t.kind === "primitive" && t.name === "any";
+function isUnresolved(t: TypeInfo): boolean {
+    return t.kind === "unresolved";
 }
 
 function typeEq(a: TypeInfo, b: TypeInfo): boolean {
-    if (isAny(a) || isAny(b)) return true;
-    // never is the bottom type: b (source) is never means assignable to
-    // any target. a (target) is never means only never is assignable.
+    // Unresolved (error recovery): compatible with everything.
+    if (a.kind === "unresolved" || b.kind === "unresolved") return true;
+    // never is the bottom type: source=never assignable to any target,
+    // only never assignable to target=never.
     if (b.kind === "never") return true;
-    if (a.kind === "never") return false; // only never assignable to never
+    if (a.kind === "never") return false;
+    // unknown is the top type: anything assignable to target=unknown,
+    // source=unknown not assignable to concrete.
+    if (a.kind === "unknown") return true;
+    if (b.kind === "unknown") return false;
     if (a.kind !== b.kind) return false;
     if (a.kind === "primitive" && b.kind === "primitive") {
         // integer is compatible with number
@@ -99,7 +110,6 @@ function typeEq(a: TypeInfo, b: TypeInfo): boolean {
             return true;
         return a.name === b.name;
     }
-    if (a.kind === "unknown" || b.kind === "unknown") return true;
     return true; // structural comparison not needed for operator checks
 }
 
@@ -117,6 +127,8 @@ function typeName(t: TypeInfo): string {
             return "unknown";
         case "never":
             return "never";
+        case "unresolved":
+            return "unresolved";
     }
 }
 
@@ -156,13 +168,13 @@ function typeExprToInfo(
                     return { kind: "primitive", name: "integer" };
                 case "boolean":
                     return BOOLEAN;
-                case "any":
-                    return ANY;
                 case "never":
                     return NEVER;
+                case "unknown":
+                    return UNKNOWN;
                 default:
                     onUnknownType?.(te);
-                    return UNKNOWN;
+                    return UNRESOLVED;
             }
         case "ArrayType":
             return {
@@ -197,7 +209,7 @@ function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
         const items = schema["items"] as Record<string, unknown> | undefined;
         return {
             kind: "array",
-            element: items ? jsonSchemaToTypeInfo(items) : ANY,
+            element: items ? jsonSchemaToTypeInfo(items) : UNKNOWN,
         };
     }
     if (type === "object") {
@@ -224,7 +236,7 @@ function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
     ) {
         return NEVER;
     }
-    return ANY;
+    return UNKNOWN;
 }
 
 // ---- Type checker ----
@@ -248,7 +260,7 @@ export class TypeChecker {
         const returnType = this.checkStatements(wf.body, scope);
         // Validate return type matches declaration
         const declared = this.resolveTypeExpr(wf.returnType);
-        if (returnType.kind !== "unknown" && !typeEq(declared, returnType)) {
+        if (returnType.kind !== "unresolved" && !typeEq(declared, returnType)) {
             this.addError(
                 `Workflow return type '${typeName(returnType)}' is not assignable to declared type '${typeName(declared)}'`,
                 wf.loc.line,
@@ -274,10 +286,10 @@ export class TypeChecker {
 
     /** Check statements and return the inferred type of the first return found. */
     private checkStatements(stmts: Statement[], scope: Scope): TypeInfo {
-        let returnType: TypeInfo = UNKNOWN;
+        let returnType: TypeInfo = UNRESOLVED;
         for (const s of stmts) {
             const t = this.checkStatement(s, scope);
-            if (returnType.kind === "unknown" && t.kind !== "unknown") {
+            if (returnType.kind === "unresolved" && t.kind !== "unresolved") {
                 returnType = t;
             }
         }
@@ -291,7 +303,10 @@ export class TypeChecker {
                 const valueType = this.inferExpr(s.value, scope);
                 if (s.typeAnnotation) {
                     const declared = this.resolveTypeExpr(s.typeAnnotation);
-                    if (!typeEq(declared, valueType) && !isAny(valueType)) {
+                    if (
+                        !isUnresolved(valueType) &&
+                        !typeEq(declared, valueType)
+                    ) {
                         this.addError(
                             `Type '${typeName(valueType)}' is not assignable to type '${typeName(declared)}'`,
                             s.loc.line,
@@ -305,7 +320,7 @@ export class TypeChecker {
                         ? this.resolveTypeExpr(s.typeAnnotation)
                         : valueType,
                 );
-                return UNKNOWN;
+                return UNRESOLVED;
             }
             case "DestructuringConst": {
                 const valueType = this.inferExpr(s.value, scope);
@@ -315,34 +330,37 @@ export class TypeChecker {
                             s.names[i],
                             i < valueType.elements.length
                                 ? valueType.elements[i]
-                                : UNKNOWN,
+                                : UNRESOLVED,
                         );
                     }
                 } else if (valueType.kind === "array") {
                     for (const name of s.names) {
                         scope.set(name, valueType.element);
                     }
-                } else if (!isAny(valueType) && valueType.kind !== "unknown") {
+                } else if (
+                    !isUnresolved(valueType) &&
+                    valueType.kind !== "unknown"
+                ) {
                     this.addError(
                         `Cannot destructure type '${typeName(valueType)}'; expected array or tuple`,
                         s.loc.line,
                         s.loc.col,
                     );
                     for (const name of s.names) {
-                        scope.set(name, UNKNOWN);
+                        scope.set(name, UNRESOLVED);
                     }
                 } else {
                     for (const name of s.names) {
-                        scope.set(name, ANY);
+                        scope.set(name, UNRESOLVED);
                     }
                 }
-                return UNKNOWN;
+                return UNRESOLVED;
             }
             case "IfStatement": {
                 const condType = this.inferExpr(s.condition, scope);
                 if (
                     !isBoolean(condType) &&
-                    !isAny(condType) &&
+                    !isUnresolved(condType) &&
                     condType.kind !== "unknown"
                 ) {
                     this.addError(
@@ -359,11 +377,11 @@ export class TypeChecker {
             }
             case "SwitchStatement": {
                 this.inferExpr(s.discriminant, scope);
-                let retType: TypeInfo = UNKNOWN;
+                let retType: TypeInfo = UNRESOLVED;
                 for (const arm of s.arms) {
                     this.inferExpr(arm.value, scope);
                     const t = this.checkStatements(arm.body, scope.child());
-                    if (retType.kind === "unknown") retType = t;
+                    if (retType.kind === "unresolved") retType = t;
                 }
                 if (s.default_) {
                     this.checkStatements(s.default_, scope.child());
@@ -376,7 +394,7 @@ export class TypeChecker {
             case "ReturnStatement":
                 return this.inferExpr(s.value, scope);
             case "BreakStatement":
-                return UNKNOWN;
+                return UNRESOLVED;
         }
     }
 
@@ -393,7 +411,7 @@ export class TypeChecker {
             case "BooleanLiteralExpr":
                 return BOOLEAN;
             case "NullLiteralExpr":
-                return ANY;
+                return UNKNOWN;
             case "TemplateLiteralExpr":
                 for (const expr of e.expressions) {
                     this.inferExpr(expr, scope);
@@ -401,7 +419,7 @@ export class TypeChecker {
                 return STRING;
             case "ArrayLiteralExpr": {
                 if (e.elements.length === 0)
-                    return { kind: "array", element: ANY };
+                    return { kind: "array", element: UNKNOWN };
                 const elemType = this.inferExpr(e.elements[0], scope);
                 for (let i = 1; i < e.elements.length; i++) {
                     this.inferExpr(e.elements[i], scope);
@@ -430,7 +448,7 @@ export class TypeChecker {
                             e.loc.line,
                             e.loc.col,
                         );
-                        return UNKNOWN;
+                        return UNRESOLVED;
                     }
                     return t;
                 }
@@ -442,11 +460,19 @@ export class TypeChecker {
                         e.loc.line,
                         e.loc.col,
                     );
-                    return UNKNOWN;
+                    return UNRESOLVED;
                 }
                 for (let i = 1; i < e.segments.length; i++) {
-                    if (isAny(current) || current.kind === "unknown") {
-                        return ANY;
+                    if (isUnresolved(current)) {
+                        return UNRESOLVED;
+                    }
+                    if (current.kind === "unknown") {
+                        this.addError(
+                            `Cannot access property '${e.segments[i]}' on unknown type`,
+                            e.loc.line,
+                            e.loc.col,
+                        );
+                        return UNRESOLVED;
                     }
                     if (current.kind !== "object") {
                         this.addError(
@@ -454,7 +480,7 @@ export class TypeChecker {
                             e.loc.line,
                             e.loc.col,
                         );
-                        return UNKNOWN;
+                        return UNRESOLVED;
                     }
                     const field = current.fields.get(e.segments[i]);
                     if (!field) {
@@ -463,7 +489,7 @@ export class TypeChecker {
                             e.loc.line,
                             e.loc.col,
                         );
-                        return UNKNOWN;
+                        return UNRESOLVED;
                     }
                     current = field.type;
                 }
@@ -477,7 +503,7 @@ export class TypeChecker {
                         e.loc.line,
                         e.loc.col,
                     );
-                    return UNKNOWN;
+                    return UNRESOLVED;
                 }
                 this.checkArgs(e.args, scope);
                 return jsonSchemaToTypeInfo(
@@ -492,7 +518,7 @@ export class TypeChecker {
                         e.loc.line,
                         e.loc.col,
                     );
-                    return UNKNOWN;
+                    return UNRESOLVED;
                 }
                 this.checkArgs(e.args, scope);
                 return this.resolveTypeExpr(wf.returnType);
@@ -505,7 +531,7 @@ export class TypeChecker {
                 const condType = this.inferExpr(e.condition, scope);
                 if (
                     !isBoolean(condType) &&
-                    !isAny(condType) &&
+                    !isUnresolved(condType) &&
                     condType.kind !== "unknown"
                 ) {
                     this.addError(
@@ -533,7 +559,7 @@ export class TypeChecker {
                 const countType = this.inferExpr(e.count, scope);
                 if (
                     !isNumeric(countType) &&
-                    !isAny(countType) &&
+                    !isUnresolved(countType) &&
                     countType.kind !== "unknown"
                 ) {
                     this.addError(
@@ -548,7 +574,7 @@ export class TypeChecker {
                 );
                 if (e.fallback) {
                     const fbScope = scope.child();
-                    fbScope.set(e.fallback.param, ANY);
+                    fbScope.set(e.fallback.param, UNKNOWN);
                     this.checkStatements(e.fallback.body, fbScope);
                 }
                 return retryReturnType;
@@ -558,15 +584,18 @@ export class TypeChecker {
                 const bodyScope = scope.child();
                 if (colType.kind === "array") {
                     bodyScope.set(e.param, colType.element);
-                } else if (isAny(colType) || colType.kind === "unknown") {
-                    bodyScope.set(e.param, ANY);
+                } else if (
+                    isUnresolved(colType) ||
+                    colType.kind === "unknown"
+                ) {
+                    bodyScope.set(e.param, UNKNOWN);
                 } else {
                     this.addError(
                         `map() collection must be an array, got '${typeName(colType)}'`,
                         e.collection.loc.line,
                         e.collection.loc.col,
                     );
-                    bodyScope.set(e.param, ANY);
+                    bodyScope.set(e.param, UNKNOWN);
                 }
                 const mapReturnType = this.checkStatements(e.body, bodyScope);
                 return { kind: "array", element: mapReturnType };
@@ -576,15 +605,18 @@ export class TypeChecker {
                 const bodyScope = scope.child();
                 if (colType.kind === "array") {
                     bodyScope.set(e.param, colType.element);
-                } else if (isAny(colType) || colType.kind === "unknown") {
-                    bodyScope.set(e.param, ANY);
+                } else if (
+                    isUnresolved(colType) ||
+                    colType.kind === "unknown"
+                ) {
+                    bodyScope.set(e.param, UNKNOWN);
                 } else {
                     this.addError(
                         `filter() collection must be an array, got '${typeName(colType)}'`,
                         e.collection.loc.line,
                         e.collection.loc.col,
                     );
-                    bodyScope.set(e.param, ANY);
+                    bodyScope.set(e.param, UNKNOWN);
                 }
                 this.checkStatements(e.body, bodyScope);
                 return colType;
@@ -603,7 +635,7 @@ export class TypeChecker {
                     const mcType = this.inferExpr(e.maxConcurrency, scope);
                     if (
                         !isNumeric(mcType) &&
-                        !isAny(mcType) &&
+                        !isUnresolved(mcType) &&
                         mcType.kind !== "unknown"
                     ) {
                         this.addError(
@@ -620,22 +652,25 @@ export class TypeChecker {
                 const bodyScope = scope.child();
                 if (colType.kind === "array") {
                     bodyScope.set(e.param, colType.element);
-                } else if (isAny(colType) || colType.kind === "unknown") {
-                    bodyScope.set(e.param, ANY);
+                } else if (
+                    isUnresolved(colType) ||
+                    colType.kind === "unknown"
+                ) {
+                    bodyScope.set(e.param, UNKNOWN);
                 } else {
                     this.addError(
                         `parallelMap() collection must be an array, got '${typeName(colType)}'`,
                         e.collection.loc.line,
                         e.collection.loc.col,
                     );
-                    bodyScope.set(e.param, ANY);
+                    bodyScope.set(e.param, UNKNOWN);
                 }
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
                 if (e.maxConcurrency) {
                     const mcType = this.inferExpr(e.maxConcurrency, scope);
                     if (
                         !isNumeric(mcType) &&
-                        !isAny(mcType) &&
+                        !isUnresolved(mcType) &&
                         mcType.kind !== "unknown"
                     ) {
                         this.addError(
@@ -684,6 +719,8 @@ export class TypeChecker {
                 if (
                     left.kind !== "never" &&
                     right.kind !== "never" &&
+                    left.kind !== "unknown" &&
+                    right.kind !== "unknown" &&
                     !typeEq(left, right)
                 ) {
                     this.addError(
@@ -743,7 +780,7 @@ export class TypeChecker {
             case "!":
                 if (
                     !isBoolean(operand) &&
-                    !isAny(operand) &&
+                    !isUnresolved(operand) &&
                     operand.kind !== "unknown"
                 ) {
                     this.addError(
@@ -756,7 +793,7 @@ export class TypeChecker {
             case "-":
                 if (
                     !isNumeric(operand) &&
-                    !isAny(operand) &&
+                    !isUnresolved(operand) &&
                     operand.kind !== "unknown"
                 ) {
                     this.addError(

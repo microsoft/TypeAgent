@@ -10,7 +10,7 @@
  *   ParamList    = Param ("," Param)*
  *   Param        = IDENT ":" TypeExpr
  *   TypeExpr     = BaseType ("[]")?
- *   BaseType     = "string" | "number" | "integer" | "boolean" | "any"
+ *   BaseType     = "string" | "number" | "integer" | "boolean" | "never" | "unknown"
  *                | "{" FieldList "}"
  *   Statement    = ConstStmt | DestructuringConst | IfStmt | SwitchStmt
  *                | ReturnStmt | BreakStmt | ThrowStmt | ExprStmt

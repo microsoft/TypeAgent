@@ -389,6 +389,132 @@ const summary = llm.summarize(result)
 Both `//` and `/* */` are supported. Comments are preserved in the AST
 (see section 6) to ensure round-trip fidelity between text and visual editing.
 
+### 2.14 Type system
+
+The DSL has a static type system that runs between parsing and emission. It
+infers types for all expressions, validates operator usage, and reports errors
+at compile time. The system follows TypeScript semantics where possible but is
+deliberately simpler: no union types, no generics, no type aliases.
+
+#### Type kinds
+
+| Kind      | Description                            | DSL syntax                        | JSON Schema                                 |
+| --------- | -------------------------------------- | --------------------------------- | ------------------------------------------- |
+| `string`  | Text values                            | `string`                          | `{ "type": "string" }`                      |
+| `number`  | Floating-point numbers                 | `number`                          | `{ "type": "number" }`                      |
+| `integer` | Whole numbers                          | `integer`                         | `{ "type": "integer" }`                     |
+| `boolean` | True/false values                      | `boolean`                         | `{ "type": "boolean" }`                     |
+| object    | Structured records with typed fields   | `{ name: string, age?: integer }` | `{ "type": "object", "properties": {...} }` |
+| array     | Ordered list of elements               | `string[]`, `{ x: number }[]`     | `{ "type": "array", "items": {...} }`       |
+| tuple     | Fixed-length heterogeneous list        | _(inferred from `parallel`)_      | _(no DSL syntax)_                           |
+| `unknown` | Top type: anything is assignable to it | `unknown`                         | `{}`                                        |
+| `never`   | Bottom type: assignable to anything    | `never`                           | `{ "not": {} }`                             |
+
+`integer` and `number` are interchangeable in type compatibility checks
+(an `integer` value can be used where `number` is expected, and vice versa).
+
+#### Type annotations
+
+Type annotations appear in two places:
+
+1. **Workflow parameters and return types** (required):
+
+   ```
+   workflow process(url: string, maxRetries: integer): { body: string }
+   ```
+
+2. **Const bindings** (optional, for documentation or to constrain):
+   ```
+   const x = task.call(arg: v)           // type inferred from task schema
+   const y: string = task.call(arg: v)   // explicit: error if schema disagrees
+   ```
+
+#### Type inference
+
+Every expression has a type, inferred bottom-up:
+
+- **Literals:** `42` is `number`, `"hello"` is `string`, `true` is `boolean`,
+  `null` is `unknown`.
+- **Task calls:** return type from the task's `outputSchema`.
+- **Workflow calls:** return type from the called workflow's declaration.
+- **Dotted access:** field type from the parent object's schema.
+- **Operators:** result type from the operator type rules (section 2.6).
+- **Ternary:** both arms must be the same type; that is the result type.
+  If either arm is `never`, the result is the other arm's type.
+- **Template literals:** always `string`.
+- **Array literals:** `[a, b, c]` infers the element type from the first element.
+- **Built-ins:** `map` and `filter` return arrays of the body's return type.
+  `retry` returns the body's return type. `parallel` returns a tuple of each
+  arm's return type. `parallelMap` returns an array of the body's return type.
+
+#### `unknown` (top type)
+
+The `unknown` type represents values whose structure is not statically known.
+It corresponds to `{}` (empty schema) in JSON Schema and follows TypeScript
+semantics:
+
+- **Any type is assignable to `unknown`.** A workflow returning `unknown` can
+  return a string, number, object, or any other value.
+- **`unknown` is not assignable to concrete types.** If a task returns
+  `unknown`, the result cannot be used where a `string` or `number` is
+  expected without passing through a task that produces a concrete type.
+- **Field access on `unknown` is an error.** If `r.value` has type `unknown`,
+  writing `r.value.foo` is a compile error.
+- **Equality operators (`===`, `!==`) skip type checking when either operand
+  is `unknown`.** This allows comparing unknown values for identity without
+  a compile error.
+
+Primary use case: tasks like `llm.generateJson` that produce arbitrary
+structured data. The output type is genuinely unknown at compile time;
+downstream consumers must use it opaquely or pass it to tasks that accept `{}`.
+
+```
+workflow test(): unknown {
+    const r = llm.generateJson(prompt: "generate some JSON")
+    return r.value    // r.value is unknown
+    // r.value.foo    // compile error: Cannot access property 'foo' on unknown type
+}
+```
+
+#### `never` (bottom type)
+
+The `never` type represents computations that never produce a value (they
+always throw). It corresponds to `{ "not": {} }` in JSON Schema and follows
+TypeScript semantics:
+
+- **`never` is assignable to any type.** A `throw` expression or a workflow
+  that always throws can appear anywhere a value is expected.
+- **No concrete type is assignable to `never`.** A workflow declared as
+  returning `never` must throw; `return "value"` is a compile error.
+- **In ternary expressions, `never` propagates the other arm's type.** If one
+  arm throws (returns `never`), the ternary's type is the other arm's type,
+  matching TypeScript behavior.
+
+```
+workflow fail(): never { throw "fatal error" }
+
+workflow process(x: boolean): string {
+    return x ? "ok" : fail()   // type is string, not string | never
+}
+```
+
+#### Strict rules (deviations from TypeScript)
+
+- No implicit coercion. `number + string` is a compile error.
+- `===` / `!==` require both operands to be the same type (unless `unknown` or `never`).
+- `&&` / `||` require `boolean` operands (no truthy/falsy coercion).
+- `if` and ternary conditions must be `boolean`, not just truthy.
+- `+` is arithmetic only; use template literals for string concatenation.
+- No `any` type. Use `unknown` for untyped values.
+
+#### Unresolved type (internal)
+
+When the type checker encounters an unknown type name (typo or unsupported
+type) or an unknown variable reference, it produces an internal `unresolved`
+type. This type is compatible with everything to prevent cascading errors:
+a single typo should not generate dozens of downstream type errors. The
+`unresolved` type is never exposed in DSL syntax.
+
 ---
 
 ## 3. Built-in functions
@@ -813,7 +939,8 @@ Remove parsing:
 ### 7.3 Type checker (new phase)
 
 A new compiler phase between parsing and emission. Walks the AST and assigns
-a type to every expression. Reports errors for type mismatches.
+a type to every expression. Reports errors for type mismatches. See section
+2.14 for the full type system specification.
 
 Type sources:
 

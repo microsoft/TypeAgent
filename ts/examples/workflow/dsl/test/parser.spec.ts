@@ -53,7 +53,7 @@ describe("parser", () => {
 
     test("parses workflow with multiple params", () => {
         const wf = parseWf(
-            "workflow multi(a: string, b: number, c: boolean): any {}",
+            "workflow multi(a: string, b: number, c: boolean): unknown {}",
         );
         expect(wf.params).toHaveLength(3);
         expect(wf.params.map((p) => p.name)).toEqual(["a", "b", "c"]);

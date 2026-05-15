@@ -173,7 +173,7 @@ describe("DSL parser", () => {
     });
 
     it("parses map built-in", () => {
-        const source = `workflow test(items: string[]): any {
+        const source = `workflow test(items: string[]): { text: string }[] {
             const results = map(items, (item) => {
                 const x = text.template("{{i}}", { i: item })
                 return x
@@ -240,7 +240,7 @@ describe("DSL compiler", () => {
     });
 
     it("lowers map to a loop node with index machinery", () => {
-        const source = `workflow test(items: string[]): any {
+        const source = `workflow test(items: string[]): string {
             const results = map(items, (item) => {
                 const result = text.template("{{x}}", { x: item })
                 return result
@@ -316,7 +316,7 @@ describe("DSL compiler", () => {
     });
 
     it("compiles retry to a loop node", () => {
-        const source = `workflow test(url: string): any {
+        const source = `workflow test(url: string): { body: string } {
             const result = retry(3, () => {
                 const r = web.fetch(url)
                 return r
@@ -334,7 +334,7 @@ describe("DSL compiler", () => {
     });
 
     it("compiles if/else to branch nodes", () => {
-        const source = `workflow test(x: boolean): any {
+        const source = `workflow test(x: boolean): string {
             if (x) {
                 const a = web.fetch("https://a.com")
             } else {
@@ -353,7 +353,7 @@ describe("DSL compiler", () => {
     });
 
     it("compiles parallel to a fork node", () => {
-        const source = `workflow test(): any {
+        const source = `workflow test(): unknown {
             const results = parallel(
                 () => {
                     const a = web.fetch("https://a.com")

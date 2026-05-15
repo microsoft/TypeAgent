@@ -56,9 +56,9 @@ question.
 | 1.1  | Specify parser precedence and associativity in the language docs.                                                                                    | Documented. 9 precedence levels (ternary lowest, member/call highest), all left-associative except ternary (right) and unary prefix (right). Only `===`/`!==` (no loose `==`/`!=`).    |
 | 1.2  | Decide whether parse-time builtin reservation is the intended language rule or whether naming should be made more explicit/less ambiguous.           | Keep parse-time detection. Reservation is narrow (only `name(` triggers it). Builtins need custom syntax parsing. Documented the scope of reservation.                                 |
 | 1.3  | Specify the arrow-body disambiguation rule.                                                                                                          | Keep as-is. Standard JS/TS rule: `{` means block body, otherwise expression body (wrapped in synthetic ReturnStatement). No ambiguity.                                                 |
-| 1.4  | Specify the restriction and confirm the error behavior is the one we want.                                                                           | Gap: parser accepts `break` anywhere (no `inSwitch` check). Emitter silently ignores it. Should add a diagnostic rejecting `break` outside switch arms.                                |
+| 1.4  | Specify the restriction and confirm the error behavior is the one we want.                                                                           | Fixed. Parser tracks `inSwitchDepth` and rejects `break` outside switch arms with a diagnostic.                                                                                        |
 | 1.5  | Specify the error strategy for banned operators and confirm the diagnostic wording approach.                                                         | Keep as-is. Lexer rejects `==`/`!=` with clear diagnostic suggesting `===`/`!==`. No token emitted, so parser never sees them. Earliest-possible error.                                |
-| 2.1  | Decide whether `unknown` should remain universally compatible or become stricter.                                                                    | Strongly typed. `unknown` is an internal recovery sentinel only: producers emit errors, consumers may continue, and compilation fails if any unknowns are produced.                    |
+| 2.1  | Decide the type system's treatment of `any`, `unknown`, and error recovery.                                                                          | Removed `any` from the DSL. `unknown` is the top type (TS semantics) for `{}` schemas. Error recovery uses internal `unresolved` type (not exposed). See dsl-v2.md section 2.14.       |
 | 2.2  | Specify numeric compatibility rules.                                                                                                                 | Keep as-is. `integer` and `number` are bidirectionally compatible (JS has one numeric type). `integer` preserved for JSON Schema fidelity. Document `integer` in dsl-v2 type table.    |
 | 2.3  | Review as an unsupported/runtime gap. Decide whether to detect this statically or document it as unsupported.                                        | Document as limitation. Recursion is unsupported (sub-workflows emit as unregistered tasks). No static cycle check needed now; once inlining lands, recursion is structurally blocked. |
 | 2.4  | Specify array-element type propagation rules.                                                                                                        | Keep as-is. Element types fully propagate: `map`/`parallelMap` extract element from collection, bind to callback param, return `array<body-type>`. `filter` preserves collection type. |
@@ -228,12 +228,9 @@ function semantics, no ambiguity.
 
 ### 1.4 `break` is only allowed in switch arms
 
-The plan says `break` is only valid in switch arms (not loops, since v2 has
-no loops). However, the parser accepts `break` anywhere - there is no
-`inSwitch` context flag. The emitter silently ignores it (returns `undefined`),
-so a stray `break` at workflow top level compiles without error and produces
-no IR node. This is a minor gap: ideally the compiler should reject `break`
-outside switch arms with a diagnostic.
+The parser tracks `inSwitchDepth` and rejects `break` outside switch arms
+with a diagnostic: "'break' is only allowed inside switch arms". This was
+originally a gap (parser accepted `break` anywhere) but has been fixed.
 
 ### 1.5 `==` and `!=` produce errors, not silent fallback
 
@@ -248,19 +245,40 @@ clear diagnostics at the earliest possible point.
 
 ## Phase 2: Type Checker
 
-### 2.1 `unknown` is an internal error-recovery sentinel, not a language type
+### 2.1 Type system: `unknown`, `never`, `unresolved`, and removal of `any`
 
-The DSL is strongly typed. When the checker cannot determine a type because
-the source is invalid or incomplete - for example an unknown reference,
-unknown field, or unknown named type in an annotation - it emits a type error
-at the producer site and returns `{ kind: "unknown" }` so later checks can
-continue without producing a cascade of follow-on errors.
+The type system has three special types with distinct roles:
 
-`unknown` is not a successful type result and is not exposed as a valid DSL
-type. A value that has already been reported as unknown may flow through later
-checks for recovery purposes, but compilation still fails because the producer
-already emitted an error. The plan mentioned `TypeInfo` with an `unknown` kind
-but didn't specify this error-recovery behavior.
+**`unknown` (top type)** - A real language type exposed as a DSL keyword.
+Follows TypeScript semantics: any type is assignable to `unknown`, but
+`unknown` is not assignable to concrete types. Field access on `unknown`
+is a compile error. Corresponds to `{}` (empty schema) in JSON Schema.
+Primary use case: tasks like `llm.generateJson` whose output structure is
+not statically known. Emits as `{}` in IR outputSchema.
+
+**`never` (bottom type)** - Exposed as a DSL keyword. Represents
+computations that never produce a value (always throw). Assignable to any
+type. Corresponds to `{ "not": {} }` in JSON Schema. In ternary
+expressions, if one arm is `never`, the result is the other arm's type.
+
+**`unresolved` (internal error recovery)** - Not exposed in DSL syntax.
+When the type checker encounters an unknown reference, unknown field, or
+unrecognized type name, it emits a type error at the producer site and
+returns `{ kind: "unresolved" }`. This type is compatible with everything
+to prevent cascading errors. Compilation still fails because the producer
+already emitted an error.
+
+**`any` removed** - The `any` keyword was removed from the DSL. Using
+`any` as a type annotation produces an "Unknown type" error. `unknown`
+replaces `any` for cases where the type is genuinely unconstrained.
+
+`typeEq(target, source)` evaluation order: unresolved (compatible with
+all) -> never (bottom: source=never assignable to any target) -> unknown
+(top: anything assignable to target=unknown, source=unknown not assignable
+to concrete) -> kind/primitive checks.
+
+See [dsl-v2.md section 2.14](dsl/dsl-v2.md) for the full type system
+specification.
 
 ### 2.2 Integer vs number
 
@@ -277,9 +295,7 @@ inferred as `integer`, `3.14` as `number`). The distinction is preserved
 for JSON Schema fidelity and documentation, but the checker's `isNumeric()`
 and `typeEq()` treat them interchangeably.
 
-Note: dsl-v2.md does not mention `integer` as a surface type (v1 did).
-The parser and type-expression resolver still accept it. This should be
-documented in the v2 type table.
+`integer` is documented in the dsl-v2.md type table (section 2.14).
 
 ### 2.3 Recursive workflow calls are not explicitly checked
 
@@ -305,7 +321,7 @@ The type checker infers array element types from context:
 - `filter(coll, (item) => { ... })` - `item` gets element type; return type
   is the original collection type (filtering doesn't change element type)
 - `parallelMap` follows the same pattern as `map`
-- When collection type is `any` or `unknown`, callback param falls back to `any`
+- When collection type is `unknown`, callback param is `unknown`
 
 **Classification:** Correct implementation. Matches spec. No changes needed.
 

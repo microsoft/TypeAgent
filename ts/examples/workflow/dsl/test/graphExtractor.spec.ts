@@ -50,7 +50,7 @@ describe("Graph extractor v2", () => {
 
     test("task call creates task node with edges", () => {
         const g = extract(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const result = web.fetch(url)
                 return result
             }
@@ -82,7 +82,7 @@ describe("Graph extractor v2", () => {
 
     test("template literal creates template node", () => {
         const g = extract(`
-            workflow test(name: string): any {
+            workflow test(name: string): unknown {
                 const msg = \`Hello \${name}!\`
                 return msg
             }
@@ -96,7 +96,7 @@ describe("Graph extractor v2", () => {
 
     test("if/else creates groups", () => {
         const g = extract(`
-            workflow test(x: boolean): any {
+            workflow test(x: boolean): unknown {
                 if (x) {
                     const a = web.fetch("https://a.com")
                 } else {
@@ -116,7 +116,7 @@ describe("Graph extractor v2", () => {
 
     test("switch creates groups for cases", () => {
         const g = extract(`
-            workflow test(x: string): any {
+            workflow test(x: string): unknown {
                 switch (x) {
                     case "a":
                         const r1 = web.fetch("https://a.com")
@@ -140,7 +140,7 @@ describe("Graph extractor v2", () => {
 
     test("throw creates error node", () => {
         const g = extract(`
-            workflow test(): any {
+            workflow test(): unknown {
                 throw "something went wrong"
                 return "never"
             }
@@ -154,7 +154,7 @@ describe("Graph extractor v2", () => {
 
     test("binary operator creates operator node", () => {
         const g = extract(`
-            workflow test(a: integer, b: integer): any {
+            workflow test(a: integer, b: integer): unknown {
                 const sum = a + b
                 return sum
             }
@@ -171,7 +171,7 @@ describe("Graph extractor v2", () => {
 
     test("retry creates group", () => {
         const g = extract(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
                     return result
@@ -189,7 +189,7 @@ describe("Graph extractor v2", () => {
 
     test("map creates group with edge from collection", () => {
         const g = extract(`
-            workflow test(urls: string[]): any {
+            workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
                     const result = web.fetch(url)
                     return result
@@ -208,7 +208,7 @@ describe("Graph extractor v2", () => {
 
     test("filter creates group", () => {
         const g = extract(`
-            workflow test(items: string[]): any {
+            workflow test(items: string[]): unknown {
                 return filter(items, (item) => {
                     return item === "keep"
                 })
@@ -222,7 +222,7 @@ describe("Graph extractor v2", () => {
 
     test("parallel creates group", () => {
         const g = extract(`
-            workflow test(): any {
+            workflow test(): unknown {
                 return parallel(
                     () => { return "a" },
                     () => { return "b" }
@@ -238,7 +238,7 @@ describe("Graph extractor v2", () => {
 
     test("parallelMap creates group", () => {
         const g = extract(`
-            workflow test(urls: string[]): any {
+            workflow test(urls: string[]): unknown {
                 return parallelMap(urls, (url) => {
                     const result = web.fetch(url)
                     return result
@@ -254,7 +254,7 @@ describe("Graph extractor v2", () => {
 
     test("destructuring binds names to source", () => {
         const g = extract(`
-            workflow test(): any {
+            workflow test(): unknown {
                 const results = parallel(
                     () => { return "a" },
                     () => { return "b" }
@@ -275,7 +275,7 @@ describe("Graph extractor v2", () => {
 
     test("workflow call creates workflowCall node", () => {
         const g = extract(`
-            workflow test(url: string): any {
+            workflow test(url: string): unknown {
                 const result = helper(url)
                 return result
             }
@@ -289,7 +289,7 @@ describe("Graph extractor v2", () => {
 
     test("nested built-ins create nested groups", () => {
         const g = extract(`
-            workflow test(urls: string[]): any {
+            workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
                     return retry(3, () => {
                         const result = web.fetch(url)
