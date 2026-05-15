@@ -35,6 +35,7 @@ To use the `graph-utils` package, several environment variables need to be set u
 Ensure these variables are correctly configured in your environment. For detailed steps on how to obtain and set these values, refer to the hand-written README.
 
 ## Key Files
+
 The `graph-utils` package is structured to provide a clear separation of concerns, with dedicated modules for different functionalities:
 
 - [index.ts](./src/index.ts): Exports utility functions and client creation methods for calendar and email services.

@@ -29,6 +29,7 @@ The package integrates with other TypeAgent packages such as `@typeagent/agent-r
 To set up the `websocket-channel-server` package, follow these steps:
 
 1. Install the necessary dependencies:
+
    ```sh
    pnpm install @typeagent/agent-rpc @typeagent/common-utils debug ws
    ```
@@ -38,6 +39,7 @@ To set up the `websocket-channel-server` package, follow these steps:
 No additional environment variables are required for this package beyond the standard configuration for WebSocket servers.
 
 ## Key Files
+
 The package's architecture is centered around the WebSocket server implementation. Key files include:
 
 - [index.ts](./src/index.ts): This file exports the main functionalities of the package, primarily the server implementation.

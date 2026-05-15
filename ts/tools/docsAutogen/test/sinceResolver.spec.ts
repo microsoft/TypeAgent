@@ -20,12 +20,18 @@ function fakeRunner(repo: FakeRepo): GitRunner {
         });
         const fail = (): GitResult => ({ stdout: "", stderr: "", code: 1 });
 
+        // Strip optional `--end-of-options` separators that the
+        // production code emits to harden against second-order
+        // command-injection (a ref starting with `-` would otherwise
+        // be interpreted by git as an option).
+        const filtered = args.filter((a) => a !== "--end-of-options");
+
         if (
-            args[0] === "rev-parse" &&
-            args[1] === "--verify" &&
-            args[2] === "--quiet"
+            filtered[0] === "rev-parse" &&
+            filtered[1] === "--verify" &&
+            filtered[2] === "--quiet"
         ) {
-            const ref = args[3]!;
+            const ref = filtered[3]!;
             const sha =
                 repo.refs.get(ref) ??
                 repo.refs.get(stripTagPrefix(ref)) ??
@@ -33,20 +39,20 @@ function fakeRunner(repo: FakeRepo): GitRunner {
             return sha !== undefined ? ok(`${sha}\n`) : fail();
         }
         if (
-            args[0] === "symbolic-ref" &&
-            args[1] === "--quiet" &&
-            args[2] === "--short"
+            filtered[0] === "symbolic-ref" &&
+            filtered[1] === "--quiet" &&
+            filtered[2] === "--short"
         ) {
             return repo.branch !== null ? ok(`${repo.branch}\n`) : fail();
         }
-        if (args[0] === "merge-base") {
-            const a = args[1]!;
-            const b = args[2]!;
+        if (filtered[0] === "merge-base") {
+            const a = filtered[1]!;
+            const b = filtered[2]!;
             const key = `${a}|${b}`;
             const found = repo.mergeBases.get(key);
             return found !== undefined ? ok(`${found}\n`) : fail();
         }
-        if (args[0] === "rev-parse" && args[1] === "HEAD") {
+        if (filtered[0] === "rev-parse" && filtered[1] === "HEAD") {
             const head = repo.refs.get("HEAD");
             return head !== undefined ? ok(`${head}\n`) : fail();
         }

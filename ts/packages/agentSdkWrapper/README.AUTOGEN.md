@@ -46,6 +46,7 @@ To use the `agent-sdk-wrapper` package, you need to set several environment vari
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `agent-sdk-wrapper` package is structured to provide direct API integration with the Anthropic Agent SDK. Key files and their responsibilities include:
 
 - [index.ts](./src/index.ts): Re-exports utilities and classes from other packages, such as `CacheClient` and `DebugLogger`.

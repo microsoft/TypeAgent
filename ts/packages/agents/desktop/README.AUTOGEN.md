@@ -55,6 +55,7 @@ To set up the `desktop-automation` package, you need to configure the following 
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `desktop-automation` package is structured as follows:
 
 - **Manifest**: The agent's manifest is defined in [manifest.json](./src/manifest.json), which includes descriptions and schema files for the agent and its sub-actions.

@@ -40,6 +40,7 @@ To set up the `windowsclock-agent` package, follow these steps:
 3. Follow any additional setup instructions provided in the hand-written README.
 
 ## Key Files
+
 The `windowsclock-agent` package is structured as follows:
 
 - **Manifest**: The manifest file [windowsClockManifest.json](./src/windowsClockManifest.json) describes the agent, including its emoji representation and schema details.

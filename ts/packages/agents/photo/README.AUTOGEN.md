@@ -25,6 +25,7 @@ To set up the `photo-agent`, ensure you have the necessary environment configure
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `photo-agent` package is structured around several key files:
 
 - **[photoManifest.json](./src/photoManifest.json)**: Defines the agent's manifest, including its description and schema.
@@ -82,8 +83,8 @@ External: _None at runtime._
 
 _1 action implemented by this agent, parsed deterministically from `./src/photoSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
+| User says                                              | Action                                     |
+| ------------------------------------------------------ | ------------------------------------------ |
 | _uses a camera attached to the system to take a photo_ | `takePhoto` → `{ "originalRequest": "…" }` |
 
 ---

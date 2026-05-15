@@ -32,6 +32,7 @@ To set up the `knowledge-processor` package, ensure you have the necessary depen
 For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
 
 ## Key Files
+
 The `knowledge-processor` package is organized into several modules, each responsible for different aspects of knowledge processing:
 
 - **Conversation**: Handles conversation-related functionalities, including managing conversation topics, extracting knowledge from conversations, and generating answers. Key files include [conversationManager.ts](./src/conversation/conversationManager.ts), [conversation.ts](./src/conversation/conversation.ts), and [answerGenerator.ts](./src/conversation/answerGenerator.ts).

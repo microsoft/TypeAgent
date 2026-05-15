@@ -23,6 +23,7 @@ This package provides a set of actions for managing and executing PowerShell scr
 The package requires the environment variable `TYPEAGENT_NO_SAMPLES`. This variable controls whether sample data is included in the agent's responses. To set up the package, ensure this environment variable is defined in your environment. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The package is structured into several key components:
 
 - **Manifest**: The [manifest.json](./src/manifest.json) file defines the agent's capabilities, including the core flow management actions and sub-action manifests for file operations, process management, and system information.

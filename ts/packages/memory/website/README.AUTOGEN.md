@@ -35,6 +35,7 @@ To set up the `website-memory` package, you need to configure the AI model and o
 For detailed setup instructions, including how to obtain these keys and configure the AI model, refer to the hand-written README.
 
 ## Key Files
+
 The `website-memory` package is organized into several key components:
 
 - **Content Extraction**: The main extraction logic is implemented in [contentExtractor.ts](./src/extraction/contentExtractor.ts). This class handles different extraction modes and integrates with AI models for advanced knowledge extraction.

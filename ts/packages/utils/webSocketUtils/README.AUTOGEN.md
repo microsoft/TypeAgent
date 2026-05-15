@@ -35,6 +35,7 @@ To use the `websocket-utils` package, you need to set the `WEBSOCKET_HOST` envir
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The package consists of the following key files:
 
 - [index.ts](./src/index.ts): Exports the functions and types from `webSockets.ts`.

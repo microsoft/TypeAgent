@@ -31,6 +31,7 @@ To set up the `mcp-plan-validation` package, you need to install the necessary d
 You can obtain these values by following the instructions in the hand-written README. Additionally, you may need to configure client-specific settings for tools like Claude, Copilot, or Cursor.
 
 ## Key Files
+
 The package is structured into several key files, each responsible for different aspects of the plan validation and execution process:
 
 - [index.ts](./src/index.ts): Entry point for the MCP server, handling policy loading and server initialization.

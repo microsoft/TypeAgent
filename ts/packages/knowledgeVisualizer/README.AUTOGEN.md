@@ -36,6 +36,7 @@ pnpm run kv
 This command will start the development server and enable the visualization tool. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The package is structured into several key components:
 
 - **Route Handling**: The [route.ts](./src/route/route.ts) file sets up middleware for the development server and handles server-sent events (SSE) to update visualizations. It listens for changes in the data and triggers the appropriate visualization updates.

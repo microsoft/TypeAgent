@@ -43,6 +43,7 @@ Additionally, ensure that the necessary media player is installed on your system
 No external API keys are required. The agent uses the system's built-in audio capabilities.
 
 ## Key Files
+
 The `music-local` package is structured as follows:
 
 - **Manifest**: [localPlayerManifest.json](./src/agent/localPlayerManifest.json) defines the agent's metadata and schema.

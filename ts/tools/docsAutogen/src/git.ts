@@ -51,6 +51,40 @@ function trim(s: string): string {
 }
 
 /**
+ * Reject ref/tag/sha values that could be misinterpreted by `git` as a
+ * command-line option (CodeQL: second-order command injection). All
+ * values that flow into a positional argument are validated through
+ * this helper before being passed to `spawn`.
+ *
+ * Conservative policy: reject anything starting with `-`, anything
+ * containing whitespace, NUL, or control characters. Legitimate git
+ * refs do not contain these.
+ */
+function validateGitRefArg(value: string, name: string): void {
+    if (typeof value !== "string" || value.length === 0) {
+        throw new Error(`Invalid git ${name}: must be a non-empty string`);
+    }
+    if (value.startsWith("-")) {
+        throw new Error(
+            `Invalid git ${name}: must not start with '-' (was: ${JSON.stringify(value)})`,
+        );
+    }
+    for (let i = 0; i < value.length; i++) {
+        const c = value.charCodeAt(i);
+        if (c === 0x00 || (c < 0x20 && c !== 0x09) || c === 0x7f) {
+            throw new Error(
+                `Invalid git ${name}: contains control character (was: ${JSON.stringify(value)})`,
+            );
+        }
+        if (c === 0x20) {
+            throw new Error(
+                `Invalid git ${name}: must not contain whitespace (was: ${JSON.stringify(value)})`,
+            );
+        }
+    }
+}
+
+/**
  * Thin, focused git wrapper for the operations docs-autogen needs.
  *
  * All methods return `null` (rather than throwing) for the well-known
@@ -82,7 +116,14 @@ export class Git {
      * when the ref does not exist.
      */
     async revParse(ref: string): Promise<string | null> {
-        const r = await this.run(["rev-parse", "--verify", "--quiet", ref]);
+        validateGitRefArg(ref, "ref");
+        const r = await this.run([
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            ref,
+        ]);
         if (r.code !== 0) return null;
         const out = trim(r.stdout);
         return out.length > 0 ? out : null;
@@ -113,7 +154,9 @@ export class Git {
      * common ancestor (or either ref is missing).
      */
     async mergeBase(a: string, b: string): Promise<string | null> {
-        const r = await this.run(["merge-base", a, b]);
+        validateGitRefArg(a, "ref");
+        validateGitRefArg(b, "ref");
+        const r = await this.run(["merge-base", "--end-of-options", a, b]);
         if (r.code !== 0) return null;
         const out = trim(r.stdout);
         return out.length > 0 ? out : null;
@@ -136,10 +179,10 @@ export class Git {
         from: string,
         to: string | null = null,
     ): Promise<string[]> {
-        const args =
-            to === null
-                ? ["diff", "--name-only", from]
-                : ["diff", "--name-only", `${from}..${to}`];
+        validateGitRefArg(from, "ref");
+        if (to !== null) validateGitRefArg(to, "ref");
+        const refspec = to === null ? from : `${from}..${to}`;
+        const args = ["diff", "--name-only", refspec, "--"];
         const out = await this.runOk(args);
         return parseLines(out);
     }
@@ -164,10 +207,12 @@ export class Git {
 
     /** True iff the named tag exists locally. */
     async tagExists(tag: string): Promise<boolean> {
+        validateGitRefArg(tag, "tag");
         const r = await this.run([
             "rev-parse",
             "--verify",
             "--quiet",
+            "--end-of-options",
             `refs/tags/${tag}`,
         ]);
         return r.code === 0;
@@ -178,7 +223,9 @@ export class Git {
      * success.
      */
     async setTag(tag: string, sha: string): Promise<boolean> {
-        const r = await this.run(["tag", "-f", tag, sha]);
+        validateGitRefArg(tag, "tag");
+        validateGitRefArg(sha, "sha");
+        const r = await this.run(["tag", "-f", "--", tag, sha]);
         return r.code === 0;
     }
 
@@ -187,10 +234,12 @@ export class Git {
      * to overwrite an existing remote tag.
      */
     async pushTag(remote: string, tag: string, force = false): Promise<void> {
+        validateGitRefArg(remote, "remote");
+        validateGitRefArg(tag, "tag");
         const refspec = force
             ? `+refs/tags/${tag}:refs/tags/${tag}`
             : `refs/tags/${tag}:refs/tags/${tag}`;
-        await this.runOk(["push", remote, refspec]);
+        await this.runOk(["push", "--", remote, refspec]);
     }
 }
 

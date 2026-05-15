@@ -33,6 +33,7 @@ To use the `image-agent`, you need to configure API keys and endpoints in the ro
 Ensure these variables are set correctly in your `.env` file. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `image-agent` package is structured into several key files:
 
 - [imageManifest.json](./src/imageManifest.json): Defines the agent's manifest, including its description and schema.
@@ -94,8 +95,8 @@ External: _None at runtime._
 
 _1 action implemented by this agent, parsed deterministically from `./src/imageActionSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
+| User says                                            | Action                                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | _creates an image based on the supplied description_ | `createImageAction` → `{ "originalRequest": "…", "caption": "…", "numImages": 0 }` |
 
 ---

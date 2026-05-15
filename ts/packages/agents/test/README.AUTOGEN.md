@@ -31,6 +31,7 @@ To set up the `test-agent` package, follow these steps:
 2. No additional environment variables or external accounts are required for this package.
 
 ## Key Files
+
 The `test-agent` package consists of the following key files:
 
 - [manifest.json](./src/manifest.json): Defines the agent's metadata, including its emoji representation, description, and schema details.

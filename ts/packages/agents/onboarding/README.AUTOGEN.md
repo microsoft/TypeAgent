@@ -32,6 +32,7 @@ To set up the onboarding-agent, you need to configure the `TYPEAGENT_UIA_HELPER`
 For detailed setup instructions, including how to obtain the value for `TYPEAGENT_UIA_HELPER`, refer to the hand-written README.
 
 ## Key Files
+
 The onboarding-agent is structured into several key components:
 
 - **Manifest**: [onboardingManifest.json](./src/onboardingManifest.json) defines the agent's metadata and schema.
@@ -118,12 +119,12 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _4 actions implemented by this agent, parsed deterministically from `./src/onboardingSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _(no sample)_ | `startOnboarding` → `{ "integrationName": "…" }` |
-| _(no sample)_ | `resumeOnboarding` → `{ "integrationName": "…" }` |
+| User says     | Action                                               |
+| ------------- | ---------------------------------------------------- |
+| _(no sample)_ | `startOnboarding` → `{ "integrationName": "…" }`     |
+| _(no sample)_ | `resumeOnboarding` → `{ "integrationName": "…" }`    |
 | _(no sample)_ | `getOnboardingStatus` → `{ "integrationName": "…" }` |
-| _(no sample)_ | `listIntegrations` |
+| _(no sample)_ | `listIntegrations`                                   |
 
 ---
 

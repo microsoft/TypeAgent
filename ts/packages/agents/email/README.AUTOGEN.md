@@ -36,6 +36,7 @@ To set up the Email agent, you need to configure access to the Microsoft Graph A
 These variables are essential for authenticating and interacting with the Microsoft Graph API. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The internal structure of the Email agent is organized into several key files:
 
 - [emailManifest.json](./src/emailManifest.json): Defines the agent's manifest, including its description and schema.
@@ -97,12 +98,12 @@ External: `@anthropic-ai/claude-agent-sdk`, `chalk`, `debug`
 
 _4 actions implemented by this agent, parsed deterministically from `./src/emailActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _Type for sending a simple email_ | `sendEmail` → `{ "subject": "…", "to": ["…"] }` |
-| _Type for forwarding an email_ | `forwardEmail` → `{ "to": ["…"], "messageRef": "…" }` |
-| _Type for replying to an email_ | `replyEmail` → `{ "messageRef": "…" }` |
-| _Type for finding an email message (search for emails)_ | `findEmail` → `{ "messageRef": "…" }` |
+| User says                                               | Action                                                |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| _Type for sending a simple email_                       | `sendEmail` → `{ "subject": "…", "to": ["…"] }`       |
+| _Type for forwarding an email_                          | `forwardEmail` → `{ "to": ["…"], "messageRef": "…" }` |
+| _Type for replying to an email_                         | `replyEmail` → `{ "messageRef": "…" }`                |
+| _Type for finding an email message (search for emails)_ | `findEmail` → `{ "messageRef": "…" }`                 |
 
 ---
 

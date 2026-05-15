@@ -29,6 +29,7 @@ To set up the montage-agent package, you need to configure several environment v
 Additionally, you need to install the necessary dependencies using `pnpm install`. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The montage-agent package is organized into several key components:
 
 - **Agent Manifest**: The [montageManifest.json](./src/agent/montageManifest.json) file defines the agent's schema and description.

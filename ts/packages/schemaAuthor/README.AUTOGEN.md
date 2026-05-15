@@ -38,6 +38,7 @@ To set up the `schema-author` package, ensure you have the necessary dependencie
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `schema-author` package is structured into several key files:
 
 - **[index.ts](./src/index.ts)**: This file exports the main functionalities of the package, including schema loading and variation generation.

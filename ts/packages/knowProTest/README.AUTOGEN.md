@@ -30,6 +30,7 @@ To set up the `knowpro-test` package, ensure you have the necessary environment 
 Refer to the hand-written README for detailed setup instructions, including how to configure LLM and embedding models, and how to create query translators and answer generators.
 
 ## Key Files
+
 The `knowpro-test` package is organized into several key files, each responsible for different aspects of the functionality:
 
 - **[index.ts](./src/index.ts)**: The main entry point that exports various modules and functionalities.

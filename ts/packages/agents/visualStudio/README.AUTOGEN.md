@@ -35,6 +35,7 @@ To set up the `visualstudio-agent`, you need to have Visual Studio 2022 (or late
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The architecture of the `visualstudio-agent` involves two WebSocket channels:
 
 - **Chat channel** (port 8999): The WebView2 inside the VSIX communicates with the dispatcher.

@@ -36,6 +36,7 @@ Environment variables:
 For detailed setup instructions, including how to obtain API keys and configure environment variables, refer to the hand-written README.
 
 ## Key Files
+
 The `image-memory` package is structured into several key files, each responsible for different aspects of the functionality:
 
 - [index.ts](./src/index.ts): The entry point that exports various modules.

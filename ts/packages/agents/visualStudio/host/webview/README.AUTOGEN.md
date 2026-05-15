@@ -34,6 +34,7 @@ To set up the `visualstudio-extension-webview` package, ensure you have the nece
 For detailed setup instructions, including how to obtain and configure this environment variable, refer to the hand-written README.
 
 ## Key Files
+
 The package's architecture is centered around three main files:
 
 - [main.ts](./src/main.ts): Initializes the chat panel and manages the connection to the dispatcher. It sets up the UI elements and handles user interactions.

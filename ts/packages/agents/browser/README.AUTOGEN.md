@@ -41,6 +41,7 @@ Additionally, you need to enable developer mode in your browser and load the unp
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `browser-typeagent` package is structured into several key components:
 
 - **Agent WebSocket Server**: Exposes a WebSocket server (`AgentWebSocketServer`) on port 8081, allowing clients to connect and communicate with the browser agent. Clients include the Chrome extension and the Electron shell.

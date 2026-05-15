@@ -78,6 +78,122 @@ export function maskInlineCode(line: string): string {
     return out;
 }
 /**
+ * A single inline-link match inside a markdown string.
+ *
+ * Returned by `parseInlineLinks`. Offsets are 0-based and refer to
+ * the original string the parser was called with — useful when
+ * callers need to splice or replace individual matches in place.
+ */
+export interface InlineLinkMatch {
+    /** The full matched substring `[text](target)` or `[text](target "title")`. */
+    readonly fullMatch: string;
+    /** Visible link text (between `[` and `]`). */
+    readonly text: string;
+    /** Link target (inside parentheses, before any `"title"`). */
+    readonly target: string;
+    /** Optional title inside `"..."`; undefined if absent. */
+    readonly title: string | undefined;
+    /** Index of the leading `[`. */
+    readonly start: number;
+    /** Index just past the trailing `)`. */
+    readonly end: number;
+}
+
+/**
+ * Parse every inline markdown link `[text](target[ "title"])` in the
+ * supplied string. Single forward pass with `String#indexOf` — runs
+ * in linear time on input length, no regex backtracking. Safe for
+ * adversarial inputs (e.g. LLM output containing pathological
+ * sequences of `[[[[(((` characters).
+ *
+ * Limitations (intentional, kept simple):
+ *   - Reference-style links `[text][id]` are NOT matched.
+ *   - Nested square brackets in `text` are NOT supported (the first
+ *     `]` after `[` closes the text).
+ *   - Target may not contain whitespace nor `)` (must be percent-encoded).
+ *   - Title (if present) is the substring inside the first matched
+ *     `"..."` after the target; nested quotes are not supported.
+ */
+export function parseInlineLinks(s: string): InlineLinkMatch[] {
+    const out: InlineLinkMatch[] = [];
+    let i = 0;
+    while (i < s.length) {
+        const lb = s.indexOf("[", i);
+        if (lb < 0) break;
+        const rb = s.indexOf("]", lb + 1);
+        if (rb < 0) break;
+        if (s.charCodeAt(rb + 1) !== 0x28 /* ( */) {
+            i = lb + 1;
+            continue;
+        }
+        const lp = rb + 1;
+        const rp = s.indexOf(")", lp + 1);
+        if (rp < 0) break;
+        const inner = s.slice(lp + 1, rp);
+        const wsIdx = firstAsciiWhitespace(inner);
+        let target: string;
+        let title: string | undefined;
+        if (wsIdx < 0) {
+            target = inner;
+            title = undefined;
+        } else {
+            target = inner.slice(0, wsIdx);
+            const rest = inner.slice(wsIdx);
+            // Strip leading whitespace deterministically (no regex).
+            let r = 0;
+            while (r < rest.length) {
+                const c = rest.charCodeAt(r);
+                if (c !== 0x20 && c !== 0x09) break;
+                r++;
+            }
+            const afterWs = rest.slice(r);
+            // Match the original regex's strict "title-or-bust" rule:
+            // anything after target whitespace must be a quoted title
+            // running exactly to the closing paren. Otherwise the
+            // whole construct is rejected as not a valid inline link.
+            if (
+                afterWs.length >= 2 &&
+                afterWs.charCodeAt(0) === 0x22 /* " */ &&
+                afterWs.charCodeAt(afterWs.length - 1) === 0x22
+            ) {
+                const interior = afterWs.slice(1, -1);
+                if (!interior.includes('"')) {
+                    title = interior;
+                } else {
+                    i = lb + 1;
+                    continue;
+                }
+            } else {
+                i = lb + 1;
+                continue;
+            }
+        }
+        if (target.length === 0 || firstAsciiWhitespace(target) >= 0) {
+            i = lb + 1;
+            continue;
+        }
+        out.push({
+            fullMatch: s.slice(lb, rp + 1),
+            text: s.slice(lb + 1, rb),
+            target,
+            title,
+            start: lb,
+            end: rp + 1,
+        });
+        i = rp + 1;
+    }
+    return out;
+}
+
+function firstAsciiWhitespace(s: string): number {
+    for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d) return i;
+    }
+    return -1;
+}
+
+/**
  * Targets we never attempt to validate against the filesystem.
  * Anchor-only links (`#section`) and protocol-bearing URLs are
  * intentionally allowed — the AUTOGEN block restricts external links
@@ -105,10 +221,6 @@ export function extractMarkdownLinks(markdown: string): ExtractedLink[] {
     const out: ExtractedLink[] = [];
     let inFence = false;
     let fenceMarker = "";
-    // Inline link pattern. The target group avoids unescaped parentheses
-    // in the URL (which the markdown spec disallows for inline links
-    // without escaping).
-    const linkRegex = /\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu;
     for (let i = 0; i < lines.length; i++) {
         const raw = lines[i]!;
         const trimmed = raw.trim();
@@ -128,12 +240,10 @@ export function extractMarkdownLinks(markdown: string): ExtractedLink[] {
         // Mask inline code spans before scanning so literal
         // `[x](path)` examples in prose are not extracted as real links.
         const masked = maskInlineCode(raw);
-        linkRegex.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = linkRegex.exec(masked)) !== null) {
+        for (const match of parseInlineLinks(masked)) {
             out.push({
-                text: m[1] ?? "",
-                target: m[2] ?? "",
+                text: match.text,
+                target: match.target,
                 line: i + 1,
             });
         }

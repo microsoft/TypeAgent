@@ -62,15 +62,18 @@ export function parseWorkspacePatterns(yamlText: string): string[] {
     const patterns: string[] = [];
     let inPackages = false;
     for (const raw of lines) {
-        const line = raw.replace(/#.*$/u, "");
+        // Strip a `#` line comment without a regex; an indexOf scan
+        // is linear and cannot backtrack.
+        const hashIdx = raw.indexOf("#");
+        const line = hashIdx >= 0 ? raw.slice(0, hashIdx) : raw;
         if (/^packages\s*:/u.test(line)) {
             inPackages = true;
             continue;
         }
         if (inPackages) {
-            const m = /^\s*-\s*"?([^"\s][^"]*?)"?\s*$/u.exec(line);
-            if (m && m[1]) {
-                patterns.push(m[1]);
+            const value = parseYamlListItem(line);
+            if (value !== null) {
+                patterns.push(value);
                 continue;
             }
             // A new top-level key terminates the packages block.
@@ -80,6 +83,49 @@ export function parseWorkspacePatterns(yamlText: string): string[] {
         }
     }
     return patterns;
+}
+
+/**
+ * Parses a single YAML sequence entry of the form `  - value` or
+ * `  - "value"`. Implemented as a forward scan instead of a single
+ * regex with nested quantifiers (`^\s*-\s*"?([^"\s][^"]*?)"?\s*$`),
+ * which CodeQL flags as polynomial.
+ */
+function parseYamlListItem(line: string): string | null {
+    let i = 0;
+    while (i < line.length) {
+        const c = line.charCodeAt(i);
+        if (c !== 0x20 && c !== 0x09) break;
+        i++;
+    }
+    if (line.charCodeAt(i) !== 0x2d /* - */) return null;
+    i++;
+    while (i < line.length) {
+        const c = line.charCodeAt(i);
+        if (c !== 0x20 && c !== 0x09) break;
+        i++;
+    }
+    let end = line.length;
+    while (end > i) {
+        const c = line.charCodeAt(end - 1);
+        if (c !== 0x20 && c !== 0x09) break;
+        end--;
+    }
+    if (end <= i) return null;
+    let value = line.slice(i, end);
+    if (
+        value.length >= 2 &&
+        value.charCodeAt(0) === 0x22 &&
+        value.charCodeAt(value.length - 1) === 0x22
+    ) {
+        value = value.slice(1, -1);
+    }
+    if (value.length === 0) return null;
+    if (value.includes('"')) return null;
+    if (value.charCodeAt(0) === 0x20 || value.charCodeAt(0) === 0x09) {
+        return null;
+    }
+    return value;
 }
 
 /**

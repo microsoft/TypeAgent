@@ -28,6 +28,7 @@ To set up the `agent-server`, you need to configure the following environment va
 Ensure these variables are set in your environment or in a `.env` file. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `agent-server` package is structured around several key components:
 
 ### `server.ts` — WebSocket listener

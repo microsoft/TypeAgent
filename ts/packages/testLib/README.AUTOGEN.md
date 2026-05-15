@@ -38,6 +38,7 @@ These keys are used to configure the OpenAI models for testing purposes. Ensure 
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `testLib` package is structured into several key files, each responsible for different aspects of the library:
 
 - **[index.ts](./src/index.ts)**: The entry point that exports functions from other modules.
@@ -49,7 +50,8 @@ The `testLib` package is structured into several key files, each responsible for
 
 ### Detailed File Responsibilities
 
-- **[file.ts](./src/file.ts)**: 
+- **[file.ts](./src/file.ts)**:
+
   - `getAbsolutePath`: Converts a relative path to an absolute path.
   - `getRootDataPath`: Returns the root data path for tests.
   - `getOutputDirPath`: Returns the output directory path for tests.
@@ -60,6 +62,7 @@ The `testLib` package is structured into several key files, each responsible for
   - `ensureOutputDir`: Ensures the output directory exists, optionally cleaning it.
 
 - **[models.ts](./src/models.ts)**:
+
   - `hasTestKeys`: Checks if the necessary environment variables for testing are set.
   - `createTestEmbeddingModel`: Creates a test embedding model.
   - `createTestChatModel`: Creates a test chat model.
@@ -67,9 +70,11 @@ The `testLib` package is structured into several key files, each responsible for
   - `NullEmbeddingModel`: A mock embedding model for testing purposes.
 
 - **[parse.ts](./src/parse.ts)**:
+
   - `parseCommandArgs`: Parses command-line styled arguments into named and unnamed arguments.
 
 - **[test.ts](./src/test.ts)**:
+
   - `testIf`: Conditionally runs a test based on a provided function.
   - `describeIf`: Conditionally runs a test suite based on a provided function.
   - `shouldSkip`: Determines if tests should be skipped based on environment settings.

@@ -23,6 +23,7 @@ The `interactiveApp` package provides a set of tools and utilities to create int
 This package does not require any special setup beyond installing its dependencies. Simply run `pnpm install` to install the necessary packages. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `interactiveApp` package is structured into several key modules:
 
 - **[index.ts](./src/index.ts)**: The entry point of the package, exporting functionalities from other modules.

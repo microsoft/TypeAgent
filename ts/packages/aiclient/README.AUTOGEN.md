@@ -32,6 +32,7 @@ The package includes a sophisticated mechanism for managing multi-region endpoin
 Endpoints are grouped by priority tiers, with random selection within each tier. The lowest-priority tier that still has at least one healthy (non-cooling-down) member wins; within that tier, one member is picked uniformly at random. This ensures that multiple client processes spread across the regions in that tier instead of stampeding the same endpoint.
 
 On failure:
+
 - **429**: Parses `Retry-After`, marks the member as cooling for `max(Retry-After, base × 2^consecutive_429s)`, capped at 120 seconds, and rotates to the next healthy member.
 - **5xx / timeout / network error**: Applies a floor cooldown of 5 seconds and rotates.
 - **Non-transient 4xx** (e.g., 401): Returns immediately without rotating.
@@ -47,6 +48,7 @@ To use the `aiclient` package, certain environment variables need to be set up. 
 For detailed setup instructions, including how to provision more endpoints and configure multi-region deploy and secret-sync tooling, see the hand-written README.
 
 ## Key Files
+
 The `aiclient` package is organized into several key files, each responsible for different aspects of the library:
 
 - [index.ts](./src/index.ts): The main entry point, exporting various modules and functions.

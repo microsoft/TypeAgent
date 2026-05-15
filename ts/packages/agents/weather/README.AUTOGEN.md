@@ -29,6 +29,7 @@ These actions enable users to obtain detailed weather information, including cur
 To set up the `weather-agent`, ensure you have the necessary environment variables configured. The package requires access to a weather API service, and you need to set the API key in your environment variables. Follow the steps in the hand-written README for detailed instructions on obtaining and configuring the API key.
 
 ## Key Files
+
 The `weather-agent` package is structured as follows:
 
 - **Manifest**: The agent's manifest is defined in [weatherManifest.json](./src/weatherManifest.json), which includes metadata and schema information.
@@ -88,11 +89,11 @@ External: _None at runtime._
 
 _3 actions implemented by this agent, parsed deterministically from `./src/weatherSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
+| User says     | Action                                         |
+| ------------- | ---------------------------------------------- |
 | _(no sample)_ | `getCurrentConditions` → `{ "location": "…" }` |
-| _(no sample)_ | `getForecast` → `{ "location": "…" }` |
-| _(no sample)_ | `getAlerts` → `{ "location": "…" }` |
+| _(no sample)_ | `getForecast` → `{ "location": "…" }`          |
+| _(no sample)_ | `getAlerts` → `{ "location": "…" }`            |
 
 ---
 

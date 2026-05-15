@@ -37,6 +37,7 @@ To set up the `grammar-tools-ui` package, ensure you have the following environm
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The package is structured as follows:
 
 - [src/index.ts](./src/index.ts): Exports the main components and types.

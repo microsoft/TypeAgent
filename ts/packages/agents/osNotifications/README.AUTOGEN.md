@@ -31,6 +31,7 @@ For Windows, additional setup is required to build and register the helper execu
 See the hand-written README for the full step-by-step setup instructions.
 
 ## Key Files
+
 The package is structured as follows:
 
 - **Manifest**: [osNotificationsManifest.json](./src/osNotificationsManifest.json) — Defines the agent's metadata and schema.

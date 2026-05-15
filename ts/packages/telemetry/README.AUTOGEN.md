@@ -37,6 +37,7 @@ To use the `telemetry` package, you need to set up the following environment var
 These environment variables are required for the respective logger sinks to function correctly. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `telemetry` package is structured into several key components:
 
 - [indexNode.ts](./src/indexNode.ts): The main entry point that exports various logger sinks and utilities.

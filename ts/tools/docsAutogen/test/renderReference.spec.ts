@@ -385,6 +385,41 @@ describe("renderReferenceSection", () => {
         });
         expect(out).not.toContain("### Environment variables");
     });
+
+    it("escapes backslashes before pipes in action table cells (incomplete-string-escaping fix)", () => {
+        const out = renderReferenceSection(
+            makeInputs({
+                isAgentPackage: true,
+                agentSurface: {
+                    manifestPath: "./src/m.json",
+                    schemaPath: "./src/s.ts",
+                    grammarPath: null,
+                    handlerPath: "./src/h.ts",
+                },
+                actions: [
+                    {
+                        typeName: "EscapeAction",
+                        actionName: "escape",
+                        // A backslash followed by a pipe in user input
+                        // must end up as `\\\|` in the rendered table
+                        // cell — backslash escaped to `\\` first, then
+                        // the pipe escaped to `\|`. The previous
+                        // implementation produced `\\|` which markdown
+                        // parsers render as a literal backslash + cell
+                        // separator (incomplete-string-escaping).
+                        description: "has a back\\slash and | a pipe",
+                        samplePhrases: ["try \\| this"],
+                        parameters: [],
+                        implemented: true,
+                    },
+                ],
+            }),
+            { compact: false, reasons: [] },
+        );
+        expect(out).toContain("### Actions");
+        // Sample phrase: original `\| ` → escaped to `\\\|`.
+        expect(out).toContain('"try \\\\\\| this"');
+    });
 });
 
 describe("decideCompact", () => {

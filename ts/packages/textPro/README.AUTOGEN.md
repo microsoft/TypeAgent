@@ -37,6 +37,7 @@ pnpm install cheerio marked
 For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `textpro` package is organized into several key files, each responsible for different aspects of text manipulation:
 
 - [index.ts](./src/index.ts): Exports the main functionalities from `markdown.ts` and `html.ts`.

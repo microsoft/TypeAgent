@@ -160,6 +160,23 @@ function stripCommentMarker(line: string): string {
     return s;
 }
 
+/**
+ * Returns true when `comment` is exactly a "Sample phrases" header,
+ * with optional surrounding whitespace, optional trailing colon, and
+ * either singular or plural ("phrase" / "phrases"). Implemented as a
+ * forward scan to avoid the regex shape `\s+phrases?\s*` which
+ * exhibits polynomial backtracking on adversarial whitespace runs.
+ */
+function isSamplePhrasesHeader(comment: string): boolean {
+    const t = comment.trim().toLowerCase();
+    return (
+        t === "sample phrase" ||
+        t === "sample phrase:" ||
+        t === "sample phrases" ||
+        t === "sample phrases:"
+    );
+}
+
 function splitDescriptionAndPhrases(comments: readonly string[]): {
     description: string;
     samplePhrases: string[];
@@ -168,8 +185,7 @@ function splitDescriptionAndPhrases(comments: readonly string[]): {
     const phraseLines: string[] = [];
     let mode: "desc" | "phrases" = "desc";
     for (const c of comments) {
-        const trimmed = c.trim();
-        if (/^sample\s+phrases?\s*:?\s*$/iu.test(trimmed)) {
+        if (isSamplePhrasesHeader(c)) {
             mode = "phrases";
             continue;
         }
@@ -182,7 +198,7 @@ function splitDescriptionAndPhrases(comments: readonly string[]): {
     const description = descLines.join(" ").replace(/\s+/gu, " ").trim();
     const samplePhrases: string[] = [];
     for (const raw of phraseLines) {
-        const m = /^\s*-\s*"([^"]*)"\s*$/u.exec(raw);
+        const m = /^\s*-\s*"([^"\n]*)"\s*$/u.exec(raw);
         if (m) {
             samplePhrases.push(m[1]!);
             continue;

@@ -37,6 +37,7 @@ pnpm install
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `typechat-utils` package is organized into several modules, each responsible for different aspects of utility functions:
 
 - **[index.ts](./src/index.ts)**: The main entry point that exports functions and classes from other modules.

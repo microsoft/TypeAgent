@@ -31,6 +31,7 @@ To set up the `uri-handler` package, ensure you have the necessary dependencies 
 There are no additional environment variables or external accounts required for this package.
 
 ## Key Files
+
 The `uri-handler` package is structured as follows:
 
 - [index.ts](./src/index.ts): The main entry point of the package. It contains the logic for parsing command-line arguments, validating URIs, and connecting to the dispatcher.

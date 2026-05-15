@@ -25,6 +25,7 @@ To set up the settings agent, ensure you have the necessary dependencies install
 For detailed setup instructions, including environment variables and any required API keys, refer to the hand-written README.
 
 ## Key Files
+
 The settings agent's architecture consists of several key components:
 
 - **Manifest**: The [settingsManifest.json](./src/settingsManifest.json) file defines the agent's description, emoji character, and schema details.

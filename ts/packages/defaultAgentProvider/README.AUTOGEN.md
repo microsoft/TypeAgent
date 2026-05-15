@@ -48,6 +48,7 @@ To set up the `default-agent-provider` package, follow these steps:
 For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The package is structured into several key files, each responsible for different aspects of the agent provider functionality:
 
 - [index.ts](./src/index.ts): Exports the main functions for retrieving default providers and configurations.

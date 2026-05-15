@@ -35,6 +35,7 @@ To set up the Markdown Agent, you need to configure the following environment va
 Ensure these environment variables are set in your shell or in the `ts/.env` file. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The Markdown Agent's architecture is organized into several key components:
 
 - **Manifest**: The [markdownManifest.json](./src/agent/markdownManifest.json) file defines the agent's schema, description, and supported actions.

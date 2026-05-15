@@ -42,6 +42,7 @@ To set up the `grammar-tools-cli` package, follow these steps:
 For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `grammar-tools-cli` package is structured around a single entry point: [cli.ts](./src/cli.ts). This file defines the CLI commands and their respective handlers. The package imports various functions from `grammar-tools-core` to perform the actual grammar operations.
 
 Key files:

@@ -32,6 +32,7 @@ To set up the `taskflow-typeagent` package, you need to configure the necessary 
 Additionally, depending on the specific integrations you plan to use, you may need to set up OAuth or API keys. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `taskflow-typeagent` package is organized into several key components:
 
 - **Schema**: The task flow schema is defined in [taskflowSchema.agr](./src/taskflowSchema.agr) and [userActions.mts](./src/schema/userActions.mts). These files specify the structure and types of task flow actions.

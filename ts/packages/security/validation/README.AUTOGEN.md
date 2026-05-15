@@ -32,6 +32,7 @@ To use the `validation` package, ensure you have the necessary dependencies inst
 For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
 
 ## Key Files
+
 The `validation` package is organized into several key files, each responsible for different aspects of plan validation and execution:
 
 - [specSchema.ts](./src/specSchema.ts): Defines the complete logical syntax for agent plan specifications.

@@ -63,10 +63,28 @@ export function compareReadmes(oldText: string, newText: string): DiffResult {
 function normalize(text: string): string {
     let out = stripStalenessFooter(text);
     out = stripHashComment(out);
-    out = out.replace(/[ \t]+$/gmu, "");
+    // Strip trailing horizontal whitespace from every line via a
+    // linear character-loop. The previous regex `/[ \t]+$/gmu` runs
+    // in O(n²) on long whitespace runs that don't reach end-of-line.
+    out = stripTrailingHorizontalWhitespacePerLine(out);
     out = out.replace(/\r\n/gu, "\n");
     out = out.replace(/\n+$/u, "\n");
     return out;
+}
+
+function stripTrailingHorizontalWhitespacePerLine(text: string): string {
+    const lines = text.split(/\r?\n/u);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+        let end = line.length;
+        while (end > 0) {
+            const c = line.charCodeAt(end - 1);
+            if (c !== 0x20 && c !== 0x09) break;
+            end--;
+        }
+        if (end !== line.length) lines[i] = line.slice(0, end);
+    }
+    return lines.join("\n");
 }
 
 function stripHashComment(text: string): string {

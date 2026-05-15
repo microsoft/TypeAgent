@@ -42,10 +42,12 @@ You can install these dependencies using `pnpm install`. For detailed setup inst
 The package is structured into several key components:
 
 - **Parsing and Compilation**:
+
   - [grammarRuleParser.ts](./src/grammarRuleParser.ts): Parses `.agr` files into AST.
   - [grammarCompiler.ts](./src/grammarCompiler.ts): Compiles AST into in-memory `Grammar`.
 
 - **Matching**:
+
   - [grammarMatcher.ts](./src/grammarMatcher.ts): Implements recursive backtracking matcher.
   - [nfaCompiler.ts](./src/nfaCompiler.ts): Compiles `Grammar` to NFA.
   - [nfaInterpreter.ts](./src/nfaInterpreter.ts): Executes NFA with parallel threads.
@@ -53,10 +55,12 @@ The package is structured into several key components:
   - [dfaMatcher.ts](./src/dfaMatcher.ts): Implements DFA-based matching.
 
 - **Entity Management**:
+
   - [entityRegistry.ts](./src/entityRegistry.ts): Manages entities with validators and converters.
   - [builtInEntities.ts](./src/builtInEntities.ts): Provides built-in entity converters.
 
 - **Dynamic Loading**:
+
   - [dynamicGrammarLoader.ts](./src/dynamicGrammarLoader.ts): Handles runtime rule loading and validation.
 
 - **Utilities**:
@@ -68,14 +72,17 @@ The package is structured into several key components:
 To extend the `action-grammar` package, follow these steps:
 
 1. **Add new grammar rules**:
+
    - Create or modify `.agr` files with new rules.
    - Use `parseGrammarRules` to parse the new rules into AST.
 
 2. **Implement custom matchers or optimizers**:
+
    - Extend existing matchers in [grammarMatcher.ts](./src/grammarMatcher.ts) or [dfaMatcher.ts](./src/dfaMatcher.ts).
    - Add new optimization passes in [grammarOptimizer.ts](./src/grammarOptimizer.ts).
 
 3. **Add new entities**:
+
    - Define new entities in [entityRegistry.ts](./src/entityRegistry.ts).
    - Implement converters and validators for the new entities.
 

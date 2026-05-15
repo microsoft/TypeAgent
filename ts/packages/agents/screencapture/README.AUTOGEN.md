@@ -48,6 +48,7 @@ Additionally, set the following environment variables:
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `screencapture-agent` is structured into several key files:
 
 - [screencaptureActionHandler.ts](./src/screencaptureActionHandler.ts): Contains the logic for handling screen capture and recording actions.
@@ -124,13 +125,13 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 _5 actions implemented by this agent, parsed deterministically from `./src/screencaptureSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _Take a screenshot_ | `takeScreenshot` |
-| _Start a screen recording_ | `startRecording` |
-| _Stop the currently active screen recording._ | `stopRecording` |
-| _List all currently visible windows so the user can target them by name._ | `listWindows` |
-| _Activity type tracked while a recording is in progress._ | `recording` → `{ "outputPath": "…", "startedAtMs": 0 }` |
+| User says                                                                 | Action                                                  |
+| ------------------------------------------------------------------------- | ------------------------------------------------------- |
+| _Take a screenshot_                                                       | `takeScreenshot`                                        |
+| _Start a screen recording_                                                | `startRecording`                                        |
+| _Stop the currently active screen recording._                             | `stopRecording`                                         |
+| _List all currently visible windows so the user can target them by name._ | `listWindows`                                           |
+| _Activity type tracked while a recording is in progress._                 | `recording` → `{ "outputPath": "…", "startedAtMs": 0 }` |
 
 ---
 

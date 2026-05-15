@@ -30,6 +30,7 @@ When a reminder fires, the agent pushes a message to the user via `SessionContex
 To set up the `timer-agent`, ensure you have the necessary environment configured. The package does not require any external API keys or OAuth setup. Simply install the dependencies using `pnpm install`. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `timer-agent` package is structured as follows:
 
 - [timerManifest.json](./src/timerManifest.json): Defines the agent's manifest, including its description and schema.
@@ -113,12 +114,12 @@ External: _None at runtime._
 
 _4 actions implemented by this agent, parsed deterministically from `./src/timerSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _Set a reminder_ | `setReminder` → `{ "message": "…", "when": "…" }` |
-| _Set a repeating reminder_ | `repeatReminder` → `{ "message": "…", "every": "…" }` |
-| _List all pending reminders._ | `listReminders` |
-| _Cancel a pending reminder by id, or all reminders._ | `cancelReminder` → `{ "id": "…" }` |
+| User says                                            | Action                                                |
+| ---------------------------------------------------- | ----------------------------------------------------- |
+| _Set a reminder_                                     | `setReminder` → `{ "message": "…", "when": "…" }`     |
+| _Set a repeating reminder_                           | `repeatReminder` → `{ "message": "…", "every": "…" }` |
+| _List all pending reminders._                        | `listReminders`                                       |
+| _Cancel a pending reminder by id, or all reminders._ | `cancelReminder` → `{ "id": "…" }`                    |
 
 ---
 

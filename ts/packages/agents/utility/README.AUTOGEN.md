@@ -36,6 +36,7 @@ To set up the `utility-typeagent` package, you need to configure several environ
 Additionally, you need to install the necessary dependencies and configure the package settings. For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `utility-typeagent` package is structured as follows:
 
 - **Grammar**: The grammar for the agent is defined in [utilitySchema.agr](./src/utilitySchema.agr). This file specifies the syntax for the supported actions.

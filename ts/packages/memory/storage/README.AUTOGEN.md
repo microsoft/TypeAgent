@@ -25,6 +25,7 @@ To set up the `memory-storage` package, you need to configure environment variab
 For detailed setup instructions, including how to obtain the necessary values, please refer to the hand-written README.
 
 ## Key Files
+
 The `memory-storage` package is organized into several key components:
 
 - **SQLite Integration**: Located in the [sqlite](./src/sqlite/index.ts) directory, this component handles storage operations using SQLite.

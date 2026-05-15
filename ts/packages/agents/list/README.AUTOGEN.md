@@ -113,14 +113,14 @@ External: _None at runtime._
 
 _6 actions implemented by this agent, parsed deterministically from `./src/listSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _add one or more items to a list; if the list does not exist, create it_ | `addItems` → `{ "items": ["…"], "listName": "…" }` |
-| _remove one or more items from a list_ | `removeItems` → `{ "items": ["…"], "listName": "…" }` |
-| _(no sample)_ | `createList` → `{ "listName": "…" }` |
-| _use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"_ | `getList` → `{ "listName": "…" }` |
-| _(no sample)_ | `clearList` → `{ "listName": "…" }` |
-| _(no sample)_ | `startEditList` → `{ "listName": "…" }` |
+| User says                                                                                                                                     | Action                                                |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| _add one or more items to a list; if the list does not exist, create it_                                                                      | `addItems` → `{ "items": ["…"], "listName": "…" }`    |
+| _remove one or more items from a list_                                                                                                        | `removeItems` → `{ "items": ["…"], "listName": "…" }` |
+| _(no sample)_                                                                                                                                 | `createList` → `{ "listName": "…" }`                  |
+| _use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"_ | `getList` → `{ "listName": "…" }`                     |
+| _(no sample)_                                                                                                                                 | `clearList` → `{ "listName": "…" }`                   |
+| _(no sample)_                                                                                                                                 | `startEditList` → `{ "listName": "…" }`               |
 
 ---
 

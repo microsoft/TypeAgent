@@ -34,6 +34,7 @@ To enable Spotify integration, you need to set up a Spotify application and conf
 See the hand-written README for the full walk-through.
 
 ## Key Files
+
 The `music` package is structured around several key files:
 
 - [playerManifest.json](./src/agent/playerManifest.json): Defines the agent's metadata and schema.

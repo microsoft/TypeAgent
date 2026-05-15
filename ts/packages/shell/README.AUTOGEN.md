@@ -37,6 +37,7 @@ Additionally, you need to install the necessary libraries for building and using
 For detailed setup steps, including keyless API access for Azure Speech Services, refer to the hand-written README.
 
 ## Key Files
+
 The `agent-shell` package is organized into several key components:
 
 - **Main Entry Point**: The main entry point is located at [./src/main/index.ts](./src/main/index.ts), which initializes the shell and sets up the necessary configurations.

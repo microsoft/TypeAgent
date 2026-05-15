@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { maskInlineCode } from "./linkExtraction.js";
+import { maskInlineCode, parseInlineLinks } from "./linkExtraction.js";
 
 /**
  * Transform a markdown body so that every `[text](target)` link
@@ -48,11 +48,6 @@ export function stripBrokenLinks(
     }
 
     let stripped = 0;
-    // Match `[text](target)` allowing an optional `"title"`; capture
-    // text and the target separately so we can decide whether to
-    // strip based on exact target equality (same as
-    // extractMarkdownLinks's view of the target).
-    const linkRegex = /\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu;
     const lines = body.split(/\r?\n/u);
     let inFence = false;
     let fenceMarker = "";
@@ -76,19 +71,21 @@ export function stripBrokenLinks(
         // an inline code span; only rewrite link matches that lie
         // wholly outside any masked region.
         const masked = maskInlineCode(line);
-        lines[i] = line.replace(
-            linkRegex,
-            (match, text: string, target: string, offset: number) => {
-                if (!targets.has(target)) return match;
-                // If any character of the match is inside an inline
-                // code span (where masked has spaces in place of the
-                // interior), leave the literal alone.
-                const slice = masked.slice(offset, offset + match.length);
-                if (slice !== match) return match;
-                stripped++;
-                return text;
-            },
-        );
+        const matches = parseInlineLinks(masked);
+        if (matches.length === 0) continue;
+        // Walk matches in reverse so earlier offsets stay valid as we
+        // splice out later ones.
+        let rebuilt = line;
+        for (let k = matches.length - 1; k >= 0; k--) {
+            const m = matches[k]!;
+            if (!targets.has(m.target)) continue;
+            // Confirm the match is not inside an inline code span.
+            const slice = masked.slice(m.start, m.end);
+            if (slice !== m.fullMatch) continue;
+            rebuilt = rebuilt.slice(0, m.start) + m.text + rebuilt.slice(m.end);
+            stripped++;
+        }
+        lines[i] = rebuilt;
     }
     return { body: lines.join("\n"), strippedCount: stripped };
 }

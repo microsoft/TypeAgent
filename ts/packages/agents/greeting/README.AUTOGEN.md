@@ -31,6 +31,7 @@ BING_API_KEY
 If a Bing API key is not available, the agent will still function but will return a generic response when personalized information is required. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The Greeting Agent's architecture consists of several key components:
 
 - **Manifest**: The [greetingManifest.json](./src/greetingManifest.json) file defines the agent's metadata, including its description and emoji character.

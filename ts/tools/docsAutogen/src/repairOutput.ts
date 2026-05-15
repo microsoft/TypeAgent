@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { walkLinesWithFences } from "./fenceWalker.js";
+import { parseInlineLinks } from "./linkExtraction.js";
 
 /**
  * Post-process LLM documentation output to mechanically fix the most
@@ -143,22 +144,30 @@ function inferFenceLanguage(contentLines: string[]): string {
  * sign-in URLs, etc.) are useful and shouldn't trigger a retry.
  */
 export function repairAbsoluteLinks(body: string): string {
-    let s = body;
-    // Markdown link with absolute http(s) target → drop the link
-    // wrapper, keep the visible text. Use a non-greedy match on the
-    // text and a class that excludes ')' on the URL so we stop at
-    // the first closing paren of the link target.
-    s = s.replace(
-        /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/giu,
-        (_match, text: string) => text,
+    // Pass 1: drop the `[text](https://...)` wrapper, keep visible text.
+    // Use the linear-time link parser so the rewrite is bounded by
+    // input size even on adversarial sequences of brackets.
+    const matches = parseInlineLinks(body).filter((m) =>
+        isAbsoluteHttpUrl(m.target),
     );
-    // Autolink → wrap in inline code so it's still readable but no
-    // longer matches `<http(s)://...>` syntax.
+    let s = body;
+    for (let k = matches.length - 1; k >= 0; k--) {
+        const m = matches[k]!;
+        s = s.slice(0, m.start) + m.text + s.slice(m.end);
+    }
+    // Pass 2: autolink `<http(s)://...>` → wrap in inline code so it's
+    // still readable but no longer matches `<...>` syntax. The
+    // negated class excludes `<`, `>`, and whitespace so the regex
+    // engine cannot backtrack across nested or pathological inputs.
     s = s.replace(
-        /<(https?:\/\/[^>\s]+)>/giu,
+        /<(https?:\/\/[^>\s<\n]{1,2048})>/giu,
         (_m, url: string) => `\`${url}\``,
     );
     return s;
+}
+
+function isAbsoluteHttpUrl(target: string): boolean {
+    return /^https?:\/\//iu.test(target);
 }
 
 /**
@@ -198,10 +207,17 @@ export function repairH1Headings(body: string): string {
  */
 export function repairSelfReadmeLinks(body: string): string {
     const lines = body.split(/\r?\n/u);
-    const linkRegex = /\[([^\]]+)\]\(\.\/README\.md(?:\s+"[^"]*")?\)/gu;
     walkLinesWithFences(body, (line, idx, state) => {
         if (state.isFence || state.inFence) return;
-        lines[idx] = line.replace(linkRegex, (_m, text: string) => text);
+        const matches = parseInlineLinks(line);
+        if (matches.length === 0) return;
+        let rebuilt = line;
+        for (let k = matches.length - 1; k >= 0; k--) {
+            const m = matches[k]!;
+            if (m.target !== "./README.md") continue;
+            rebuilt = rebuilt.slice(0, m.start) + m.text + rebuilt.slice(m.end);
+        }
+        lines[idx] = rebuilt;
     });
     return lines.join("\n");
 }

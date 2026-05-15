@@ -35,6 +35,7 @@ To set up the `code-agent`, you need to configure the environment variable `CODE
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `code-agent` package is structured around several key components:
 
 - **Manifest**: The agent manifest is defined in [codeManifest.json](./src/codeManifest.json), which describes the agent and its sub-agents.
@@ -101,8 +102,8 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 6 additional actions are declared in the schema but not yet implemented; not shown._
 
-| User says | Action |
-| --- | --- |
+| User says                | Action                                |
+| ------------------------ | ------------------------------------- |
 | _Launch or Start VSCode_ | `launchVSCode` → `{ "mode": "last" }` |
 
 ---

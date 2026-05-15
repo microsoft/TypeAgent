@@ -29,11 +29,13 @@ The `coder-wrapper` package offers several key functionalities:
 To set up the `coder-wrapper` package, follow these steps:
 
 1. Navigate to the package directory:
+
    ```bash
    cd packages/coderWrapper
    ```
 
 2. Install the necessary dependencies:
+
    ```bash
    npm install
    ```
@@ -44,6 +46,7 @@ To set up the `coder-wrapper` package, follow these steps:
    ```
 
 ## Key Files
+
 The `coder-wrapper` package is structured as follows:
 
 - **Entry point**: The main entry point is [src/index.ts](./src/index.ts), which exports key components such as `PtyWrapper`, `AssistantConfig`, `CacheClient`, and `DebugLogger`.
@@ -57,30 +60,34 @@ The `coder-wrapper` package is structured as follows:
 To extend the `coder-wrapper` package, follow these steps:
 
 1. **Add a new assistant**:
+
    - Edit [src/assistantConfig.ts](./src/assistantConfig.ts) to add the new assistant configuration. For example:
      ```typescript
      export const ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
-         claude: {
-             name: "Claude Code",
-             command: "claude",
-             args: [],
-         },
-         newAssistant: {
-             name: "New Assistant",
-             command: "new-assistant",
-             args: [],
-         },
-         // Add more assistants as needed
+       claude: {
+         name: "Claude Code",
+         command: "claude",
+         args: [],
+       },
+       newAssistant: {
+         name: "New Assistant",
+         command: "new-assistant",
+         args: [],
+       },
+       // Add more assistants as needed
      };
      ```
 
 2. **Implement custom caching logic**:
+
    - Modify [src/cacheClient.ts](./src/cacheClient.ts) to implement custom caching logic or integrate with a different caching system.
 
 3. **Enhance debug logging**:
+
    - Extend [src/debugLogger.ts](./src/debugLogger.ts) to include additional debug information or change the logging format.
 
 4. **Modify PTY wrapper behavior**:
+
    - Update [src/ptyWrapper.ts](./src/ptyWrapper.ts) to change how the PTY wrapper handles I/O, caching, or assistant interactions.
 
 5. **Testing**:

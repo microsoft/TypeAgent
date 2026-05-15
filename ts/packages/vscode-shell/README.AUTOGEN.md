@@ -69,6 +69,7 @@ code --install-extension dist-pub/vscode-shell.vsix --force
 ```
 
 ## Key Files
+
 The `vscode-shell` package consists of several key components:
 
 - **Extension Host**: Manages the WebSocket connection to the agent server and bridges messages to/from webview panels. Key files include [agentServerBridge.ts](./src/agentServerBridge.ts) and [clientIO.ts](./src/bridge/clientIO.ts).

@@ -39,6 +39,7 @@ Additionally, the package relies on external dependencies such as `ansi_up`, `do
 For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
 
 ## Key Files
+
 The `chat-ui` package is organized into several key files:
 
 - **[index.ts](./src/index.ts)**: Exports the main components and types used by the package.

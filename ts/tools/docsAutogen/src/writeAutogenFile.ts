@@ -113,5 +113,22 @@ export async function writeAutogenFile(
 }
 
 function trimEdges(body: string): string {
-    return body.replace(/^[ \t\r\n]+/u, "").replace(/[ \t\r\n]+$/u, "");
+    // Char-loop trim avoids the polynomial behaviour CodeQL flags on
+    // `/[ \t\r\n]+$/u` when the input contains long whitespace runs.
+    let start = 0;
+    while (
+        start < body.length &&
+        isAsciiWhitespaceCode(body.charCodeAt(start))
+    ) {
+        start++;
+    }
+    let end = body.length;
+    while (end > start && isAsciiWhitespaceCode(body.charCodeAt(end - 1))) {
+        end--;
+    }
+    return start === 0 && end === body.length ? body : body.slice(start, end);
+}
+
+function isAsciiWhitespaceCode(c: number): boolean {
+    return c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d;
 }

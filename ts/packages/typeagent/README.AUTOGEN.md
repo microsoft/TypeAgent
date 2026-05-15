@@ -37,6 +37,7 @@ pnpm install
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `typeagent` package is organized into several key files and directories, each responsible for different aspects of the library:
 
 - **[src/index.ts](./src/index.ts)**: The main entry point that exports various modules and components.

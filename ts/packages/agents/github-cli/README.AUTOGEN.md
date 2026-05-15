@@ -43,6 +43,7 @@ To use the `github-cli-agent`, ensure the following prerequisites are met:
 The agent performs a `gh auth status` readiness check at startup and before every action. If the GitHub CLI is not installed or the user is not authenticated, the dispatcher will provide instructions to resolve the issue. After fixing any issues, run `@config agent refresh github-cli` to re-probe.
 
 ## Key Files
+
 The `github-cli-agent` is structured into several key components:
 
 - **Manifest**: The [github-cliManifest.json](./src/github-cliManifest.json) file defines the agent's metadata, including its description, emoji character, and schema details.
@@ -56,11 +57,13 @@ The `github-cli-agent` is structured into several key components:
 To extend the `github-cli-agent`, follow these steps:
 
 1. **Add a new action**:
+
    - Define the action type in [github-cliSchema.ts](./src/github-cliSchema.ts).
    - Add natural language mappings in [github-cliSchema.agr](./src/github-cliSchema.agr).
    - Implement the action logic in [github-cliActionHandler.ts](./src/github-cliActionHandler.ts).
 
 2. **Update the manifest**:
+
    - Ensure the new action is included in the schema details in [github-cliManifest.json](./src/github-cliManifest.json).
 
 3. **Test the new action**:
@@ -107,39 +110,39 @@ External: _None at runtime._
 
 _64 actions implemented by this agent, parsed deterministically from `./src/github-cliSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _(no sample)_ | `authLogin` |
-| _(no sample)_ | `authLogout` |
-| _(no sample)_ | `authStatus` |
-| _(no sample)_ | `browseRepo` |
-| _(no sample)_ | `browseIssue` |
-| _(no sample)_ | `browsePr` |
-| _(no sample)_ | `codespaceCreate` |
-| _(no sample)_ | `codespaceDelete` |
-| _(no sample)_ | `codespaceList` |
-| _(no sample)_ | `gistCreate` |
-| _(no sample)_ | `gistDelete` |
-| _(no sample)_ | `gistList` |
-| _(no sample)_ | `issueCreate` |
-| _(no sample)_ | `issueClose` |
+| User says                                                           | Action                            |
+| ------------------------------------------------------------------- | --------------------------------- |
+| _(no sample)_                                                       | `authLogin`                       |
+| _(no sample)_                                                       | `authLogout`                      |
+| _(no sample)_                                                       | `authStatus`                      |
+| _(no sample)_                                                       | `browseRepo`                      |
+| _(no sample)_                                                       | `browseIssue`                     |
+| _(no sample)_                                                       | `browsePr`                        |
+| _(no sample)_                                                       | `codespaceCreate`                 |
+| _(no sample)_                                                       | `codespaceDelete`                 |
+| _(no sample)_                                                       | `codespaceList`                   |
+| _(no sample)_                                                       | `gistCreate`                      |
+| _(no sample)_                                                       | `gistDelete`                      |
+| _(no sample)_                                                       | `gistList`                        |
+| _(no sample)_                                                       | `issueCreate`                     |
+| _(no sample)_                                                       | `issueClose`                      |
 | _Permanently delete a GitHub issue (uses `gh issue delete --yes`)._ | `issueDelete` → `{ "number": 0 }` |
-| _(no sample)_ | `issueReopen` |
-| _(no sample)_ | `issueList` |
-| _View / open a specific GitHub issue by number_ | `issueView` |
-| _(no sample)_ | `orgList` |
-| _(no sample)_ | `orgView` |
-| _(no sample)_ | `prCreate` |
-| _(no sample)_ | `prClose` |
-| _(no sample)_ | `prMerge` |
-| _(no sample)_ | `prList` |
-| _View / open a specific GitHub pull request by number_ | `prView` |
-| _(no sample)_ | `prCheckout` |
-| _(no sample)_ | `prChecks` → `{ "number": 0 }` |
-| _(no sample)_ | `projectCreate` |
-| _(no sample)_ | `projectDelete` |
-| _(no sample)_ | `projectList` |
-| _…and 34 more actions not shown (cap: 30)._ | |
+| _(no sample)_                                                       | `issueReopen`                     |
+| _(no sample)_                                                       | `issueList`                       |
+| _View / open a specific GitHub issue by number_                     | `issueView`                       |
+| _(no sample)_                                                       | `orgList`                         |
+| _(no sample)_                                                       | `orgView`                         |
+| _(no sample)_                                                       | `prCreate`                        |
+| _(no sample)_                                                       | `prClose`                         |
+| _(no sample)_                                                       | `prMerge`                         |
+| _(no sample)_                                                       | `prList`                          |
+| _View / open a specific GitHub pull request by number_              | `prView`                          |
+| _(no sample)_                                                       | `prCheckout`                      |
+| _(no sample)_                                                       | `prChecks` → `{ "number": 0 }`    |
+| _(no sample)_                                                       | `projectCreate`                   |
+| _(no sample)_                                                       | `projectDelete`                   |
+| _(no sample)_                                                       | `projectList`                     |
+| _…and 34 more actions not shown (cap: 30)._                         |                                   |
 
 ---
 

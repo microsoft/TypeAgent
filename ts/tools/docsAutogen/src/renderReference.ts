@@ -275,7 +275,10 @@ function renderActionRow(action: AgentAction): string {
 }
 
 function escapeTableCell(value: string): string {
-    return value.replace(/\|/gu, "\\|");
+    // Escape backslashes BEFORE pipes so we don't double-escape the
+    // backslash we just added in front of `|` (incomplete-string-
+    // escaping CodeQL warning).
+    return value.replace(/\\/gu, "\\\\").replace(/\|/gu, "\\|");
 }
 
 function formatUserSaysCell(action: AgentAction): string {

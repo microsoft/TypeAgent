@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { parseFenceLine, walkLinesWithFences } from "./fenceWalker.js";
+import { parseInlineLinks } from "./linkExtraction.js";
 import {
     DOCUMENTATION_HARD_CAP_WORDS,
     DOCUMENTATION_TARGET_WORDS_MAX,
@@ -131,7 +132,18 @@ export function validateDocumentation(body: string): DocumentationValidation {
         );
     }
 
-    if (/(?:^|\n)\s*(?:`{3,}|~{3,})\s*mermaid/iu.test(body)) {
+    // Detect a Mermaid-tagged fence opener via the shared fence
+    // walker. Avoids a regex with `\s` quantifiers that could
+    // backtrack on adversarial newline sequences.
+    let hasMermaidFence = false;
+    walkLinesWithFences(body, (line, _idx, state) => {
+        if (!state.isFence || state.inFence) return;
+        const fence = parseFenceLine(line);
+        if (fence && /^mermaid\b/iu.test(fence.info)) {
+            hasMermaidFence = true;
+        }
+    });
+    if (hasMermaidFence) {
         violations.push("Documentation must not contain Mermaid diagrams.");
     }
 
@@ -141,12 +153,19 @@ export function validateDocumentation(body: string): DocumentationValidation {
     // `\`https://aka.ms/foo\`` are allowed because legitimate setup
     // documentation needs to point at external portals.
     const codeStripped = stripFencedCode(body);
-    if (/\[[^\]]+\]\(https?:\/\/[^)\s]+\)/iu.test(codeStripped)) {
+    const hasAbsoluteLink = parseInlineLinks(codeStripped).some((m) =>
+        /^https?:\/\//iu.test(m.target),
+    );
+    if (hasAbsoluteLink) {
         violations.push(
             "Documentation must not contain absolute URLs in markdown link syntax `[text](https://…)`; use repo-relative ./ or ../ paths or move the URL into prose / inline code.",
         );
     }
-    if (/<https?:\/\/[^>\s]+>/iu.test(codeStripped)) {
+    // Bounded character class (`[^>\s<\n]{1,2048}`) keeps the regex
+    // strictly linear: the engine cannot scan past 2048 chars or
+    // cross a newline, eliminating polynomial backtracking on
+    // sequences of `<http://<http://...`.
+    if (/<https?:\/\/[^>\s<\n]{1,2048}>/iu.test(codeStripped)) {
         violations.push(
             "Documentation must not contain `<https://…>` autolinks; wrap the URL in inline code (`` `https://…` ``) or rephrase as prose.",
         );
@@ -182,7 +201,10 @@ function collectH2Headings(body: string): string[] {
     const out: string[] = [];
     walkLinesWithFences(body, (line, _idx, state) => {
         if (state.isFence || state.inFence) return;
-        const m = /^##\s+(.+?)\s*$/u.exec(line);
+        // Use a greedy capture and trim afterwards rather than
+        // `(.+?)\s*$` (non-greedy + trailing-whitespace anchor),
+        // which is the canonical polynomial-backtracking shape.
+        const m = /^##\s+(.+)$/u.exec(line);
         if (m) out.push(m[1]!.trim());
     });
     return out;

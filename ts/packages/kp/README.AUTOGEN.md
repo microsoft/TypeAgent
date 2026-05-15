@@ -35,6 +35,7 @@ To set up the `kp` package, you need to configure the following environment vari
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The `kp` package is organized into several modules, each responsible for different aspects of the knowledge processing pipeline:
 
 - **[index.ts](./src/index.ts)**: The main entry point that exports core types and functionalities.

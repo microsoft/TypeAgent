@@ -33,6 +33,7 @@ To use `grammar-tools-core`, ensure you have the necessary dependencies installe
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
+
 The package is structured into several key files, each responsible for different aspects of grammar handling:
 
 - **[index.ts](./src/index.ts)**: The main entry point, exporting types and services.

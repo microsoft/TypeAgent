@@ -32,6 +32,7 @@ To set up the `knowpro` package, ensure you have the necessary dependencies inst
 For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
 
 ## Key Files
+
 The `knowpro` package is organized into several key components:
 
 - **Schemas**: Define the structure of the data used in the package, such as [answerContextSchema.ts](./src/answerContextSchema.ts) and [answerResponseSchema.ts](./src/answerResponseSchema.ts).

@@ -34,6 +34,7 @@ For identity-based authentication, specify the key as `identity`.
 See the hand-written README for the full walk-through on setting up these environment variables.
 
 ## Key Files
+
 The `video-agent` package is structured around the TypeAgent framework, with key components including the manifest, schema, grammar, and handler.
 
 ### Key Files
@@ -101,8 +102,8 @@ External: _None at runtime._
 
 _1 action implemented by this agent, parsed deterministically from `./src/videoActionSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
+| User says                                           | Action                                                             |
+| --------------------------------------------------- | ------------------------------------------------------------------ |
 | _creates a video based on the supplied description_ | `createVideoAction` → `{ "originalRequest": "…", "caption": "…" }` |
 
 ---

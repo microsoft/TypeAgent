@@ -38,6 +38,7 @@ To set up the `codeProcessor` package, ensure you have the necessary dependencie
 2. Set up environment variables if required (refer to the hand-written README for detailed steps).
 
 ## Key Files
+
 The `codeProcessor` package is structured into several key files, each responsible for different aspects of code processing:
 
 - **Schemas**: Define the structure of data used in code processing.
