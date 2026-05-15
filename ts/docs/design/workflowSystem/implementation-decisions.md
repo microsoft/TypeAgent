@@ -46,13 +46,13 @@ should become spec text, a code fix, a cleanup task, or an explicit open
 question.
 
 | Item | Review as                                                                                                                                            | Outcome                                                                                                                                                                              |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.1  | Specify current runtime semantics in main spec docs.                                                                                                 | Keep current behavior. Make the main spec explicit that parallel/fork scheduling order is undefined when `maxConcurrency > 1`.                                                       |
 | 0.2  | Decide whether this heuristic should be part of the runtime contract or replaced with explicit output rules.                                         | Replace stale heuristic note with the current explicit-output contract: fork branch output is resolved from `branch.scope.output` in branch scope.                                   |
 | 0.3  | Review as an implementation gap against the plan/spec. Decide whether to fix behavior or reduce the documented contract.                             | Option D: reduce spec to match current code (error only). Planned future: partial + trigger + abort signal + wait/fail-fast policy. See `ir/future/fork-error-partial-injection.md`. |
 | 0.4  | Specify the runtime error contract for divide-by-zero.                                                                                               | All math uses JS number semantics. Division/modulo by zero returns Infinity/NaN, not a task failure. `int.*` deprecated. Added `math.floor/round/ceil` for integer conversion.       |
-| 0.5  | Decide whether comparison semantics should intentionally follow JavaScript or become stricter/more explicit.                                         | TBD                                                                                                                                                                                  |
-| 0.6  | Decide whether non-short-circuit boolean tasks are an acceptable language limitation or need a separate control-flow form.                           | TBD                                                                                                                                                                                  |
+| 0.5  | Decide whether comparison semantics should intentionally follow JavaScript or become stricter/more explicit.                                         | Keep JS semantics. Ordering operators already restrict inputs to `number`, so string coercion is a non-issue. NaN/Infinity behavior documented in spec section 3.1.                  |
+| 0.6  | Decide whether non-short-circuit boolean tasks are an acceptable language limitation or need a separate control-flow form.                           | Lower `&&`/`                                                                                                                                                                         |     | `to branch nodes for short-circuit evaluation. Remove`bool.and`/`bool.or` builtins. Validator extended with split-point phi coverage to accept bindings on all branch arms. |
 | 1.1  | Specify parser precedence and associativity in the language docs.                                                                                    | TBD                                                                                                                                                                                  |
 | 1.2  | Decide whether parse-time builtin reservation is the intended language rule or whether naming should be made more explicit/less ambiguous.           | TBD                                                                                                                                                                                  |
 | 1.3  | Specify the arrow-body disambiguation rule.                                                                                                          | TBD                                                                                                                                                                                  |
@@ -144,16 +144,29 @@ emitter loop counter compatibility). Integer conversion is available via
 ### 0.5 Comparison operators use JavaScript semantics
 
 `compare.equals` uses strict equality (`===`), `compare.lessThan` uses `<`,
-etc. This means comparisons follow JavaScript coercion rules for `<` / `>`
-(which do coerce strings to numbers in some cases). The plan listed
-implementations without specifying strictness for ordering operators.
+etc. Ordering operators restrict inputs to `number`, so JavaScript's
+string-to-number coercion for `<` / `>` never applies. `NaN` comparisons
+follow IEEE 754 (all return `false`). `Infinity` comparisons work as
+expected. Equality operators accept any type and use strict comparison
+(no coercion). This is consistent with the 0.4 JS-number-semantics
+decision.
 
-### 0.6 bool.and / bool.or are not short-circuit
+### 0.6 Short-circuit &&/|| via branch nodes
 
-Both operands are resolved before the task executes (template resolution
-happens at the IR level). This means `bool.and(expensive(), fallback())`
-always evaluates both sides. True short-circuit would require a branch node,
-not a task node. The plan didn't address this.
+The DSL operators `&&` and `||` now lower to **branch nodes** that
+implement short-circuit evaluation:
+
+- `a && b`: branch on `a`; true arm evaluates `b`, false arm returns `false`
+- `a || b`: branch on `a`; true arm returns `true`, false arm evaluates `b`
+
+Both arms bind the same name and merge through a noop node, using the same
+pattern as ternary expressions. The `bool.and` and `bool.or` builtin tasks
+have been removed since they are no longer needed.
+
+The validator was extended with a "split-point phi coverage" check (case c
+in `isBindingCoveredAtNode`) that accepts bindings that appear on all arms
+of a branch or other multi-successor node. This also allows ternary
+expressions to pass validation without `skipValidation`.
 
 ---
 
@@ -579,21 +592,21 @@ emitter generates. A proper test would include these schemas and validate.
 
 ## Summary of items that may need action
 
-| #   | Issue                                                                  | Severity                    | Phase |
-| --- | ---------------------------------------------------------------------- | --------------------------- | ----- |
-| 1   | Retry runs body N times on success (3.1)                               | Bug                         | 3     |
-| 2   | `noop` and `identity` not registered in engine (3.3)                   | Bug                         | 3     |
-| 3   | Sub-workflow calls don't inline, need engine support (3.4)             | Incomplete                  | 3     |
-| 4   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3     |
-| 5   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3     |
-| 6   | bool.and/bool.or not short-circuit (0.6)                               | Design limitation           | 0     |
-| 7   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0     |
-| 8   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5     |
-| 9   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3     |
-| 10  | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3     |
-| 11  | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3     |
-| 12  | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3     |
-| 13  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3     |
-| 14  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3     |
-| 15  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3     |
-| 16  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3     |
+| #   | Issue                                                                  | Severity                    | Phase                                |
+| --- | ---------------------------------------------------------------------- | --------------------------- | ------------------------------------ | -------- | --- |
+| 1   | Retry runs body N times on success (3.1)                               | Bug                         | 3                                    |
+| 2   | `noop` and `identity` not registered in engine (3.3)                   | Bug                         | 3                                    |
+| 3   | Sub-workflow calls don't inline, need engine support (3.4)             | Incomplete                  | 3                                    |
+| 4   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3                                    |
+| 5   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3                                    |
+| 6   | &&/                                                                    |                             | short-circuit via branch nodes (0.6) | Resolved | 0   |
+| 7   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0                                    |
+| 8   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5                                    |
+| 9   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3                                    |
+| 10  | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3                                    |
+| 11  | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3                                    |
+| 12  | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3                                    |
+| 13  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3                                    |
+| 14  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3                                    |
+| 15  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3                                    |
+| 16  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3                                    |

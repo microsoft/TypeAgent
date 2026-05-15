@@ -564,6 +564,48 @@ function isBindingCoveredAtNode(
         }
     }
 
+    // (c) Split-point phi coverage: for some node with multiple successors
+    // that dominates target, every arm has a binder that cuts all paths
+    // from that arm's entry to the target. This handles branch nodes where
+    // both arms bind the same name (e.g. ternary, short-circuit &&/||).
+    const binderSet = new Set(binderList);
+    for (const [nodeId, succs] of cfg.edges) {
+        if (succs.size < 2) continue;
+        if (!dominates(nodeId, targetId, idom, cfg.entry)) continue;
+
+        let allArmsCovered = true;
+        for (const armEntry of succs) {
+            if (binderSet.has(armEntry)) continue; // arm entry itself binds
+
+            // BFS from armEntry; can we reach target without hitting a binder?
+            const visited = new Set<string>();
+            const queue: string[] = [armEntry];
+            let reachesWithoutBinder = false;
+            while (queue.length > 0) {
+                const current = queue.shift()!;
+                if (visited.has(current)) continue;
+                visited.add(current);
+                if (current === targetId) {
+                    reachesWithoutBinder = true;
+                    break;
+                }
+                const nextSuccs = cfg.edges.get(current);
+                if (nextSuccs) {
+                    for (const s of nextSuccs) {
+                        if (!binderSet.has(s) && !visited.has(s)) {
+                            queue.push(s);
+                        }
+                    }
+                }
+            }
+            if (reachesWithoutBinder) {
+                allArmsCovered = false;
+                break;
+            }
+        }
+        if (allArmsCovered) return true;
+    }
+
     return false;
 }
 

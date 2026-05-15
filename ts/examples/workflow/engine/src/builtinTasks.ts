@@ -851,54 +851,6 @@ export const compareLessOrEqual: TaskDefinition<
 
 // ---- v2 bool tasks ----
 
-export const boolAnd: TaskDefinition<
-    { left: boolean; right: boolean },
-    { result: boolean }
-> = {
-    name: "bool.and",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: {
-            left: { type: "boolean" },
-            right: { type: "boolean" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "boolean" } },
-    },
-    async execute(input) {
-        return { kind: "ok", output: { result: input.left && input.right } };
-    },
-};
-
-export const boolOr: TaskDefinition<
-    { left: boolean; right: boolean },
-    { result: boolean }
-> = {
-    name: "bool.or",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: {
-            left: { type: "boolean" },
-            right: { type: "boolean" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "boolean" } },
-    },
-    async execute(input) {
-        return { kind: "ok", output: { result: input.left || input.right } };
-    },
-};
-
 export const boolNot: TaskDefinition<{ value: boolean }, { result: boolean }> =
     {
         name: "bool.not",
@@ -1169,8 +1121,6 @@ export const v2StandardLibraryTasks: TaskDefinition[] = [
     compareLessThan,
     compareGreaterOrEqual,
     compareLessOrEqual,
-    boolAnd,
-    boolOr,
     boolNot,
     mathAdd,
     mathSubtract,

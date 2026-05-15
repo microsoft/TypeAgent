@@ -277,22 +277,35 @@ standard-library tasks available to the engine.
 
 ### 3.1 `compare` namespace
 
-| Task                     | Input schema                      | Output schema         | Notes                                  |
-| ------------------------ | --------------------------------- | --------------------- | -------------------------------------- |
-| `compare.equals`         | `{ left: T, right: T }`           | `{ result: boolean }` | `===` in DSL                           |
-| `compare.notEquals`      | `{ left: T, right: T }`           | `{ result: boolean }` | `!==` in DSL                           |
-| `compare.greaterThan`    | `{ left: number, right: number }` | `{ result: boolean }` | `>` in DSL                             |
-| `compare.lessThan`       | `{ left: number, right: number }` | `{ result: boolean }` | `<` in DSL. Overlaps v1 `int.lessThan` |
-| `compare.greaterOrEqual` | `{ left: number, right: number }` | `{ result: boolean }` | `>=` in DSL                            |
-| `compare.lessOrEqual`    | `{ left: number, right: number }` | `{ result: boolean }` | `<=` in DSL                            |
+Equality tasks (`equals`, `notEquals`) accept any type and use JavaScript
+strict equality (`===` / `!==`). No coercion occurs.
+
+Ordering tasks (`lessThan`, `greaterThan`, `lessOrEqual`, `greaterOrEqual`)
+accept `number` inputs and use the corresponding JavaScript operator.
+Because inputs are restricted to `number`, string-to-number coercion
+never applies. `NaN` comparisons follow IEEE 754: all ordering
+comparisons involving `NaN` return `false` (including `NaN < NaN`).
+`Infinity` comparisons work as expected (`Infinity > 5` is `true`).
+
+| Task                     | Input schema                      | Output schema         | Notes |
+| ------------------------ | --------------------------------- | --------------------- | ----- |
+| `compare.equals`         | `{ left: T, right: T }`           | `{ result: boolean }` | `===` |
+| `compare.notEquals`      | `{ left: T, right: T }`           | `{ result: boolean }` | `!==` |
+| `compare.greaterThan`    | `{ left: number, right: number }` | `{ result: boolean }` | `>`   |
+| `compare.lessThan`       | `{ left: number, right: number }` | `{ result: boolean }` | `<`   |
+| `compare.greaterOrEqual` | `{ left: number, right: number }` | `{ result: boolean }` | `>=`  |
+| `compare.lessOrEqual`    | `{ left: number, right: number }` | `{ result: boolean }` | `<=`  |
 
 ### 3.2 `bool` namespace
 
-| Task       | Input schema                        | Output schema         | Notes         |
-| ---------- | ----------------------------------- | --------------------- | ------------- |
-| `bool.and` | `{ left: boolean, right: boolean }` | `{ result: boolean }` | `&&` in DSL   |
-| `bool.or`  | `{ left: boolean, right: boolean }` | `{ result: boolean }` | `\|\|` in DSL |
-| `bool.not` | `{ value: boolean }`                | `{ result: boolean }` | `!` in DSL    |
+| Task       | Input schema         | Output schema         | Notes      |
+| ---------- | -------------------- | --------------------- | ---------- |
+| `bool.not` | `{ value: boolean }` | `{ result: boolean }` | `!` in DSL |
+
+The DSL operators `&&` and `||` lower to **branch nodes** that implement
+short-circuit evaluation. There are no `bool.and` or `bool.or` builtin
+tasks: the branch structure ensures the right operand is only evaluated
+when the left operand does not determine the result.
 
 ### 3.3 `math` namespace
 

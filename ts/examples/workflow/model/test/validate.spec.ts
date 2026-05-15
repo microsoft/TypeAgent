@@ -2319,6 +2319,63 @@ describe("validateWorkflowIR", () => {
                 ),
             ).toBe(true);
         });
+
+        it("accepts output ref covered by binders on all branch arms", () => {
+            const ir = makeMinimalIR({
+                entry: "branch",
+                nodes: {
+                    branch: {
+                        kind: "branch",
+                        selectorSchema: { type: "boolean" },
+                        selector: true,
+                        cases: { true: "trueArm" },
+                        default: "falseArm",
+                    },
+                    trueArm: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        bind: "data",
+                        next: "merge",
+                    },
+                    falseArm: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        bind: "data",
+                        next: "merge",
+                    },
+                    merge: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                    },
+                },
+                output: {
+                    result: {
+                        $from: "scope",
+                        name: "data",
+                        path: ["result"],
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
     });
 
     describe("type compatibility (pass 7)", () => {
@@ -2987,9 +3044,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("maxConcurrency"),
-                ),
+                result.errors.some((e) => e.message.includes("maxConcurrency")),
             ).toBe(true);
         });
 
@@ -2998,9 +3053,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("maxConcurrency"),
-                ),
+                result.errors.some((e) => e.message.includes("maxConcurrency")),
             ).toBe(true);
         });
 
@@ -3038,9 +3091,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("does not exist"),
-                ),
+                result.errors.some((e) => e.message.includes("does not exist")),
             ).toBe(true);
         });
 
@@ -3133,10 +3184,7 @@ describe("validateWorkflowIR", () => {
         }
 
         it("accepts a valid forkMap", () => {
-            const result = validateWorkflowIR(
-                makeForkMapIR(),
-                taskMap("noop"),
-            );
+            const result = validateWorkflowIR(makeForkMapIR(), taskMap("noop"));
             expect(result.valid).toBe(true);
             expect(result.errors).toHaveLength(0);
         });
@@ -3148,9 +3196,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes('type "array"'),
-                ),
+                result.errors.some((e) => e.message.includes('type "array"')),
             ).toBe(true);
         });
 
@@ -3167,9 +3213,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("does not exist"),
-                ),
+                result.errors.some((e) => e.message.includes("does not exist")),
             ).toBe(true);
         });
 
@@ -3193,9 +3237,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes('$from: "state"'),
-                ),
+                result.errors.some((e) => e.message.includes('$from: "state"')),
             ).toBe(true);
         });
 
@@ -3204,9 +3246,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("maxConcurrency"),
-                ),
+                result.errors.some((e) => e.message.includes("maxConcurrency")),
             ).toBe(true);
         });
 
@@ -3215,9 +3255,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("maxIterations"),
-                ),
+                result.errors.some((e) => e.message.includes("maxIterations")),
             ).toBe(true);
         });
 

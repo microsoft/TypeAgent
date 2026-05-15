@@ -27,8 +27,6 @@ import {
     compareLessThan,
     compareGreaterOrEqual,
     compareLessOrEqual,
-    boolAnd,
-    boolOr,
     boolNot,
     mathAdd,
     mathSubtract,
@@ -6227,24 +6225,6 @@ describe("WorkflowEngine (IR v1)", () => {
     });
 
     describe("v2 bool tasks", () => {
-        it("bool.and returns true only when both true", async () => {
-            expect(
-                await boolAnd.execute({ left: true, right: true }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: true } });
-            expect(
-                await boolAnd.execute({ left: true, right: false }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: false } });
-        });
-
-        it("bool.or returns true when either true", async () => {
-            expect(
-                await boolOr.execute({ left: false, right: true }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: true } });
-            expect(
-                await boolOr.execute({ left: false, right: false }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: false } });
-        });
-
         it("bool.not negates", async () => {
             expect(await boolNot.execute({ value: true }, {} as any)).toEqual({
                 kind: "ok",

@@ -419,6 +419,81 @@ describe("DSL -> Engine integration", () => {
             expect(result.output).toBe(true);
         });
 
+        it("short-circuits && (rhs not executed when lhs is false)", async () => {
+            const ir = compileOk(`
+                workflow sc(a: boolean, b: boolean): any {
+                    const r = a && b
+                    return r
+                }
+            `);
+            // Find the RHS-evaluation and short-circuit arm node IDs
+            const rhsNode = Object.keys(ir.nodes).find((id) =>
+                id.startsWith("and_rhs"),
+            )!;
+            const shortNode = Object.keys(ir.nodes).find((id) =>
+                id.startsWith("and_short"),
+            )!;
+            expect(rhsNode).toBeDefined();
+            expect(shortNode).toBeDefined();
+
+            const { eng, events } = makeEngine();
+
+            // false && _ => short-circuit arm taken, rhs skipped
+            events.length = 0;
+            await eng.run(ir, { input: { a: false, b: true } });
+            const executedIds = events
+                .filter((e) => e.type === "nodeStarted")
+                .map((e) => (e as any).nodeId);
+            expect(executedIds).toContain(shortNode);
+            expect(executedIds).not.toContain(rhsNode);
+
+            // true && _ => rhs arm taken, short-circuit skipped
+            events.length = 0;
+            await eng.run(ir, { input: { a: true, b: false } });
+            const executedIds2 = events
+                .filter((e) => e.type === "nodeStarted")
+                .map((e) => (e as any).nodeId);
+            expect(executedIds2).toContain(rhsNode);
+            expect(executedIds2).not.toContain(shortNode);
+        });
+
+        it("short-circuits || (rhs not executed when lhs is true)", async () => {
+            const ir = compileOk(`
+                workflow sc(a: boolean, b: boolean): any {
+                    const r = a || b
+                    return r
+                }
+            `);
+            const rhsNode = Object.keys(ir.nodes).find((id) =>
+                id.startsWith("or_rhs"),
+            )!;
+            const shortNode = Object.keys(ir.nodes).find((id) =>
+                id.startsWith("or_short"),
+            )!;
+            expect(rhsNode).toBeDefined();
+            expect(shortNode).toBeDefined();
+
+            const { eng, events } = makeEngine();
+
+            // true || _ => short-circuit arm taken, rhs skipped
+            events.length = 0;
+            await eng.run(ir, { input: { a: true, b: false } });
+            const executedIds = events
+                .filter((e) => e.type === "nodeStarted")
+                .map((e) => (e as any).nodeId);
+            expect(executedIds).toContain(shortNode);
+            expect(executedIds).not.toContain(rhsNode);
+
+            // false || _ => rhs arm taken, short-circuit skipped
+            events.length = 0;
+            await eng.run(ir, { input: { a: false, b: true } });
+            const executedIds2 = events
+                .filter((e) => e.type === "nodeStarted")
+                .map((e) => (e as any).nodeId);
+            expect(executedIds2).toContain(rhsNode);
+            expect(executedIds2).not.toContain(shortNode);
+        });
+
         it("respects operator precedence (a + b * c)", async () => {
             const ir = compileOk(`
                 workflow calc(a: number, b: number, c: number): any {
@@ -512,29 +587,19 @@ describe("DSL -> Engine integration", () => {
         });
 
         it("ternary expression picks the right value", async () => {
-            const ir = compileOk(
-                `
+            const ir = compileOk(`
                 workflow pick(flag: boolean): any {
                     const r = flag ? "yes" : "no"
                     return r
                 }
-            `,
-                [],
-                NO_VALIDATE,
-            );
+            `);
             const { eng } = makeEngine();
 
-            let result = await eng.run(ir, {
-                input: { flag: true },
-                skipValidation: true,
-            });
+            let result = await eng.run(ir, { input: { flag: true } });
             expect(result.success).toBe(true);
             expect(result.output).toBe("yes");
 
-            result = await eng.run(ir, {
-                input: { flag: false },
-                skipValidation: true,
-            });
+            result = await eng.run(ir, { input: { flag: false } });
             expect(result.success).toBe(true);
             expect(result.output).toBe("no");
         });

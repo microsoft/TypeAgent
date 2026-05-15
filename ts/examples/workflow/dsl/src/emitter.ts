@@ -820,6 +820,12 @@ export class Emitter {
     // ---- Binary / Unary / Ternary expressions ----
 
     private emitBinaryExpr(expr: BinaryExpr, scope: ScopeContext): Template {
+        // Short-circuit: && and || lower to branch nodes so the second
+        // operand is only evaluated when needed.
+        if (expr.op === "&&" || expr.op === "||") {
+            return this.emitShortCircuit(expr, scope);
+        }
+
         const left = this.emitExpr(expr.left, scope);
         const right = this.emitExpr(expr.right, scope);
 
@@ -860,10 +866,6 @@ export class Emitter {
                 return "compare.greaterOrEqual";
             case "<=":
                 return "compare.lessOrEqual";
-            case "&&":
-                return "bool.and";
-            case "||":
-                return "bool.or";
             case "+":
                 return "math.add";
             case "-":
@@ -874,6 +876,9 @@ export class Emitter {
                 return "math.divide";
             case "%":
                 return "math.modulo";
+            default:
+                // &&/|| are handled by emitShortCircuit before reaching here
+                throw new Error(`Unexpected binary op: ${op}`);
         }
     }
 
@@ -885,8 +890,6 @@ export class Emitter {
             case "<":
             case ">=":
             case "<=":
-            case "&&":
-            case "||":
                 return { type: "boolean" };
             case "+":
             case "-":
@@ -894,6 +897,8 @@ export class Emitter {
             case "/":
             case "%":
                 return { type: "number" };
+            default:
+                throw new Error(`Unexpected binary op: ${op}`);
         }
     }
 
@@ -922,6 +927,112 @@ export class Emitter {
         scope.nodes[nodeId] = node;
         scope.nodeOrder.push(nodeId);
         return this.scopeRef(nodeId, scope);
+    }
+
+    /**
+     * Lower `&&` / `||` to short-circuit branch nodes.
+     *
+     * `a && b` -> branch on a: true -> evaluate b; false -> return false
+     * `a || b` -> branch on a: true -> return true;  false -> evaluate b
+     */
+    private emitShortCircuit(expr: BinaryExpr, scope: ScopeContext): Template {
+        const isAnd = expr.op === "&&";
+        const condTemplate = this.emitExpr(expr.left, scope);
+
+        const branchId = this.freshId(isAnd ? "and" : "or");
+        const mergeId = this.freshId(isAnd ? "and_merge" : "or_merge");
+        const resultBind = this.freshId(isAnd ? "and_result" : "or_result");
+
+        // The "evaluate" arm: evaluate the right operand
+        const evalScope = this.childScope(scope);
+        const evalResult = this.emitExpr(expr.right, evalScope);
+        let evalEntry: string;
+        const evalPrefix = isAnd ? "and_rhs_" : "or_rhs_";
+        if (evalScope.nodeOrder.length > 0) {
+            this.threadNext(evalScope);
+            for (const [id, node] of Object.entries(evalScope.nodes)) {
+                const prefixed = this.prefixNodeRefs(node, evalPrefix);
+                if (
+                    id === evalScope.nodeOrder[evalScope.nodeOrder.length - 1]
+                ) {
+                    (prefixed as TaskNode).bind = resultBind;
+                    (prefixed as TaskNode).next = mergeId;
+                }
+                scope.nodes[`${evalPrefix}${id}`] = prefixed;
+            }
+            evalEntry = `${evalPrefix}${evalScope.nodeOrder[0]}`;
+        } else {
+            // Right operand is a simple value; wrap in identity
+            const passId = this.freshId(isAnd ? "and_rhs" : "or_rhs");
+            scope.nodes[passId] = {
+                kind: "task",
+                task: "identity",
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result"],
+                    properties: { result: { type: "boolean" } },
+                },
+                inputs: { value: evalResult },
+                bind: resultBind,
+                next: mergeId,
+            };
+            evalEntry = passId;
+        }
+
+        // The "short-circuit" arm: return the known boolean literal
+        const shortId = this.freshId(isAnd ? "and_short" : "or_short");
+        scope.nodes[shortId] = {
+            kind: "task",
+            task: "identity",
+            inputSchema: {
+                type: "object",
+                required: ["value"],
+                properties: { value: {} },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["result"],
+                properties: { result: { type: "boolean" } },
+            },
+            // &&: short-circuit on false; ||: short-circuit on true
+            inputs: { value: !isAnd },
+            bind: resultBind,
+            next: mergeId,
+        };
+
+        // &&: true -> evaluate rhs, false (default) -> short-circuit
+        // ||: true -> short-circuit, false (default) -> evaluate rhs
+        const branchNode: BranchNode = {
+            kind: "branch",
+            selector: condTemplate,
+            selectorSchema: { type: "boolean" },
+            cases: { true: isAnd ? evalEntry : shortId },
+            default: isAnd ? shortId : evalEntry,
+        };
+
+        const mergeNode: TaskNode = {
+            kind: "task",
+            task: "noop",
+            inputSchema: {},
+            outputSchema: {},
+            inputs: {},
+        };
+
+        scope.nodes[branchId] = branchNode;
+        scope.nodeOrder.push(branchId);
+        scope.nodes[mergeId] = mergeNode;
+        scope.nodeOrder.push(mergeId);
+        this.referencedNodes.add(resultBind);
+        return {
+            $from: "scope",
+            name: resultBind,
+            path: ["result"],
+        } as unknown as Template;
     }
 
     private emitTernaryExpr(expr: TernaryExpr, scope: ScopeContext): Template {

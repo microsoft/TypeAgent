@@ -23,8 +23,6 @@ export {
     compareLessThan,
     compareGreaterOrEqual,
     compareLessOrEqual,
-    boolAnd,
-    boolOr,
     boolNot,
     mathAdd,
     mathSubtract,
