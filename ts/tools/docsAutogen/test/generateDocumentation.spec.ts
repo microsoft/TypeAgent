@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import {
-    generateOverview,
-    type OverviewChatModel,
-} from "../src/generateOverview.js";
+    generateDocumentation,
+    type DocumentationChatModel,
+} from "../src/generateDocumentation.js";
 import type { PackageInputs } from "../src/packageInputs.js";
 import type { WorkspacePackage } from "../src/workspaceGraph.js";
 
@@ -32,6 +32,9 @@ const baseInputs: PackageInputs = {
         handlerPath: null,
     },
     isAgentPackage: false,
+    actions: [],
+    envVars: [],
+    readmeContext: { exists: false, raw: "", handAuthored: "", wordCount: 0 },
     existingBlock: null,
 };
 
@@ -39,10 +42,10 @@ function makeModel(
     responses: Array<
         { success: true; data: string } | { success: false; message: string }
     >,
-): { model: OverviewChatModel; calls: number } {
+): { model: DocumentationChatModel; calls: () => number } {
     let i = 0;
     const tracker = { calls: 0 };
-    const model: OverviewChatModel = {
+    const model: DocumentationChatModel = {
         complete: async () => {
             tracker.calls++;
             const r = responses[i] ?? responses[responses.length - 1]!;
@@ -50,16 +53,25 @@ function makeModel(
             return r;
         },
     };
-    return { model, calls: tracker.calls };
+    return { model, calls: () => tracker.calls };
 }
 
-const goodBody = "word ".repeat(280).trim() + ".";
-const tooShortBody = "Tiny note.";
+const goodBody = [
+    "## Overview",
+    "",
+    "Lorem ipsum ".repeat(180).trim() + ".",
+    "",
+    "## Architecture",
+    "",
+    "Dolor sit amet ".repeat(120).trim() + ".",
+].join("\n");
 
-describe("generateOverview", () => {
+const tooShortBody = "## Overview\n\nTiny note.";
+
+describe("generateDocumentation", () => {
     it("returns ok on the first attempt for a clean response", async () => {
         const { model } = makeModel([{ success: true, data: goodBody }]);
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
@@ -67,12 +79,13 @@ describe("generateOverview", () => {
         expect(result.status).toBe("ok");
         expect(result.attempts).toBe(1);
         expect(result.isPlaceholder).toBe(false);
-        expect(result.body).toContain("word");
+        expect(result.body).toContain("## Overview");
+        expect(result.body).toContain("Lorem ipsum");
     });
 
     it("flags ok-with-warnings when target-band rules emit a warning", async () => {
         const { model } = makeModel([{ success: true, data: tooShortBody }]);
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
@@ -84,10 +97,13 @@ describe("generateOverview", () => {
 
     it("retries once on validation failure and accepts the second attempt", async () => {
         const { model } = makeModel([
-            { success: true, data: "This package is powerful. " + goodBody },
+            {
+                success: true,
+                data: "## Overview\n\nThis package is powerful. " + goodBody,
+            },
             { success: true, data: goodBody },
         ]);
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
@@ -98,27 +114,28 @@ describe("generateOverview", () => {
     });
 
     it("falls back to placeholder when validation never passes", async () => {
-        const bad = "powerful seamless robust. " + goodBody;
+        const bad = "## Overview\n\npowerful seamless robust. " + goodBody;
         const { model } = makeModel([
             { success: true, data: bad },
             { success: true, data: bad },
+            { success: true, data: bad },
         ]);
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
         );
         expect(result.status).toBe("validation-failed");
         expect(result.isPlaceholder).toBe(true);
-        expect(result.body).toContain("Placeholder Overview");
-        expect(result.attempts).toBe(2);
+        expect(result.body).toContain("Placeholder documentation");
+        expect(result.attempts).toBe(3);
     });
 
     it("falls back to placeholder on a model error", async () => {
         const { model } = makeModel([
             { success: false, message: "rate limited" },
         ]);
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
@@ -128,36 +145,31 @@ describe("generateOverview", () => {
         expect(result.diagnostics.join(" ")).toMatch(/rate limited/u);
     });
 
-    it("strips a leading '## AI Overview' heading the model included", async () => {
+    it("strips a leading H1 the model included", async () => {
         const { model } = makeModel([
-            { success: true, data: "## AI Overview\n\n" + goodBody },
-            { success: true, data: "## AI Overview\n\n" + goodBody }, // for retry
+            { success: true, data: "# example\n\n" + goodBody },
         ]);
-        // First attempt has a heading (rejected); second still has one.
-        // After 2 attempts → validation-failed. We want to verify the
-        // body that's rejected was post-strip; assert via diagnostics.
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
         );
-        // After stripping, the heading is gone but the prose is fine,
-        // so this should actually pass on attempt 1.
         expect(result.status).toBe("ok");
-        expect(result.body.startsWith("## AI Overview")).toBe(false);
-        expect(result.body.startsWith("## Overview")).toBe(false);
+        expect(result.body.startsWith("# example")).toBe(false);
+        expect(result.body.startsWith("## Overview")).toBe(true);
     });
 
-    it("also strips a legacy '## Overview' heading for backward compat", async () => {
+    it("strips a leading '## Documentation' title-shaped heading", async () => {
         const { model } = makeModel([
-            { success: true, data: "## Overview\n\n" + goodBody },
+            { success: true, data: "## Documentation\n\n" + goodBody },
         ]);
-        const result = await generateOverview(
+        const result = await generateDocumentation(
             baseInputs,
             "## Reference",
             model,
         );
         expect(result.status).toBe("ok");
-        expect(result.body.startsWith("## Overview")).toBe(false);
+        expect(result.body.startsWith("## Documentation")).toBe(false);
+        expect(result.body.startsWith("## Overview")).toBe(true);
     });
 });

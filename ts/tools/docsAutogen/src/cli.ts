@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import path from "node:path";
 import process from "node:process";
 import chalk from "chalk";
+import { promises as fsPromises } from "node:fs";
 import { Git } from "./git.js";
 import { findMonorepoRoot } from "./paths.js";
 import { resolveSinceRef } from "./sinceResolver.js";
@@ -20,20 +21,15 @@ import { gatherPackageInputs } from "./packageInputs.js";
 import { assembleAutogenBlock } from "./assembleAutogen.js";
 import { renderReferenceSection } from "./renderReference.js";
 import { decideCompact } from "./compactMode.js";
-import { generateOverview } from "./generateOverview.js";
+import { generateDocumentation } from "./generateDocumentation.js";
 import { extractMarkdownLinks, type ExtractedLink } from "./linkExtraction.js";
 import { validateLinks } from "./linkValidation.js";
 import {
-    END_MARKER,
-    START_MARKER,
-    writeAutogenRegion,
-} from "./autogenRegion.js";
-import { compareReadmes } from "./diffGuard.js";
-import {
-    loadCanonicalTrademarks,
-    validateTrademarks,
-} from "./trademarksGuard.js";
-import { promises as fsPromises } from "node:fs";
+    composeAutogenFile,
+    writeAutogenFile,
+    type WriteResult,
+} from "./writeAutogenFile.js";
+import { stripBrokenLinks } from "./stripBrokenLinks.js";
 
 interface CliOptions {
     since: string | undefined;
@@ -50,32 +46,37 @@ interface CliOptions {
 }
 
 const DEFAULT_MAX_PACKAGES = 25;
+const AUTOGEN_FILE_NAME = "README.AUTOGEN.md";
 
-const HELP = `docs-autogen — regenerate package READMEs in the TypeAgent monorepo.
+const HELP = `docs-autogen — regenerate ${AUTOGEN_FILE_NAME} files in the TypeAgent monorepo.
 
 Usage:
   docs-autogen [options]
 
 Modes:
   (none)              Plan: print which packages would be regenerated.
-  --render            Render the AUTOGEN block(s) to stdout.
-  --render --write    Render the block(s) and write them back into each
-                      package's README.md (with diff guard + Trademarks check).
-  --verify-links      Spot-check the existing README links for each selected
-                      package. Exits non-zero on any broken link.
+  --render            Render the AUTOGEN body to stdout.
+  --render --write    Render the body and write each package's
+                      ${AUTOGEN_FILE_NAME} file (with diff guard +
+                      link validation). README.md is never touched.
+  --verify-links      Spot-check the existing ${AUTOGEN_FILE_NAME} links for
+                      each selected package. Exits non-zero on any
+                      broken link.
 
 Selection:
   --since <ref>       Diff against this ref instead of the smart default.
   --all               Select every workspace package (cost guard still applies).
-  --package <name>    Limit to the named package(s). Repeatable.
+  --package <name>    Limit to the named package(s). The "-agent" suffix
+                      is optional. Repeatable.
   --max-packages <n>  Cap selection at <n> packages (default ${DEFAULT_MAX_PACKAGES}). Anything past
                       the cap is dropped with a warning so a single run cannot
                       blow up the LLM bill.
 
 Generation:
-  --llm               When rendering, call Azure OpenAI (via aiclient) to fill in
-                      the Overview section. Requires ts/.env. Without --llm the
-                      Overview is a deterministic placeholder.
+  --llm               When rendering, call Azure OpenAI (via aiclient) to fill
+                      in the AI-authored documentation sections. Requires
+                      ts/.env. Without --llm a deterministic placeholder is
+                      written instead.
   --dry-run           Plan only; never write to disk. Implies --render in
                       render mode.
   --json              Emit machine-readable JSON output.
@@ -85,6 +86,10 @@ Smart default for --since (when none of --since/--all/--package are given):
   1. If on a non-default branch, the merge-base with origin/main.
   2. Otherwise the docs-bot/last-run watermark tag.
   3. Otherwise: no-op (warns and exits 0).
+
+Tip: invoke through the launcher (\`pnpm docs:generate\` or
+\`node tools/docsAutogen/bin/docs-autogen.cjs\`) to suppress
+cosmetic Windows libuv shutdown warnings.
 `;
 
 function parseCli(argv: readonly string[]): CliOptions {
@@ -127,6 +132,23 @@ function parseCli(argv: readonly string[]): CliOptions {
     };
 }
 
+/**
+ * On Windows TTYs we filter a known cosmetic libuv shutdown assertion
+ * via `bin/docs-autogen.cjs`. Detect when the user is running
+ * `node dist/cli.js` directly and gently nudge them at the launcher
+ * — once per run, on stderr only, behind a TTY check so we don't
+ * spam CI.
+ */
+function maybePrintLauncherTip(opts: CliOptions): void {
+    if (opts.json) return;
+    if (process.env.DOCS_AUTOGEN_LAUNCHED === "1") return;
+    if (process.platform !== "win32") return;
+    if (!process.stderr.isTTY) return;
+    process.stderr.write(
+        `${chalk.dim("docs-autogen: tip — invoke via `pnpm docs:generate ...` or `node tools/docsAutogen/bin/docs-autogen.cjs ...` to suppress a cosmetic Windows libuv shutdown warning.")}\n`,
+    );
+}
+
 async function main(): Promise<number> {
     let opts: CliOptions;
     try {
@@ -140,6 +162,8 @@ async function main(): Promise<number> {
         return 0;
     }
 
+    maybePrintLauncherTip(opts);
+
     const monorepoRoot = findMonorepoRoot(process.cwd());
     const git = new Git(monorepoRoot);
 
@@ -149,7 +173,7 @@ async function main(): Promise<number> {
 
     const explicitFilter =
         opts.packages.length > 0
-            ? new Set<string>(opts.packages.map(stripScope))
+            ? buildPackageFilter(opts.packages, eligible)
             : null;
 
     let selected: WorkspacePackage[];
@@ -158,13 +182,11 @@ async function main(): Promise<number> {
 
     if (opts.all) {
         selected = explicitFilter
-            ? eligible.filter((p) => explicitFilter.has(stripScope(p.name)))
+            ? eligible.filter((p) => explicitFilter.has(p.name))
             : eligible;
         sinceLabel = "--all";
     } else if (explicitFilter) {
-        selected = eligible.filter((p) =>
-            explicitFilter.has(stripScope(p.name)),
-        );
+        selected = eligible.filter((p) => explicitFilter.has(p.name));
         sinceLabel = "--package";
     } else {
         const since = await resolveSinceRef(git, { explicit: opts.since });
@@ -260,6 +282,44 @@ function stripScope(name: string): string {
     return slash >= 0 ? name.slice(slash + 1) : name;
 }
 
+/**
+ * Build a set of full package names matching the user's --package
+ * arguments. Accepts:
+ *
+ *   - the full scoped name (`@typeagent/list-agent`)
+ *   - the bare name (`list-agent`)
+ *   - the bare name without the conventional `-agent` suffix (`list`)
+ *
+ * The third form is convenient for the agent packages where every
+ * directory under `packages/agents/` ends in `-agent`. The lookup is
+ * resolved against the eligible package list so an unknown name is
+ * silently dropped and surfaced at no-op time.
+ */
+function buildPackageFilter(
+    requested: readonly string[],
+    eligible: readonly WorkspacePackage[],
+): Set<string> {
+    const byBare = new Map<string, WorkspacePackage>();
+    for (const pkg of eligible) {
+        byBare.set(stripScope(pkg.name), pkg);
+    }
+    const out = new Set<string>();
+    for (const raw of requested) {
+        const direct = byBare.get(stripScope(raw));
+        if (direct) {
+            out.add(direct.name);
+            continue;
+        }
+        // Try with conventional "-agent" suffix added.
+        const suffixed = byBare.get(`${stripScope(raw)}-agent`);
+        if (suffixed) {
+            out.add(suffixed.name);
+            continue;
+        }
+    }
+    return out;
+}
+
 function emitNoop(opts: CliOptions, reason: string): void {
     if (opts.json) {
         process.stdout.write(
@@ -286,7 +346,7 @@ function printHumanReport(report: {
     dryRun: boolean;
 }): void {
     const out = process.stdout;
-    out.write(`${chalk.bold("docs-autogen")} (foundation build, no LLM yet)\n`);
+    out.write(`${chalk.bold("docs-autogen")} (README.AUTOGEN.md generator)\n`);
     out.write(`  HEAD:                ${report.headSha}\n`);
     out.write(`  Since:               ${report.sinceLabel}`);
     if (report.sinceSha !== null) {
@@ -320,11 +380,32 @@ function printHumanReport(report: {
     }
 }
 
+interface RenderRecord {
+    package: string;
+    relDir: string;
+    compact: boolean;
+    hash: string;
+    body: string;
+    documentation: {
+        mode: "skeleton" | "llm";
+        status: string;
+        attempts: number;
+        isPlaceholder: boolean;
+        wordCount: number | null;
+        diagnostics: string[];
+    };
+    links: {
+        total: number;
+        broken: ExtractedLink[];
+        /** Number of broken links rewritten to bare text before write. */
+        stripped: number;
+    };
+    write: WriteResult | undefined;
+}
+
 /**
- * Render the AUTOGEN block(s) for the selected packages and print
- * them. When --json is on, emits a structured array; otherwise emits
- * each block to stdout with a delimiter, plus link-validation
- * diagnostics to stderr.
+ * Render the AUTOGEN body for the selected packages and either print
+ * to stdout or persist as `README.AUTOGEN.md`.
  */
 async function renderSelected(
     selected: readonly WorkspacePackage[],
@@ -334,50 +415,17 @@ async function renderSelected(
     opts: CliOptions,
 ): Promise<void> {
     const isoDate = new Date().toISOString();
-    const overviewModel = opts.llm
-        ? await loadOverviewModel(monorepoRoot)
+    const documentationModel = opts.llm
+        ? await loadDocumentationModel(monorepoRoot)
         : null;
 
-    const records: Array<{
-        package: string;
-        relDir: string;
-        compact: boolean;
-        hash: string;
-        body: string;
-        overview: {
-            mode: "skeleton" | "llm";
-            status: string;
-            attempts: number;
-            isPlaceholder: boolean;
-            wordCount: number | null;
-            diagnostics: string[];
-        };
-        links: { total: number; broken: ExtractedLink[] };
-        write:
-            | {
-                  attempted: boolean;
-                  verdict:
-                      | "wrote"
-                      | "unchanged"
-                      | "footer-only"
-                      | "trademarks-broken"
-                      | "broken-links";
-                  note: string | undefined;
-              }
-            | undefined;
-    }> = [];
-
-    // Load the canonical Trademarks block once when --write is on so
-    // we can guard every README before persisting.
-    const canonicalTrademarks = opts.write
-        ? await loadCanonicalTrademarks(monorepoRoot)
-        : null;
+    const records: RenderRecord[] = [];
 
     for (const pkg of selected) {
         const inputs = await gatherPackageInputs(pkg, graph, monorepoRoot);
 
-        let llmOverviewBody: string | undefined;
-        let overviewMeta: (typeof records)[number]["overview"] = {
+        let llmBody: string | undefined;
+        let docMeta: RenderRecord["documentation"] = {
             mode: "skeleton",
             status: "skipped",
             attempts: 0,
@@ -386,17 +434,17 @@ async function renderSelected(
             diagnostics: [],
         };
 
-        if (overviewModel) {
+        if (documentationModel) {
             const referencePreview = renderReferenceSection(
                 inputs,
                 decideCompact(inputs),
             );
-            const result = await generateOverview(
+            const result = await generateDocumentation(
                 inputs,
                 referencePreview,
-                overviewModel,
+                documentationModel,
             );
-            overviewMeta = {
+            docMeta = {
                 mode: "llm",
                 status: result.status,
                 attempts: result.attempts,
@@ -405,33 +453,51 @@ async function renderSelected(
                 diagnostics: result.diagnostics,
             };
             if (!result.isPlaceholder) {
-                llmOverviewBody = result.body;
+                llmBody = result.body;
             }
         }
 
         const block = assembleAutogenBlock(inputs, {
             headSha,
             isoDate,
-            ...(llmOverviewBody !== undefined ? { llmOverviewBody } : {}),
+            ...(llmBody !== undefined ? { llmDocumentationBody: llmBody } : {}),
         });
+        // Validate links against the file we'd be writing — link
+        // resolution is anchored at the file's directory.
         const links = extractMarkdownLinks(block.body);
-        const readmePath = path.join(pkg.dir, "README.md");
-        const validation = await validateLinks(links, readmePath);
+        const autogenPath = path.join(pkg.dir, AUTOGEN_FILE_NAME);
+        const validation = await validateLinks(links, autogenPath);
 
-        let writeMeta: (typeof records)[number]["write"];
-        if (opts.write && !opts.dryRun) {
-            writeMeta = await writeOnePackage(
-                pkg,
-                readmePath,
-                block.body,
-                validation.broken.length,
-                canonicalTrademarks!,
+        // Recover gracefully from broken links: drop the link wrapper
+        // and keep the visible text. The original broken set is still
+        // surfaced in diagnostics so contributors can fix the path or
+        // accept the cleanup.
+        let writeBody = block.body;
+        let strippedCount = 0;
+        if (validation.broken.length > 0) {
+            const brokenTargets = new Set(
+                validation.broken.map((b) => b.link.target),
             );
+            const result = stripBrokenLinks(block.body, brokenTargets);
+            writeBody = result.body;
+            strippedCount = result.strippedCount;
+        }
+
+        let writeMeta: WriteResult | undefined;
+        if (opts.write && !opts.dryRun) {
+            writeMeta = await writeAutogenFile(pkg.dir, writeBody);
+            if (strippedCount > 0) {
+                writeMeta = {
+                    ...writeMeta,
+                    note: `${writeMeta.note ? writeMeta.note + "; " : ""}stripped ${strippedCount} broken link(s)`,
+                };
+            }
         } else if (opts.write) {
             writeMeta = {
                 attempted: false,
                 verdict: "unchanged",
                 note: "--dry-run: not written",
+                filePath: autogenPath,
             };
         }
 
@@ -440,11 +506,12 @@ async function renderSelected(
             relDir: pkg.relDir,
             compact: block.compact,
             hash: block.hash,
-            body: block.body,
-            overview: overviewMeta,
+            body: writeBody,
+            documentation: docMeta,
             links: {
                 total: links.length,
                 broken: validation.broken.map((b) => b.link),
+                stripped: strippedCount,
             },
             write: writeMeta,
         });
@@ -459,36 +526,38 @@ async function renderSelected(
         process.stdout.write(
             `\n${chalk.bold("─── ")}${chalk.cyan(r.package)} ${chalk.dim(`(${r.relDir})`)}${chalk.bold(" ───")}\n`,
         );
-        const overviewLabel =
-            r.overview.mode === "llm"
-                ? `overview=llm/${r.overview.status} attempts=${r.overview.attempts}${
-                      r.overview.wordCount !== null
-                          ? ` words=${r.overview.wordCount}`
+        const docLabel =
+            r.documentation.mode === "llm"
+                ? `documentation=llm/${r.documentation.status} attempts=${r.documentation.attempts}${
+                      r.documentation.wordCount !== null
+                          ? ` words=${r.documentation.wordCount}`
                           : ""
                   }`
-                : `overview=skeleton`;
+                : `documentation=skeleton`;
         const writeLabel = r.write
             ? `  write=${r.write.verdict}${r.write.note ? ` (${r.write.note})` : ""}`
             : "";
         process.stdout.write(
-            `${chalk.dim(`compact=${r.compact}  hash=${r.hash.slice(0, 12)}…  links=${r.links.total} broken=${r.links.broken.length}  ${overviewLabel}${writeLabel}`)}\n\n`,
+            `${chalk.dim(`compact=${r.compact}  hash=${r.hash.slice(0, 12)}…  links=${r.links.total} broken=${r.links.broken.length}  ${docLabel}${writeLabel}`)}\n\n`,
         );
         if (!opts.write) {
-            process.stdout.write(`${START_MARKER}\n`);
-            process.stdout.write(`${r.body}\n`);
-            process.stdout.write(`${END_MARKER}\n`);
+            process.stdout.write(`${composeAutogenFile(r.body)}`);
         }
-        if (r.overview.diagnostics.length > 0) {
+        if (r.documentation.diagnostics.length > 0) {
             process.stderr.write(
-                `\n${chalk.yellow(`${r.package}: overview diagnostics`)}\n`,
+                `\n${chalk.yellow(`${r.package}: documentation diagnostics`)}\n`,
             );
-            for (const d of r.overview.diagnostics) {
+            for (const d of r.documentation.diagnostics) {
                 process.stderr.write(`  ${d}\n`);
             }
         }
         if (r.links.broken.length > 0) {
+            const verb =
+                r.links.stripped > 0
+                    ? `stripped ${r.links.stripped} broken link(s) from output`
+                    : `${r.links.broken.length} broken link(s)`;
             process.stderr.write(
-                `\n${chalk.red(`${r.package}: ${r.links.broken.length} broken link(s)`)}\n`,
+                `\n${chalk.yellow(`${r.package}: ${verb}`)}\n`,
             );
             for (const b of r.links.broken) {
                 process.stderr.write(
@@ -500,71 +569,8 @@ async function renderSelected(
 }
 
 /**
- * Persist the assembled block to a package's README.md, but only when
- * it's safe to do so: the new content must differ in a meaningful way
- * (not just the staleness footer/hash), the Trademarks block must
- * survive intact, and there must be no broken links.
- */
-async function writeOnePackage(
-    pkg: WorkspacePackage,
-    readmePath: string,
-    body: string,
-    brokenLinkCount: number,
-    canonicalTrademarks: string,
-): Promise<{
-    attempted: boolean;
-    verdict:
-        | "wrote"
-        | "unchanged"
-        | "footer-only"
-        | "trademarks-broken"
-        | "broken-links";
-    note: string | undefined;
-}> {
-    void pkg;
-    if (brokenLinkCount > 0) {
-        return {
-            attempted: false,
-            verdict: "broken-links",
-            note: `${brokenLinkCount} broken link(s) — refusing to write`,
-        };
-    }
-
-    let oldText: string;
-    try {
-        oldText = await fsPromises.readFile(readmePath, "utf8");
-    } catch {
-        oldText = "";
-    }
-
-    const newText = writeAutogenRegion(oldText, body);
-
-    const trademarksCheck = validateTrademarks(newText, canonicalTrademarks);
-    if (!trademarksCheck.ok) {
-        return {
-            attempted: false,
-            verdict: "trademarks-broken",
-            note:
-                trademarksCheck.reason ??
-                "Trademarks block missing after regeneration — refusing to write.",
-        };
-    }
-
-    const diff = compareReadmes(oldText, newText);
-    if (diff.verdict === "unchanged") {
-        return { attempted: true, verdict: "unchanged", note: undefined };
-    }
-    if (diff.verdict === "footer-only") {
-        return { attempted: true, verdict: "footer-only", note: undefined };
-    }
-
-    await fsPromises.writeFile(readmePath, newText, "utf8");
-    return { attempted: true, verdict: "wrote", note: undefined };
-}
-
-/**
- * Spot-check the existing README links for each selected package.
- * No regeneration, no LLM — just `extractMarkdownLinks` +
+ * Spot-check the existing README.AUTOGEN.md links for each selected
+ * package. No regeneration, no LLM — just `extractMarkdownLinks` +
  * `validateLinks`. Exits non-zero when any package has broken links
  * so this can be wired up as a pre-merge or pnpm-script gate.
  */
@@ -581,10 +587,10 @@ async function verifyLinksMode(
     }> = [];
 
     for (const pkg of selected) {
-        const readmePath = path.join(pkg.dir, "README.md");
+        const autogenPath = path.join(pkg.dir, AUTOGEN_FILE_NAME);
         let content: string;
         try {
-            content = await fsPromises.readFile(readmePath, "utf8");
+            content = await fsPromises.readFile(autogenPath, "utf8");
         } catch {
             records.push({
                 package: pkg.name,
@@ -596,11 +602,11 @@ async function verifyLinksMode(
             continue;
         }
         const links = extractMarkdownLinks(content);
-        const result = await validateLinks(links, readmePath);
+        const result = await validateLinks(links, autogenPath);
         records.push({
             package: pkg.name,
             relDir: pkg.relDir,
-            readme: readmePath,
+            readme: autogenPath,
             total: links.length,
             broken: result.broken.map((b) => b.link),
         });
@@ -612,7 +618,7 @@ async function verifyLinksMode(
         for (const r of records) {
             const summary = r.readme
                 ? `${chalk.cyan(r.package)} ${chalk.dim(`(${r.relDir})`)} — ${r.total} link(s), ${r.broken.length} broken`
-                : `${chalk.cyan(r.package)} ${chalk.dim(`(${r.relDir})`)} — ${chalk.dim("no README")}`;
+                : `${chalk.cyan(r.package)} ${chalk.dim(`(${r.relDir})`)} — ${chalk.dim(`no ${AUTOGEN_FILE_NAME}`)}`;
             process.stdout.write(`${summary}\n`);
             for (const b of r.broken) {
                 process.stdout.write(
@@ -630,9 +636,9 @@ async function verifyLinksMode(
  * the deterministic skeleton path does not require aiclient or
  * AZURE_OPENAI_* env vars to be present.
  */
-async function loadOverviewModel(
+async function loadDocumentationModel(
     monorepoRoot: string,
-): Promise<import("./generateOverview.js").OverviewChatModel> {
+): Promise<import("./generateDocumentation.js").DocumentationChatModel> {
     // Load ts/.env into process.env if not already loaded. Uses the
     // Node 22 built-in (no dotenv dependency). Silently no-op if the
     // file is missing — aiclient will then surface the underlying
@@ -647,7 +653,7 @@ async function loadOverviewModel(
     }
     try {
         const mod = await import("./llm.js");
-        return mod.getOverviewModel();
+        return mod.getDocumentationModel();
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         throw new Error(

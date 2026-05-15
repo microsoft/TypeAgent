@@ -40,7 +40,11 @@ function isNoise(line) {
 const result = require("node:child_process").spawnSync(
     process.execPath,
     ["--no-deprecation", "--no-warnings", cliPath, ...process.argv.slice(2)],
-    { stdio: ["inherit", "inherit", "pipe"], encoding: "utf8" },
+    {
+        stdio: ["inherit", "inherit", "pipe"],
+        encoding: "utf8",
+        env: { ...process.env, DOCS_AUTOGEN_LAUNCHED: "1" },
+    },
 );
 
 if (result.error !== undefined && result.error !== null) {

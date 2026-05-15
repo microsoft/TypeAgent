@@ -4,12 +4,21 @@
 import { decideCompact } from "./compactMode.js";
 import { computeContentHash, formatHashComment } from "./contentHash.js";
 import type { PackageInputs } from "./packageInputs.js";
-import { renderOverviewSection } from "./renderOverview.js";
+import { renderAiDocumentation } from "./renderDocumentation.js";
 import { renderReferenceSection } from "./renderReference.js";
 import { renderStalenessFooter } from "./renderStaleness.js";
 
 /**
- * Result of rendering the AUTOGEN block for a single package.
+ * Result of rendering the AUTOGEN body for a single package's
+ * `README.AUTOGEN.md` file. The body that goes between the START /
+ * END markers is the concatenation of:
+ *
+ *   1. hash comment
+ *   2. SOURCE comment pointing back at `./README.md`
+ *   3. H1 title (`# <pkg> — AI-generated documentation`)
+ *   4. AI-authored documentation body (banner + LLM sections)
+ *   5. deterministic Reference section
+ *   6. staleness footer
  */
 export interface AssembledAutogen {
     /** The full body that goes between the START / END markers. */
@@ -26,17 +35,18 @@ export interface AssembleOptions {
     /** ISO-8601 timestamp embedded in the footer. */
     readonly isoDate: string;
     /**
-     * Optional LLM-authored Overview body to embed in place of the
-     * deterministic placeholder. When provided, replaces the entire
-     * `## Overview` section content (heading is added by the renderer).
+     * Optional LLM-authored documentation body to embed in place of
+     * the deterministic placeholder. When provided, this body is
+     * expected to contain `## Section` headings beginning with
+     * `## Overview`.
      */
-    readonly llmOverviewBody?: string;
+    readonly llmDocumentationBody?: string;
 }
 
 /**
- * Compose the deterministic-skeleton + LLM-prose AUTOGEN body for a
- * package: hash comment, Overview section, Reference section, and
- * staleness footer.
+ * Compose the AUTOGEN body for a `README.AUTOGEN.md` file. Returns
+ * the body that goes between the markers, plus the hash and compact
+ * flag.
  *
  * The hash is computed over deterministic prompt-input proxies — NOT
  * over the rendered output (which would defeat the purpose).
@@ -48,10 +58,9 @@ export function assembleAutogenBlock(
     const decision = decideCompact(inputs);
 
     const hash = computeContentHash(hashInputs(inputs));
-    const overview = renderOverviewSection(
+    const documentation = renderAiDocumentation(
         inputs,
-        decision,
-        options.llmOverviewBody,
+        options.llmDocumentationBody,
     );
     const reference = renderReferenceSection(inputs, decision);
     const footer = renderStalenessFooter(
@@ -60,10 +69,18 @@ export function assembleAutogenBlock(
         inputs.pkg.name,
     );
 
+    const titleLine = `# ${inputs.pkg.name} — AI-generated documentation`;
+    const sourceComment = inputs.readmeContext.exists
+        ? "<!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->"
+        : "<!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->";
+
     const body = [
         formatHashComment(hash),
+        sourceComment,
         "",
-        overview.trimEnd(),
+        titleLine,
+        "",
+        documentation.trimEnd(),
         "",
         reference.trimEnd(),
         "",
@@ -78,6 +95,14 @@ export function assembleAutogenBlock(
  * Build the labelled string map the content hash is computed over.
  * Stable serialisation of every input that should trigger a doc
  * regeneration when changed.
+ *
+ * Notes:
+ *   - We hash a digest of the hand-written README rather than the
+ *     full text so a one-character whitespace edit doesn't churn
+ *     the doc. The word-count proxy is good enough.
+ *   - Action names + parameter shapes (but not comment text) are
+ *     hashed so the deterministic Actions reference auto-regenerates
+ *     when the schema's structural surface changes.
  */
 function hashInputs(inputs: PackageInputs): Record<string, string> {
     return {
@@ -105,6 +130,18 @@ function hashInputs(inputs: PackageInputs): Record<string, string> {
             .map((f) => `${f.relPath}:${f.sizeBytes}`)
             .join("\n"),
         "agent.surface": stableJson(inputs.agentSurface),
+        "agent.actions": inputs.actions
+            .map(
+                (a) =>
+                    `${a.actionName}|${a.implemented ? 1 : 0}|${a.parameters
+                        .map((p) => `${p.name}:${p.optional ? 1 : 0}:${p.type}`)
+                        .join(";")}`,
+            )
+            .sort()
+            .join("\n"),
+        "src.envVars": [...inputs.envVars].sort().join(","),
+        "readme.wordCount": String(inputs.readmeContext.wordCount),
+        "readme.exists": inputs.readmeContext.exists ? "1" : "0",
     };
 }
 

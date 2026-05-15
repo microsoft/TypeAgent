@@ -47,6 +47,14 @@ function makeInputs(overrides: Partial<PackageInputs> = {}): PackageInputs {
             handlerPath: null,
         },
         isAgentPackage: false,
+        actions: [],
+        envVars: [],
+        readmeContext: {
+            exists: false,
+            raw: "",
+            handAuthored: "",
+            wordCount: 0,
+        },
         existingBlock: null,
     };
     return { ...base, ...overrides };
@@ -175,6 +183,144 @@ describe("renderReferenceSection", () => {
         expect(out).not.toContain("### Agent surface");
     });
 
+    it("renders the Actions reference as a compact two-column table for agent packages with parsed actions", () => {
+        const out = renderReferenceSection(
+            makeInputs({
+                isAgentPackage: true,
+                agentSurface: {
+                    manifestPath: "./src/photoManifest.json",
+                    schemaPath: "./src/photoSchema.ts",
+                    grammarPath: null,
+                    handlerPath: "./src/photoHandler.ts",
+                },
+                actions: [
+                    {
+                        typeName: "TakePhotoAction",
+                        actionName: "takePhoto",
+                        description: "Capture a photograph.",
+                        samplePhrases: ["take a photo"],
+                        parameters: [
+                            {
+                                name: "caption",
+                                optional: true,
+                                type: "string",
+                                description: "Optional caption.",
+                            },
+                            {
+                                name: "cameraId",
+                                optional: false,
+                                type: "string",
+                                description: "Camera id.",
+                            },
+                        ],
+                        implemented: true,
+                    },
+                ],
+            }),
+            { compact: false, reasons: [] },
+        );
+        expect(out).toContain("### Actions");
+        expect(out).toContain("| User says | Action |");
+        // Required parameter `cameraId` becomes the only entry in the
+        // sample JSON; optional `caption` is intentionally elided.
+        expect(out).toContain(
+            '| "take a photo" | `takePhoto` → `{ "cameraId": "…" }` |',
+        );
+        // No more per-action sub-headings or parameter tables.
+        expect(out).not.toContain("#### `takePhoto`");
+        expect(out).not.toContain("| Name | Type | Required | Notes |");
+    });
+
+    it("omits stub actions and notes how many were hidden", () => {
+        const out = renderReferenceSection(
+            makeInputs({
+                isAgentPackage: true,
+                agentSurface: {
+                    manifestPath: "./src/discordManifest.json",
+                    schemaPath: "./src/discordSchema.ts",
+                    grammarPath: null,
+                    handlerPath: "./src/discordActionHandler.ts",
+                },
+                actions: [
+                    {
+                        typeName: "CreateMessageAction",
+                        actionName: "createMessage",
+                        description: "Send a message.",
+                        samplePhrases: ["send a message"],
+                        parameters: [],
+                        implemented: true,
+                    },
+                    {
+                        typeName: "CreateGuildAction",
+                        actionName: "createGuild",
+                        description: "Create a guild.",
+                        samplePhrases: ["create a guild"],
+                        parameters: [],
+                        implemented: false,
+                    },
+                ],
+            }),
+            { compact: false, reasons: [] },
+        );
+        expect(out).toContain("### Actions");
+        expect(out).toContain('| "send a message" | `createMessage` |');
+        expect(out).not.toContain('"create a guild"');
+        expect(out).not.toContain("`createGuild`");
+        expect(out).toMatch(
+            /1 additional action is declared in the schema but not yet implemented/u,
+        );
+    });
+
+    it("emits a 'none implemented' note when every declared action is a stub", () => {
+        const out = renderReferenceSection(
+            makeInputs({
+                isAgentPackage: true,
+                agentSurface: {
+                    manifestPath: "./src/m.json",
+                    schemaPath: "./src/s.ts",
+                    grammarPath: null,
+                    handlerPath: "./src/h.ts",
+                },
+                actions: [
+                    {
+                        typeName: "FooAction",
+                        actionName: "foo",
+                        description: "",
+                        samplePhrases: [],
+                        parameters: [],
+                        implemented: false,
+                    },
+                ],
+            }),
+            { compact: false, reasons: [] },
+        );
+        expect(out).toContain("### Actions");
+        expect(out).toMatch(
+            /1 action declared in the schema, none yet implemented/u,
+        );
+        expect(out).not.toContain("| User says | Action |");
+    });
+
+    it("omits the Actions reference for non-agent packages", () => {
+        const out = renderReferenceSection(
+            makeInputs({
+                isAgentPackage: false,
+                actions: [
+                    {
+                        typeName: "FooAction",
+                        actionName: "foo",
+                        description: "",
+                        samplePhrases: [],
+                        parameters: [],
+                        implemented: true,
+                    },
+                ],
+            }),
+            { compact: false, reasons: [] },
+        );
+        expect(out).not.toContain("### Actions");
+    });
+
     it("compact mode collapses Files of interest and omits Used by when empty", () => {
         const sourceFiles = Array.from({ length: 6 }, (_, i) =>
             file(`./src/x${i}.ts`, 5, 100),
@@ -216,6 +362,28 @@ describe("renderReferenceSection", () => {
         });
         // packages/agents/list → packages/agentSdk = 3 ../
         expect(out).toContain("[@a/sdk](../../../packages/agentSdk/README.md)");
+    });
+
+    it("emits the Environment variables subsection when env vars are present", () => {
+        const out = renderReferenceSection(
+            makeInputs({
+                envVars: ["AZURE_OPENAI_API_KEY", "DISCORD_BOT_TOKEN"],
+            }),
+            { compact: false, reasons: [] },
+        );
+        expect(out).toContain("### Environment variables");
+        expect(out).toContain("`AZURE_OPENAI_API_KEY`");
+        expect(out).toContain("`DISCORD_BOT_TOKEN`");
+        expect(out).toMatch(/2 environment variables referenced/u);
+        expect(out).toMatch(/`## Setup` section above/u);
+    });
+
+    it("omits the Environment variables subsection when none are detected", () => {
+        const out = renderReferenceSection(makeInputs({ envVars: [] }), {
+            compact: false,
+            reasons: [],
+        });
+        expect(out).not.toContain("### Environment variables");
     });
 });
 

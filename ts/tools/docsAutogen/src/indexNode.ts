@@ -45,15 +45,24 @@ export {
     parseHashComment,
 } from "./contentHash.js";
 export {
-    loadCanonicalTrademarks,
-    validateTrademarks,
-    type TrademarksValidation,
-} from "./trademarksGuard.js";
-export {
     detectAgentSurface,
     hasAgentSurface,
     type AgentSurface,
 } from "./agentSurface.js";
+export {
+    detectImplementedActionNames,
+    extractActionsFromSchema,
+    extractActionsFromSource,
+    markImplementedActions,
+    type AgentAction,
+    type ActionParameter,
+} from "./extractActions.js";
+export {
+    readReadmeContext,
+    stripGeneratedSections,
+    type ReadmeContext,
+} from "./readReadmeContext.js";
+export { collectEnvVarsFromText, detectEnvVars } from "./detectEnvVars.js";
 export { extractMarkdownLinks, type ExtractedLink } from "./linkExtraction.js";
 export {
     validateLinks,
@@ -72,15 +81,25 @@ export {
     USED_BY_MAX,
     EXTERNAL_DEPS_MAX,
     KEY_CONCEPTS_MAX,
-    OVERVIEW_TARGET_WORDS_MIN,
-    OVERVIEW_TARGET_WORDS_MAX,
-    OVERVIEW_HARD_CAP_WORDS,
+    ACTIONS_REFERENCE_MAX,
+    DOCUMENTATION_TARGET_WORDS_MIN,
+    DOCUMENTATION_TARGET_WORDS_MAX,
+    DOCUMENTATION_HARD_CAP_WORDS,
     TOTAL_BLOCK_HARD_CAP_WORDS,
     COMPACT_LINE_THRESHOLD,
     COMPACT_EXPORTS_THRESHOLD,
 } from "./lengthCaps.js";
 export { renderReferenceSection } from "./renderReference.js";
-export { renderOverviewSection } from "./renderOverview.js";
+export { renderAiDocumentation } from "./renderDocumentation.js";
+export {
+    repairAbsoluteLinks,
+    repairBareCodeFences,
+    repairOutput,
+} from "./repairOutput.js";
+export {
+    stripBrokenLinks,
+    type StripBrokenLinksResult,
+} from "./stripBrokenLinks.js";
 export {
     renderStalenessFooter,
     stripStalenessFooter,
@@ -91,23 +110,29 @@ export {
     type AssembleOptions,
 } from "./assembleAutogen.js";
 export {
-    assembleOverviewPrompt,
+    composeAutogenFile,
+    writeAutogenFile,
+    type WriteResult,
+    type WriteVerdict,
+} from "./writeAutogenFile.js";
+export {
+    assembleDocumentationPrompt,
     type AssembledPrompt,
     type PromptOptions,
 } from "./promptAssembly.js";
 export {
-    countOverviewWords,
-    validateOverview,
-    type OverviewValidation,
-} from "./overviewValidation.js";
+    countDocumentationWords,
+    validateDocumentation,
+    type DocumentationValidation,
+} from "./documentationValidation.js";
 export {
-    generateOverview,
-    type OverviewChatModel,
+    generateDocumentation,
+    type DocumentationChatModel,
     type ChatPromptSection,
-    type OverviewResult,
-    type OverviewStatus,
-    type GenerateOverviewOptions,
-} from "./generateOverview.js";
+    type DocumentationResult,
+    type DocumentationStatus,
+    type GenerateDocumentationOptions,
+} from "./generateDocumentation.js";
 export {
     compareReadmes,
     type DiffVerdict,

@@ -36,23 +36,37 @@ function makeInputs(overrides: Partial<PackageInputs> = {}): PackageInputs {
             handlerPath: null,
         },
         isAgentPackage: false,
+        actions: [],
+        envVars: [],
+        readmeContext: {
+            exists: false,
+            raw: "",
+            handAuthored: "",
+            wordCount: 0,
+        },
         existingBlock: null,
     };
     return { ...base, ...overrides };
 }
 
 describe("assembleAutogenBlock", () => {
-    it("emits hash → Overview → Reference → footer in that order", () => {
+    it("emits hash → SOURCE → H1 → AI doc → Reference → footer in that order", () => {
         const block = assembleAutogenBlock(makeInputs(), {
             headSha: "a".repeat(40),
             isoDate: "2026-05-14T21:00:00Z",
         });
         const idxHash = block.body.indexOf("AUTOGEN:DOCS:HASH:sha256=");
-        const idxOverview = block.body.indexOf("## AI Overview");
+        const idxSource = block.body.indexOf("AUTOGEN:DOCS:SOURCE:");
+        const idxTitle = block.body.indexOf(
+            "# @a/foo — AI-generated documentation",
+        );
+        const idxOverview = block.body.indexOf("## Overview");
         const idxReference = block.body.indexOf("## Reference");
         const idxFooter = block.body.indexOf("docs-generate.yml");
         expect(idxHash).toBeGreaterThanOrEqual(0);
-        expect(idxOverview).toBeGreaterThan(idxHash);
+        expect(idxSource).toBeGreaterThan(idxHash);
+        expect(idxTitle).toBeGreaterThan(idxSource);
+        expect(idxOverview).toBeGreaterThan(idxTitle);
         expect(idxReference).toBeGreaterThan(idxOverview);
         expect(idxFooter).toBeGreaterThan(idxReference);
     });
@@ -90,29 +104,61 @@ describe("assembleAutogenBlock", () => {
         expect(a.hash).not.toBe(b.hash);
     });
 
-    it("preserves an existing Overview verbatim across regen", () => {
-        const existingBlock = [
-            "<!-- AUTOGEN:DOCS:HASH:sha256=" + "0".repeat(64) + " -->",
-            "",
-            "## Overview",
-            "",
-            "Hand-written overview that must survive.",
-            "",
-            "## Reference",
-            "",
-            "old reference body",
-            "",
-        ].join("\n");
-        const block = assembleAutogenBlock(makeInputs({ existingBlock }), {
+    it("embeds the LLM-authored body when supplied", () => {
+        const llmBody =
+            "## Overview\n\nA crisp factual overview.\n\n## Architecture\n\nLayout details.";
+        const block = assembleAutogenBlock(makeInputs(), {
+            headSha: "sha",
+            isoDate: "date",
+            llmDocumentationBody: llmBody,
+        });
+        expect(block.body).toContain("A crisp factual overview.");
+        expect(block.body).toContain("AI-authored documentation");
+    });
+
+    it("falls back to a placeholder when no LLM body is supplied", () => {
+        const block = assembleAutogenBlock(makeInputs(), {
             headSha: "sha",
             isoDate: "date",
         });
-        expect(block.body).toContain(
-            "Hand-written overview that must survive.",
+        expect(block.body).toContain("Placeholder documentation");
+        expect(block.body).toContain("## Overview");
+    });
+
+    it("renders the deterministic Actions reference for agent packages", () => {
+        const block = assembleAutogenBlock(
+            makeInputs({
+                isAgentPackage: true,
+                agentSurface: {
+                    manifestPath: "./src/photoManifest.json",
+                    schemaPath: "./src/photoSchema.ts",
+                    grammarPath: null,
+                    handlerPath: "./src/photoHandler.ts",
+                },
+                actions: [
+                    {
+                        typeName: "TakePhotoAction",
+                        actionName: "takePhoto",
+                        description: "Capture a photograph.",
+                        samplePhrases: ["take a photo"],
+                        parameters: [
+                            {
+                                name: "caption",
+                                optional: true,
+                                type: "string",
+                                description: "Optional caption.",
+                            },
+                        ],
+                        implemented: true,
+                    },
+                ],
+            }),
+            { headSha: "sha", isoDate: "date" },
         );
-        // Reference is rebuilt deterministically:
-        expect(block.body).toContain("Auto-generated, no AI involvement");
-        expect(block.body).not.toContain("old reference body");
+        expect(block.body).toContain("### Actions");
+        expect(block.body).toContain("| User says | Action |");
+        // No required parameters → action cell is just the bare name.
+        expect(block.body).toContain('| "take a photo" | `takePhoto` |');
     });
 
     it("flags compact mode and KEEPS Used by when reverse-deps are non-empty", () => {
@@ -144,18 +190,5 @@ describe("assembleAutogenBlock", () => {
         );
         expect(block.compact).toBe(true);
         expect(block.body).not.toContain("### Used by");
-    });
-
-    it("composes a body that round-trips through findAutogenRegion", async () => {
-        const block = assembleAutogenBlock(makeInputs(), {
-            headSha: "sha",
-            isoDate: "date",
-        });
-        const wrapped = `# foo\n\n<!-- AUTOGEN:DOCS:START -->\n${block.body}\n<!-- AUTOGEN:DOCS:END -->\n`;
-        const { findAutogenRegion } = await import("../src/autogenRegion.js");
-        const region = findAutogenRegion(wrapped);
-        expect(region).not.toBeNull();
-        expect(region!.body).toContain("## AI Overview");
-        expect(region!.body).toContain("## Reference");
     });
 });

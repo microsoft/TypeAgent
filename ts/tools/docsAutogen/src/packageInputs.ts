@@ -5,6 +5,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { detectAgentSurface, type AgentSurface } from "./agentSurface.js";
 import { findAutogenRegion } from "./autogenRegion.js";
+import { detectEnvVars } from "./detectEnvVars.js";
+import {
+    detectImplementedActionNames,
+    extractActionsFromSchema,
+    markImplementedActions,
+    type AgentAction,
+} from "./extractActions.js";
+import { readReadmeContext, type ReadmeContext } from "./readReadmeContext.js";
 import type {
     PackageJson,
     WorkspaceGraph,
@@ -62,9 +70,28 @@ export interface PackageInputs {
     /** True when the package lives under `packages/agents/**`. */
     readonly isAgentPackage: boolean;
     /**
-     * Body of the existing AUTOGEN block, when present. Used by the
-     * renderer to preserve human-edited Overview prose across runs
-     * (so we don't churn on each scheduled invocation).
+     * Agent actions parsed from `*Schema.ts`. Empty when the package
+     * is not an agent or the schema file is missing/unparseable.
+     */
+    readonly actions: readonly AgentAction[];
+    /**
+     * Project-specific environment variables referenced as
+     * `process.env.<NAME>` anywhere in `src/` (excluding test/spec
+     * files). System and runtime env vars (NODE_ENV, DEBUG, PATH, …)
+     * are filtered out so this list reflects what a contributor would
+     * actually need to configure. Sorted alphabetically.
+     */
+    readonly envVars: readonly string[];
+    /**
+     * Snapshot of the package's hand-written `README.md`, with the
+     * AUTOGEN region (if any) and `## Trademarks` boilerplate
+     * stripped. Fed to the LLM as authoritative source material.
+     */
+    readonly readmeContext: ReadmeContext;
+    /**
+     * Body of the existing AUTOGEN block inside `README.AUTOGEN.md`,
+     * when present. Used by the renderer to preserve any LLM-friendly
+     * legacy output across runs.
      */
     readonly existingBlock: string | null;
 }
@@ -109,7 +136,25 @@ export async function gatherPackageInputs(
     const agentSurface = await detectAgentSurface(pkg.dir);
     const isAgentPackage = pkg.relDir.startsWith("packages/agents/");
 
+    let actions: AgentAction[] = [];
+    if (isAgentPackage && agentSurface.schemaPath !== null) {
+        const schemaAbs = path.join(pkg.dir, agentSurface.schemaPath);
+        actions = await extractActionsFromSchema(schemaAbs);
+        if (actions.length > 0 && agentSurface.handlerPath !== null) {
+            const handlerAbs = path.join(pkg.dir, agentSurface.handlerPath);
+            const implementedNames = await detectImplementedActionNames(
+                handlerAbs,
+                actions.map((a) => a.actionName),
+            );
+            actions = markImplementedActions(actions, implementedNames);
+        }
+    }
+
+    const readmeContext = await readReadmeContext(pkg.dir);
+
     const existingBlock = await readExistingAutogenBody(pkg.dir);
+
+    const envVars = await detectEnvVars(files);
 
     void monorepoRoot; // currently unused but reserved for cross-package link rendering
     return {
@@ -123,6 +168,9 @@ export async function gatherPackageInputs(
         entryPoints,
         agentSurface,
         isAgentPackage,
+        actions,
+        envVars,
+        readmeContext,
         existingBlock,
     };
 }
@@ -289,17 +337,24 @@ async function pathExists(p: string): Promise<boolean> {
 async function readExistingAutogenBody(
     packageDir: string,
 ): Promise<string | null> {
-    const readmePath = path.join(packageDir, "README.md");
-    let content: string;
-    try {
-        content = await fs.readFile(readmePath, "utf8");
-    } catch {
-        return null;
+    // The pivot to README.AUTOGEN.md (Phase 5) means the AUTOGEN
+    // region now lives in its own file. Fall back to README.md only
+    // for backward compatibility while migrating older packages whose
+    // AUTOGEN block is still embedded in their README.md.
+    for (const fileName of ["README.AUTOGEN.md", "README.md"] as const) {
+        const candidate = path.join(packageDir, fileName);
+        let content: string;
+        try {
+            content = await fs.readFile(candidate, "utf8");
+        } catch {
+            continue;
+        }
+        try {
+            const region = findAutogenRegion(content);
+            if (region !== null) return region.body;
+        } catch {
+            // Malformed markers in this file; try the next one.
+        }
     }
-    try {
-        const region = findAutogenRegion(content);
-        return region?.body ?? null;
-    } catch {
-        return null;
-    }
+    return null;
 }
