@@ -26,6 +26,24 @@ export interface ValidationResult {
 }
 
 /**
+ * A JSON Schema `{ "not": {} }` rejects every value (equivalent to `never`).
+ * Tasks with this outputSchema always fail and never produce output.
+ */
+export function isNeverSchema(schema: JSONSchema | undefined): boolean {
+    if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+        return false;
+    }
+    const keys = Object.keys(schema);
+    return (
+        keys.length === 1 &&
+        keys[0] === "not" &&
+        typeof (schema as Record<string, unknown>).not === "object" &&
+        Object.keys((schema as Record<string, unknown>).not as object)
+            .length === 0
+    );
+}
+
+/**
  * Structural validation for an IR v1 document.
  *
  * Checks:
@@ -1113,6 +1131,28 @@ function validateScope(
                 const taskDef = tasks.get(node.task);
                 if (taskDef) {
                     checkNodeTaskSchemas(taskDef, node, path, errors);
+                }
+            }
+            // Never-output tasks always fail: next, bind, and onError
+            // are unreachable.
+            if (isNeverSchema(node.outputSchema)) {
+                if (node.next) {
+                    errors.push({
+                        path: `${path}.next`,
+                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "next".`,
+                    });
+                }
+                if (node.bind) {
+                    errors.push({
+                        path: `${path}.bind`,
+                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "bind".`,
+                    });
+                }
+                if (node.onError) {
+                    errors.push({
+                        path: `${path}.onError`,
+                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "onError".`,
+                    });
                 }
             }
             checkTargetExists(

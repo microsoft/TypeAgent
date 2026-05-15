@@ -595,7 +595,7 @@ export class Emitter {
                 required: ["message"],
                 properties: { message: {} },
             },
-            outputSchema: {},
+            outputSchema: { not: {} },
             inputs: { message: valueTemplate },
         };
         scope.nodes[nodeId] = node;

@@ -831,6 +831,8 @@ validator, and analyzers in agreement on a single observable behavior
   `outputSchema`. A task whose `bind` is absent has no addressable output,
   but `outputSchema` is still required (it documents the contract and is
   used by the runtime to validate the task implementation's return value).
+  A special case: `outputSchema: { "not": {} }` declares that the task
+  always fails (see v2 §3.4, "Never-output convention").
 - An absent `next` (terminal node) is legal **only** in the top-level
   scope. In a loop body, every task must have `next` set to another body
   node, `@iterate`, or `@exit` (P5 scenario 39).

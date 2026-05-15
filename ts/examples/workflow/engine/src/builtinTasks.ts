@@ -1098,7 +1098,7 @@ export const errorFail: TaskDefinition<{ value: unknown }, never> = {
         required: ["value"],
         properties: { value: {} },
     },
-    outputSchema: { type: "object" },
+    outputSchema: { not: {} },
     async execute(input) {
         return {
             kind: "fail",

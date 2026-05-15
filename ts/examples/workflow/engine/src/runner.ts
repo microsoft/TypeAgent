@@ -19,6 +19,7 @@ import {
     TaskPolicyMode,
     ApprovalFn,
     validateWorkflowIR,
+    isNeverSchema,
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
@@ -735,6 +736,14 @@ export class WorkflowEngine {
                     node.task,
                     nodeId,
                     resolvedInput,
+                );
+            }
+
+            // Never-output contract: a task with outputSchema { "not": {} }
+            // must always fail. If it returned ok, the implementation is broken.
+            if (isNeverSchema(node.outputSchema)) {
+                throw new EngineError(
+                    `Task "${node.task}" at "${nodeId}" has never-output schema but returned ok.`,
                 );
             }
 

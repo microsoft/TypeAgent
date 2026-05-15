@@ -7289,4 +7289,84 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(forkCompleted).toHaveLength(1);
         });
     });
+
+    describe("never-output runtime enforcement", () => {
+        it("throws EngineError if a never-output task returns ok", async () => {
+            // A rogue task that claims never-output but returns ok.
+            const rogueFail: TaskDefinition = {
+                name: "rogue.fail",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { not: {} },
+                async execute() {
+                    return { kind: "ok", output: { value: "oops" } };
+                },
+            };
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "never-output-violation",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fail_node",
+                nodes: {
+                    fail_node: {
+                        kind: "task",
+                        task: "rogue.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { not: {} },
+                        inputs: {},
+                    },
+                },
+                output: {},
+            };
+
+            const reg = makeRegistry(...allBuiltinTasks, rogueFail);
+            const engine = new WorkflowEngine(reg);
+            const result = await engine.run(ir, {
+                skipValidation: true,
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error!.message).toContain(
+                "never-output schema but returned ok",
+            );
+        });
+
+        it("allows a proper never-output task that fails", async () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "proper-throw",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "fail_node",
+                nodes: {
+                    fail_node: {
+                        kind: "task",
+                        task: "error.fail",
+                        inputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
+                        },
+                        outputSchema: { not: {} },
+                        inputs: { value: "boom" },
+                    },
+                },
+                output: {},
+            };
+
+            const reg = makeRegistry(...allBuiltinTasks);
+            const engine = new WorkflowEngine(reg);
+            const result = await engine.run(ir, {
+                skipValidation: true,
+                policy: allowAllPolicy,
+            });
+            // error.fail causes a TaskFailure which becomes an error
+            expect(result.error).toBeDefined();
+            expect(result.error!.message).toContain("boom");
+        });
+    });
 });

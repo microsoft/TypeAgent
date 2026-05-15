@@ -442,6 +442,9 @@ describe("Emitter v2", () => {
         `);
         const [, node] = findNodeByTask(ir, "error.fail");
         expect(node.inputs.message).toBe("something went wrong");
+        expect(node.outputSchema).toEqual({ not: {} });
+        expect(node.next).toBeUndefined();
+        expect(node.bind).toBeUndefined();
     });
 
     // ---- Ternary expression ----

@@ -32,4 +32,5 @@ export {
     ValidationError,
     ValidationResult,
     validateWorkflowIR,
+    isNeverSchema,
 } from "./validate.js";

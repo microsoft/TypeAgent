@@ -10,6 +10,7 @@ import {
     ForkMapNode,
     TaskDefinition,
     validateWorkflowIR,
+    isNeverSchema,
 } from "../src/index.js";
 
 function makeMinimalIR(overrides?: Partial<WorkflowIR>): WorkflowIR {
@@ -3290,6 +3291,100 @@ describe("validateWorkflowIR", () => {
             ir.outputSchema = { type: "object" };
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
+        });
+    });
+
+    describe("never-output schema", () => {
+        it("accepts a never-output task with no next, bind, or onError", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                    }),
+                },
+                output: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("error.fail"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects a never-output task with next", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                        next: "after",
+                    }),
+                    after: makeTaskNode({ bind: "out" }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("error.fail", "noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("must not have \"next\"")),
+            ).toBe(true);
+        });
+
+        it("rejects a never-output task with bind", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                        bind: "x",
+                    }),
+                },
+                output: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("error.fail"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("must not have \"bind\"")),
+            ).toBe(true);
+        });
+
+        it("rejects a never-output task with onError", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                        onError: "handler",
+                    }),
+                    handler: makeTaskNode({ bind: "out" }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("error.fail", "noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) => e.message.includes("must not have \"onError\""),
+                ),
+            ).toBe(true);
+        });
+    });
+
+    describe("isNeverSchema", () => {
+        it("returns true for { not: {} }", () => {
+            expect(isNeverSchema({ not: {} })).toBe(true);
+        });
+
+        it("returns false for empty schema", () => {
+            expect(isNeverSchema({})).toBe(false);
+        });
+
+        it("returns false for normal object schema", () => {
+            expect(isNeverSchema({ type: "object" })).toBe(false);
+        });
+
+        it("returns false for non-empty not", () => {
+            expect(isNeverSchema({ not: { type: "string" } })).toBe(false);
+        });
+
+        it("returns false for undefined", () => {
+            expect(isNeverSchema(undefined)).toBe(false);
         });
     });
 });

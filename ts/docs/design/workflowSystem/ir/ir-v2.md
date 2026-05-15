@@ -338,6 +338,21 @@ Primary use case: cleanup-then-rethrow in a retry fallback, where
 the preceding cleanup task succeeds and the author wants to
 explicitly fail with the original error.
 
+#### Never-output convention
+
+A task whose output schema is `{ "not": {} }` (the JSON Schema equivalent
+of `never`) declares that it always fails and never produces a successful
+output. The IR toolchain enforces this in two places:
+
+1. **Validator (static):** A task node with `outputSchema: { "not": {} }`
+   must not have a `next` field, a `bind` field, or an `onError` field.
+   There is no successful path to follow, no output to bind, and no
+   recovery to attempt (the failure is intentional).
+2. **Runner (runtime):** If a task with `outputSchema: { "not": {} }`
+   returns `kind: "ok"` instead of `kind: "fail"`, the engine throws an
+   `EngineError`. This guards against a task implementation that violates
+   its declared contract.
+
 ### 3.5 `list` namespace
 
 | Task          | Input schema                 | Output schema     | Notes                                      |
