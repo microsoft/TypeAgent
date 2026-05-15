@@ -36,6 +36,7 @@ import {
     ClientIO,
     createDispatcher,
     Dispatcher,
+    PortRegistrar,
     RequestId,
 } from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -47,12 +48,17 @@ import {
     ensureAgentServer,
     connectAgentServer,
     stopAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     loadUserSettings,
     saveUserSettings,
 } from "agent-dispatcher/helpers/userSettings";
+import {
+    startStandaloneDiscoveryServer,
+    type StandaloneDiscoveryServer,
+} from "./discoveryServer.js";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -185,6 +191,7 @@ async function initializeDispatcher(
         // Use 'let' so that session switches can rebind the active dispatcher.
         let newDispatcher: Dispatcher;
         let connection: AgentServerConnection | undefined;
+        let standaloneDiscovery: StandaloneDiscoveryServer | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
         if (connect !== undefined) {
@@ -461,6 +468,37 @@ async function initializeDispatcher(
                 configName,
             );
 
+            // Standalone shell hosts its own dispatcher in-process. Pre-build
+            // a PortRegistrar so we can hand the same instance to both the
+            // dispatcher (where agents register their dynamically assigned
+            // ports) and the discovery WS server below (which reads from it
+            // to answer external lookups). Without this shared instance, the
+            // dispatcher would silently make its own private registrar and
+            // the Chrome extension's discoverPort lookup would never find
+            // the browser agent's port.
+            const portRegistrar = new PortRegistrar();
+
+            // Stand up the discovery WS so the Chrome extension (and any
+            // other external client speaking the agent-server discovery
+            // protocol) can find in-process agents at parity with what
+            // they get when connecting to a real agent-server. Bind is
+            // exact on AGENT_SERVER_DEFAULT_PORT (8999): an EADDRINUSE
+            // here usually means a real agent-server is already running,
+            // and silently picking a random port would only confuse the
+            // user (their default-configured extension would still fail).
+            try {
+                standaloneDiscovery = await startStandaloneDiscoveryServer(
+                    AGENT_SERVER_DEFAULT_PORT,
+                    portRegistrar,
+                );
+            } catch (e) {
+                debugShellError(
+                    "Failed to start standalone discovery server on port %d: %s. External clients (e.g. Chrome extension) will not be able to discover in-process agent ports.",
+                    AGENT_SERVER_DEFAULT_PORT,
+                    (e as Error).message,
+                );
+            }
+
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
@@ -469,6 +507,7 @@ async function initializeDispatcher(
                 agentInitOptions: {
                     browser: browserControl.control,
                 },
+                portRegistrar,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 persistSession: true,
                 persistDir: instanceDir,
@@ -547,6 +586,10 @@ async function initializeDispatcher(
             // explicitly here so the process doesn't leak it on shutdown.
             if (connection !== undefined) {
                 await connection.close();
+            }
+            if (standaloneDiscovery !== undefined) {
+                standaloneDiscovery.close();
+                standaloneDiscovery = undefined;
             }
             clientIOChannel.notifyDisconnected();
             ipcMain.removeListener("clientio-rpc-reply", onClientIORpcReply);

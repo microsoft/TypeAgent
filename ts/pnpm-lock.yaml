@@ -5073,6 +5073,9 @@ importers:
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../agentServer/protocol
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -5136,6 +5139,9 @@ importers:
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      websocket-channel-server:
+        specifier: workspace:*
+        version: link:../utils/webSocketChannelServer
       websocket-utils:
         specifier: workspace:*
         version: link:../utils/webSocketUtils

@@ -25,7 +25,7 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
     AGENT_SERVER_DISCOVERY_NAME,
     DiscoveryChannelName,
-    DiscoveryInvokeFunctions,
+    createDiscoveryHandlers,
     DispatcherConnectOptions,
     UserIdentity,
     getDispatcherChannelName,
@@ -448,23 +448,15 @@ async function main() {
             // on the same WS as agent-server so clients only need one
             // connection. Mutations to the registrar are NOT exposed
             // here — only agents themselves can register, via the
-            // in-process SessionContext.registerPort.
-            const discoveryFunctions: DiscoveryInvokeFunctions = {
-                lookupPort: async ({ agentName, role }) => {
-                    // The agent-server's own port is registered as a
-                    // real allocation under AGENT_SERVER_DISCOVERY_NAME
-                    // / DEFAULT_ROLE (see registerSelfPort below), so
-                    // no special-case is needed here — the lookup just
-                    // works for both well-known and agent-defined
-                    // names.
-                    const port = portRegistrar.lookup(agentName, role);
-                    return { port: port ?? null };
-                },
-            };
+            // in-process SessionContext.registerPort. The handler
+            // factory is shared with the standalone Electron shell so
+            // both hosts speak the same protocol byte-for-byte.
             createRpc(
                 "agent-server:discovery",
                 channelProvider.createChannel(DiscoveryChannelName),
-                discoveryFunctions,
+                createDiscoveryHandlers((agentName, role) =>
+                    portRegistrar.lookup(agentName, role),
+                ),
             );
         },
     );
