@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    WebSocketMessageV2,
-    keepWebSocketAlive,
-} from "websocket-utils";
+import { WebSocketMessageV2, keepWebSocketAlive } from "websocket-utils";
 
 import WebSocket from "ws";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
