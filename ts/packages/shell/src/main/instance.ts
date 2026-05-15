@@ -91,6 +91,12 @@ async function initializeDispatcher(
         // Make sure the previous cleanup is done.
         await cleanupP;
     }
+    // Hoisted above the try{} so the catch can clean up an already-bound
+    // discovery WS if a later step (createDispatcher, etc.) throws —
+    // otherwise the listening socket on AGENT_SERVER_DEFAULT_PORT would
+    // leak across re-init attempts and block the next launch with
+    // EADDRINUSE.
+    let standaloneDiscovery: StandaloneDiscoveryServer | undefined;
     try {
         const clientIOChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
@@ -191,7 +197,6 @@ async function initializeDispatcher(
         // Use 'let' so that session switches can rebind the active dispatcher.
         let newDispatcher: Dispatcher;
         let connection: AgentServerConnection | undefined;
-        let standaloneDiscovery: StandaloneDiscoveryServer | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
         if (connect !== undefined) {
@@ -657,6 +662,12 @@ async function initializeDispatcher(
             rebindDispatcher,
         };
     } catch (e: any) {
+        // Tear down the discovery WS if it was already bound before the
+        // failure — otherwise port AGENT_SERVER_DEFAULT_PORT stays held
+        // by this process and the next shell launch hits EADDRINUSE.
+        if (standaloneDiscovery !== undefined) {
+            standaloneDiscovery.close();
+        }
         if (isTest) {
             // In test mode, avoid blocking dialogs so the process can exit cleanly
             console.error("Exception initializing dispatcher:", e.stack);

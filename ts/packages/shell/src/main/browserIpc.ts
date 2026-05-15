@@ -252,6 +252,13 @@ export class BrowserAgentIpc {
  *
  * The agent-server discovery URL defaults to ws://localhost:8999/ but can
  * be overridden with WEBSOCKET_HOST for non-default deployments.
+ *
+ * NOTE on WEBSOCKET_HOST semantics: this caller treats it as a *base URL*
+ * (protocol + host + port) and builds its own path/query. The legacy
+ * `createWebSocket` helper in `packages/utils/webSocketUtils/src/webSockets.ts`
+ * treats the same env var as a *complete endpoint replacement*. Set
+ * WEBSOCKET_HOST to a base URL without a path (e.g. `ws://example.com:9000/`)
+ * for predictable behavior across both call sites.
  */
 async function createInlineBrowserWebSocket(): Promise<WebSocket | undefined> {
     const agentServerUrl =
