@@ -70,7 +70,7 @@ question.
 | 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | Keep as-is. Localized mutation in a single helper, runs before nodes are consumed. Internal lowering detail, not a spec concern.                                                       |
-| 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | TBD                                                                                                                                                                                    |
+| 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | Rewritten. Description was stale. Both branches now normalize through identity nodes to a shared `updated_results` bind, using the same pattern as 3.12.                               |
 | 3.9  | Decide whether identity-wrapping is the intended lowering pattern for literal arms or whether the IR should grow a cleaner representation.           | TBD                                                                                                                                                                                    |
 | 3.10 | Specify whether implicit termination via missing `next` is the intended node contract.                                                               | TBD                                                                                                                                                                                    |
 | 3.11 | Decide whether root-level identity wrapping is canonical lowering that belongs in the spec.                                                          | TBD                                                                                                                                                                                    |
@@ -382,15 +382,17 @@ have not been consumed at the point of rewrite. Not a spec concern.
 ### 3.8 Filter uses a two-branch pattern
 
 The filter emitter creates a branch node inside the loop body. The `true`
-case appends the item to the accumulator; the `false` case uses a separate
-`keep_results` identity node that passes the current results through
-unchanged. Both branches write to different bind names, then `iterateState`
-picks the appropriate one.
+case appends the item to the accumulator via `list.append`, then wraps the
+result through an `identity` node (`wrap_append`) that binds
+`updated_results`. The `false` case uses a `keep_results` identity node
+that passes the current `results` state through, also binding
+`updated_results`. Both branches converge at `step_i` (the index
+increment). The loop's `iterateState` reads from `updated_results` to
+update the `results` state variable.
 
-Actually: the filter's iterateState references the append node's bind name.
-On the false branch (item filtered out), the results state variable doesn't
-get updated because the append node doesn't execute. The state variable
-retains its previous value via the loop's `iterateState` mechanism.
+**Classification:** Correct implementation. Uses the same shared-bind
+normalization pattern as 3.12. Both branches produce the same bind name
+so the merge point has a single, unambiguous source for the next state.
 
 ### 3.9 Ternary creates synthetic identity tasks for literals
 
