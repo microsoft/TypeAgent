@@ -197,7 +197,9 @@ describe("beginAgentThread", () => {
 });
 
 describe("notifyReadinessChanged", () => {
-    function makeContextWithAgents(refreshImpl: (name: string) => Promise<any>) {
+    function makeContextWithAgents(
+        refreshImpl: (name: string) => Promise<any>,
+    ) {
         const refreshCalls: string[] = [];
         const ctx = {
             session: {

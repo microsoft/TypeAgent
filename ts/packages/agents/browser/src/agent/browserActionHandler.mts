@@ -237,9 +237,8 @@ async function ensureSharedBrowserServer(): Promise<AgentWebSocketServer> {
     }
     sharedStartingPromise = (async () => {
         try {
-            const server = await AgentWebSocketServer.start(
-                getBrowserBindPort(),
-            );
+            const server =
+                await AgentWebSocketServer.start(getBrowserBindPort());
             sharedBrowserServer = server;
             return server;
         } finally {
@@ -602,7 +601,9 @@ async function updateBrowserContext(
             // shared-server side. (Defensive: dispatcher should not
             // re-fire enable for the same schema, but we want to be
             // refcount-safe.)
-            debug("Browser schema already enabled; skipping shared-server bind");
+            debug(
+                "Browser schema already enabled; skipping shared-server bind",
+            );
             return;
         }
         try {
