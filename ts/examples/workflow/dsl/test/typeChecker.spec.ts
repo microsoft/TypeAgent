@@ -88,7 +88,7 @@ describe("type checker", () => {
     // ---- Valid programs ----
 
     test("empty workflow passes", () => {
-        expectNoErrors("workflow test(): string { return \"hello\" }");
+        expectNoErrors('workflow test(): string { return "hello" }');
     });
 
     test("const with matching type annotation", () => {
@@ -349,6 +349,13 @@ describe("type checker", () => {
         );
     });
 
+    test("unknown type annotation", () => {
+        expectError(
+            `workflow test(x: mystery): string { return "ok" }`,
+            "Unknown type",
+        );
+    });
+
     // ---- Type errors: control flow ----
 
     test("if with non-boolean condition", () => {
@@ -438,9 +445,7 @@ describe("type checker", () => {
     });
 
     test("workflow return type matches", () => {
-        expectNoErrors(
-            `workflow test(): string { return "hello" }`,
-        );
+        expectNoErrors(`workflow test(): string { return "hello" }`);
     });
 
     // ---- Type errors: built-in argument validation ----

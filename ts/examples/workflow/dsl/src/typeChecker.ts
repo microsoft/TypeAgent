@@ -12,13 +12,7 @@
  * and tuples (from parallel destructuring).
  */
 
-import {
-    WorkflowDecl,
-    Statement,
-    Expr,
-    TypeExpr,
-    TaskArg,
-} from "./ast.js";
+import { WorkflowDecl, Statement, Expr, TypeExpr, TaskArg } from "./ast.js";
 import { TaskSchemaInfo } from "./emitter.js";
 
 // ---- Type representation ----
@@ -76,10 +70,7 @@ function isNumeric(t: TypeInfo): boolean {
 }
 
 function isBoolean(t: TypeInfo): boolean {
-    return (
-        t.kind === "primitive" &&
-        (t.name === "boolean" || t.name === "any")
-    );
+    return t.kind === "primitive" && (t.name === "boolean" || t.name === "any");
 }
 
 function isAny(t: TypeInfo): boolean {
@@ -138,7 +129,10 @@ class Scope {
 
 // ---- Converter: AST TypeExpr -> TypeInfo ----
 
-function typeExprToInfo(te: TypeExpr): TypeInfo {
+function typeExprToInfo(
+    te: TypeExpr,
+    onUnknownType?: (te: Extract<TypeExpr, { kind: "NamedType" }>) => void,
+): TypeInfo {
     switch (te.kind) {
         case "NamedType":
             switch (te.name) {
@@ -153,15 +147,22 @@ function typeExprToInfo(te: TypeExpr): TypeInfo {
                 case "any":
                     return ANY;
                 default:
+                    onUnknownType?.(te);
                     return UNKNOWN;
             }
         case "ArrayType":
-            return { kind: "array", element: typeExprToInfo(te.element) };
+            return {
+                kind: "array",
+                element: typeExprToInfo(te.element, onUnknownType),
+            };
         case "ObjectType": {
-            const fields = new Map<string, { type: TypeInfo; optional: boolean }>();
+            const fields = new Map<
+                string,
+                { type: TypeInfo; optional: boolean }
+            >();
             for (const f of te.fields) {
                 fields.set(f.name, {
-                    type: typeExprToInfo(f.type),
+                    type: typeExprToInfo(f.type, onUnknownType),
                     optional: f.optional,
                 });
             }
@@ -180,10 +181,15 @@ function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
     if (type === "boolean") return BOOLEAN;
     if (type === "array") {
         const items = schema["items"] as Record<string, unknown> | undefined;
-        return { kind: "array", element: items ? jsonSchemaToTypeInfo(items) : ANY };
+        return {
+            kind: "array",
+            element: items ? jsonSchemaToTypeInfo(items) : ANY,
+        };
     }
     if (type === "object") {
-        const props = schema["properties"] as Record<string, Record<string, unknown>> | undefined;
+        const props = schema["properties"] as
+            | Record<string, Record<string, unknown>>
+            | undefined;
         const required = new Set((schema["required"] as string[]) ?? []);
         if (!props) return { kind: "object", fields: new Map() };
         const fields = new Map<string, { type: TypeInfo; optional: boolean }>();
@@ -205,10 +211,7 @@ export class TypeChecker {
     private taskSchemaMap: Map<string, TaskSchemaInfo>;
     private workflowMap: Map<string, WorkflowDecl>;
 
-    constructor(
-        taskSchemas: TaskSchemaInfo[],
-        workflows: WorkflowDecl[] = [],
-    ) {
+    constructor(taskSchemas: TaskSchemaInfo[], workflows: WorkflowDecl[] = []) {
         this.taskSchemaMap = new Map(taskSchemas.map((s) => [s.name, s]));
         this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
     }
@@ -217,15 +220,12 @@ export class TypeChecker {
         this.errors = [];
         const scope = new Scope();
         for (const p of wf.params) {
-            scope.set(p.name, typeExprToInfo(p.type));
+            scope.set(p.name, this.resolveTypeExpr(p.type));
         }
         const returnType = this.checkStatements(wf.body, scope);
         // Validate return type matches declaration
-        const declared = typeExprToInfo(wf.returnType);
-        if (
-            returnType.kind !== "unknown" &&
-            !typeEq(declared, returnType)
-        ) {
+        const declared = this.resolveTypeExpr(wf.returnType);
+        if (returnType.kind !== "unknown" && !typeEq(declared, returnType)) {
             this.addError(
                 `Workflow return type '${typeName(returnType)}' is not assignable to declared type '${typeName(declared)}'`,
                 wf.loc.line,
@@ -237,6 +237,16 @@ export class TypeChecker {
 
     private addError(msg: string, line: number, col: number): void {
         this.errors.push({ message: msg, line, col });
+    }
+
+    private resolveTypeExpr(te: TypeExpr): TypeInfo {
+        return typeExprToInfo(te, (unknownType) => {
+            this.addError(
+                `Unknown type: '${unknownType.name}'`,
+                unknownType.loc.line,
+                unknownType.loc.col,
+            );
+        });
     }
 
     /** Check statements and return the inferred type of the first return found. */
@@ -257,7 +267,7 @@ export class TypeChecker {
             case "ConstStatement": {
                 const valueType = this.inferExpr(s.value, scope);
                 if (s.typeAnnotation) {
-                    const declared = typeExprToInfo(s.typeAnnotation);
+                    const declared = this.resolveTypeExpr(s.typeAnnotation);
                     if (!typeEq(declared, valueType) && !isAny(valueType)) {
                         this.addError(
                             `Type '${typeName(valueType)}' is not assignable to type '${typeName(declared)}'`,
@@ -266,7 +276,12 @@ export class TypeChecker {
                         );
                     }
                 }
-                scope.set(s.name, s.typeAnnotation ? typeExprToInfo(s.typeAnnotation) : valueType);
+                scope.set(
+                    s.name,
+                    s.typeAnnotation
+                        ? this.resolveTypeExpr(s.typeAnnotation)
+                        : valueType,
+                );
                 return UNKNOWN;
             }
             case "DestructuringConst": {
@@ -302,7 +317,11 @@ export class TypeChecker {
             }
             case "IfStatement": {
                 const condType = this.inferExpr(s.condition, scope);
-                if (!isBoolean(condType) && !isAny(condType) && condType.kind !== "unknown") {
+                if (
+                    !isBoolean(condType) &&
+                    !isAny(condType) &&
+                    condType.kind !== "unknown"
+                ) {
                     this.addError(
                         `Condition must be boolean, got '${typeName(condType)}'`,
                         s.condition.loc.line,
@@ -358,7 +377,8 @@ export class TypeChecker {
                 }
                 return STRING;
             case "ArrayLiteralExpr": {
-                if (e.elements.length === 0) return { kind: "array", element: ANY };
+                if (e.elements.length === 0)
+                    return { kind: "array", element: ANY };
                 const elemType = this.inferExpr(e.elements[0], scope);
                 for (let i = 1; i < e.elements.length; i++) {
                     this.inferExpr(e.elements[i], scope);
@@ -366,7 +386,10 @@ export class TypeChecker {
                 return { kind: "array", element: elemType };
             }
             case "ObjectLiteralExpr": {
-                const fields = new Map<string, { type: TypeInfo; optional: boolean }>();
+                const fields = new Map<
+                    string,
+                    { type: TypeInfo; optional: boolean }
+                >();
                 for (const entry of e.entries) {
                     fields.set(entry.key, {
                         type: this.inferExpr(entry.value, scope),
@@ -434,7 +457,9 @@ export class TypeChecker {
                     return UNKNOWN;
                 }
                 this.checkArgs(e.args, scope);
-                return jsonSchemaToTypeInfo(schema.outputSchema as Record<string, unknown>);
+                return jsonSchemaToTypeInfo(
+                    schema.outputSchema as Record<string, unknown>,
+                );
             }
             case "WorkflowCallExpr": {
                 const wf = this.workflowMap.get(e.name);
@@ -447,7 +472,7 @@ export class TypeChecker {
                     return UNKNOWN;
                 }
                 this.checkArgs(e.args, scope);
-                return typeExprToInfo(wf.returnType);
+                return this.resolveTypeExpr(wf.returnType);
             }
             case "BinaryExpr":
                 return this.inferBinaryExpr(e, scope);
@@ -455,7 +480,11 @@ export class TypeChecker {
                 return this.inferUnaryExpr(e, scope);
             case "TernaryExpr": {
                 const condType = this.inferExpr(e.condition, scope);
-                if (!isBoolean(condType) && !isAny(condType) && condType.kind !== "unknown") {
+                if (
+                    !isBoolean(condType) &&
+                    !isAny(condType) &&
+                    condType.kind !== "unknown"
+                ) {
                     this.addError(
                         `Ternary condition must be boolean, got '${typeName(condType)}'`,
                         e.condition.loc.line,
@@ -475,14 +504,21 @@ export class TypeChecker {
             }
             case "RetryNode": {
                 const countType = this.inferExpr(e.count, scope);
-                if (!isNumeric(countType) && !isAny(countType) && countType.kind !== "unknown") {
+                if (
+                    !isNumeric(countType) &&
+                    !isAny(countType) &&
+                    countType.kind !== "unknown"
+                ) {
                     this.addError(
                         `retry() count must be numeric, got '${typeName(countType)}'`,
                         e.count.loc.line,
                         e.count.loc.col,
                     );
                 }
-                const retryReturnType = this.checkStatements(e.body, scope.child());
+                const retryReturnType = this.checkStatements(
+                    e.body,
+                    scope.child(),
+                );
                 if (e.fallback) {
                     const fbScope = scope.child();
                     fbScope.set(e.fallback.param, ANY);
@@ -530,12 +566,19 @@ export class TypeChecker {
                 const elemTypes: TypeInfo[] = [];
                 for (const branch of e.bodies) {
                     const branchScope = scope.child();
-                    const branchType = this.checkStatements(branch.body, branchScope);
+                    const branchType = this.checkStatements(
+                        branch.body,
+                        branchScope,
+                    );
                     elemTypes.push(branchType);
                 }
                 if (e.maxConcurrency) {
                     const mcType = this.inferExpr(e.maxConcurrency, scope);
-                    if (!isNumeric(mcType) && !isAny(mcType) && mcType.kind !== "unknown") {
+                    if (
+                        !isNumeric(mcType) &&
+                        !isAny(mcType) &&
+                        mcType.kind !== "unknown"
+                    ) {
                         this.addError(
                             `maxConcurrency must be numeric, got '${typeName(mcType)}'`,
                             e.loc.line,
@@ -563,7 +606,11 @@ export class TypeChecker {
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
                 if (e.maxConcurrency) {
                     const mcType = this.inferExpr(e.maxConcurrency, scope);
-                    if (!isNumeric(mcType) && !isAny(mcType) && mcType.kind !== "unknown") {
+                    if (
+                        !isNumeric(mcType) &&
+                        !isAny(mcType) &&
+                        mcType.kind !== "unknown"
+                    ) {
                         this.addError(
                             `maxConcurrency must be numeric, got '${typeName(mcType)}'`,
                             e.loc.line,
@@ -663,7 +710,11 @@ export class TypeChecker {
         const operand = this.inferExpr(e.operand, scope);
         switch (e.op) {
             case "!":
-                if (!isBoolean(operand) && !isAny(operand) && operand.kind !== "unknown") {
+                if (
+                    !isBoolean(operand) &&
+                    !isAny(operand) &&
+                    operand.kind !== "unknown"
+                ) {
                     this.addError(
                         `Operand of '!' must be boolean, got '${typeName(operand)}'`,
                         e.operand.loc.line,
@@ -672,7 +723,11 @@ export class TypeChecker {
                 }
                 return BOOLEAN;
             case "-":
-                if (!isNumeric(operand) && !isAny(operand) && operand.kind !== "unknown") {
+                if (
+                    !isNumeric(operand) &&
+                    !isAny(operand) &&
+                    operand.kind !== "unknown"
+                ) {
                     this.addError(
                         `Operand of unary '-' must be numeric, got '${typeName(operand)}'`,
                         e.operand.loc.line,

@@ -58,7 +58,7 @@ question.
 | 1.3  | Specify the arrow-body disambiguation rule.                                                                                                          | Keep as-is. Standard JS/TS rule: `{` means block body, otherwise expression body (wrapped in synthetic ReturnStatement). No ambiguity.                                               |
 | 1.4  | Specify the restriction and confirm the error behavior is the one we want.                                                                           | Gap: parser accepts `break` anywhere (no `inSwitch` check). Emitter silently ignores it. Should add a diagnostic rejecting `break` outside switch arms.                              |
 | 1.5  | Specify the error strategy for banned operators and confirm the diagnostic wording approach.                                                         | Keep as-is. Lexer rejects `==`/`!=` with clear diagnostic suggesting `===`/`!==`. No token emitted, so parser never sees them. Earliest-possible error.                              |
-| 2.1  | Decide whether `unknown` should remain universally compatible or become stricter.                                                                    | TBD                                                                                                                                                                                  |
+| 2.1  | Decide whether `unknown` should remain universally compatible or become stricter.                                                                    | Strongly typed. `unknown` is an internal recovery sentinel only: producers emit errors, consumers may continue, and compilation fails if any unknowns are produced.                  |
 | 2.2  | Specify numeric compatibility rules.                                                                                                                 | TBD                                                                                                                                                                                  |
 | 2.3  | Review as an unsupported/runtime gap. Decide whether to detect this statically or document it as unsupported.                                        | TBD                                                                                                                                                                                  |
 | 2.4  | Specify array-element type propagation rules.                                                                                                        | TBD                                                                                                                                                                                  |
@@ -248,14 +248,19 @@ clear diagnostics at the earliest possible point.
 
 ## Phase 2: Type Checker
 
-### 2.1 `unknown` type is a universal compatible type
+### 2.1 `unknown` is an internal error-recovery sentinel, not a language type
 
-When the type checker cannot determine a type (e.g., a task with no output
-schema, or an unresolvable dotted access), it produces `{ kind: "unknown" }`.
-Unknown is compatible with all other types in assignments and operator checks.
-This prevents cascading errors but means some type mismatches may slip through.
-The plan mentioned `TypeInfo` with an `unknown` kind but didn't specify its
-compatibility rules.
+The DSL is strongly typed. When the checker cannot determine a type because
+the source is invalid or incomplete - for example an unknown reference,
+unknown field, or unknown named type in an annotation - it emits a type error
+at the producer site and returns `{ kind: "unknown" }` so later checks can
+continue without producing a cascade of follow-on errors.
+
+`unknown` is not a successful type result and is not exposed as a valid DSL
+type. A value that has already been reported as unknown may flow through later
+checks for recovery purposes, but compilation still fails because the producer
+already emitted an error. The plan mentioned `TypeInfo` with an `unknown` kind
+but didn't specify this error-recovery behavior.
 
 ### 2.2 Integer vs number
 
