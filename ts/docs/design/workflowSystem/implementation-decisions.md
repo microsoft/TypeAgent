@@ -68,7 +68,7 @@ question.
 | 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | Fixed. Both `noop` and `identity` are now registered in `builtinTasks.ts` and exported in `allBuiltinTasks`.                                                                           |
 | 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
-| 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | TBD                                                                                                                                                                                    |
+| 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | TBD                                                                                                                                                                                    |
 | 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | TBD                                                                                                                                                                                    |
 | 3.9  | Decide whether identity-wrapping is the intended lowering pattern for literal arms or whether the IR should grow a cleaner representation.           | TBD                                                                                                                                                                                    |
@@ -360,14 +360,6 @@ The emitter produces two synthetic task types:
 **Classification:** Fixed. Both `noop` and `identity` are now registered in
 `builtinTasks.ts` and included in the `allBuiltinTasks` export. Switch
 statements and ternary expressions with literal arms execute correctly.
-
-### 3.6 Parallel branches don't have inputSchema/outputSchema/output/inputs
-
-The plan references ir-v2.md which specifies that fork branches have the
-same contract as loop bodies (inputs, inputSchema, entry, nodes, output,
-outputSchema). The emitter only generates `{ entry, nodes }` for each
-branch, omitting the schema and I/O fields. Validation may reject this if
-it enforces the full branch sub-scope contract.
 
 ### 3.7 `captureOuterRefs` in-place rewrite
 
