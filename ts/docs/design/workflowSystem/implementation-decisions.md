@@ -65,7 +65,7 @@ question.
 | 2.5  | Decide whether ternary mismatches should stay as errors or grow into a union-type feature later.                                                     | Keep as-is. Arms must match types (error if not). No union types. Returns consequent type. Correct and intentional.                                                                    |
 | 3.1  | Review as a real implementation bug to fix, not a behavior to bless.                                                                                 | Fixed. Retry now exits on first success. Bug was already addressed before this review.                                                                                                 |
 | 3.2  | Decide whether hard-coded iteration limits are acceptable and, if so, where they should be documented/configured.                                    | Removed from emitter. Engine provides default (10,000). IR `maxIterations` is optional; workflows can override per-node.                                                               |
-| 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | TBD                                                                                                                                                                                    |
+| 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | Fixed. Both `noop` and `identity` are now registered in `builtinTasks.ts` and exported in `allBuiltinTasks`.                                                                           |
 | 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | TBD                                                                                                                                                                                    |
 | 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | TBD                                                                                                                                                                                    |
 | 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | TBD                                                                                                                                                                                    |
@@ -357,14 +357,9 @@ The emitter produces two synthetic task types:
   arm is a literal value (wraps `{ value: literal }`). Emitted by
   `emitTernary()`.
 
-Neither `noop` nor `identity` is registered in `builtinTasks.ts`. Any
-workflow whose IR contains these nodes will fail at runtime with
-`Task "noop" not found in registry` or `Task "identity" not found`.
-
-This means: switch statements and ternary expressions with literal arms
-currently compile but cannot execute. They would need `noop` and `identity`
-to be registered as built-in tasks, or the emitter needs to avoid generating
-them.
+**Classification:** Fixed. Both `noop` and `identity` are now registered in
+`builtinTasks.ts` and included in the `allBuiltinTasks` export. Switch
+statements and ternary expressions with literal arms execute correctly.
 
 ### 3.4 Sub-workflow calls emit as task nodes, not inlined
 
@@ -640,17 +635,16 @@ Items tracked in `dsl/dsl-v2-implementation-gap.md` are omitted here.
 
 | #   | Issue                                                                  | Severity                    | Phase                                |
 | --- | ---------------------------------------------------------------------- | --------------------------- | ------------------------------------ | -------- | --- |
-| 1   | `noop` and `identity` not registered in engine (3.3)                   | Bug                         | 3                                    |
-| 2   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3                                    |
-| 3   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3                                    |
-| 4   | &&/                                                                    |                             | short-circuit via branch nodes (0.6) | Resolved | 0   |
-| 5   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0                                    |
-| 6   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5                                    |
-| 7   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3                                    |
-| 8   | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3                                    |
-| 9   | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3                                    |
-| 10  | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3                                    |
-| 11  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3                                    |
-| 12  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3                                    |
-| 13  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3                                    |
-| 14  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3                                    |
+| 1   | Parallel branch names are synthetic, not from destructuring (3.5)      | Design gap                  | 3                                    |
+| 2   | Parallel branches missing inputSchema/outputSchema/inputs/output (3.6) | Possible validation failure | 3                                    |
+| 3   | &&/                                                                    |                             | short-circuit via branch nodes (0.6) | Resolved | 0   |
+| 4   | Fork/ForkMap onError lacks `partial` injection (0.3)                   | Incomplete                  | 0                                    |
+| 5   | d8 retry exhaustion now throws instead of silent fallthrough (5.1)     | Behavioral change           | 5                                    |
+| 6   | Pure-literal workflows require identity entry node (3.11)              | Design choice               | 3                                    |
+| 7   | Branch-returning control flow uses shared-bind normalization (3.12)    | Design choice               | 3                                    |
+| 8   | Map/filter semantics are pre-check loops (3.13)                        | Behavioral choice           | 3                                    |
+| 9   | Loop indices lower through integer builtins (3.14)                     | Design choice               | 3                                    |
+| 10  | Output projection must use canonical scope refs (3.15)                 | Design choice               | 3                                    |
+| 11  | `noop` / `identity` are required lowering primitives (3.16)            | Design choice               | 3                                    |
+| 12  | Some emitter coverage intentionally bypasses IR validation (3.17)      | Technical debt              | 3                                    |
+| 13  | Composition coverage preserves current language limits (3.18)          | Scope boundary              | 3                                    |

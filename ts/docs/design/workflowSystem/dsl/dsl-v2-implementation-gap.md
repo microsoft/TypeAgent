@@ -35,29 +35,6 @@ sub-workflows are called by name and inlined at compile time.
 **Related items:** implementation-decisions.md 2.3 (recursive calls),
 3.4 (sub-workflow emit strategy).
 
-## `noop` and `identity` tasks not registered in engine
-
-**Spec:** These are synthetic tasks the emitter produces for merge points
-(switch/branch convergence) and literal-arm passthrough (ternary with
-literal values). They are part of the compiler's lowering strategy.
-
-**Current state:** Neither `noop` nor `identity` is in `builtinTasks.ts`.
-Any workflow whose IR contains these nodes crashes at runtime with
-"Task not found in registry."
-
-**Impact:** Switch statements and ternary expressions with literal arms
-compile but cannot execute.
-
-**What needs to happen:**
-
-1. Register `noop` and `identity` as builtin tasks in the engine.
-   `noop` is a no-op (returns empty). `identity` passes its input
-   through as output.
-2. Add integration tests that execute switch and ternary-with-literal
-   workflows end-to-end.
-
-**Related items:** implementation-decisions.md 3.3, 3.16.
-
 ## Parallel branch names are synthetic
 
 **Spec:** dsl-v2.md section 3.4. Destructuring bindings become branch
