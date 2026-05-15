@@ -1,0 +1,309 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Daily regeneration of package-level READMEs under ts/packages/**.
+#
+# Detects packages whose source has changed since the last successful
+# scheduled run (tracked by the `docs-bot/last-run` lightweight tag),
+# rebuilds the AUTOGEN region in each affected README, runs link
+# validation + Trademarks-block guard before writing, and opens a
+# single batched PR. Prior open bot PRs are closed with --delete-branch
+# so only one is ever live at a time.
+#
+# Authoring of the Overview section uses Azure OpenAI via
+# packages/aiclient. Everything else is deterministic.
+#
+# Required repository configuration:
+#   variables:
+#     DOCS_BOT_APP_ID         GitHub App that opens the PR
+#   secrets:
+#     DOCS_BOT_APP_PRIVATE_KEY  Private key for the GitHub App
+#     AZURE_OPENAI_ENDPOINT     Azure OpenAI endpoint URL
+#     AZURE_OPENAI_API_KEY      Azure OpenAI key (or wire OIDC instead)
+#
+# The workflow is read-only and emits no PR until those are provisioned;
+# it simply prints what it would have done.
+
+name: docs-generate
+
+on:
+  schedule:
+    # Daily at 08:00 UTC = 01:00 PST. Low-traffic window so churn from
+    # this PR does not collide with other automated PRs.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry run — analyse and render only, don't write or open PR"
+        type: boolean
+        default: false
+      packages:
+        description: "Comma-separated package names to regenerate (overrides change detection)"
+        type: string
+        default: ""
+      since:
+        description: "Override the watermark — git ref to diff against (e.g. main, HEAD~10)"
+        type: string
+        default: ""
+      llm:
+        description: "Use Azure OpenAI to author the Overview section (skeleton-only when off)"
+        type: boolean
+        default: true
+      max-packages:
+        description: "Per-run cap on packages touched (defaults to 25)"
+        type: string
+        default: "25"
+
+# Never cancel an in-flight docs-autogen run; let it finish and let the
+# next scheduled run supersede the resulting PR if necessary.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DOCS_BOT_APP_ID }}
+          private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
+
+      - name: Install ts dependencies
+        working-directory: ts
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build docs-autogen tool
+        working-directory: ts
+        run: |
+          pnpm --filter aiclient build
+          pnpm --filter @typeagent/docs-autogen build
+
+      # Compose the CLI flags from dispatch inputs once so each
+      # subsequent step uses the same set. `--write` is omitted on
+      # dry-run; otherwise the CLI writes to disk in-place and we
+      # detect the diff afterwards.
+      - name: Compose CLI flags
+        id: flags
+        env:
+          INPUT_PACKAGES: ${{ inputs.packages }}
+          INPUT_SINCE: ${{ inputs.since }}
+          INPUT_LLM: ${{ inputs.llm }}
+          INPUT_MAX_PACKAGES: ${{ inputs.max-packages }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          FLAGS="--render"
+          if [ "$INPUT_DRY_RUN" != "true" ]; then
+            FLAGS="$FLAGS --write"
+          else
+            FLAGS="$FLAGS --dry-run"
+          fi
+          if [ -n "$INPUT_PACKAGES" ]; then
+            # Convert comma-separated list into repeated --package flags.
+            IFS=',' read -ra PKGS <<< "$INPUT_PACKAGES"
+            for PKG in "${PKGS[@]}"; do
+              PKG_TRIMMED=$(echo "$PKG" | xargs)
+              if [ -n "$PKG_TRIMMED" ]; then
+                FLAGS="$FLAGS --package $PKG_TRIMMED"
+              fi
+            done
+          fi
+          if [ -n "$INPUT_SINCE" ]; then
+            FLAGS="$FLAGS --since $INPUT_SINCE"
+          fi
+          if [ "$INPUT_LLM" = "true" ]; then
+            FLAGS="$FLAGS --llm"
+          fi
+          if [ -n "$INPUT_MAX_PACKAGES" ]; then
+            FLAGS="$FLAGS --max-packages $INPUT_MAX_PACKAGES"
+          fi
+          echo "flags=$FLAGS" >> "$GITHUB_OUTPUT"
+          echo "Composed CLI flags: $FLAGS"
+
+      - name: Regenerate package READMEs
+        id: regen
+        working-directory: ts
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          DEBUG: "docs-autogen:*"
+        run: |
+          # Run with stdout captured for the job summary; stderr passes
+          # through so diagnostics are visible in the live log.
+          set -o pipefail
+          node tools/docsAutogen/dist/cli.js ${{ steps.flags.outputs.flags }} \
+            | tee /tmp/docs-autogen.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      # Detect whether anything actually changed under ts/packages/**.
+      # When the CLI ran with --write, all README edits are already on
+      # disk. We rely on git status alone — if it's clean there's no PR
+      # to open, even if the CLI processed packages (footer-only or
+      # unchanged verdicts skip writes).
+      - name: Detect changes
+        id: detect
+        working-directory: ts
+        run: |
+          if git diff --quiet --exit-code -- 'packages/**/README.md'; then
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+            echo "No README changes after regeneration."
+          else
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+            CHANGED=$(git diff --name-only -- 'packages/**/README.md' | wc -l)
+            echo "changed_files=$CHANGED" >> "$GITHUB_OUTPUT"
+            echo "$CHANGED README(s) modified."
+          fi
+
+      # ── Create PR (and supersede prior bot PRs) ─────────────────────
+      - name: Create pull request
+        if: ${{ steps.detect.outputs.changes == 'true' && inputs.dry-run != true }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BRANCH="automated/docs-readmes-$(date +%Y%m%d)-${{ github.run_number }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          # Scope strictly to ts/packages/**/README.md to avoid sweeping
+          # in any incidental working-tree noise from CI.
+          git add 'ts/packages/**/README.md'
+          CHANGED_LIST=$(git diff --cached --name-only)
+
+          git commit -m "docs: regenerate package READMEs ($(date +%Y-%m-%d))
+
+          Automated by docs-generate workflow.
+
+          ${{ steps.detect.outputs.changed_files }} file(s) updated.
+
+          Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+
+          git push origin "$BRANCH"
+
+          # Close any previously-open bot PRs before opening the new
+          # one. Each daily run produces a unique branch, so without
+          # dedup the repo accumulates stacking duplicate PRs whenever
+          # yesterday's hasn't been merged. Always keep the freshest.
+          PREV_PRS=$(gh pr list \
+            --state open \
+            --search 'head:automated/docs-readmes- in:branch' \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName != "'"$BRANCH"'") | .number')
+          if [ -n "$PREV_PRS" ]; then
+            echo "Closing superseded docs-autogen PRs: $PREV_PRS"
+            for PR in $PREV_PRS; do
+              gh pr close "$PR" \
+                --delete-branch \
+                --comment "Superseded by a newer automated docs PR." \
+                || echo "::warning::Failed to close PR #$PR"
+            done
+          fi
+
+          BODY=$(cat <<PREOF
+          ## Automated package README regeneration
+
+          This PR was automatically generated by the \`docs-generate\` workflow.
+
+          ### Summary
+          - **Files updated:** ${{ steps.detect.outputs.changed_files }}
+          - **LLM mode:** ${{ inputs.llm == false && 'skeleton-only' || 'aiclient (Overview only)' }}
+          - **Per-run cap:** ${{ inputs.max-packages || '25' }} package(s)
+          - **Trigger:** ${{ github.event_name == 'schedule' && 'scheduled (daily)' || format('manual ({0})', github.actor) }}
+
+          ### Changed READMEs
+          \`\`\`
+          $CHANGED_LIST
+          \`\`\`
+
+          ### How this works
+          1. Diffs \`ts/packages/**\` source files against the last successful run
+             (tracked by the \`docs-bot/last-run\` git tag).
+          2. For each affected package, regenerates the AUTOGEN region of its
+             README — Reference section deterministically, Overview section
+             via Azure OpenAI when enabled.
+          3. Validates every generated link resolves on disk and that the
+             canonical Trademarks block survives intact; refuses to write
+             otherwise.
+          4. Skips packages whose new content differs only in the staleness
+             footer (so daily PRs don't churn unchanged docs).
+
+          ### Review checklist
+          - [ ] Sample one or two READMEs and confirm the Reference section
+                accurately describes the package.
+          - [ ] Sample one Overview and confirm it reads as contributor-grade
+                documentation (not marketing prose, no hallucinated APIs).
+          - [ ] Confirm no \`## Trademarks\` block has been altered.
+
+          See [\`ts/docs/architecture/doc-autogen.md\`](../blob/main/ts/docs/architecture/doc-autogen.md) for design details.
+          PREOF
+          )
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "docs: regenerate package READMEs ($(date +%Y-%m-%d))" \
+            --body "$BODY" \
+            --label "documentation"
+
+      # Advance the watermark only on a successful scheduled run with a
+      # PR. Manual dispatches and dry-runs intentionally do not move
+      # the tag, so they remain idempotent against the daily cron.
+      - name: Advance watermark tag
+        if: ${{ github.event_name == 'schedule' && steps.detect.outputs.changes == 'true' && inputs.dry-run != true }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # Tag the commit we generated against (the original SHA before
+          # the PR branch was created), not the branch tip.
+          git tag -f docs-bot/last-run ${{ github.sha }}
+          git push origin docs-bot/last-run --force
+
+      # ── Job summary ─────────────────────────────────────────────────
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Package README regeneration"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Trigger | ${{ github.event_name }} |"
+            echo "| Dry run | ${{ inputs.dry-run || 'false' }} |"
+            echo "| LLM enabled | ${{ inputs.llm || 'true' }} |"
+            echo "| Per-run cap | ${{ inputs.max-packages || '25' }} |"
+            echo "| Changes detected | ${{ steps.detect.outputs.changes || 'false' }} |"
+            echo "| Files modified | ${{ steps.detect.outputs.changed_files || '0' }} |"
+            echo ""
+            if [ -f /tmp/docs-autogen.log ]; then
+              echo "### CLI output (truncated)"
+              echo '```'
+              tail -n 200 /tmp/docs-autogen.log || true
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -16,6 +16,7 @@ packages:
   - examples/workflow/*
   - extensions/*
   - tools
+  - tools/*
 
 onlyBuiltDependencies:
   - "@azure/msal-node-extensions"
