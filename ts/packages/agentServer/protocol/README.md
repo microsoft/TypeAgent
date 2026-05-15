@@ -10,6 +10,12 @@ The fixed channel name for conversation lifecycle RPC is exported as `AgentServe
 export const AgentServerChannelName = "agent-server";
 ```
 
+The fixed channel name for the read-only port discovery RPC is exported as `DiscoveryChannelName`:
+
+```typescript
+export const DiscoveryChannelName = "discovery";
+```
+
 Session-namespaced channels (one pair per joined conversation) are constructed via helper functions:
 
 ```typescript
@@ -66,6 +72,33 @@ registerClientType(connectionId: string, clientType: string): void
 getClientType(connectionId: string): string | undefined
 unregisterClient(connectionId: string): void
 ```
+
+## Discovery channel
+
+External clients (Chrome extension, VS Code extension, CLI) look up the live port of any in-process app-agent through a read-only RPC channel hosted at the well-known `discovery` channel name. The dispatcher's `PortRegistrar` is the source of truth; the channel only exposes a single `lookupPort` method:
+
+```typescript
+export type DiscoveryInvokeFunctions = {
+    lookupPort: (param: {
+        agentName: string;
+        role?: string;
+    }) => Promise<{ port: number | null }>;
+};
+```
+
+`null` means "no allocation found, try again later" — clients should poll/back off rather than treat it as fatal. The well-known `agentName === "agent-server"` resolves the host's own listening port for clients that bootstrap from a different known port.
+
+To stay in lockstep across hosts, both the standalone `agentServer` process and the standalone Electron `shell` build their handler set from the shared factory:
+
+```typescript
+import { createDiscoveryHandlers } from "@typeagent/agent-server-protocol";
+
+createDiscoveryHandlers((agentName, role) =>
+    portRegistrar.lookup(agentName, role),
+);
+```
+
+Passing a lookup callback (rather than the `IPortRegistrar` itself) keeps this package free of an `agent-dispatcher` dependency.
 
 ---
 

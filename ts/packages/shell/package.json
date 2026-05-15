@@ -84,8 +84,8 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
-    "websocket-utils": "workspace:*",
     "websocket-channel-server": "workspace:*",
+    "websocket-utils": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {

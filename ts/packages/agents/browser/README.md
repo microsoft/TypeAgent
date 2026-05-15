@@ -35,8 +35,11 @@ To build the browser extension, run `pnpm run build` in this folder. For debug s
 The browser agent exposes a WebSocket server (`AgentWebSocketServer`) on a
 port assigned dynamically by the OS at bind time. The actual port is
 published to the host's `PortRegistrar` under `(browser, default)` and
-discovered by external clients via the agent-server's discovery
-channel (default `ws://localhost:8999/`). To pin the port for
+discovered by external clients via the discovery channel hosted at
+`ws://localhost:8999/` (default). Both supported hosts publish this
+channel: the standalone `agentServer` process and the standalone
+Electron `shell` (which hosts an in-process discovery WS so the same
+extension config works against either host). To pin the port for
 debugging, set `BROWSER_WEBSOCKET_PORT=<n>` before launching the host.
 
 Two types of clients connect to the browser agent:
