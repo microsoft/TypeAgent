@@ -5,8 +5,8 @@ compiles to the [workflow IR](../ir/ir-v1.md).
 
 ## Reading order
 
-1. **[dsl-v1.md](dsl-v1.md)** - the v1 DSL design. Syntax, lowering
-   rules, scope model, and the relationship to IR assumptions.
+1. **[dsl-v0.1.md](dsl-v0.1.md)** - the DSL design. Syntax, type system,
+   built-in functions, compiler specification, and the relationship to IR.
 2. **[decisions/0001-language-style.md](decisions/0001-language-style.md)** -
    why the imperative TypeScript-like style was chosen over alternatives.
 

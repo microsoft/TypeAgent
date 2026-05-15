@@ -1,11 +1,11 @@
-# DSL v2 Implementation Gaps
+# DSL Implementation Gaps
 
-Tracked items where the DSL spec (dsl-v2.md) describes features that are
+Tracked items where the DSL spec (dsl-v0.1.md) describes features that are
 not yet fully wired end-to-end.
 
 ## G1: Sub-workflow calls
 
-**Spec:** dsl-v2.md section 4. Multiple workflows in a single file;
+**Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
 sub-workflows are called by name and inlined at compile time.
 
 **Current state:**
@@ -42,11 +42,11 @@ sub-workflows are called by name and inlined at compile time.
   cycle check would give a better error but is low priority.
 - Sub-workflow emit strategy: the current `workflow.<name>` task-node
   approach is a placeholder. The intended v2 behavior is compile-time
-  inlining per dsl-v2.md section 4.
+  inlining per dsl-v0.1.md section 4.
 
 ## G2: Parallel branch names are synthetic
 
-**Spec:** dsl-v2.md section 3.4. Destructuring bindings become branch
+**Spec:** dsl-v0.1.md section 3.4. Destructuring bindings become branch
 names: `const [text, image] = parallel(...)` should produce branches
 named `text` and `image`.
 

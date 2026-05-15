@@ -1,20 +1,19 @@
-# Workflow DSL v2
+# Workflow DSL
 
 Status: **Implemented.** All phases complete (lexer, parser, type checker, emitter, graph extractor).
 
-Compile target: [ir-v1.md](../ir/ir-v1.md) + [ir-v2.md](../ir/ir-v2.md) (new node kinds: `fork`, `forkMap`).
+Compile target: [ir-v1.md](../ir/ir-v1.md) + [ir-v2.md](../ir/ir-v2.md).
 Design rationale: [dsl-comparison.md](dsl-comparison.md) (Option E selected).
+Implementation gaps: [dsl-v0.1-gap.md](dsl-v0.1-gap.md).
 
 ---
 
 ## 1. Overview
 
-DSL v2 is an evolution of v1 (Option A, TS-like) to Option E (TS + built-ins).
+DSL v0.1 evolved from an earlier v1 (Option A, TS-like) to Option E (TS + built-ins).
 The core change: replace general-purpose imperative control flow (`while`, `for`,
 `try/catch`, `break`, `continue`) with compiler-recognized built-in functions
 (`retry`, `map`, `filter`, `parallel`) that take arrow function arguments.
-
-### 1.1 Guiding principles
 
 Seven high-level principles drove the design. Each one eliminated alternatives
 and shaped specific technical decisions.
@@ -103,46 +102,6 @@ This is the **only** deviation from TypeScript syntax. All other constructs
 arrow functions, template literals, dotted access, object/array literals,
 `return`) are valid TypeScript.
 
-### 1.3 What stays from v1
-
-- `workflow` declaration with typed parameters and return type
-- `const` for constants and string/number/boolean literals
-- Template literals with `${}` interpolation
-- Task calls: `namespace.task({ name: value, ... })` with named arguments
-- Object literal return: `return { field: expr, ... }`
-- `if/else` (statement only, no value)
-- `switch` (renamed from `match`, statement only, no value)
-- Dotted name expressions for field access
-
-### 1.4 What changes from v1
-
-| v1 (removed)                                 | v2 (replacement)                                      |
-| -------------------------------------------- | ----------------------------------------------------- |
-| `let x = expr`                               | `const x = expr`                                      |
-| `let x: type` (uninitialized)                | Eliminated. All bindings initialized.                 |
-| `x = expr` (reassignment)                    | Eliminated. SSA.                                      |
-| `for (item of collection) { ... }`           | `const results = map(collection, (item) => { ... })`  |
-| `while (true) { try { ... } catch { ... } }` | `const result = retry(n, () => { ... })`              |
-| `continue`                                   | Eliminated. Built-ins handle control flow internally. |
-| `break` (loop control)                       | Eliminated. `break` exists only in switch arms.       |
-| `match` keyword                              | `switch` keyword (TS alignment)                       |
-| Need a value from if/else                    | `const x = cond ? exprA : exprB`                      |
-| Need a value from switch                     | Sub-workflow with `return` in each arm                |
-| Sequential execution only                    | `const [a, b] = parallel(() => ..., () => ...)`       |
-
-### 1.5 What's new in v2
-
-| Feature                | Syntax                                         | AST node         | Visual element                      |
-| ---------------------- | ---------------------------------------------- | ---------------- | ----------------------------------- |
-| Arrow functions        | `(param) => { body }`                          | ArrowFunction    | Group boundary                      |
-| `retry` built-in       | `retry(n, () => { body }, fallback?)`          | RetryNode        | "retry" group with badge            |
-| `map` built-in         | `map(coll, (item) => { body })`                | MapNode          | "map" group with iteration badge    |
-| `filter` built-in      | `filter(coll, (item) => { body })`             | FilterNode       | "filter" group with predicate badge |
-| `parallel` built-in    | `parallel(() => a, () => b, opts?)`            | ParallelNode     | Side-by-side group                  |
-| `parallelMap` built-in | `parallelMap(coll, (item) => { body }, opts?)` | ParallelMapNode  | "parallel map" group                |
-| Ternary expression     | `cond ? exprA : exprB`                         | TernaryExpr      | Diamond with two edges              |
-| Sub-workflow calls     | `subWorkflow(args)`                            | WorkflowCallExpr | Collapsed node (drill-in)           |
-
 ---
 
 ## 2. Syntax
@@ -155,7 +114,7 @@ workflow NAME(PARAM: TYPE, ...): RETURN_TYPE {
 }
 ```
 
-Unchanged from v1. Multiple workflows can be defined in a single file.
+Multiple workflows can be defined in a single file.
 Sub-workflows are called by name.
 
 ### 2.2 Bindings
@@ -188,7 +147,7 @@ input field.
 const prompt = `Hello ${name}, your order ${order.id} is ready`
 ```
 
-Unchanged from v1. Backtick syntax with `${}` interpolation.
+Backtick syntax with `${}` interpolation.
 
 ### 2.5 Constants
 
@@ -197,7 +156,7 @@ const maxRetries = 2
 const baseUrl = "https://api.example.com"
 ```
 
-String, number, and boolean literals. Unchanged from v1.
+String, number, and boolean literals.
 
 ### 2.6 Operators (syntactic sugar)
 
@@ -365,7 +324,7 @@ return result.field
 return { path: writeResult.path, summary: summaryResult.text }
 ```
 
-Object literal return for multi-field output. Unchanged from v1.
+Object literal return for multi-field output.
 
 ### 2.12 Semicolons
 
@@ -570,8 +529,7 @@ const result = retry(2, () => {
 - On exhaustion without fallback: runtime error
 
 **AST:** `RetryNode { count, body: Statement[], fallback?: Statement[] }`
-**IR lowering:** Loop node with onError edges and attempt counter (same
-machinery as v1's while+try/catch, but generated by compiler).
+**IR lowering:** Loop node with onError edges and attempt counter.
 
 ### 3.2 `map(collection, body)`
 
@@ -589,8 +547,7 @@ const sections = map(repos, (repo) => {
 - Returns an array of the body's last expression per item
 
 **AST:** `MapNode { collection: Expr, param: string, body: Statement[] }`
-**IR lowering:** Loop node with index/length/compare/check_done machinery
-(same as v1's for..of, but no explicit accumulator).
+**IR lowering:** Loop node with index/length/compare/check_done machinery.
 
 **Semantics:** `map` uses pre-check loop semantics. On each iteration, the
 compiler-generated loop first compares the current index against the
@@ -735,7 +692,7 @@ still shows them as collapsed nodes (drill-in) based on the AST.
 
 ## 5. Full examples
 
-### 5.1 d1-standup-prep (v2)
+### 5.1 d1-standup-prep
 
 ```
 workflow standupPrep(author: string, repos: string[]): string {
@@ -749,7 +706,7 @@ workflow standupPrep(author: string, repos: string[]): string {
 }
 ```
 
-### 5.2 d8-summarize-url (v2)
+### 5.2 d8-summarize-url
 
 ```
 workflow summarizeUrl(url: string, outputPath: string): { path: string, summary: string } {
@@ -906,32 +863,30 @@ the parent built-in node's `body` field directly.
 
 ---
 
-## 7. Compiler changes from v1
+## 7. Compiler specification
 
 ### 7.1 Lexer
 
-Add tokens:
+Tokens:
 
+- Keywords: `workflow`, `const`, `return`, `if`, `else`, `switch`, `case`,
+  `default`, `break`, `throw`, `true`, `false`, `null`
 - `Arrow` (`=>`) for arrow functions
-- `QuestionMark` (`?`) for ternary
-- `Colon` (`:`) already exists, used in ternary and switch arms
-- `Switch`, `Case`, `Default` keywords
-- `Break` keyword (only valid in switch arms)
-- `Throw` keyword
+- `QuestionMark` (`?`) and `Colon` (`:`) for ternary and switch arms
 - Comparison operators: `===`, `!==`, `>`, `<`, `>=`, `<=`
 - Logical operators: `&&`, `||`, `!`
 - Arithmetic operators: `+`, `-`, `*`, `/`, `%`
-- `==` and `!=` are recognized by the lexer but produce a compile error:
+- `==` and `!=` are recognized but produce a compile error:
   `"use === instead of == (no implicit coercion)"`
-
-Remove tokens:
-
-- `Let`, `While`, `For`, `Of`, `Try`, `Catch`, `Continue`
+- String literals, template literals, number literals, identifiers
+- Structural: `{`, `}`, `(`, `)`, `[`, `]`, `,`, `.`, `;`
 
 ### 7.2 Parser
 
-Add parsing:
+The parser is recursive-descent, producing a typed AST. It handles:
 
+- Workflow declarations with typed parameters and return types
+- `const` bindings with optional type annotations
 - Arrow function expressions: `(param, ...) => { body }` and `() => expr`
 - Built-in call recognition: after parsing a call expression, check if callee
   is in `{ retry, map, filter, parallel, parallelMap }`. If so, restructure
@@ -955,20 +910,16 @@ Add parsing:
 - Switch statement: `switch (expr) { case lit: stmts break ... default: stmts break }`
 - Destructuring const: `const [a, b, c] = expr`
 - Throw statement: `throw expr`
+- Task call expressions: `namespace.task({ ... })` or `namespace.task(arg)`
+- Dotted name expressions for field access
+- Literals: strings, template literals, numbers, booleans, null, arrays, objects
+- `if/else` statements
+- `switch/case/default` statements with `break`
+- `return` statements
 
-Remove parsing:
+### 7.3 Type checker
 
-- `let` declarations
-- `while` loops
-- `for..of` loops
-- `try/catch` blocks
-- `continue` statements
-- `break` in loops (break is retained for switch arms only)
-- Assignment statements (`x = expr`)
-
-### 7.3 Type checker (new phase)
-
-A new compiler phase between parsing and emission. Walks the AST and assigns
+A compiler phase between parsing and emission. Walks the AST and assigns
 a type to every expression. Reports errors for type mismatches. See section
 2.14 for the full type system specification.
 
@@ -1010,11 +961,8 @@ Strict rules (deviations from TS):
   to branch nodes for short-circuit evaluation (same pattern as ternary).
   Syntactic sugar only; invisible to the workflow author.
 - RetryNode: emit loop node with onError edges and attempt counter
-  (same machinery as v1's while+try/catch lowering, factored into a
-  dedicated emitter method)
 - MapNode: emit loop node with index/length/compare/check_done
-  (same as v1's for..of lowering, without explicit accumulator)
-- FilterNode: emit loop with branch + `list.append` (see §3.3 IR lowering)
+- FilterNode: emit loop with branch + `list.append` (see section 3.3 IR lowering)
 - ParallelNode: emit `fork` node (ir-v2) with named branches per arrow function
   and optional `maxConcurrency`
 - ParallelMapNode: emit `forkMap` node (ir-v2) with collection, body sub-scope,
@@ -1027,8 +975,8 @@ Strict rules (deviations from TS):
   to `error.fail`; `error.fail` has `next: null` (terminal). The engine
   executes `error.fail` and produces a failure result with the thrown
   value, which triggers the enclosing scope's error propagation. In a
-  retry fallback body, this causes the fallback handler to fail per v1
-  §3.8 recovery-failure semantics. At workflow top level, it fails the
+  retry fallback body, this causes the fallback handler to fail per
+  ir-v1.md section 3.8 recovery-failure semantics. At workflow top level, it fails the
   workflow. No new IR node kind is needed: `error.fail` is a regular
   task node with `kind: "task"`.
 
@@ -1045,31 +993,13 @@ Already walks the AST. New node types need handlers:
 
 ---
 
-## 8. Migration from v1
-
-v1 `.wf` files can be mechanically translated:
-
-| v1 pattern                                   | v2 equivalent                                  |
-| -------------------------------------------- | ---------------------------------------------- |
-| `let x = expr`                               | `const x = expr`                               |
-| `for (item of coll) { ... list.append ... }` | `const results = map(coll, (item) => { ... })` |
-| `while (true) { try { ... } catch { ... } }` | `const result = retry(n, () => { ... })`       |
-| `match (x) { ... }`                          | `switch (x) { ... }`                           |
-| Variables assigned in if/else                | `const x = cond ? a : b` or sub-workflow       |
-
-v1 `.wf` files can be mechanically migrated before switching to the v2
-compiler. The v1 compiler is replaced, not kept alongside.
-
----
-
-## 9. Open questions
+## 8. Resolved design questions
 
 1. ~~**Sub-workflow compilation.** Inline at compile time, or compile as separate
    IR workflows with a call mechanism? Inlining is simpler but may bloat IR.~~
-   **Resolved:** Inlined at compile time. Sub-workflows use arrow function
-   syntax `() => { ... }` and are expanded into the calling workflow's IR.
-   Simpler for the engine; IR bloat is acceptable for now. Post-v2: add
-   separate compilation (like functions) with imports across files.
+   **Resolved:** Inlined at compile time. Sub-workflows are expanded into
+   the calling workflow's IR. Simpler for the engine; IR bloat is acceptable
+   for now. Future: add separate compilation with imports across files.
 
 2. ~~**Error handling beyond retry.** `retry` handles "try N times". What about
    "on error, do X instead" (fallback)? Could extend: `retry(n, body, fallback)`.~~
@@ -1077,7 +1007,7 @@ compiler. The v1 compiler is replaced, not kept alongside.
    Fallback receives the error, can return a substitute value or `throw` to
    propagate. `throw` is a new statement (valid TS syntax, no deviation).
    Cleanup-then-rethrow pattern: do cleanup in fallback, then `throw err`.
-   Saga/compensation patterns are post-v2. See sections 2.10 and 3.1.
+   Saga/compensation patterns are future work. See sections 2.10 and 3.1.
 
 3. ~~**Built-in extensibility.** Is the set `{ retry, map, filter, parallel,
 parallelMap }` closed, or should users be able to define custom built-ins?
@@ -1085,9 +1015,7 @@ parallelMap }` closed, or should users be able to define custom built-ins?
    **Resolved:** Closed set. New built-ins are added to the compiler as
    needed. Users cannot define custom built-ins.
 
-4. ~~**Type inference.** v1 required explicit types on uninitialized `let`. With
-   SSA, types can be inferred from the initializer expression in most cases.
-   Should type annotations be optional on `const`?~~
+4. ~~**Type inference.** Should type annotations be optional on `const`?~~
    **Resolved:** Type annotations are optional. The compiler infers types from
    initializer expressions. Explicit annotations are allowed for documentation
    or to constrain the type. See section 7.3.
