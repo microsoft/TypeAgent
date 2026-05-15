@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=a8c90fe833cf8b512fa06d07d7c6e99af9206bee93e55e5dd43f7733d7517671 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# code-processor â€” AI-generated documentation
+# code-processor — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -82,11 +82,11 @@ By following these steps, you can effectively extend the capabilities of the `co
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/index.js](./dist/index.js)
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -106,7 +106,7 @@ External: `typechat`, `typescript`
 
 ### Files of interest
 
-`./src/codeAnswerSchema.ts`, `./src/codeDocSchema.ts`, `./src/codeGenSchema.ts`, â€¦and 9 more under `./src/`.
+`./src/codeAnswerSchema.ts`, `./src/codeDocSchema.ts`, `./src/codeGenSchema.ts`, …and 9 more under `./src/`.
 
 ---
 

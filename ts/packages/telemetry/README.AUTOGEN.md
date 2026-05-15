@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=3c94d842df1fb2e958a0d4cbdaf3a7ec82b9a0933c80a35d13564b98fe7adfbe -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# telemetry â€” AI-generated documentation
+# telemetry — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -71,11 +71,11 @@ By following these steps, you can extend the `telemetry` package to support addi
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/indexNode.js](./dist/indexNode.js)
+- default → [./dist/indexNode.js](./dist/indexNode.js)
 
 ### Dependencies
 
@@ -95,11 +95,11 @@ External: `chalk`, `debug`, `dotenv`, `find-config`, `mongodb`
 - [chat-example](../../examples/chat/README.md)
 - [code-agent](../../packages/agents/code/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
-- _â€¦and 10 more workspace consumers._
+- _…and 10 more workspace consumers._
 
 ### Files of interest
 
-`./src/indexNode.ts`, `./src/logger/cosmosDBLoggerSink.ts`, `./src/logger/databaseLoggerSink.ts`, â€¦and 9 more under `./src/`.
+`./src/indexNode.ts`, `./src/logger/cosmosDBLoggerSink.ts`, `./src/logger/databaseLoggerSink.ts`, …and 9 more under `./src/`.
 
 ### Environment variables
 

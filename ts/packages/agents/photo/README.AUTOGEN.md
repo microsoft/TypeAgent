@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=dd832066bc448df7af558e0ed2f771549b85f68e8bdafb13e7183152ef0cc3f4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# photo-agent â€” AI-generated documentation
+# photo-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -47,12 +47,12 @@ Start by opening [photoActionHandler.ts](./src/photoActionHandler.ts) and follow
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/photoManifest.json](./src/photoManifest.json)
-- `./agent/handlers` â†’ [./dist/photoActionHandler.js](./dist/photoActionHandler.js)
+- `./agent/manifest` → [./src/photoManifest.json](./src/photoManifest.json)
+- `./agent/handlers` → [./dist/photoActionHandler.js](./dist/photoActionHandler.js)
 
 ### Dependencies
 
@@ -69,7 +69,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/photoActionHandler.ts`, `./src/photoManifest.json`, `./src/photoSchema.agr`, â€¦and 3 more under `./src/`.
+`./src/photoActionHandler.ts`, `./src/photoManifest.json`, `./src/photoSchema.agr`, …and 3 more under `./src/`.
 
 ### Agent surface
 
@@ -84,7 +84,7 @@ _1 action implemented by this agent, parsed deterministically from `./src/photoS
 
 | User says | Action |
 | --- | --- |
-| _uses a camera attached to the system to take a photo_ | `takePhoto` â†’ `{ "originalRequest": "â€¦" }` |
+| _uses a camera attached to the system to take a photo_ | `takePhoto` → `{ "originalRequest": "…" }` |
 
 ---
 

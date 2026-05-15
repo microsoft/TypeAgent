@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=beaeb39359dc2abf3d8829b91bb46a5cd569c7c7be1ece4fa207158afe519d1c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# knowpro â€” AI-generated documentation
+# knowpro — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -53,11 +53,11 @@ For detailed examples and further guidance, refer to the [KnowPro test app](../.
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/index.js](./dist/index.js)
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -82,11 +82,11 @@ External: `async`, `debug`, `fast-levenshtein`, `typechat`
 - [knowpro-test](../../packages/knowProTest/README.md)
 - [memory-mcp](../../examples/mcpMemory/README.md)
 - [memory-storage](../../packages/memory/storage/README.md)
-- _â€¦and 3 more workspace consumers._
+- _…and 3 more workspace consumers._
 
 ### Files of interest
 
-`./src/answerContextSchema.ts`, `./src/answerResponseSchema.ts`, `./src/dataFrame/index.ts`, â€¦and 43 more under `./src/`.
+`./src/answerContextSchema.ts`, `./src/answerResponseSchema.ts`, `./src/dataFrame/index.ts`, …and 43 more under `./src/`.
 
 ---
 

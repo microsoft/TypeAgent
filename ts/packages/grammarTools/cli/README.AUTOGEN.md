@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=c40b567265c871d9a2bee790dde4f091ff29952277eebb1830792fb329da68ab -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# grammar-tools-cli â€” AI-generated documentation
+# grammar-tools-cli — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -70,7 +70,7 @@ By following these steps, you can effectively extend the functionality of the `g
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 

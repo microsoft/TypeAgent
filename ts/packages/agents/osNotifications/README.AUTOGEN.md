@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=bd9bd170987b82b536ece83cf127c0f6d5211c6e1ea71702a9f02d05b6189dd5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# os-notifications-agent â€” AI-generated documentation
+# os-notifications-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -33,13 +33,13 @@ See the hand-written README for the full step-by-step setup instructions.
 ## Key Files
 The package is structured as follows:
 
-- **Manifest**: [osNotificationsManifest.json](./src/osNotificationsManifest.json) â€” Defines the agent's metadata and schema.
-- **Schema**: [osNotificationsSchema.ts](./src/osNotificationsSchema.ts) â€” Describes the actions supported by the agent.
-- **Grammar**: [osNotificationsSchema.agr](./src/osNotificationsSchema.agr) â€” Defines the natural language entry points for the actions.
-- **Handler**: [osNotificationsActionHandler.ts](./src/osNotificationsActionHandler.ts) â€” Implements the logic for handling actions.
-- **Configuration**: [osNotificationsConfig.ts](./src/osNotificationsConfig.ts) â€” Contains user-tunable settings for the agent.
-- **Watcher Protocol**: [watcherProtocol.ts](./src/watcherProtocol.ts) â€” Defines the types shared between the per-platform watchers and the agent.
-- **Watchers**: [index.ts](./src/watchers/index.ts) â€” Entry point for starting the appropriate watcher based on the platform.
+- **Manifest**: [osNotificationsManifest.json](./src/osNotificationsManifest.json) — Defines the agent's metadata and schema.
+- **Schema**: [osNotificationsSchema.ts](./src/osNotificationsSchema.ts) — Describes the actions supported by the agent.
+- **Grammar**: [osNotificationsSchema.agr](./src/osNotificationsSchema.agr) — Defines the natural language entry points for the actions.
+- **Handler**: [osNotificationsActionHandler.ts](./src/osNotificationsActionHandler.ts) — Implements the logic for handling actions.
+- **Configuration**: [osNotificationsConfig.ts](./src/osNotificationsConfig.ts) — Contains user-tunable settings for the agent.
+- **Watcher Protocol**: [watcherProtocol.ts](./src/watcherProtocol.ts) — Defines the types shared between the per-platform watchers and the agent.
+- **Watchers**: [index.ts](./src/watchers/index.ts) — Entry point for starting the appropriate watcher based on the platform.
 
 ## How to extend
 
@@ -69,12 +69,12 @@ By following these steps, you can extend the functionality of the `os-notificati
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/osNotificationsManifest.json](./src/osNotificationsManifest.json)
-- `./agent/handlers` â†’ [./dist/osNotificationsActionHandler.js](./dist/osNotificationsActionHandler.js)
+- `./agent/manifest` → [./src/osNotificationsManifest.json](./src/osNotificationsManifest.json)
+- `./agent/handlers` → [./dist/osNotificationsActionHandler.js](./dist/osNotificationsActionHandler.js)
 
 ### Dependencies
 
@@ -92,7 +92,7 @@ External: `dbus-next`, `debug`
 
 ### Files of interest
 
-`./src/osNotificationsActionHandler.ts`, `./src/osNotificationsManifest.json`, `./src/osNotificationsSchema.agr`, â€¦and 8 more under `./src/`.
+`./src/osNotificationsActionHandler.ts`, `./src/osNotificationsManifest.json`, `./src/osNotificationsSchema.agr`, …and 8 more under `./src/`.
 
 ### Agent surface
 

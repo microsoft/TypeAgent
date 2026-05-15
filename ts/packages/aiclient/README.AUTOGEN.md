@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=a29f58c29d4535efa5ec09332082451db3e0db1e5254f5138625c36fd843059f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# aiclient â€” AI-generated documentation
+# aiclient — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -25,14 +25,14 @@ The library includes functionality for managing settings required to call these 
 
 ### Multi-region endpoint pools
 
-The package includes a sophisticated mechanism for managing multi-region endpoint pools. Chat, embedding, and image factories resolve each model into an endpoint pool â€” a list of endpoints (one per region + variant) that the client rotates among on 429 / 5xx / timeout errors. This helps to survive single-region throttling without user-visible stalls and keeps a PTU reservation preferred when one is configured.
+The package includes a sophisticated mechanism for managing multi-region endpoint pools. Chat, embedding, and image factories resolve each model into an endpoint pool — a list of endpoints (one per region + variant) that the client rotates among on 429 / 5xx / timeout errors. This helps to survive single-region throttling without user-visible stalls and keeps a PTU reservation preferred when one is configured.
 
 ### Selection algorithm
 
 Endpoints are grouped by priority tiers, with random selection within each tier. The lowest-priority tier that still has at least one healthy (non-cooling-down) member wins; within that tier, one member is picked uniformly at random. This ensures that multiple client processes spread across the regions in that tier instead of stampeding the same endpoint.
 
 On failure:
-- **429**: Parses `Retry-After`, marks the member as cooling for `max(Retry-After, base Ã— 2^consecutive_429s)`, capped at 120 seconds, and rotates to the next healthy member.
+- **429**: Parses `Retry-After`, marks the member as cooling for `max(Retry-After, base × 2^consecutive_429s)`, capped at 120 seconds, and rotates to the next healthy member.
 - **5xx / timeout / network error**: Applies a floor cooldown of 5 seconds and rotates.
 - **Non-transient 4xx** (e.g., 401): Returns immediately without rotating.
 
@@ -79,12 +79,12 @@ By following these steps, you can effectively extend the functionality of the `a
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/index.js](./dist/index.js)
-- `./test` â†’ [./dist/test/testCore.js](./dist/test/testCore.js)
+- default → [./dist/index.js](./dist/index.js)
+- `./test` → [./dist/test/testCore.js](./dist/test/testCore.js)
 
 ### Dependencies
 
@@ -104,11 +104,11 @@ External: `@azure/identity`, `async`, `debug`, `typechat`
 - [agent-shell](../../packages/shell/README.md)
 - [azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
-- _â€¦and 38 more workspace consumers._
+- _…and 38 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/auth.ts`, `./src/azureSettings.ts`, â€¦and 12 more under `./src/`.
+`./src/index.ts`, `./src/auth.ts`, `./src/azureSettings.ts`, …and 12 more under `./src/`.
 
 ---
 

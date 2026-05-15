@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=835455e8c175de27561845dbe0357bd66dc9a775eb3a75f4efab1d1d36349478 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# test-agent â€” AI-generated documentation
+# test-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -51,12 +51,12 @@ After making changes, run tests to ensure the new functionality works as expecte
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` â†’ [./dist/handler.js](./dist/handler.js)
+- `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
+- `./agent/handlers` → [./dist/handler.js](./dist/handler.js)
 
 ### Dependencies
 
@@ -68,7 +68,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/manifest.json`, `./src/handler.ts`, `./src/schema.ts`, â€¦and 1 more under `./src/`.
+`./src/manifest.json`, `./src/handler.ts`, `./src/schema.ts`, …and 1 more under `./src/`.
 
 ### Agent surface
 

@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=cc5b2a63640a21c1197b34721f5abcb7f88b98fe023d270056ad5509b343045f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# desktop-automation â€” AI-generated documentation
+# desktop-automation — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -88,12 +88,12 @@ By following these steps, you can extend the functionality of the `desktop-autom
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` â†’ [./dist/actionHandler.js](./dist/actionHandler.js)
+- `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
+- `./agent/handlers` → [./dist/actionHandler.js](./dist/actionHandler.js)
 
 ### Dependencies
 
@@ -115,7 +115,7 @@ External: `body-parser`, `chalk`, `cors`, `debug`, `dotenv`, `find-config`, `typ
 
 ### Files of interest
 
-`./src/actionHandler.ts`, `./src/actionsSchema.ts`, `./src/desktopSchema.agr`, â€¦and 20 more under `./src/`.
+`./src/actionHandler.ts`, `./src/actionsSchema.ts`, `./src/desktopSchema.agr`, …and 20 more under `./src/`.
 
 ### Agent surface
 

@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=63237fcb74e9501fc3112ca39a46518e4e3bcf0c61828a7d8f5c097dc149bb81 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# mcp-plan-validation â€” AI-generated documentation
+# mcp-plan-validation — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -69,11 +69,11 @@ By following these steps, you can extend the package to support additional valid
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/index.js](./dist/index.js)
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -89,7 +89,7 @@ External: `@modelcontextprotocol/sdk`, `fast-glob`, `zod`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/cli.ts`, `./src/executor.ts`, â€¦and 4 more under `./src/`.
+`./src/index.ts`, `./src/cli.ts`, `./src/executor.ts`, …and 4 more under `./src/`.
 
 ---
 

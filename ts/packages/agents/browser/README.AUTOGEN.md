@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=f7bee5bfe0bc1ab4e65a10e3db52a808deddebed65b1e2a80aec890be9c7e204 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# browser-typeagent â€” AI-generated documentation
+# browser-typeagent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -78,17 +78,17 @@ By following these steps, you can extend the capabilities of the `browser-typeag
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/agent/manifest.json](./src/agent/manifest.json)
-- `./agent/handlers` â†’ [./dist/agent/browserActionHandler.mjs](./dist/agent/browserActionHandler.mjs)
-- `./agent/types` â†’ [./dist/common/browserControl.mjs](./dist/common/browserControl.mjs)
-- `./agent/indexing` â†’ [./dist/agent/indexing/browserIndexingService.js](./dist/agent/indexing/browserIndexingService.js)
-- `./contentScriptRpc/types` â†’ [./dist/common/contentScriptRpc/types.mjs](./dist/common/contentScriptRpc/types.mjs)
-- `./contentScriptRpc/client` â†’ [./dist/common/contentScriptRpc/client.mjs](./dist/common/contentScriptRpc/client.mjs)
-- `./htmlReducer` â†’ [./dist/common/crossContextHtmlReducer.js](./dist/common/crossContextHtmlReducer.js)
+- `./agent/manifest` → [./src/agent/manifest.json](./src/agent/manifest.json)
+- `./agent/handlers` → [./dist/agent/browserActionHandler.mjs](./dist/agent/browserActionHandler.mjs)
+- `./agent/types` → [./dist/common/browserControl.mjs](./dist/common/browserControl.mjs)
+- `./agent/indexing` → [./dist/agent/indexing/browserIndexingService.js](./dist/agent/indexing/browserIndexingService.js)
+- `./contentScriptRpc/types` → [./dist/common/contentScriptRpc/types.mjs](./dist/common/contentScriptRpc/types.mjs)
+- `./contentScriptRpc/client` → [./dist/common/contentScriptRpc/client.mjs](./dist/common/contentScriptRpc/client.mjs)
+- `./htmlReducer` → [./dist/common/crossContextHtmlReducer.js](./dist/common/crossContextHtmlReducer.js)
 
 ### Dependencies
 
@@ -117,7 +117,7 @@ Workspace:
 
 External: `@anthropic-ai/claude-agent-sdk`, `@mozilla/readability`, `@popperjs/core`, `bootstrap`, `chalk`, `cheerio`, `cytoscape`, `cytoscape-dagre`, `dagre`, `debug`, `dompurify`, `express`, `express-rate-limit`, `graphology`, `graphology-communities-louvain`, `graphology-layout`, `graphology-layout-forceatlas2`, `graphology-layout-noverlap`, `graphology-types`, `html-to-text`
 
-_â€¦and 17 more not shown._
+_…and 17 more not shown._
 
 ### Used by
 
@@ -137,7 +137,7 @@ _â€¦and 17 more not shown._
 - [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
 - [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
 - [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _â€¦and 283 more under `./src/`._
+- _…and 283 more under `./src/`._
 
 ### Environment variables
 

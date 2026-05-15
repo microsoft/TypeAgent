@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=7ae325430512eb6b112a1aa9147a75c80e6d2de50f932377c06af8425077989f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# github-cli-agent â€” AI-generated documentation
+# github-cli-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -71,12 +71,12 @@ By following these steps, you can add new capabilities to the `github-cli-agent`
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/github-cliManifest.json](./src/github-cliManifest.json)
-- `./agent/handlers` â†’ [./dist/github-cliActionHandler.js](./dist/github-cliActionHandler.js)
+- `./agent/manifest` → [./src/github-cliManifest.json](./src/github-cliManifest.json)
+- `./agent/handlers` → [./dist/github-cliActionHandler.js](./dist/github-cliActionHandler.js)
 
 ### Dependencies
 
@@ -94,7 +94,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/github-cliActionHandler.ts`, `./src/github-cliManifest.json`, `./src/github-cliSchema.agr`, â€¦and 3 more under `./src/`.
+`./src/github-cliActionHandler.ts`, `./src/github-cliManifest.json`, `./src/github-cliSchema.agr`, …and 3 more under `./src/`.
 
 ### Agent surface
 
@@ -123,7 +123,7 @@ _64 actions implemented by this agent, parsed deterministically from `./src/gith
 | _(no sample)_ | `gistList` |
 | _(no sample)_ | `issueCreate` |
 | _(no sample)_ | `issueClose` |
-| _Permanently delete a GitHub issue (uses `gh issue delete --yes`)._ | `issueDelete` â†’ `{ "number": 0 }` |
+| _Permanently delete a GitHub issue (uses `gh issue delete --yes`)._ | `issueDelete` → `{ "number": 0 }` |
 | _(no sample)_ | `issueReopen` |
 | _(no sample)_ | `issueList` |
 | _View / open a specific GitHub issue by number_ | `issueView` |
@@ -135,11 +135,11 @@ _64 actions implemented by this agent, parsed deterministically from `./src/gith
 | _(no sample)_ | `prList` |
 | _View / open a specific GitHub pull request by number_ | `prView` |
 | _(no sample)_ | `prCheckout` |
-| _(no sample)_ | `prChecks` â†’ `{ "number": 0 }` |
+| _(no sample)_ | `prChecks` → `{ "number": 0 }` |
 | _(no sample)_ | `projectCreate` |
 | _(no sample)_ | `projectDelete` |
 | _(no sample)_ | `projectList` |
-| _â€¦and 34 more actions not shown (cap: 30)._ | |
+| _…and 34 more actions not shown (cap: 30)._ | |
 
 ---
 

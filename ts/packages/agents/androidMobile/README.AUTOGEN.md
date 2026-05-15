@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=45a77f2a9050899a071bc71ba0711777cf5cd5c5c4a807c494ce10062f4eb46e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# android-mobile-agent â€” AI-generated documentation
+# android-mobile-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -87,12 +87,12 @@ By following these steps, you can extend the capabilities of the `android-mobile
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/androidMobileManifest.json](./src/androidMobileManifest.json)
-- `./agent/handlers` â†’ [./dist/androidMobileActionHandler.js](./dist/androidMobileActionHandler.js)
+- `./agent/manifest` → [./src/androidMobileManifest.json](./src/androidMobileManifest.json)
+- `./agent/handlers` → [./dist/androidMobileActionHandler.js](./dist/androidMobileActionHandler.js)
 
 ### Dependencies
 
@@ -108,7 +108,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/androidMobileActionHandler.ts`, `./src/androidMobileManifest.json`, `./src/androidMobileSchema.ts`, â€¦and 1 more under `./src/`.
+`./src/androidMobileActionHandler.ts`, `./src/androidMobileManifest.json`, `./src/androidMobileSchema.ts`, …and 1 more under `./src/`.
 
 ### Agent surface
 
@@ -122,11 +122,11 @@ _5 actions implemented by this agent, parsed deterministically from `./src/andro
 
 | User says | Action |
 | --- | --- |
-| _sends a SMS to the supplied phone number_ | `sendSMS` â†’ `{ "originalRequest": "â€¦", "phoneNumber": "â€¦", "message": "â€¦" }` |
-| _calls a user's phone number but only if we know the phone number_ | `callPhoneNumber` â†’ `{ "originalRequest": "â€¦", "phoneNumber": "â€¦" }` |
-| _sets an alarm on the local mobile device_ | `setAlarm` â†’ `{ "originalRequest": "â€¦", "time": "â€¦" }` |
-| _opens the maps application and performs a location search_ | `searchNearby` â†’ `{ "originalRequest": "â€¦", "searchTerm": "â€¦" }` |
-| _Automation agent on the phone that can perform UI tasks on behalf of the user_ | `automateUI` â†’ `{ "originalRequest": "â€¦" }` |
+| _sends a SMS to the supplied phone number_ | `sendSMS` → `{ "originalRequest": "…", "phoneNumber": "…", "message": "…" }` |
+| _calls a user's phone number but only if we know the phone number_ | `callPhoneNumber` → `{ "originalRequest": "…", "phoneNumber": "…" }` |
+| _sets an alarm on the local mobile device_ | `setAlarm` → `{ "originalRequest": "…", "time": "…" }` |
+| _opens the maps application and performs a location search_ | `searchNearby` → `{ "originalRequest": "…", "searchTerm": "…" }` |
+| _Automation agent on the phone that can perform UI tasks on behalf of the user_ | `automateUI` → `{ "originalRequest": "…" }` |
 
 ---
 

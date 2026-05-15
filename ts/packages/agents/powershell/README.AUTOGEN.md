@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=143fb58cf8e856dcd1cb296414d7e2c3400a897e43bcc4e50e2e34acbadc2db6 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# powershell-typeagent â€” AI-generated documentation
+# powershell-typeagent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -45,13 +45,13 @@ For a starting point, open the [actionHandler.mts](./src/actionHandler.mts) file
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` â†’ [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
-- `./recipe` â†’ [./dist/types/scriptRecipe.js](./dist/types/scriptRecipe.js)
+- `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
+- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
+- `./recipe` → [./dist/types/scriptRecipe.js](./dist/types/scriptRecipe.js)
 
 ### Dependencies
 
@@ -80,7 +80,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`
 - [./src/namespaces/services/servicesSchema.agr](./src/namespaces/services/servicesSchema.agr)
 - [./src/namespaces/system/systemSchema.agr](./src/namespaces/system/systemSchema.agr)
 - [./src/schema/allActionsSchema.ts](./src/schema/allActionsSchema.ts)
-- _â€¦and 14 more under `./src/`._
+- _…and 14 more under `./src/`._
 
 ### Agent surface
 

@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=bf3ea8a2bf675e78ea8bddbfc85245e44ffdd5963f273823b8550bbc395cb59e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# music â€” AI-generated documentation
+# music — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -57,12 +57,12 @@ By following this pattern, you can add new capabilities to the music agent and e
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/agent/playerManifest.json](./src/agent/playerManifest.json)
-- `./agent/handlers` â†’ [./dist/agent/playerHandlers.js](./dist/agent/playerHandlers.js)
+- `./agent/manifest` → [./src/agent/playerManifest.json](./src/agent/playerManifest.json)
+- `./agent/handlers` → [./dist/agent/playerHandlers.js](./dist/agent/playerHandlers.js)
 
 ### Dependencies
 
@@ -81,7 +81,7 @@ External: `chalk`, `debug`, `dotenv`, `express`, `open`, `typechat`
 
 ### Files of interest
 
-`./src/agent/playerManifest.json`, `./src/agent/playerSchema.agr`, `./src/agent/playerSchema.ts`, â€¦and 20 more under `./src/`.
+`./src/agent/playerManifest.json`, `./src/agent/playerSchema.agr`, `./src/agent/playerSchema.ts`, …and 20 more under `./src/`.
 
 ### Environment variables
 

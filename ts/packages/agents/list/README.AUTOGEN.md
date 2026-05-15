@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=723c7326dc4ac226af0036912412b48254f91e425af0db5d4b5a3b18c9ef598a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# list-agent â€” AI-generated documentation
+# list-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -38,6 +38,7 @@ pnpm install
 For detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
+
 The `list-agent` package is structured around several key files:
 
 - **Manifest**: [listManifest.json](./src/listManifest.json) describes the agent, including its emoji representation and schema details.
@@ -76,12 +77,12 @@ By following these steps, you can extend the functionality of the `list-agent` p
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/listManifest.json](./src/listManifest.json)
-- `./agent/handlers` â†’ [./dist/listActionHandler.js](./dist/listActionHandler.js)
+- `./agent/manifest` → [./src/listManifest.json](./src/listManifest.json)
+- `./agent/handlers` → [./dist/listActionHandler.js](./dist/listActionHandler.js)
 
 ### Dependencies
 
@@ -99,7 +100,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, â€¦and 3 more under `./src/`.
+`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 3 more under `./src/`.
 
 ### Agent surface
 
@@ -114,15 +115,15 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 | User says | Action |
 | --- | --- |
-| _add one or more items to a list; if the list does not exist, create it_ | `addItems` â†’ `{ "items": ["â€¦"], "listName": "â€¦" }` |
-| _remove one or more items from a list_ | `removeItems` â†’ `{ "items": ["â€¦"], "listName": "â€¦" }` |
-| _(no sample)_ | `createList` â†’ `{ "listName": "â€¦" }` |
-| _use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"_ | `getList` â†’ `{ "listName": "â€¦" }` |
-| _(no sample)_ | `clearList` â†’ `{ "listName": "â€¦" }` |
-| _(no sample)_ | `startEditList` â†’ `{ "listName": "â€¦" }` |
+| _add one or more items to a list; if the list does not exist, create it_ | `addItems` → `{ "items": ["…"], "listName": "…" }` |
+| _remove one or more items from a list_ | `removeItems` → `{ "items": ["…"], "listName": "…" }` |
+| _(no sample)_ | `createList` → `{ "listName": "…" }` |
+| _use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"_ | `getList` → `{ "listName": "…" }` |
+| _(no sample)_ | `clearList` → `{ "listName": "…" }` |
+| _(no sample)_ | `startEditList` → `{ "listName": "…" }` |
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `4e0c0f2b365493bc89734743ffc031e5861c69a0` on `2026-05-15T19:08:28.264Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

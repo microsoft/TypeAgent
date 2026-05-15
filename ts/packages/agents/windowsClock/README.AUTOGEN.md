@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=71d84bd3f1b2b8ef478c1a8264fb6adeacf882372f5a24fd4f1d81eb33b5ef43 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# windowsclock-agent â€” AI-generated documentation
+# windowsclock-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -60,12 +60,12 @@ By following these steps, you can extend the functionality of the `windowsclock-
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/windowsClockManifest.json](./src/windowsClockManifest.json)
-- `./agent/handlers` â†’ [./dist/windowsClockActionHandler.js](./dist/windowsClockActionHandler.js)
+- `./agent/manifest` → [./src/windowsClockManifest.json](./src/windowsClockManifest.json)
+- `./agent/handlers` → [./dist/windowsClockActionHandler.js](./dist/windowsClockActionHandler.js)
 
 ### Dependencies
 
@@ -83,7 +83,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/windowsClockActionHandler.ts`, `./src/windowsClockManifest.json`, `./src/windowsClockSchema.ts`, â€¦and 1 more under `./src/`.
+`./src/windowsClockActionHandler.ts`, `./src/windowsClockManifest.json`, `./src/windowsClockSchema.ts`, …and 1 more under `./src/`.
 
 ### Agent surface
 

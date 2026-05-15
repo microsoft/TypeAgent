@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=943d08468a1cfc5b77db5c6739a27ccd099a37aeb544ab1f4ab8dc309b864947 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# onboarding-agent â€” AI-generated documentation
+# onboarding-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -59,13 +59,13 @@ By following these steps, you can add new capabilities to the onboarding-agent, 
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/onboardingManifest.json](./src/onboardingManifest.json)
-- `./agent/handlers` â†’ [./dist/onboardingActionHandler.js](./dist/onboardingActionHandler.js)
-- `./uiCapture` â†’ [./dist/uiCapture/index.js](./dist/uiCapture/index.js)
+- `./agent/manifest` → [./src/onboardingManifest.json](./src/onboardingManifest.json)
+- `./agent/handlers` → [./dist/onboardingActionHandler.js](./dist/onboardingActionHandler.js)
+- `./uiCapture` → [./dist/uiCapture/index.js](./dist/uiCapture/index.js)
 
 ### Dependencies
 
@@ -99,7 +99,7 @@ External: `debug`, `typechat`
 - [./src/discovery/discoverySchema.ts](./src/discovery/discoverySchema.ts)
 - [./src/grammarGen/grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts)
 - [./src/grammarGen/grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr)
-- _â€¦and 59 more under `./src/`._
+- _…and 59 more under `./src/`._
 
 ### Agent surface
 
@@ -120,9 +120,9 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 | User says | Action |
 | --- | --- |
-| _(no sample)_ | `startOnboarding` â†’ `{ "integrationName": "â€¦" }` |
-| _(no sample)_ | `resumeOnboarding` â†’ `{ "integrationName": "â€¦" }` |
-| _(no sample)_ | `getOnboardingStatus` â†’ `{ "integrationName": "â€¦" }` |
+| _(no sample)_ | `startOnboarding` → `{ "integrationName": "…" }` |
+| _(no sample)_ | `resumeOnboarding` → `{ "integrationName": "…" }` |
+| _(no sample)_ | `getOnboardingStatus` → `{ "integrationName": "…" }` |
 | _(no sample)_ | `listIntegrations` |
 
 ---

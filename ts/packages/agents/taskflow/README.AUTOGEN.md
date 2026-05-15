@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=dda609dc04d2e3cc95566bb5a0a9fab73a72bf17994a76fffd3060d86051b06d -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# taskflow-typeagent â€” AI-generated documentation
+# taskflow-typeagent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -52,13 +52,13 @@ By following these steps, you can add new functionality to the `taskflow-typeage
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./manifest.json](./manifest.json)
-- `./agent/handlers` â†’ [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
-- `./recipe` â†’ [./dist/types/recipe.js](./dist/types/recipe.js)
+- `./agent/manifest` → [./manifest.json](./manifest.json)
+- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
+- `./recipe` → [./dist/types/recipe.js](./dist/types/recipe.js)
 
 ### Dependencies
 
@@ -87,7 +87,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `typescript`
 - [./src/script/taskFlowScriptApi.mts](./src/script/taskFlowScriptApi.mts)
 - [./src/script/taskFlowScriptExecutor.mts](./src/script/taskFlowScriptExecutor.mts)
 - [./src/script/taskFlowScriptValidator.mts](./src/script/taskFlowScriptValidator.mts)
-- _â€¦and 5 more under `./src/`._
+- _…and 5 more under `./src/`._
 
 ### Agent surface
 

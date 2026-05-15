@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=d9fb5b6d5f736fd8f6092bdf63b292ba4f03add55f9cf68e5683b2fd9ddbfa71 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# music-local â€” AI-generated documentation
+# music-local — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -74,12 +74,12 @@ Start by opening [localPlayerSchema.ts](./src/agent/localPlayerSchema.ts) and [l
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/agent/localPlayerManifest.json](./src/agent/localPlayerManifest.json)
-- `./agent/handlers` â†’ [./dist/agent/localPlayerHandlers.js](./dist/agent/localPlayerHandlers.js)
+- `./agent/manifest` → [./src/agent/localPlayerManifest.json](./src/agent/localPlayerManifest.json)
+- `./agent/handlers` → [./dist/agent/localPlayerHandlers.js](./dist/agent/localPlayerHandlers.js)
 
 ### Dependencies
 
@@ -98,7 +98,7 @@ External: `chalk`, `debug`, `play-sound`
 
 ### Files of interest
 
-`./src/agent/localPlayerManifest.json`, `./src/agent/localPlayerSchema.agr`, `./src/agent/localPlayerSchema.ts`, â€¦and 5 more under `./src/`.
+`./src/agent/localPlayerManifest.json`, `./src/agent/localPlayerSchema.agr`, `./src/agent/localPlayerSchema.ts`, …and 5 more under `./src/`.
 
 ### Environment variables
 

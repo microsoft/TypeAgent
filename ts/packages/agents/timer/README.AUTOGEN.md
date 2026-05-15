@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=21cbfec6da1f18f42b18ef9ddeb0e021537181efe39653ae74ec930078a8fbcf -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# timer-agent â€” AI-generated documentation
+# timer-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -56,13 +56,13 @@ These tasks were intentionally deferred while standing up the agent-initiated me
 
 ### Shell
 
-- **Real toast overlay surface**: `kind: "toast"` currently routes through `chatView.addNotificationMessage` (`appendMode: "temporary"` â€” gets overwritten by the next message). A fixed-position overlay outside `messageDiv` with auto-dismiss, click-to-dismiss, and stacking would give toast its own visual lane separate from the chat scroll. Wire-up in [main.ts setDisplay/appendDisplay](../../shell/src/renderer/src/main.ts).
+- **Real toast overlay surface**: `kind: "toast"` currently routes through `chatView.addNotificationMessage` (`appendMode: "temporary"` — gets overwritten by the next message). A fixed-position overlay outside `messageDiv` with auto-dismiss, click-to-dismiss, and stacking would give toast its own visual lane separate from the chat scroll. Wire-up in [main.ts setDisplay/appendDisplay](../../shell/src/renderer/src/main.ts).
 - **Distinct inline rendering**: `kind: "inline"` currently shares the same temporary-status path as `kind: "toast"`. A compact non-overwriting one-liner row (similar to the `notification-system-*` join/leave rows auto-created in [chatView.ts](../../shell/src/renderer/src/chat/chatView.ts)) would let inline persist in the scroll without bubble chrome.
 - **Auto-scroll / focus / TTS policy**: Agent-initiated messages currently use the same scroll + TTS behavior as response bubbles. Conservative default per the plan: don't auto-speak, don't steal scroll if the user has scrolled up, flash a "new message below" affordance.
 
 ### CLI
 
-- **Readline-aware prompt safety**: When no spinner is active and the user is mid-typing at the prompt, `displayContent` writes to stdout and corrupts the readline input line. Needs save-cursor / clear-line / write / restore-cursor handling. Same issue exists today for the `notify` path's non-spinner branch â€” fix both together. Code path: [enhancedConsole.ts renderAgentMessage](../../cli/src/enhancedConsole.ts).
+- **Readline-aware prompt safety**: When no spinner is active and the user is mid-typing at the prompt, `displayContent` writes to stdout and corrupts the readline input line. Needs save-cursor / clear-line / write / restore-cursor handling. Same issue exists today for the `notify` path's non-spinner branch — fix both together. Code path: [enhancedConsole.ts renderAgentMessage](../../cli/src/enhancedConsole.ts).
 
 ### Timer agent (this package)
 
@@ -71,18 +71,18 @@ These tasks were intentionally deferred while standing up the agent-initiated me
 
 ### Cross-cutting
 
-- **Pending-interaction policy verification**: Confirm that an agent-initiated message arriving during `requestChoice` / `popupQuestion` / `requestInteraction` renders above the prompt without breaking the interaction. Per the plan: bubble appears in chat, prompt remains interactive. No code change expected â€” pure manual verification.
-- **Multi-conversation routing verification**: With two clients on different conversations, a reminder set in conversation A must fire only in A. `sessionContext` is bound to a single conversation by `clientIO` injection so this should already work â€” needs a verification test, no code change expected.
-- **Persistent reminder replay round-trip test**: A bubble reminder that fires during conversation X should re-render in its original slot when a fresh client connects to X. The infrastructure is in place (logged via `setDisplay`, replayed via `replayDisplayHistory`, kind survives serialization) â€” needs a manual end-to-end test.
+- **Pending-interaction policy verification**: Confirm that an agent-initiated message arriving during `requestChoice` / `popupQuestion` / `requestInteraction` renders above the prompt without breaking the interaction. Per the plan: bubble appears in chat, prompt remains interactive. No code change expected — pure manual verification.
+- **Multi-conversation routing verification**: With two clients on different conversations, a reminder set in conversation A must fire only in A. `sessionContext` is bound to a single conversation by `clientIO` injection so this should already work — needs a verification test, no code change expected.
+- **Persistent reminder replay round-trip test**: A bubble reminder that fires during conversation X should re-render in its original slot when a fresh client connects to X. The infrastructure is in place (logged via `setDisplay`, replayed via `replayDisplayHistory`, kind survives serialization) — needs a manual end-to-end test.
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/timerManifest.json](./src/timerManifest.json)
-- `./agent/handlers` â†’ [./dist/timerActionHandler.js](./dist/timerActionHandler.js)
+- `./agent/manifest` → [./src/timerManifest.json](./src/timerManifest.json)
+- `./agent/handlers` → [./dist/timerActionHandler.js](./dist/timerActionHandler.js)
 
 ### Dependencies
 
@@ -100,7 +100,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/timerActionHandler.ts`, `./src/timerManifest.json`, `./src/timerSchema.agr`, â€¦and 2 more under `./src/`.
+`./src/timerActionHandler.ts`, `./src/timerManifest.json`, `./src/timerSchema.agr`, …and 2 more under `./src/`.
 
 ### Agent surface
 
@@ -115,10 +115,10 @@ _4 actions implemented by this agent, parsed deterministically from `./src/timer
 
 | User says | Action |
 | --- | --- |
-| _Set a reminder_ | `setReminder` â†’ `{ "message": "â€¦", "when": "â€¦" }` |
-| _Set a repeating reminder_ | `repeatReminder` â†’ `{ "message": "â€¦", "every": "â€¦" }` |
+| _Set a reminder_ | `setReminder` → `{ "message": "…", "when": "…" }` |
+| _Set a repeating reminder_ | `repeatReminder` → `{ "message": "…", "every": "…" }` |
 | _List all pending reminders._ | `listReminders` |
-| _Cancel a pending reminder by id, or all reminders._ | `cancelReminder` â†’ `{ "id": "â€¦" }` |
+| _Cancel a pending reminder by id, or all reminders._ | `cancelReminder` → `{ "id": "…" }` |
 
 ---
 

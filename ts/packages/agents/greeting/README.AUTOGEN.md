@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=c1833fc7a143e126699af834ea4d0bc3a636617b2a6e8a20e4ec7a47c66ecfc3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# greeting-agent â€” AI-generated documentation
+# greeting-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -58,12 +58,12 @@ By following these steps, you can extend the Greeting Agent to handle additional
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/greetingManifest.json](./src/greetingManifest.json)
-- `./agent/handlers` â†’ [./dist/greetingCommandHandler.js](./dist/greetingCommandHandler.js)
+- `./agent/manifest` → [./src/greetingManifest.json](./src/greetingManifest.json)
+- `./agent/handlers` → [./dist/greetingCommandHandler.js](./dist/greetingCommandHandler.js)
 
 ### Dependencies
 
@@ -86,7 +86,7 @@ External: `debug`, `typechat`
 
 ### Files of interest
 
-`./src/greetingActionSchema.ts`, `./src/greetingCommandHandler.ts`, `./src/greetingManifest.json`, â€¦and 1 more under `./src/`.
+`./src/greetingActionSchema.ts`, `./src/greetingCommandHandler.ts`, `./src/greetingManifest.json`, …and 1 more under `./src/`.
 
 ### Agent surface
 

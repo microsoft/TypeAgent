@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=d73e018186694c96a7059073a42c0d29bb8a0db1195b12db3596acfd8a1a6000 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# code-agent â€” AI-generated documentation
+# code-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -58,12 +58,12 @@ By following these steps, you can add new capabilities to the `code-agent` packa
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/codeManifest.json](./src/codeManifest.json)
-- `./agent/handlers` â†’ [./dist/codeActionHandler.js](./dist/codeActionHandler.js)
+- `./agent/manifest` → [./src/codeManifest.json](./src/codeManifest.json)
+- `./agent/handlers` → [./dist/codeActionHandler.js](./dist/codeActionHandler.js)
 
 ### Dependencies
 
@@ -82,7 +82,7 @@ External: `better-sqlite3`, `chalk`, `debug`, `ws`
 
 ### Files of interest
 
-`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, â€¦and 25 more under `./src/`.
+`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 25 more under `./src/`.
 
 ### Agent surface
 
@@ -103,7 +103,7 @@ _1 action implemented by this agent, parsed deterministically from `./src/codeAc
 
 | User says | Action |
 | --- | --- |
-| _Launch or Start VSCode_ | `launchVSCode` â†’ `{ "mode": "last" }` |
+| _Launch or Start VSCode_ | `launchVSCode` → `{ "mode": "last" }` |
 
 ---
 

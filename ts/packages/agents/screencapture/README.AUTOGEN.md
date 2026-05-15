@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=721907799acbf2f8c1eef57ad5e79b8479b722ae05c54198b124ddf176a459ab -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# screencapture-agent â€” AI-generated documentation
+# screencapture-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -79,12 +79,12 @@ By following these steps, you can add new capabilities to the `screencapture-age
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/screencaptureManifest.json](./src/screencaptureManifest.json)
-- `./agent/handlers` â†’ [./dist/screencaptureActionHandler.js](./dist/screencaptureActionHandler.js)
+- `./agent/manifest` → [./src/screencaptureManifest.json](./src/screencaptureManifest.json)
+- `./agent/handlers` → [./dist/screencaptureActionHandler.js](./dist/screencaptureActionHandler.js)
 
 ### Dependencies
 
@@ -104,7 +104,7 @@ External: `debug`
 
 ### Files of interest
 
-`./src/screencaptureActionHandler.ts`, `./src/screencaptureManifest.json`, `./src/screencaptureSchema.agr`, â€¦and 11 more under `./src/`.
+`./src/screencaptureActionHandler.ts`, `./src/screencaptureManifest.json`, `./src/screencaptureSchema.agr`, …and 11 more under `./src/`.
 
 ### Agent surface
 
@@ -130,7 +130,7 @@ _5 actions implemented by this agent, parsed deterministically from `./src/scree
 | _Start a screen recording_ | `startRecording` |
 | _Stop the currently active screen recording._ | `stopRecording` |
 | _List all currently visible windows so the user can target them by name._ | `listWindows` |
-| _Activity type tracked while a recording is in progress._ | `recording` â†’ `{ "outputPath": "â€¦", "startedAtMs": 0 }` |
+| _Activity type tracked while a recording is in progress._ | `recording` → `{ "outputPath": "…", "startedAtMs": 0 }` |
 
 ---
 

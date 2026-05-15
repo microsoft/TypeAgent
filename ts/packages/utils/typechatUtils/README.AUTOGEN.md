@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=dab46e54e83202ae26b3f18a3d6dcac3b774201b713d0775d12025f972711769 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# typechat-utils â€” AI-generated documentation
+# typechat-utils — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -69,11 +69,11 @@ By following these steps, you can effectively extend the `typechat-utils` packag
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/index.js](./dist/index.js)
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -97,11 +97,11 @@ External: `@azure-rest/maps-search`, `chalk`, `date-fns`, `debug`, `exifreader`,
 - [chat-example](../../../examples/chat/README.md)
 - [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
 - [desktop-automation](../../../packages/agents/desktop/README.md)
-- _â€¦and 5 more workspace consumers._
+- _…and 5 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/datetimeHelper.ts`, `./src/image.ts`, â€¦and 5 more under `./src/`.
+`./src/index.ts`, `./src/datetimeHelper.ts`, `./src/image.ts`, …and 5 more under `./src/`.
 
 ---
 

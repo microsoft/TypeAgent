@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=7ada2f9a71ae8e2dff79b65bc1f2f7c68b338e852735091314975317204636db -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# visualstudio-agent â€” AI-generated documentation
+# visualstudio-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -30,7 +30,7 @@ These actions allow users to manage breakpoints, control the debugger, perform f
 
 ## Setup
 
-To set up the `visualstudio-agent`, you need to have Visual Studio 2022 (or later) with the **Visual Studio extension development** workload installed. Additionally, ensure you have Node.js â‰¥ 20 and pnpm â‰¥ 10.
+To set up the `visualstudio-agent`, you need to have Visual Studio 2022 (or later) with the **Visual Studio extension development** workload installed. Additionally, ensure you have Node.js ≥ 20 and pnpm ≥ 10.
 
 For detailed setup instructions, see the hand-written README.
 
@@ -44,16 +44,16 @@ The project structure is as follows:
 
 ```text
 packages/agents/visualStudio/
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ visualStudioActionHandler.ts   # AppAgent + WebSocket bridge server
-â”‚   â”œâ”€â”€ visualStudioSchema.ts          # Action type definitions
-â”‚   â”œâ”€â”€ visualStudioSchema.agr         # Grammar rules
-â”‚   â””â”€â”€ visualStudioManifest.json
-â”œâ”€â”€ host/
-â”‚   â”œâ”€â”€ csharp/                        # VSIX project (.NET / WPF)
-â”‚   â””â”€â”€ webview/                       # WebView2 chat content (TS + Vite)
-â”œâ”€â”€ package.json
-â””â”€â”€ README.md
+├── src/
+│   ├── visualStudioActionHandler.ts   # AppAgent + WebSocket bridge server
+│   ├── visualStudioSchema.ts          # Action type definitions
+│   ├── visualStudioSchema.agr         # Grammar rules
+│   └── visualStudioManifest.json
+├── host/
+│   ├── csharp/                        # VSIX project (.NET / WPF)
+│   └── webview/                       # WebView2 chat content (TS + Vite)
+├── package.json
+└── README.md
 ```
 
 ## How to extend
@@ -72,12 +72,12 @@ By following these steps, you can extend the functionality of the `visualstudio-
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/visualStudioManifest.json](./src/visualStudioManifest.json)
-- `./agent/handlers` â†’ [./dist/visualStudioActionHandler.js](./dist/visualStudioActionHandler.js)
+- `./agent/manifest` → [./src/visualStudioManifest.json](./src/visualStudioManifest.json)
+- `./agent/handlers` → [./dist/visualStudioActionHandler.js](./dist/visualStudioActionHandler.js)
 
 ### Dependencies
 
@@ -95,7 +95,7 @@ External: `ws`
 
 ### Files of interest
 
-`./src/visualStudioActionHandler.ts`, `./src/visualStudioManifest.json`, `./src/visualStudioSchema.agr`, â€¦and 2 more under `./src/`.
+`./src/visualStudioActionHandler.ts`, `./src/visualStudioManifest.json`, `./src/visualStudioSchema.agr`, …and 2 more under `./src/`.
 
 ### Agent surface
 

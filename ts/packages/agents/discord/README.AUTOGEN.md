@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=ee0724066bf7764fc9f636978cca59be8557ffc25e9c28a15ded77e6d6f848c1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# discord-agent â€” AI-generated documentation
+# discord-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -102,12 +102,12 @@ By following these steps, you can extend the functionality of the `discord-agent
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/discordManifest.json](./src/discordManifest.json)
-- `./agent/handlers` â†’ [./dist/discordActionHandler.js](./dist/discordActionHandler.js)
+- `./agent/manifest` → [./src/discordManifest.json](./src/discordManifest.json)
+- `./agent/handlers` → [./dist/discordActionHandler.js](./dist/discordActionHandler.js)
 
 ### Dependencies
 
@@ -125,7 +125,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/discordActionHandler.ts`, `./src/discordManifest.json`, `./src/discordSchema.agr`, â€¦and 16 more under `./src/`.
+`./src/discordActionHandler.ts`, `./src/discordManifest.json`, `./src/discordSchema.agr`, …and 16 more under `./src/`.
 
 ### Agent surface
 
@@ -146,11 +146,11 @@ _7 actions implemented by this agent, parsed deterministically from `./src/disco
 
 | User says | Action |
 | --- | --- |
-| "Send a message to the general channel saying 'Hello everyone!'" | `createMessage` â†’ `{ "channel_id": "â€¦", "content": "â€¦" }` |
-| "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` â†’ `{ "channel_id": "â€¦" }` |
+| "Send a message to the general channel saying 'Hello everyone!'" | `createMessage` → `{ "channel_id": "…", "content": "…" }` |
+| "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` → `{ "channel_id": "…" }` |
 | "Can you show me my account details?" | `getCurrentUser` |
-| _Create a new invite for a channel._ | `createChannelInvite` â†’ `{ "channel_id": "â€¦" }` |
-| _Set the default Discord server (guild) for all operations._ | `setGuild` â†’ `{ "guild_id": "â€¦" }` |
+| _Create a new invite for a channel._ | `createChannelInvite` → `{ "channel_id": "…" }` |
+| _Set the default Discord server (guild) for all operations._ | `setGuild` → `{ "guild_id": "…" }` |
 | _List all channels in the current Discord server._ | `listChannels` |
 | _Refresh the channel cache from the Discord server._ | `refreshChannels` |
 

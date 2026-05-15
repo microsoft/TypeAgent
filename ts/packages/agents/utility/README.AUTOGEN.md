@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=021ac978661b96da3b730555b699bfd6aa6f32a6469bbf42479cee2b45d10112 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# utility-typeagent â€” AI-generated documentation
+# utility-typeagent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -63,12 +63,12 @@ By following these steps, you can extend the capabilities of the `utility-typeag
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./manifest.json](./manifest.json)
-- `./agent/handlers` â†’ [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
+- `./agent/manifest` → [./manifest.json](./manifest.json)
+- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
 
 ### Dependencies
 
@@ -87,7 +87,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@types/html-to-text`, `html-to-text
 
 ### Files of interest
 
-`./src/utilitySchema.agr`, `./src/actionHandler.mts`, `./src/tsconfig.json`, â€¦and 1 more under `./src/`.
+`./src/utilitySchema.agr`, `./src/actionHandler.mts`, `./src/tsconfig.json`, …and 1 more under `./src/`.
 
 ### Agent surface
 

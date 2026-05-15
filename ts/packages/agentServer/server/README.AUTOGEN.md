@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=391a851b92c23c56cf489f8f3ed1c0995284c1961bd8e10055f3d398e70e7e40 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# agent-server â€” AI-generated documentation
+# agent-server — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -30,19 +30,19 @@ Ensure these variables are set in your environment or in a `.env` file. For deta
 ## Key Files
 The `agent-server` package is structured around several key components:
 
-### `server.ts` â€” WebSocket listener
+### `server.ts` — WebSocket listener
 
 The `server.ts` file is responsible for setting up the WebSocket server and managing connections. It creates a `ConversationManager` at startup and calls `createWebSocketChannelServer` to accept connections. For each connection, it exposes `AgentServerInvokeFunctions` over the `agent-server` RPC channel, handling actions such as joining and leaving conversations, creating and listing conversations, and shutting down the server.
 
-### `conversationManager.ts` â€” Conversation pool
+### `conversationManager.ts` — Conversation pool
 
 The `conversationManager.ts` file maintains a pool of per-conversation `SharedDispatcher` instances. It handles persistence of conversation metadata, lazy initialization of dispatchers, automatic creation of default conversations, and cleanup of ephemeral conversations. It also supports idle shutdown based on the `--idle-timeout` flag.
 
-### `sharedDispatcher.ts` â€” Routing layer
+### `sharedDispatcher.ts` — Routing layer
 
 The `sharedDispatcher.ts` file manages multiple client connections within a single conversation. It wraps a dispatcher context and routes client IO methods based on connection IDs. This ensures that each client's display output is isolated while sharing the same dispatcher and conversation context.
 
-### `status.ts` and `stop.ts` â€” Server control
+### `status.ts` and `stop.ts` — Server control
 
 The `status.ts` and `stop.ts` files provide utilities for checking the server status and stopping the server, respectively. They use the `@typeagent/agent-server-client` package to interact with the server.
 
@@ -59,11 +59,11 @@ By following these steps, you can extend the functionality of the `agent-server`
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/server.js](./dist/server.js)
+- default → [./dist/server.js](./dist/server.js)
 
 ### Dependencies
 
@@ -84,7 +84,7 @@ External: `@azure/identity`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/conversationManager.ts`, `./src/server.ts`, `./src/sharedDispatcher.ts`, â€¦and 3 more under `./src/`.
+`./src/conversationManager.ts`, `./src/server.ts`, `./src/sharedDispatcher.ts`, …and 3 more under `./src/`.
 
 ### Environment variables
 

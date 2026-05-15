@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=3725ce07d9888cad8fb3dfca00dda7d128d6e0f17016a510ba20d8a11273372f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# montage-agent â€” AI-generated documentation
+# montage-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -51,13 +51,13 @@ By following these steps, you can extend the capabilities of the montage-agent p
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- default â†’ [./dist/route/route.js](./dist/route/route.js)
-- `./agent/manifest` â†’ [./src/agent/montageManifest.json](./src/agent/montageManifest.json)
-- `./agent/handlers` â†’ [./dist/agent/montageActionHandler.js](./dist/agent/montageActionHandler.js)
+- default → [./dist/route/route.js](./dist/route/route.js)
+- `./agent/manifest` → [./src/agent/montageManifest.json](./src/agent/montageManifest.json)
+- `./agent/handlers` → [./dist/agent/montageActionHandler.js](./dist/agent/montageActionHandler.js)
 
 ### Dependencies
 
@@ -89,7 +89,7 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 - [./src/site/index.html](./src/site/index.html)
 - [./src/site/photo.ts](./src/site/photo.ts)
 - [./src/site/styles.css](./src/site/styles.css)
-- _â€¦and 1 more under `./src/`._
+- _…and 1 more under `./src/`._
 
 ---
 

@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=b9653de4bfbe1c54d0d30adeb6cf6f89c30b656115deffde919f372ff0129fcf -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
-# weather-agent â€” AI-generated documentation
+# weather-agent — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -51,12 +51,12 @@ By following these steps, you can extend the functionality of the `weather-agent
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/weatherManifest.json](./src/weatherManifest.json)
-- `./agent/handlers` â†’ [./dist/weatherActionHandler.js](./dist/weatherActionHandler.js)
+- `./agent/manifest` → [./src/weatherManifest.json](./src/weatherManifest.json)
+- `./agent/handlers` → [./dist/weatherActionHandler.js](./dist/weatherActionHandler.js)
 
 ### Dependencies
 
@@ -75,7 +75,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/weatherActionHandler.ts`, `./src/weatherManifest.json`, `./src/weatherSchema.agr`, â€¦and 6 more under `./src/`.
+`./src/weatherActionHandler.ts`, `./src/weatherManifest.json`, `./src/weatherSchema.agr`, …and 6 more under `./src/`.
 
 ### Agent surface
 
@@ -90,9 +90,9 @@ _3 actions implemented by this agent, parsed deterministically from `./src/weath
 
 | User says | Action |
 | --- | --- |
-| _(no sample)_ | `getCurrentConditions` â†’ `{ "location": "â€¦" }` |
-| _(no sample)_ | `getForecast` â†’ `{ "location": "â€¦" }` |
-| _(no sample)_ | `getAlerts` â†’ `{ "location": "â€¦" }` |
+| _(no sample)_ | `getCurrentConditions` → `{ "location": "…" }` |
+| _(no sample)_ | `getForecast` → `{ "location": "…" }` |
+| _(no sample)_ | `getAlerts` → `{ "location": "…" }` |
 
 ---
 

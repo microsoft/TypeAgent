@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=23accd865bc873670c2b37254248a90d73778e849cd7434d05094f2a8d407c03 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# knowledgevisualizer â€” AI-generated documentation
+# knowledgevisualizer — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -55,11 +55,11 @@ By following these steps, you can extend the functionality of the Knowledge Visu
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./route` â†’ [./dist/route/route.js](./dist/route/route.js)
+- `./route` → [./dist/route/route.js](./dist/route/route.js)
 
 ### Dependencies
 
@@ -71,7 +71,7 @@ External: `chalk`, `d3`, `d3-cloud`, `debug`
 
 ### Files of interest
 
-`./src/site/index.ts`, `./src/route/route.ts`, `./src/route/tsconfig.json`, â€¦and 10 more under `./src/`.
+`./src/site/index.ts`, `./src/route/route.ts`, `./src/route/tsconfig.json`, …and 10 more under `./src/`.
 
 ---
 

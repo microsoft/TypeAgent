@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT License. -->
 
 <!-- AUTOGEN:DOCS:START -->
@@ -6,9 +6,9 @@
 <!-- AUTOGEN:DOCS:HASH:sha256=f28f4db0986fec3000531fa23ac9ed3c709cef5aeb4d718d72f803e4f56b87cd -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# email â€” AI-generated documentation
+# email — AI-generated documentation
 
-> ðŸ¤– **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h â€” see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -58,12 +58,12 @@ By following this pattern, you can extend the functionality of the Email agent t
 
 ## Reference
 
-> âš™ï¸ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
+> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this file. Hand edits to this file will be overwritten on the next run.
 
 ### Entry points
 
-- `./agent/manifest` â†’ [./src/emailManifest.json](./src/emailManifest.json)
-- `./agent/handlers` â†’ [./dist/emailActionHandler.js](./dist/emailActionHandler.js)
+- `./agent/manifest` → [./src/emailManifest.json](./src/emailManifest.json)
+- `./agent/handlers` → [./dist/emailActionHandler.js](./dist/emailActionHandler.js)
 
 ### Dependencies
 
@@ -84,7 +84,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `chalk`, `debug`
 
 ### Files of interest
 
-`./src/emailActionHandler.ts`, `./src/emailActionsSchema.ts`, `./src/emailManifest.json`, â€¦and 6 more under `./src/`.
+`./src/emailActionHandler.ts`, `./src/emailActionsSchema.ts`, `./src/emailManifest.json`, …and 6 more under `./src/`.
 
 ### Agent surface
 
@@ -99,10 +99,10 @@ _4 actions implemented by this agent, parsed deterministically from `./src/email
 
 | User says | Action |
 | --- | --- |
-| _Type for sending a simple email_ | `sendEmail` â†’ `{ "subject": "â€¦", "to": ["â€¦"] }` |
-| _Type for forwarding an email_ | `forwardEmail` â†’ `{ "to": ["â€¦"], "messageRef": "â€¦" }` |
-| _Type for replying to an email_ | `replyEmail` â†’ `{ "messageRef": "â€¦" }` |
-| _Type for finding an email message (search for emails)_ | `findEmail` â†’ `{ "messageRef": "â€¦" }` |
+| _Type for sending a simple email_ | `sendEmail` → `{ "subject": "…", "to": ["…"] }` |
+| _Type for forwarding an email_ | `forwardEmail` → `{ "to": ["…"], "messageRef": "…" }` |
+| _Type for replying to an email_ | `replyEmail` → `{ "messageRef": "…" }` |
+| _Type for finding an email message (search for emails)_ | `findEmail` → `{ "messageRef": "…" }` |
 
 ---
 
