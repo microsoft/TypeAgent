@@ -149,4 +149,32 @@ describe("validateDocumentation", () => {
         expect(v.valid).toBe(true);
         expect(v.warnings.join(" ")).toMatch(/target band/iu);
     });
+
+    it("collects an H2 heading whose payload follows tabs", () => {
+        const v = validateDocumentation("##\t\tOverview\n\nbody");
+        expect(v.sectionHeadings).toContain("Overview");
+    });
+
+    it("ignores `##` followed only by whitespace (no payload)", () => {
+        const v = validateDocumentation("## \t \nbody");
+        expect(v.sectionHeadings).not.toContain("");
+    });
+
+    it("ignores H3+ headings", () => {
+        const v = validateDocumentation("### Subheading\n\nbody");
+        expect(v.sectionHeadings).not.toContain("Subheading");
+    });
+
+    // ReDoS regression: `^##\s+(.+)$/u` runs in polynomial time on
+    // adversarial whitespace because `\s` and `.` both match `\t`.
+    // The linear forward scan must complete in <100ms even at 100k
+    // tab characters with no closing payload.
+    it("handles adversarial `##` + tabs in linear time", () => {
+        const adversarial = "##" + "\t".repeat(100_000);
+        const start = Date.now();
+        const v = validateDocumentation(adversarial);
+        const elapsed = Date.now() - start;
+        expect(v.sectionHeadings).toEqual([]);
+        expect(elapsed).toBeLessThan(100);
+    });
 });

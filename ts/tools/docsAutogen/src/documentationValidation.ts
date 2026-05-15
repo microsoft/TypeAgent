@@ -201,13 +201,42 @@ function collectH2Headings(body: string): string[] {
     const out: string[] = [];
     walkLinesWithFences(body, (line, _idx, state) => {
         if (state.isFence || state.inFence) return;
-        // Use a greedy capture and trim afterwards rather than
-        // `(.+?)\s*$` (non-greedy + trailing-whitespace anchor),
-        // which is the canonical polynomial-backtracking shape.
-        const m = /^##\s+(.+)$/u.exec(line);
-        if (m) out.push(m[1]!.trim());
+        const heading = parseH2Heading(line);
+        if (heading !== null) out.push(heading);
     });
     return out;
+}
+
+/**
+ * Returns the heading text of a line that begins with exactly `##`
+ * followed by at least one ASCII space or tab and a non-empty payload;
+ * otherwise null. Implemented as a linear forward scan rather than the
+ * regex `^##\s+(.+)$/u` (Copilot/CodeQL flagged that pattern as
+ * polynomial: `\s+` and `.+` both match `\t`, so adversarial input
+ * like `##\t\t\t\t…` triggers nested backtracking on engines that
+ * don't reduce to a DFA).
+ */
+function parseH2Heading(line: string): string | null {
+    if (line.length < 3) return null;
+    if (line.charCodeAt(0) !== 0x23 || line.charCodeAt(1) !== 0x23) return null;
+    // Reject H3+ — `###...` would otherwise consume `\s+` against `#`.
+    if (line.charCodeAt(2) === 0x23) return null;
+    let i = 2;
+    let sawWs = false;
+    while (i < line.length) {
+        const c = line.charCodeAt(i);
+        if (c !== 0x20 && c !== 0x09) break;
+        sawWs = true;
+        i++;
+    }
+    if (!sawWs) return null;
+    let end = line.length;
+    while (end > i) {
+        const c = line.charCodeAt(end - 1);
+        if (c !== 0x20 && c !== 0x09) break;
+        end--;
+    }
+    return end > i ? line.slice(i, end) : null;
 }
 
 /**
