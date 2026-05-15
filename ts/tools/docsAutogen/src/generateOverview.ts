@@ -149,11 +149,12 @@ export async function generateOverview(
 /**
  * Strip the LLM's accidental scaffolding so the validator sees just
  * the prose body. Removes leading/trailing whitespace and a leading
- * "## Overview" line if the model included it despite instructions.
+ * "## AI Overview" (or legacy "## Overview") line if the model
+ * included it despite instructions.
  */
 function stripExtraneous(raw: string): string {
     let s = raw.trim();
-    s = s.replace(/^\s*##\s+Overview\s*\r?\n+/iu, "");
+    s = s.replace(/^\s*##\s+(?:AI\s+)?Overview\s*\r?\n+/iu, "");
     return s.trim();
 }
 
@@ -161,5 +162,5 @@ function placeholderBody(inputs: PackageInputs): string {
     const desc =
         inputs.description?.trim() ||
         `Workspace package \`${inputs.pkg.name}\`.`;
-    return `${desc}\n\n> _Pending LLM-authored Overview. The Reference section below is generated deterministically and may already be useful._`;
+    return `${desc}\n\n> 📝 **Placeholder Overview — AI authoring failed.** Re-run with \`--llm\` to retry, or replace with hand-written prose. The deterministic Reference section below is already populated.`;
 }

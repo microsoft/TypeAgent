@@ -35,20 +35,37 @@ The CLI accepts more granular flags:
 
 ```bash
 # Regenerate one package only.
-node tools/docsAutogen/dist/cli.js --package list-agent --render --write --llm
+node tools/docsAutogen/bin/docs-autogen.cjs --package list-agent --render --write --llm
 
 # Diff against an explicit ref instead of the watermark.
-node tools/docsAutogen/dist/cli.js --since main --render --write
+node tools/docsAutogen/bin/docs-autogen.cjs --since main --render --write
 
 # Dry-run preview without touching disk.
-node tools/docsAutogen/dist/cli.js --package list-agent --render --write --dry-run
+node tools/docsAutogen/bin/docs-autogen.cjs --package list-agent --render --write --dry-run
 
 # JSON output for tool-driven consumers.
-node tools/docsAutogen/dist/cli.js --all --render --json > /tmp/plan.json
+node tools/docsAutogen/bin/docs-autogen.cjs --all --render --json > /tmp/plan.json
 
 # Cap how many packages a single run touches (default 25).
-node tools/docsAutogen/dist/cli.js --all --render --write --max-packages 5
+node tools/docsAutogen/bin/docs-autogen.cjs --all --render --write --max-packages 5
 ```
+
+> The `bin/docs-autogen.cjs` shim is a thin launcher that silences a
+> Node 24 deprecation warning from `simple-git` and filters a known
+> Windows libuv shutdown-race assertion from stderr. The underlying
+> CLI is still `dist/cli.js` and accepts identical flags if you need
+> to invoke it directly.
+>
+> **Known limitation (Windows + Node 24, `--llm` only):** the libuv
+> shutdown bug (`STATUS_STACK_BUFFER_OVERRUN` / exit code
+> `-1073740791`) fires from inside `aiclient`'s dependency tree
+> _after_ a successful LLM run completes. The launcher hides the
+> stderr text but cannot rewrite the abort exit code (Node 22 is the
+> repo's documented minimum and is not affected; CI runs on Linux
+> and is not affected). Treat the run as successful if every
+> per-package `write=...` line shows `wrote`, `unchanged`, or
+> `footer-only` — those are emitted before exit, so any real failure
+> would be visible there.
 
 `--render` without `--write` prints the assembled AUTOGEN block to
 stdout so you can inspect what would be written. `--write` requires

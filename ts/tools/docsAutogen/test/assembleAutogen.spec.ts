@@ -48,7 +48,7 @@ describe("assembleAutogenBlock", () => {
             isoDate: "2026-05-14T21:00:00Z",
         });
         const idxHash = block.body.indexOf("AUTOGEN:DOCS:HASH:sha256=");
-        const idxOverview = block.body.indexOf("## Overview");
+        const idxOverview = block.body.indexOf("## AI Overview");
         const idxReference = block.body.indexOf("## Reference");
         const idxFooter = block.body.indexOf("docs-generate.yml");
         expect(idxHash).toBeGreaterThanOrEqual(0);
@@ -111,7 +111,7 @@ describe("assembleAutogenBlock", () => {
             "Hand-written overview that must survive.",
         );
         // Reference is rebuilt deterministically:
-        expect(block.body).toContain("Generated deterministically");
+        expect(block.body).toContain("Auto-generated, no AI involvement");
         expect(block.body).not.toContain("old reference body");
     });
 
@@ -155,7 +155,7 @@ describe("assembleAutogenBlock", () => {
         const { findAutogenRegion } = await import("../src/autogenRegion.js");
         const region = findAutogenRegion(wrapped);
         expect(region).not.toBeNull();
-        expect(region!.body).toContain("## Overview");
+        expect(region!.body).toContain("## AI Overview");
         expect(region!.body).toContain("## Reference");
     });
 });

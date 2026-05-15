@@ -25,7 +25,7 @@ export function renderReferenceSection(
     lines.push("## Reference");
     lines.push("");
     lines.push(
-        "> Generated deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit shown in the footer below. The Overview above is LLM-authored; this section is not.",
+        "> ⚙️ **Auto-generated, no AI involvement.** Built deterministically from `package.json`, `src/`, and the workspace dependency graph at the commit recorded in the staleness footer at the end of this block. Hand edits inside the AUTOGEN region will be overwritten on the next run.",
     );
     lines.push("");
 

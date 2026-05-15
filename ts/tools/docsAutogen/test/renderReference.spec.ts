@@ -58,7 +58,7 @@ describe("renderReferenceSection", () => {
             compact: false,
             reasons: [],
         });
-        expect(out).toMatch(/Generated deterministically/u);
+        expect(out).toMatch(/Auto-generated, no AI involvement/u);
         expect(out).toMatch(/^## Reference$/mu);
     });
 

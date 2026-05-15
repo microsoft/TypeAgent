@@ -110,7 +110,7 @@ describe("generateOverview", () => {
         );
         expect(result.status).toBe("validation-failed");
         expect(result.isPlaceholder).toBe(true);
-        expect(result.body).toContain("Pending LLM-authored Overview");
+        expect(result.body).toContain("Placeholder Overview");
         expect(result.attempts).toBe(2);
     });
 
@@ -128,10 +128,10 @@ describe("generateOverview", () => {
         expect(result.diagnostics.join(" ")).toMatch(/rate limited/u);
     });
 
-    it("strips a leading '## Overview' heading the model included", async () => {
+    it("strips a leading '## AI Overview' heading the model included", async () => {
         const { model } = makeModel([
-            { success: true, data: "## Overview\n\n" + goodBody },
-            { success: true, data: "## Overview\n\n" + goodBody }, // for retry
+            { success: true, data: "## AI Overview\n\n" + goodBody },
+            { success: true, data: "## AI Overview\n\n" + goodBody }, // for retry
         ]);
         // First attempt has a heading (rejected); second still has one.
         // After 2 attempts → validation-failed. We want to verify the
@@ -143,6 +143,20 @@ describe("generateOverview", () => {
         );
         // After stripping, the heading is gone but the prose is fine,
         // so this should actually pass on attempt 1.
+        expect(result.status).toBe("ok");
+        expect(result.body.startsWith("## AI Overview")).toBe(false);
+        expect(result.body.startsWith("## Overview")).toBe(false);
+    });
+
+    it("also strips a legacy '## Overview' heading for backward compat", async () => {
+        const { model } = makeModel([
+            { success: true, data: "## Overview\n\n" + goodBody },
+        ]);
+        const result = await generateOverview(
+            baseInputs,
+            "## Reference",
+            model,
+        );
         expect(result.status).toBe("ok");
         expect(result.body.startsWith("## Overview")).toBe(false);
     });

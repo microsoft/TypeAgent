@@ -5,15 +5,18 @@ import type { CompactDecision } from "./compactMode.js";
 import type { PackageInputs } from "./packageInputs.js";
 
 /**
- * Render the `## Overview` section of an AUTOGEN block.
+ * Render the `## AI Overview` section of an AUTOGEN block. The
+ * heading is deliberately namespaced with "AI " so the generated
+ * section never collides with a hand-written `## Overview` outside
+ * the AUTOGEN region.
  *
  * Phase 2 has no LLM integration: this either preserves any
- * existing Overview verbatim (so we don't churn user-edited prose
+ * existing AI Overview verbatim (so we don't churn user-edited prose
  * before the LLM is wired up), or emits a clearly marked placeholder
  * built from the package description.
  *
  * When the LLM is wired up in Phase 3, this function is replaced /
- * augmented but its output contract stays the same: a `## Overview`
+ * augmented but its output contract stays the same: a `## AI Overview`
  * section terminated by a single trailing newline.
  */
 export function renderOverviewSection(
@@ -23,7 +26,11 @@ export function renderOverviewSection(
 ): string {
     if (llmBody !== undefined && llmBody.trim().length > 0) {
         const lines: string[] = [];
-        lines.push("## Overview");
+        lines.push("## AI Overview");
+        lines.push("");
+        lines.push(
+            "> 🤖 **AI-authored summary**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer.",
+        );
         lines.push("");
         lines.push(llmBody.trim());
         lines.push("");
@@ -36,7 +43,11 @@ export function renderOverviewSection(
     }
 
     const lines: string[] = [];
-    lines.push("## Overview");
+    lines.push("## AI Overview");
+    lines.push("");
+    lines.push(
+        "> 📝 **Placeholder Overview — not AI-authored yet.** Re-run `pnpm docs:generate:llm` to populate this section, or replace it with hand-written prose. The deterministic Reference section below is already populated.",
+    );
     lines.push("");
     if (inputs.description.length > 0) {
         lines.push(inputs.description);
@@ -46,10 +57,6 @@ export function renderOverviewSection(
         );
     }
     lines.push("");
-    lines.push(
-        "> _Pending LLM-authored Overview. The Reference section below is generated deterministically and may already be useful._",
-    );
-    lines.push("");
     if (!decision.compact) {
         appendWhereToStartPlaceholder(lines, inputs);
     }
@@ -57,17 +64,19 @@ export function renderOverviewSection(
 }
 
 /**
- * Pull the existing `## Overview` section (and any sub-headings up to
- * the next `##`) out of a previously-generated AUTOGEN body, so the
- * renderer can preserve human edits across runs while the LLM is not
- * yet wired in.
+ * Pull the existing `## AI Overview` section (and any sub-headings up
+ * to the next `##`) out of a previously-generated AUTOGEN body, so
+ * the renderer can preserve human edits across runs while the LLM is
+ * not yet wired in. Also matches the legacy `## Overview` heading
+ * for backward compatibility with blocks generated before the
+ * heading was renamed.
  */
 function extractExistingOverview(body: string | null): string | null {
     if (body === null) return null;
     const lines = body.split(/\r?\n/u);
     let start = -1;
     for (let i = 0; i < lines.length; i++) {
-        if (/^##\s+Overview\s*$/u.test(lines[i]!)) {
+        if (/^##\s+(AI\s+)?Overview\s*$/u.test(lines[i]!)) {
             start = i;
             break;
         }
@@ -92,11 +101,11 @@ function appendWhereToStartPlaceholder(
     const eps = inputs.entryPoints.filter((ep) => ep.exists).slice(0, 3);
     if (eps.length === 0) {
         out.push(
-            "_The LLM-authored Overview will populate this section. Until then, see the Reference section below for files of interest._",
+            "_See the Reference section below for files of interest until this section is AI-authored._",
         );
     } else {
         out.push(
-            "_Until the LLM-authored Overview is populated, the most likely entry points are:_",
+            "_Most likely entry points (until this section is AI-authored):_",
         );
         out.push("");
         for (const ep of eps) {
