@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as process from "node:process";
 import {
+    detectImplementedActionNames,
     extractActionsFromSource,
     markImplementedActions,
     type AgentAction,
@@ -117,30 +122,119 @@ describe("markImplementedActions", () => {
     });
 });
 
-describe("handler implementation detection (regex semantics)", () => {
-    // Indirectly exercised by detectImplementedActionNames; we keep
-    // these tight, source-only assertions to lock the matcher's
-    // boundary behaviour: only quoted literals count.
-    const handlerSnippet = `
-        switch (action.actionName) {
-            case "createPlaylist": { return; }
-            // mention as identifier should NOT count: createPlaylistHelper()
-            default: throw new Error("Unknown: " + action.actionName);
-        }
-    `;
-    function mentions(name: string): boolean {
-        return new RegExp(`(?:["'\`])${name}(?:["'\`])`, "u").test(
-            handlerSnippet,
-        );
+describe("handler implementation detection (dispatch-context regex)", () => {
+    // The detector requires the action name to appear in a dispatch
+    // context — `case "X":` or `=== "X"` / `"X" ===`. Mentions in
+    // comments, plain strings, or guard-list `Set` literals do NOT
+    // count as implementation. These tests lock in that contract by
+    // invoking the actual detector via `detectImplementedActionNames`
+    // through a temporary file fixture.
+    const tmpdir = path.join(
+        os.tmpdir(),
+        `docs-autogen-extractActions-${process.pid}-${Date.now()}`,
+    );
+    beforeAll(() => fs.mkdirSync(tmpdir, { recursive: true }));
+    afterAll(() => fs.rmSync(tmpdir, { recursive: true, force: true }));
+
+    async function detect(
+        source: string,
+        names: readonly string[],
+    ): Promise<Set<string>> {
+        const file = path.join(tmpdir, `handler-${Math.random()}.ts`);
+        fs.writeFileSync(file, source, "utf8");
+        const out = await detectImplementedActionNames(file, names);
+        fs.unlinkSync(file);
+        if (!out) throw new Error("expected detector to return a non-null set");
+        return out;
     }
-    it("matches a quoted literal", () => {
-        expect(mentions("createPlaylist")).toBe(true);
+
+    it("accepts a switch/case arm with a quoted literal", async () => {
+        const src = `switch (action.actionName) { case "createPlaylist": return; }`;
+        expect(await detect(src, ["createPlaylist"])).toEqual(
+            new Set(["createPlaylist"]),
+        );
     });
-    it("does NOT match an identifier substring", () => {
-        // "createPlaylistHelper" contains createPlaylist but is not quoted.
-        // The literal "createPlaylist" *is* present in the case arm above,
-        // so for this test we use a name that only appears unquoted:
-        const onlyIdentifier = "doesNotExist";
-        expect(mentions(onlyIdentifier)).toBe(false);
+
+    it("accepts === equality on the right side of the action name", async () => {
+        const src = `if (action.actionName === "addItems") { /* ... */ }`;
+        expect(await detect(src, ["addItems"])).toEqual(new Set(["addItems"]));
+    });
+
+    it("accepts === equality on the left side of the action name", async () => {
+        const src = `if ("addItems" === action.actionName) { /* ... */ }`;
+        expect(await detect(src, ["addItems"])).toEqual(new Set(["addItems"]));
+    });
+
+    it("accepts double-equals (==) as well as triple", async () => {
+        const src = `if (action.actionName == "addItems") { }`;
+        expect(await detect(src, ["addItems"])).toEqual(new Set(["addItems"]));
+    });
+
+    it("accepts single-quoted and backtick string literals", async () => {
+        const src = `case 'a': return; if (n === \`b\`) return;`;
+        expect(await detect(src, ["a", "b"])).toEqual(new Set(["a", "b"]));
+    });
+
+    it("rejects a mention inside a // line comment", async () => {
+        const src = `// TODO: handle case "addItems":\nreturn;`;
+        expect(await detect(src, ["addItems"])).toEqual(new Set());
+    });
+
+    it("rejects a mention inside a /* block */ comment", async () => {
+        const src = `/* later: case "addItems": */\nreturn;`;
+        expect(await detect(src, ["addItems"])).toEqual(new Set());
+    });
+
+    it("rejects a mention as a JSDoc example", async () => {
+        const src = `/**\n * Example: action.actionName === "addItems"\n */\nreturn;`;
+        expect(await detect(src, ["addItems"])).toEqual(new Set());
+    });
+
+    it("rejects a bare string in a log message or import path", async () => {
+        const src = [
+            `import { foo } from "./addItems";`,
+            `debug("addItems is handled");`,
+            `const COMMENTARY = ["addItems is fun"];`,
+        ].join("\n");
+        expect(await detect(src, ["addItems"])).toEqual(new Set());
+    });
+
+    it("rejects membership in a guard-list Set / array (not a dispatch)", async () => {
+        // Set membership names actions that *require a guard*; the
+        // actual dispatch happens via case/=== elsewhere. If the
+        // case/=== isn't there, we correctly mark it unimplemented.
+        const src = `const GUILD_REQUIRED_ACTIONS = new Set(["joinGuild", "leaveGuild"]);`;
+        expect(await detect(src, ["joinGuild", "leaveGuild"])).toEqual(
+            new Set(),
+        );
+    });
+
+    it("rejects an identifier substring (createPlaylistHelper)", async () => {
+        const src = `function createPlaylistHelper() { return; }`;
+        expect(await detect(src, ["createPlaylist"])).toEqual(new Set());
+    });
+
+    it("returns null when the handler file does not exist", async () => {
+        const missing = path.join(tmpdir, "does-not-exist.ts");
+        expect(await detectImplementedActionNames(missing, ["x"])).toBeNull();
+    });
+
+    it("handles a realistic dispatcher with a mix of dispatched and stub actions", async () => {
+        const src = `
+            const GUARD = new Set(["joinGuild"]);
+            switch (action.actionName) {
+                case "createMessage": { return; }
+                case "getCurrentUser": { return; }
+                default:
+                    // "joinGuild" is named in GUARD but not dispatched.
+                    throw new Error("Unknown action: " + action.actionName);
+            }
+        `;
+        const out = await detect(src, [
+            "createMessage",
+            "getCurrentUser",
+            "joinGuild",
+        ]);
+        expect(out).toEqual(new Set(["createMessage", "getCurrentUser"]));
     });
 });

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { parseFenceLine, walkLinesWithFences } from "./fenceWalker.js";
 import {
     DOCUMENTATION_HARD_CAP_WORDS,
     DOCUMENTATION_TARGET_WORDS_MAX,
@@ -53,7 +54,7 @@ const FORBIDDEN_H1 = /^\s*#\s+\S/mu;
 
 /** Count whitespace-separated tokens, ignoring code fences. */
 export function countDocumentationWords(markdown: string): number {
-    const stripped = markdown.replace(/```[\s\S]*?```/gu, " ");
+    const stripped = stripFencedCode(markdown);
     const tokens = stripped.trim().split(/\s+/u).filter(Boolean);
     return tokens.length;
 }
@@ -130,7 +131,7 @@ export function validateDocumentation(body: string): DocumentationValidation {
         );
     }
 
-    if (/```\s*mermaid/iu.test(body)) {
+    if (/(?:^|\n)\s*(?:`{3,}|~{3,})\s*mermaid/iu.test(body)) {
         violations.push("Documentation must not contain Mermaid diagrams.");
     }
 
@@ -151,21 +152,22 @@ export function validateDocumentation(body: string): DocumentationValidation {
         );
     }
 
-    const fenceLines = body
-        .split(/\r?\n/u)
-        .map((line, idx) => ({ line, idx }))
-        .filter(({ line }) => /^\s*```/u.test(line));
-    for (let i = 0; i < fenceLines.length; i += 2) {
-        const opener = fenceLines[i];
-        if (!opener) continue;
-        const trimmed = opener.line.trim();
-        const lang = trimmed.slice(3).trim();
-        if (!lang) {
+    // Walk fences with shared state machine so opener/closer pairing
+    // is correct for both ``` and ~~~ fences and odd-numbered fences
+    // (e.g. an unterminated opener) don't trigger false-positive
+    // "missing language tag" violations on what is actually a closer.
+    walkLinesWithFences(body, (line, idx, state) => {
+        if (!state.isFence) return;
+        // Only check opener boundaries (not closers).
+        if (state.inFence) return;
+        const fence = parseFenceLine(line);
+        if (!fence) return;
+        if (fence.info.length === 0) {
             violations.push(
-                `Code fence at line ${opener.idx + 1} is missing a language tag.`,
+                `Code fence at line ${idx + 1} is missing a language tag.`,
             );
         }
-    }
+    });
 
     return {
         valid: violations.length === 0,
@@ -178,22 +180,27 @@ export function validateDocumentation(body: string): DocumentationValidation {
 
 function collectH2Headings(body: string): string[] {
     const out: string[] = [];
-    const lines = body.split(/\r?\n/u);
-    let inFence = false;
-    for (const line of lines) {
-        if (/^\s*```/u.test(line)) {
-            inFence = !inFence;
-            continue;
-        }
-        if (inFence) continue;
+    walkLinesWithFences(body, (line, _idx, state) => {
+        if (state.isFence || state.inFence) return;
         const m = /^##\s+(.+?)\s*$/u.exec(line);
         if (m) out.push(m[1]!.trim());
-    }
+    });
     return out;
 }
 
-/** Replace fenced code blocks with whitespace so URL/link checks
- * don't accidentally flag content inside `\`\`\`md` examples. */
+/**
+ * Replace fenced code blocks (both ``` and ~~~) with a single space
+ * so URL/link checks don't accidentally flag content inside example
+ * code blocks. Uses the shared fence walker for consistent pairing.
+ */
 function stripFencedCode(body: string): string {
-    return body.replace(/```[\s\S]*?```/gu, " ");
+    const out: string[] = [];
+    walkLinesWithFences(body, (line, _idx, state) => {
+        if (state.isFence || state.inFence) {
+            out.push(" ");
+            return;
+        }
+        out.push(line);
+    });
+    return out.join("\n");
 }

@@ -12,93 +12,76 @@
 
 ## Overview
 
-The `discord-agent` package is a TypeAgent application agent designed to interact with Discord servers using natural language commands. It leverages the Discord REST API v10 to perform various actions such as sending messages, listing channels, creating invites, and more. This agent simplifies the process of managing Discord servers by allowing users to refer to channels by name rather than by ID.
+The `discord-agent` package is a TypeAgent application agent designed to interact with Discord servers using natural language commands. It leverages the Discord REST API v10 to perform various actions such as sending messages, listing channels, creating invites, and more. This agent simplifies the process of managing Discord servers by allowing users to issue commands in plain English.
 
 ## What it does
 
-The `discord-agent` package implements several actions that enable interaction with Discord servers. These actions include:
+The `discord-agent` package supports a range of actions that facilitate interaction with Discord servers. These actions include:
 
 - `createMessage`: Sends a message to a specified channel.
-- `getChannelMessages`: Fetches messages from a specified channel.
-- `getCurrentUser`: Retrieves the user object of the requester's account.
+- `getChannelMessages`: Retrieves messages from a specified channel.
+- `getCurrentUser`: Fetches the user object of the requester's account.
 - `createChannelInvite`: Creates a new invite for a channel.
 - `setGuild`: Sets the default Discord server (guild) for all operations.
 - `listChannels`: Lists all channels in the current Discord server.
 - `refreshChannels`: Refreshes the channel cache from the Discord server.
 
-These actions allow users to manage their Discord servers efficiently through natural language commands.
+These actions enable users to manage their Discord servers efficiently, perform administrative tasks, and interact with server members through automated commands.
 
 ## Setup
 
-To set up the `discord-agent`, you need to configure a Discord bot and obtain a bot token. Follow these steps:
+To set up the `discord-agent`, follow these steps:
 
-1. **Create a Discord Bot**:
+1. **Prerequisites**:
+   - Ensure you have Node.js >= 20 and pnpm >= 10 installed.
+   - Obtain a Discord account and manage a server (guild).
 
+2. **Discord Bot Setup**:
    - Go to the Discord Developer Portal (`https://discord.com/developers/applications`) and create a new application.
    - Navigate to the **Bot** tab, reset the token, and copy it.
-
-2. **Configure Environment Variables**:
-
-   - Add the bot token to your environment variables in `ts/.env`:
+   - Add the token to your environment variables in `ts/.env`:
      ```env
      DISCORD_BOT_TOKEN=your_token_here
      ```
+   - Enable the **Message Content Intent** in the **Bot → Privileged Gateway Intents** section.
+   - Invite the bot to your server using the OAuth2 URL Generator, selecting the appropriate scopes and permissions.
+   - Enable **Developer Mode** in Discord settings and obtain your Server ID.
 
-3. **Enable Message Content Intent**:
-
-   - In the **Bot** tab, enable the **Message Content Intent** under **Privileged Gateway Intents**.
-
-4. **Invite the Bot to Your Server**:
-
-   - Generate an invite URL in the **OAuth2 > URL Generator** section, select the necessary scopes and permissions, and authorize the bot in your server.
-
-5. **Enable Developer Mode**:
-
-   - Enable **Developer Mode** in Discord settings to obtain your Server ID.
-
-6. **Set Up the Discord Server in TypeAgent**:
-   - After restarting TypeAgent with the bot token configured, set your Discord server ID:
+3. **First-Time Setup in TypeAgent**:
+   - Restart TypeAgent with the bot token configured.
+   - Set your Discord server ID using the command:
      ```bash
      set my discord server to YOUR_SERVER_ID
      ```
 
-For detailed setup instructions, see the hand-written README.
-
 ## Key Files
-The `discord-agent` package is structured into several key components:
 
-- **Manifest**: [discordManifest.json](./src/discordManifest.json) defines the agent's metadata and schema configuration.
-- **Schema**: [discordSchema.ts](./src/discordSchema.ts) outlines the types and actions supported by the agent.
-- **Grammar**: [discordSchema.agr](./src/discordSchema.agr) contains patterns for user requests.
-- **Handler**: [discordActionHandler.ts](./src/discordActionHandler.ts) implements the logic for handling actions.
+The `discord-agent` package consists of several key files that define its functionality:
 
-The agent uses the TypeAgent SDK to manage actions and sessions, and it interacts with the Discord API to perform operations.
+- [discordActionHandler.ts](./src/discordActionHandler.ts): Contains the implementation of action handlers for the Discord agent.
+- [discordManifest.json](./src/discordManifest.json): Defines the agent's manifest, including its description, schema, and default settings.
+- [discordSchema.ts](./src/discordSchema.ts): Specifies the types and structures for the Discord actions.
+- [discordSchema.agr](./src/discordSchema.agr): Contains the grammar definitions for parsing natural language commands related to Discord actions.
 
 ## How to extend
 
 To extend the `discord-agent` package, follow these steps:
 
 1. **Add New Actions**:
+   - Define new actions in the [discordSchema.ts](./src/discordSchema.ts) file.
+   - Implement the corresponding handlers in [discordActionHandler.ts](./src/discordActionHandler.ts).
 
-   - Define new actions in the schema file [discordSchema.ts](./src/discordSchema.ts).
-   - Update the grammar file [discordSchema.agr](./src/discordSchema.agr) with patterns for the new actions.
+2. **Update Grammar**:
+   - Modify the grammar definitions in [discordSchema.agr](./src/discordSchema.agr) to support new natural language commands.
 
-2. **Implement Action Handlers**:
-
-   - Implement the logic for new actions in [discordActionHandler.ts](./src/discordActionHandler.ts). Use the existing handlers as a reference.
-
-3. **Test Your Changes**:
-
-   - Run tests to ensure your new actions work correctly. Add test cases for new actions in the appropriate test files.
-
-4. **Build the Package**:
-   - Build the package using the following command:
+3. **Testing**:
+   - Write tests for new actions and handlers to ensure they work as expected.
+   - Run the tests using the following command:
      ```bash
-     cd ts/packages/agents/discord
-     pnpm run build
+     pnpm run test
      ```
 
-By following these steps, you can extend the functionality of the `discord-agent` package to support additional Discord operations.
+By following these steps, you can add new functionalities to the `discord-agent` package and enhance its capabilities for managing Discord servers.
 
 ## Reference
 
@@ -156,6 +139,6 @@ _7 actions implemented by this agent, parsed deterministically from `./src/disco
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:27:49.365Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `efea70b1cce9f181f91a37badbbda26f7a295a0b` on `2026-05-15T20:36:12.535Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

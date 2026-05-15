@@ -80,6 +80,7 @@ export async function generateDocumentation(
 
     let lastValidation: DocumentationValidation | undefined;
     let priorViolations: string[] = [];
+    let lastModelError: string | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const messages: ChatPromptSection[] = [
@@ -95,23 +96,23 @@ export async function generateDocumentation(
 
         const result = await model.complete(messages);
         if (!result.success) {
+            // Treat model errors (rate limits, transient 5xx, network
+            // blips) the same as validation failures: spend a retry
+            // attempt rather than burning the whole budget on one bad
+            // response. Only emit the placeholder if every attempt
+            // also fails.
+            lastModelError = result.message;
             diagnostics.push(
                 `Attempt ${attempt}: model error: ${result.message}`,
             );
-            return {
-                status: "model-error",
-                body: placeholderBody(inputs),
-                isPlaceholder: true,
-                validation: undefined,
-                attempts: attempt,
-                diagnostics,
-                prompt,
-            };
+            priorViolations = [];
+            continue;
         }
 
         const candidate = repairOutput(stripExtraneous(result.data));
         const validation = validateDocumentation(candidate);
         lastValidation = validation;
+        lastModelError = undefined;
 
         if (validation.valid) {
             const status: DocumentationStatus =
@@ -136,8 +137,13 @@ export async function generateDocumentation(
         priorViolations = validation.violations;
     }
 
+    // All attempts exhausted. Distinguish "model never returned a
+    // successful response" from "model returned but validator rejected
+    // every draft" so callers can decide whether to preserve any
+    // existing on-disk content.
     return {
-        status: "validation-failed",
+        status:
+            lastModelError !== undefined ? "model-error" : "validation-failed",
         body: placeholderBody(inputs),
         isPlaceholder: true,
         validation: lastValidation,

@@ -306,22 +306,22 @@ function extractParameters(bodyLines: readonly string[]): ActionParameter[] {
 }
 
 /**
- * Scan the given handler source file for occurrences of each action
- * name as a quoted string literal (`"x"`, `'x'`, or `` `x` ``) and
- * return the subset that appears at least once. This is the deterministic
- * heuristic the renderer uses to distinguish *implemented* actions from
- * schema-only stubs.
+ * Scan the given handler source file and return the subset of
+ * `actionNames` whose name appears in a *dispatch* context. The
+ * detection is intentionally conservative — we only accept patterns
+ * the agent handlers in this monorepo use to actually route an
+ * action to its implementation:
  *
- * The check is intentionally conservative — it only considers the
- * action name appearing as a complete string literal, which matches
- * the conventional dispatch shapes used by agents in this monorepo:
+ *   - switch / case arm: `case "addItems":`
+ *   - equality comparison: `action.actionName === "addItems"` or
+ *     `"addItems" === action.actionName` (covers `==` too)
  *
- *   - `case "addItems":`
- *   - `if (action.actionName === "addItems") { … }`
- *   - membership in a `Set<string>` of action names
- *
- * Identifier mentions (e.g. `addItemsHelper`) are not treated as
- * implementations.
+ * Mentions in comments (line `//` or block `/* * /`), JSDoc, plain
+ * log messages, import paths, or guard-list `Set`/array literals do
+ * NOT count as implementation. The error mode is now skewed toward
+ * false-negatives (an action implemented via a non-standard pattern
+ * may be marked unimplemented), which is the safer direction: docs
+ * understate implementation status rather than overstate it.
  *
  * Returns `null` when the handler file cannot be read. Callers should
  * treat a `null` result as "implementation status unknown" and leave
@@ -337,18 +337,53 @@ export async function detectImplementedActionNames(
     } catch {
         return null;
     }
+    // Strip comments once so every per-action regex sees the same
+    // dispatch-only view of the source.
+    const cleaned = stripCommentsForDispatchScan(source);
     const found = new Set<string>();
     for (const name of actionNames) {
-        if (handlerMentionsAction(source, name)) found.add(name);
+        if (handlerMentionsAction(cleaned, name)) found.add(name);
     }
     return found;
 }
 
-function handlerMentionsAction(source: string, actionName: string): boolean {
+/**
+ * Remove single-line and block comments so dispatch-shaped strings
+ * inside JSDoc / `// TODO: case "X":` etc. are not counted as
+ * implementations. Not string-literal-aware (would over-engineer for
+ * the rare case where a string literal contains `//`); the worst
+ * effect is dropping a string mention that would have been counted
+ * anyway, which is acceptable.
+ */
+function stripCommentsForDispatchScan(source: string): string {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//gu, " ")
+        .replace(/\/\/[^\n]*/gu, " ");
+}
+
+function handlerMentionsAction(cleaned: string, actionName: string): boolean {
     if (actionName.length === 0) return false;
     const escaped = actionName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-    const re = new RegExp(`(?:["'\`])${escaped}(?:["'\`])`, "u");
-    return re.test(source);
+    // A quoted form of the action name in any of the three accepted
+    // string-literal styles. Reused in every alternation branch below.
+    const quoted = `(?:"${escaped}"|'${escaped}'|\`${escaped}\`)`;
+    // Match exactly one of the dispatch shapes:
+    //   1. `case "X":`  — switch dispatch
+    //   2. `=== "X"` / `== "X"`  — equality on the right
+    //   3. `"X" ===` / `"X" ==`  — equality on the left
+    // The leading `\b` before `case` keeps us from matching
+    // `xcase "X":` or similar identifier-tail false positives.
+    const dispatchPattern = new RegExp(
+        `(?:` +
+            `\\bcase\\s+${quoted}\\s*:` +
+            `|` +
+            `===?\\s*${quoted}` +
+            `|` +
+            `${quoted}\\s*===?` +
+            `)`,
+        "u",
+    );
+    return dispatchPattern.test(cleaned);
 }
 
 /**

@@ -42,17 +42,32 @@ describe("stripBrokenLinks", () => {
         expect(fromArray.strippedCount).toBe(fromSet.strippedCount);
     });
 
-    it("leaves bare-text URLs and inline-code references untouched", () => {
+    it("leaves inline-code references untouched (does not strip literal `[fake](./bad.md)` shown in code)", () => {
         const body =
             "Open https://example.com or `[fake](./bad.md)` for context.";
         const out = stripBrokenLinks(body, ["./bad.md"]);
-        // The inline-code occurrence is still stripped because we
-        // operate at the markdown source level — that's acceptable;
-        // contributors rarely embed inline code with the exact
-        // shape of a markdown link, and false negatives are worse
-        // than false positives here.
-        expect(out.body).toContain("Open https://example.com");
-        expect(out.strippedCount).toBe(1);
+        // The inline-code occurrence is preserved verbatim; only
+        // real markdown links outside code spans are rewritten.
+        expect(out.body).toBe(body);
+        expect(out.strippedCount).toBe(0);
+    });
+
+    it("leaves links inside fenced code blocks untouched", () => {
+        const body = [
+            "Real [bad](./bad.md) link.",
+            "",
+            "```md",
+            "Example: [fake](./bad.md)",
+            "```",
+            "",
+            "Another [bad](./bad.md) after.",
+        ].join("\n");
+        const out = stripBrokenLinks(body, ["./bad.md"]);
+        // Two real links rewritten; the fenced-block example survives.
+        expect(out.body).toContain("Real bad link.");
+        expect(out.body).toContain("Another bad after.");
+        expect(out.body).toContain("Example: [fake](./bad.md)");
+        expect(out.strippedCount).toBe(2);
     });
 
     it("preserves link text containing markdown emphasis or punctuation", () => {

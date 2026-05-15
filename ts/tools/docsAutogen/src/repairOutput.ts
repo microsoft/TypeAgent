@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { walkLinesWithFences } from "./fenceWalker.js";
+
 /**
  * Post-process LLM documentation output to mechanically fix the most
  * common, trivially-recoverable validation violations BEFORE running
@@ -42,31 +44,38 @@ export function repairBareCodeFences(body: string): string {
     const lines = body.split(/\r?\n/u);
     const out: string[] = [];
     let i = 0;
+    // Match either ` or ~ fence runs (>=3) optionally followed by an info string.
+    const fenceRegex = /^(\s*)(`{3,}|~{3,})(.*)$/u;
     while (i < lines.length) {
         const line = lines[i]!;
-        // Match any fence line (opener or closer); the loop body
-        // always advances past the matching closer, so we never see
-        // a closer at the start of an iteration except as a fresh
-        // (independent) opener of a new block — which is fine.
-        const fence = /^(\s*)```(.*)$/u.exec(line);
+        const fence = fenceRegex.exec(line);
         if (!fence) {
             out.push(line);
             i++;
             continue;
         }
         const indent = fence[1] ?? "";
-        const existingTag = (fence[2] ?? "").trim();
+        const marker = fence[2] ?? "```";
+        const existingTag = (fence[3] ?? "").trim();
 
-        // Find the matching closing fence line.
+        // Find the matching closing fence: same marker character and
+        // length >= opener. Mismatched fences (different char, shorter
+        // run) are content per CommonMark.
+        const markerChar = marker.charAt(0);
+        const markerLen = marker.length;
+        const closerRegex = new RegExp(
+            `^\\s*${markerChar === "`" ? "`" : "~"}{${markerLen},}\\s*$`,
+            "u",
+        );
         let j = i + 1;
-        while (j < lines.length && !/^\s*```/u.test(lines[j]!)) {
+        while (j < lines.length && !closerRegex.test(lines[j]!)) {
             j++;
         }
         const contentLines = lines.slice(i + 1, j);
 
         if (existingTag.length === 0) {
             const lang = inferFenceLanguage(contentLines);
-            out.push(`${indent}\`\`\`${lang}`);
+            out.push(`${indent}${marker}${lang}`);
         } else {
             out.push(line);
         }
@@ -167,19 +176,13 @@ export function repairAbsoluteLinks(body: string): string {
  */
 export function repairH1Headings(body: string): string {
     const lines = body.split(/\r?\n/u);
-    let inFence = false;
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]!;
-        if (/^\s*```/u.test(line)) {
-            inFence = !inFence;
-            continue;
-        }
-        if (inFence) continue;
+    walkLinesWithFences(body, (line, idx, state) => {
+        if (state.isFence || state.inFence) return;
         // Match `# ` exactly (single hash + space), not `## `, `### `, etc.
         if (/^#\s/u.test(line)) {
-            lines[i] = `#${line}`;
+            lines[idx] = `#${line}`;
         }
-    }
+    });
     return lines.join("\n");
 }
 
@@ -195,16 +198,10 @@ export function repairH1Headings(body: string): string {
  */
 export function repairSelfReadmeLinks(body: string): string {
     const lines = body.split(/\r?\n/u);
-    let inFence = false;
     const linkRegex = /\[([^\]]+)\]\(\.\/README\.md(?:\s+"[^"]*")?\)/gu;
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]!;
-        if (/^\s*```/u.test(line)) {
-            inFence = !inFence;
-            continue;
-        }
-        if (inFence) continue;
-        lines[i] = line.replace(linkRegex, (_m, text: string) => text);
-    }
+    walkLinesWithFences(body, (line, idx, state) => {
+        if (state.isFence || state.inFence) return;
+        lines[idx] = line.replace(linkRegex, (_m, text: string) => text);
+    });
     return lines.join("\n");
 }

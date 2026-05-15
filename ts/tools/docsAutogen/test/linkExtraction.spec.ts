@@ -62,4 +62,21 @@ describe("extractMarkdownLinks", () => {
         const links = extractMarkdownLinks(md);
         expect(links).toEqual([]);
     });
+    it("skips links inside inline code spans (single backtick)", () => {
+        const md = "real [a](./a.ts) and `code [skipme](./b.ts) example`";
+        const links = extractMarkdownLinks(md);
+        expect(links.map((l) => l.target)).toEqual(["./a.ts"]);
+    });
+    it("skips links inside multi-backtick code spans (``...``)", () => {
+        const md = "real [a](./a.ts) and ``span with ` and [skip](./b.ts)``";
+        const links = extractMarkdownLinks(md);
+        expect(links.map((l) => l.target)).toEqual(["./a.ts"]);
+    });
+    it("does not lose real links following an unterminated backtick", () => {
+        // Unterminated openers are conservatively NOT masked, but we
+        // still expect the link before the opener to be extracted.
+        const md = "see [a](./a.ts) and stray ` no closer here";
+        const links = extractMarkdownLinks(md);
+        expect(links.map((l) => l.target)).toEqual(["./a.ts"]);
+    });
 });

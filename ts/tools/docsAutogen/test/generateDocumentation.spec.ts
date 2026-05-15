@@ -131,8 +131,8 @@ describe("generateDocumentation", () => {
         expect(result.attempts).toBe(3);
     });
 
-    it("falls back to placeholder on a model error", async () => {
-        const { model } = makeModel([
+    it("falls back to placeholder on a model error after exhausting retries", async () => {
+        const { model, calls } = makeModel([
             { success: false, message: "rate limited" },
         ]);
         const result = await generateDocumentation(
@@ -142,7 +142,45 @@ describe("generateDocumentation", () => {
         );
         expect(result.status).toBe("model-error");
         expect(result.isPlaceholder).toBe(true);
+        expect(result.attempts).toBe(3);
+        // Each attempt that returned an error should be reported.
+        expect(calls()).toBe(3);
         expect(result.diagnostics.join(" ")).toMatch(/rate limited/u);
+    });
+
+    it("recovers from a transient model error on a retry", async () => {
+        const { model, calls } = makeModel([
+            { success: false, message: "5xx blip" },
+            { success: true, data: goodBody },
+        ]);
+        const result = await generateDocumentation(
+            baseInputs,
+            "## Reference",
+            model,
+        );
+        expect(result.status).toBe("ok");
+        expect(result.attempts).toBe(2);
+        expect(result.isPlaceholder).toBe(false);
+        expect(calls()).toBe(2);
+    });
+
+    it("reports validation-failed (not model-error) when the last attempt completed but failed validation", async () => {
+        const bad = "## Overview\n\npowerful seamless robust. " + goodBody;
+        const { model } = makeModel([
+            { success: false, message: "transient" },
+            { success: true, data: bad },
+            { success: true, data: bad },
+        ]);
+        const result = await generateDocumentation(
+            baseInputs,
+            "## Reference",
+            model,
+        );
+        // Last attempt was a validation failure, not a model error,
+        // so the final verdict is validation-failed (more useful for
+        // an operator deciding whether to retry vs revise prompts).
+        expect(result.status).toBe("validation-failed");
+        expect(result.attempts).toBe(3);
     });
 
     it("strips a leading H1 the model included", async () => {

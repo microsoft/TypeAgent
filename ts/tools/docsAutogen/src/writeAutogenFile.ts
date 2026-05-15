@@ -74,7 +74,14 @@ export async function writeAutogenFile(
 
     let oldText: string;
     try {
-        oldText = await fs.readFile(filePath, "utf8");
+        const raw = await fs.readFile(filePath, "utf8");
+        // Normalize CRLF → LF so a Windows checkout (where git may
+        // have rewritten line endings on the working copy) doesn't
+        // permanently look "footer-only" against our LF-emitting
+        // composer. We deliberately rewrite the file when only the
+        // line endings differ — that is the desired behaviour to
+        // restore canonical LF endings.
+        oldText = raw.replace(/\r\n/gu, "\n");
     } catch {
         oldText = "";
     }

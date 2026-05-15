@@ -30,6 +30,7 @@ import {
     type WriteResult,
 } from "./writeAutogenFile.js";
 import { stripBrokenLinks } from "./stripBrokenLinks.js";
+import { AI_AUTHORED_BANNER_SENTINEL } from "./renderDocumentation.js";
 
 interface CliOptions {
     since: string | undefined;
@@ -176,17 +177,28 @@ async function main(): Promise<number> {
             ? buildPackageFilter(opts.packages, eligible)
             : null;
 
+    if (explicitFilter && explicitFilter.unmatched.length > 0 && !opts.json) {
+        process.stderr.write(
+            `${chalk.yellow(
+                `docs-autogen: --package selector(s) did not match any eligible package: ${explicitFilter.unmatched.join(", ")}`,
+            )}\n`,
+        );
+    }
+
     let selected: WorkspacePackage[];
     let sinceLabel: string;
     let sinceSha: string | null = null;
+    // Resolve HEAD once; both the change-detection path (when no
+    // explicit selector is given) and downstream consumers use it.
+    const headSha = await git.headSha();
 
     if (opts.all) {
         selected = explicitFilter
-            ? eligible.filter((p) => explicitFilter.has(p.name))
+            ? eligible.filter((p) => explicitFilter.matched.has(p.name))
             : eligible;
         sinceLabel = "--all";
     } else if (explicitFilter) {
-        selected = eligible.filter((p) => explicitFilter.has(p.name));
+        selected = eligible.filter((p) => explicitFilter.matched.has(p.name));
         sinceLabel = "--package";
     } else {
         const since = await resolveSinceRef(git, { explicit: opts.since });
@@ -196,7 +208,6 @@ async function main(): Promise<number> {
         }
         sinceLabel = `${since.source} (${since.sinceRef})`;
         sinceSha = since.sinceSha;
-        const headSha = await git.headSha();
         const changedFiles =
             since.sinceSha === headSha
                 ? []
@@ -204,8 +215,6 @@ async function main(): Promise<number> {
         const detection = detectChangedPackages(eligible, changedFiles);
         selected = detection.packages;
     }
-
-    const headSha = await git.headSha();
 
     // Cost guard: cap the number of packages a single run can touch
     // so an accidental --all + --llm doesn't run up an unbounded LLM
@@ -283,6 +292,18 @@ function stripScope(name: string): string {
 }
 
 /**
+ * Result of resolving --package selectors against the eligible
+ * package list. Unmatched selectors are surfaced so the CLI can emit
+ * a yellow warning instead of silently dropping them.
+ */
+export interface PackageFilterResult {
+    /** Full scoped names of packages the user explicitly selected. */
+    readonly matched: Set<string>;
+    /** Selector strings that did not resolve to any eligible package. */
+    readonly unmatched: string[];
+}
+
+/**
  * Build a set of full package names matching the user's --package
  * arguments. Accepts:
  *
@@ -291,33 +312,34 @@ function stripScope(name: string): string {
  *   - the bare name without the conventional `-agent` suffix (`list`)
  *
  * The third form is convenient for the agent packages where every
- * directory under `packages/agents/` ends in `-agent`. The lookup is
- * resolved against the eligible package list so an unknown name is
- * silently dropped and surfaced at no-op time.
+ * directory under `packages/agents/` ends in `-agent`. Unknown names
+ * are returned in `unmatched` so the caller can warn rather than
+ * silently dropping them.
  */
-function buildPackageFilter(
+export function buildPackageFilter(
     requested: readonly string[],
     eligible: readonly WorkspacePackage[],
-): Set<string> {
+): PackageFilterResult {
     const byBare = new Map<string, WorkspacePackage>();
     for (const pkg of eligible) {
         byBare.set(stripScope(pkg.name), pkg);
     }
-    const out = new Set<string>();
+    const matched = new Set<string>();
+    const unmatched: string[] = [];
     for (const raw of requested) {
         const direct = byBare.get(stripScope(raw));
         if (direct) {
-            out.add(direct.name);
+            matched.add(direct.name);
             continue;
         }
-        // Try with conventional "-agent" suffix added.
         const suffixed = byBare.get(`${stripScope(raw)}-agent`);
         if (suffixed) {
-            out.add(suffixed.name);
+            matched.add(suffixed.name);
             continue;
         }
+        unmatched.push(raw);
     }
-    return out;
+    return { matched, unmatched };
 }
 
 function emitNoop(opts: CliOptions, reason: string): void {
@@ -485,12 +507,31 @@ async function renderSelected(
 
         let writeMeta: WriteResult | undefined;
         if (opts.write && !opts.dryRun) {
-            writeMeta = await writeAutogenFile(pkg.dir, writeBody);
-            if (strippedCount > 0) {
+            // Safety net: if the new body is a placeholder (model
+            // error / all attempts failed validation) but the existing
+            // on-disk file already contains AI-authored content, skip
+            // the write rather than overwriting good content with the
+            // "AI authoring failed" placeholder. The next successful
+            // run will refresh it.
+            const placeholderWouldOverwriteAi =
+                docMeta.isPlaceholder &&
+                docMeta.mode === "llm" &&
+                (await existingFileIsAiAuthored(autogenPath));
+            if (placeholderWouldOverwriteAi) {
                 writeMeta = {
-                    ...writeMeta,
-                    note: `${writeMeta.note ? writeMeta.note + "; " : ""}stripped ${strippedCount} broken link(s)`,
+                    attempted: false,
+                    verdict: "unchanged",
+                    note: "preserved existing AI body; current run produced placeholder",
+                    filePath: autogenPath,
                 };
+            } else {
+                writeMeta = await writeAutogenFile(pkg.dir, writeBody);
+                if (strippedCount > 0) {
+                    writeMeta = {
+                        ...writeMeta,
+                        note: `${writeMeta.note ? writeMeta.note + "; " : ""}stripped ${strippedCount} broken link(s)`,
+                    };
+                }
             }
         } else if (opts.write) {
             writeMeta = {
@@ -629,6 +670,22 @@ async function verifyLinksMode(
     }
     const totalBroken = records.reduce((acc, r) => acc + r.broken.length, 0);
     return totalBroken === 0 ? 0 : 1;
+}
+
+/**
+ * Cheap on-disk inspection: returns true when an existing AUTOGEN
+ * file already contains an AI-authored body. Looks for the shared
+ * `AI_AUTHORED_BANNER_SENTINEL` marker emitted by
+ * `renderDocumentation.ts:aiBanner`. When the file does not exist
+ * or cannot be read, returns false (i.e. no protection needed).
+ */
+async function existingFileIsAiAuthored(filePath: string): Promise<boolean> {
+    try {
+        const content = await fsPromises.readFile(filePath, "utf8");
+        return content.includes(AI_AUTHORED_BANNER_SENTINEL);
+    } catch {
+        return false;
+    }
 }
 
 /**

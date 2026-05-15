@@ -4,6 +4,19 @@
 import type { PackageInputs } from "./packageInputs.js";
 
 /**
+ * Sentinel string embedded verbatim in the AI banner above any
+ * AI-authored body. Cheap-to-grep marker that downstream tooling
+ * uses to distinguish AI-authored README.AUTOGEN.md files from
+ * placeholder ones (e.g. cli.ts:existingFileIsAiAuthored, which
+ * gates a placeholder write from clobbering a good AI body on a
+ * transient model error).
+ *
+ * Keep this short, distinctive, and stable — changing it without
+ * also updating consumers will silently disable the protection.
+ */
+export const AI_AUTHORED_BANNER_SENTINEL = "**AI-authored documentation**";
+
+/**
  * Render the AI-authored portion of `README.AUTOGEN.md`.
  *
  * Two paths:
@@ -37,7 +50,7 @@ function aiBanner(inputs: PackageInputs): string {
     const sourceHint = inputs.readmeContext.exists
         ? " Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source."
         : "";
-    return `> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics.${sourceHint} May lag the working tree by up to 24h — see the staleness footer at the end of this file.`;
+    return `> 🤖 ${AI_AUTHORED_BANNER_SENTINEL}, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics.${sourceHint} May lag the working tree by up to 24h — see the staleness footer at the end of this file.`;
 }
 
 function renderPlaceholder(inputs: PackageInputs): string {
