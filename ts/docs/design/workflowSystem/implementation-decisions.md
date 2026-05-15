@@ -67,7 +67,7 @@ question.
 | 3.2  | Decide whether hard-coded iteration limits are acceptable and, if so, where they should be documented/configured.                                    | Removed from emitter. Engine provides default (10,000). IR `maxIterations` is optional; workflows can override per-node.                                                               |
 | 3.3  | Verify current status, since later work may already have resolved this. Then either remove it, rewrite it, or fold the final contract into the spec. | Fixed. Both `noop` and `identity` are now registered in `builtinTasks.ts` and exported in `allBuiltinTasks`.                                                                           |
 | 3.4  | Decide whether sub-workflows should inline or execute through an explicit runtime call contract.                                                     | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
-| 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | TBD                                                                                                                                                                                    |
+| 3.5  | Decide whether branch naming is an internal detail or a user-visible contract that should match destructuring/source order semantics.                | Tracked in `dsl-v2-implementation-gap.md`. Removed from this doc.                                                                                                                      |
 | 3.6  | Review as a spec/implementation mismatch. Decide whether to expand emitted branch shape or relax the documented contract.                            | TBD                                                                                                                                                                                    |
 | 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | TBD                                                                                                                                                                                    |
 | 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | TBD                                                                                                                                                                                    |
@@ -360,17 +360,6 @@ The emitter produces two synthetic task types:
 **Classification:** Fixed. Both `noop` and `identity` are now registered in
 `builtinTasks.ts` and included in the `allBuiltinTasks` export. Switch
 statements and ternary expressions with literal arms execute correctly.
-
-### 3.5 Parallel branch names are synthetic
-
-The plan said "Names from destructuring bindings." The implementation uses
-`branch_0`, `branch_1`, etc. (indexed by position), not the destructuring
-variable names from `const [a, b] = parallel(...)`.
-
-This means the fork node's output is keyed by `branch_0`, `branch_1`,
-not by the user-visible variable names. The engine's fork output collection
-uses these keys, so downstream code referencing `a` or `b` must map from
-the destructuring position to the branch index.
 
 ### 3.6 Parallel branches don't have inputSchema/outputSchema/output/inputs
 
