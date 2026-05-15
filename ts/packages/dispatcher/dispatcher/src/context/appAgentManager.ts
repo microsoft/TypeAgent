@@ -149,6 +149,14 @@ export class AppAgentManager implements ActionConfigProvider {
     // {state: "ready"} for them. Cleared on agent disable; re-populated by
     // setup() and explicit refresh().
     private readonly readiness = new Map<string, ReadinessReport>();
+    // Set of agents observed to implement `checkReadiness` at any point
+    // this session. Sticky on purpose: once we know an agent supports
+    // readiness, we keep that fact even after the agent is disabled and
+    // its session context torn down, so the `@config agent` table can
+    // distinguish "agent supports readiness but isn't currently probed"
+    // (❓ badge) from "agent doesn't implement readiness, assume ready"
+    // (no badge). Cleared only on dispatcher shutdown.
+    private readonly readinessImplementers = new Set<string>();
     // Persistent per-app-agent load failure cache. Populated in the failure
     // branches of setState (action/command init paths — provider load,
     // initializeAgentContext, etc.) and cleared on successful (re-)enable.
@@ -218,6 +226,23 @@ export class AppAgentManager implements ActionConfigProvider {
     // execution.
     public getReadiness(appAgentName: string): ReadinessReport {
         return this.readiness.get(appAgentName) ?? { state: "ready" };
+    }
+
+    // True iff this agent has been observed to implement checkReadiness
+    // at any point this session AND we currently don't have a cached
+    // report for it. In practice this means: the agent was enabled at
+    // some point in a previous process (we know from a persisted hint or
+    // future extension), or the readiness entry was explicitly cleared.
+    // Note that disabling an agent does NOT clear its cached entry, so a
+    // previously-ready agent that's now disabled still reports its last
+    // known state instead of "unknown" — we have no reason to forget
+    // working information. UI surfaces use this to show an "unknown"
+    // indicator only when it's actually meaningful.
+    public hasUnknownReadiness(appAgentName: string): boolean {
+        return (
+            this.readinessImplementers.has(appAgentName) &&
+            !this.readiness.has(appAgentName)
+        );
     }
 
     // Returns the most recent load failure for this agent, or undefined if
@@ -1464,6 +1489,7 @@ export class AppAgentManager implements ActionConfigProvider {
             // the agent — a misbehaving checkReadiness shouldn't deny the
             // user the agent.
             if (appAgent.checkReadiness !== undefined) {
+                this.readinessImplementers.add(record.name);
                 try {
                     const report = await appAgent.checkReadiness(
                         record.sessionContext!,
@@ -1508,9 +1534,13 @@ export class AppAgentManager implements ActionConfigProvider {
         record.sessionContext = undefined;
         record.sessionContextP = undefined;
         record.sessionContextId = undefined;
-        // Drop cached readiness — the session is going away, the next
-        // enable will repopulate via initializeSessionContext.
-        this.readiness.delete(record.name);
+        // Preserve the cached readiness entry across disable/enable. The
+        // last probe is the best information we have until the agent is
+        // re-enabled and re-probed; dropping it would force every
+        // disable cycle to show "(?)" in `@config agent` for a fact we
+        // already know. The next initializeSessionContext overwrites the
+        // entry with a fresh probe anyway, so staleness is bounded to
+        // the disabled window.
         try {
             const sessionContext = await sessionContextP;
             // Since we have a session context, appAgent must be defined as well.

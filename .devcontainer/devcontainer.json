@@ -1,6 +1,6 @@
 {
   "name": "TypeAgent Development",
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "image": "mcr.microsoft.com/devcontainers/universal:6",
 
   // This configuration works with:
   // - VS Code + Docker Desktop (local)
@@ -8,7 +8,7 @@
   // - JetBrains IDEs with Dev Containers support
 
   // Fix stale yarn GPG key in base image before features install
-  "initializeCommand": "docker run --rm mcr.microsoft.com/devcontainers/universal:2 echo 'Pulling base image...' || true",
+  "initializeCommand": "docker run --rm mcr.microsoft.com/devcontainers/universal:6 echo 'Pulling base image...' || true",
 
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},

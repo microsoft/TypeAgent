@@ -31,6 +31,36 @@ ENV=$(detect_env)
 echo "Environment: $ENV"
 echo ""
 
+# Fix ownership of Docker named-volume mount points.
+# Named volumes mounted into the container are owned by root:root by default,
+# which prevents the non-root `codespace` user from writing into them
+# (e.g. `pnpm install` -> EACCES on ts/node_modules).
+echo "Fixing ownership of mounted volume directories..."
+VOLUME_PATHS=(
+    "/home/codespace/.local/share/pnpm"
+    "/home/codespace/.local/share/pnpm/store"
+    "/home/codespace/.claude"
+)
+# Discover the workspace ts/node_modules path dynamically (works for worktrees too)
+WS_TS_DIR=""
+if [[ -d "/workspaces/TypeAgent/ts" ]]; then
+    WS_TS_DIR="/workspaces/TypeAgent/ts"
+else
+    WS_TS_DIR=$(find /workspaces -maxdepth 2 -type d -name "ts" 2>/dev/null | head -1)
+fi
+if [[ -n "$WS_TS_DIR" ]]; then
+    VOLUME_PATHS+=("$WS_TS_DIR/node_modules")
+fi
+
+for p in "${VOLUME_PATHS[@]}"; do
+    if [[ -e "$p" ]]; then
+        sudo chown -R codespace:codespace "$p" 2>/dev/null \
+            && echo "  chowned $p" \
+            || echo "  warn: could not chown $p"
+    fi
+done
+echo ""
+
 # Navigate to TypeScript workspace
 echo "Looking for TypeScript workspace..."
 if [[ -d "/workspaces/TypeAgent/ts" ]]; then

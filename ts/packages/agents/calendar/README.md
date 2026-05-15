@@ -14,7 +14,7 @@ These are declared in the `package.json` as export paths:
 
 ### Prerequisites
 
-The code uses Microsoft Graph to access your Microsoft account, Azure Active Directory, and Outlook Microsoft Graph API. Microsoft Graph [quickstart](https://developer.microsoft.com/en-us/graph/quick-start?state=option-typescript) example makes it easy to create you own graph client. Once you have created your graph client application and demo tenant you can update the following variables in the `.env` file:
+The code uses Microsoft Graph to access your Microsoft account, Azure Active Directory, and Outlook Microsoft Graph API. Microsoft Graph [quickstart](https://developer.microsoft.com/en-us/graph/quick-start?state=option-typescript) example makes it easy to create you own graph client. Once you have created your graph client application and demo tenant you can update the following variables in `config.local.yaml` (under `msGraph`) or the legacy `.env` file:
 
 ```
 MSGRAPH_APP_CLIENTID

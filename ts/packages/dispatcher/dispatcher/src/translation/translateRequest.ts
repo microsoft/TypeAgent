@@ -652,10 +652,12 @@ async function finalizeMultipleActions(
     context: ActionContext<CommandHandlerContext>,
     usageCallback: CompleteUsageStatsCallback,
 ): Promise<ExecutableAction[]> {
-    if (attachments !== undefined && attachments.length !== 0) {
-        // TODO: What to do with attachments with multiple actions?
-        throw new Error("Attachments with multiple actions not supported");
-    }
+    // When the translator decomposes a request with attachments (e.g.
+    // "edit this image so X and Y") into a MultipleAction, route the
+    // same attachment list to every sub-action. The attachments are
+    // already persisted in session storage by the request handler, so
+    // passing them along here only affects any sub-action re-translation
+    // — sub-handlers read bytes back via session storage by filename.
     const requests = action.parameters.requests;
     const actions: ExecutableAction[] = [];
     for (const request of requests) {
@@ -671,7 +673,7 @@ async function finalizeMultipleActions(
             schemaName,
             activeSchemas,
             history,
-            undefined, // TODO: What to do with attachments with multiple actions?
+            attachments,
             context,
             usageCallback,
             request.resultEntityId,

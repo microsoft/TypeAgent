@@ -13,8 +13,8 @@
  * Run `npm test -- --verbose` to see the printed table.
  */
 
-import dotenv from "dotenv";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
+import { loadConfigSync } from "@typeagent/config";
+loadConfigSync();
 
 import {
     createSchemaInfoProvider,

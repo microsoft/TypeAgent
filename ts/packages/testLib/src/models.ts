@@ -1,9 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
-const envUrl = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envUrl });
+import { loadConfigSync } from "@typeagent/config";
+loadConfigSync();
 
 import {
     ChatModel,
