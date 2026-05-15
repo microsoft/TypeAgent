@@ -3320,10 +3320,15 @@ describe("validateWorkflowIR", () => {
                     after: makeTaskNode({ bind: "out" }),
                 },
             });
-            const result = validateWorkflowIR(ir, taskMap("error.fail", "noop"));
+            const result = validateWorkflowIR(
+                ir,
+                taskMap("error.fail", "noop"),
+            );
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) => e.message.includes("must not have \"next\"")),
+                result.errors.some((e) =>
+                    e.message.includes('must not have "next"'),
+                ),
             ).toBe(true);
         });
 
@@ -3341,7 +3346,9 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("error.fail"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) => e.message.includes("must not have \"bind\"")),
+                result.errors.some((e) =>
+                    e.message.includes('must not have "bind"'),
+                ),
             ).toBe(true);
         });
 
@@ -3356,11 +3363,14 @@ describe("validateWorkflowIR", () => {
                     handler: makeTaskNode({ bind: "out" }),
                 },
             });
-            const result = validateWorkflowIR(ir, taskMap("error.fail", "noop"));
+            const result = validateWorkflowIR(
+                ir,
+                taskMap("error.fail", "noop"),
+            );
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some(
-                    (e) => e.message.includes("must not have \"onError\""),
+                result.errors.some((e) =>
+                    e.message.includes('must not have "onError"'),
                 ),
             ).toBe(true);
         });

@@ -72,7 +72,7 @@ question.
 | 3.7  | Decide whether the in-place rewrite is an acceptable implementation detail or should be refactored before being relied on.                           | Keep as-is. Localized mutation in a single helper, runs before nodes are consumed. Internal lowering detail, not a spec concern.                                                       |
 | 3.8  | Verify current status against the latest emitter changes, then decide whether this remains a real issue or should be rewritten/removed.              | Rewritten. Description was stale. Both branches now normalize through identity nodes to a shared `updated_results` bind, using the same pattern as 3.12.                               |
 | 3.9  | Decide whether identity-wrapping is the intended lowering pattern for literal arms or whether the IR should grow a cleaner representation.           | Keep as-is. Branch targets must be node IDs; identity wrapping is the only correct lowering for literal arms. Both arms bind a shared result name and converge at a noop merge node.   |
-| 3.10 | Specify whether implicit termination via missing `next` is the intended node contract.                                                               | Implemented never-output convention. `outputSchema: { "not": {} }` marks always-fail tasks. Validator rejects `next`/`bind`/`onError`. Runner asserts `kind: "fail"` at runtime.     |
+| 3.10 | Specify whether implicit termination via missing `next` is the intended node contract.                                                               | Implemented never-output convention. `outputSchema: { "not": {} }` marks always-fail tasks. Validator rejects `next`/`bind`/`onError`. Runner asserts `kind: "fail"` at runtime.       |
 | 3.11 | Decide whether root-level identity wrapping is canonical lowering that belongs in the spec.                                                          | TBD                                                                                                                                                                                    |
 | 3.12 | Decide whether shared-bind normalization is the standard lowering rule for branch-produced values.                                                   | TBD                                                                                                                                                                                    |
 | 3.13 | Specify loop semantics for `map`/`filter` as part of the emitted/runtime contract.                                                                   | TBD                                                                                                                                                                                    |
@@ -430,7 +430,7 @@ The `error.fail` builtin's `outputSchema` was updated from
 whether missing `next` adequately signals termination. The answer is
 that `next?: string` with `undefined` = terminal is the universal IR
 convention (correct for all nodes), but `error.fail` additionally needs
-the never-output contract to encode that it *must* fail.
+the never-output contract to encode that it _must_ fail.
 
 ### 3.11 Pure-literal workflows are normalized through identity
 

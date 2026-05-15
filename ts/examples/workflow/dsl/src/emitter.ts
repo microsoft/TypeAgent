@@ -2469,6 +2469,8 @@ export class Emitter {
                         return { type: "boolean" };
                     case "any":
                         return {};
+                    case "never":
+                        return { not: {} };
                     default:
                         return { type: t.name as JSONSchema["type"] };
                 }

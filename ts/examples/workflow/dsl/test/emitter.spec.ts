@@ -447,6 +447,15 @@ describe("Emitter v2", () => {
         expect(node.bind).toBeUndefined();
     });
 
+    test("never return type produces { not: {} } outputSchema", () => {
+        const ir = compileOk(`
+            workflow test(): never {
+                throw "always fails"
+            }
+        `);
+        expect(ir.outputSchema).toEqual({ not: {} });
+    });
+
     // ---- Ternary expression ----
 
     test("ternary lowers to branch node", () => {

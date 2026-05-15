@@ -22,6 +22,7 @@ export type TypeInfo =
     | ObjectTypeInfo
     | ArrayTypeInfo
     | TupleTypeInfo
+    | NeverType
     | UnknownType;
 
 export interface PrimitiveType {
@@ -48,6 +49,10 @@ export interface UnknownType {
     kind: "unknown";
 }
 
+export interface NeverType {
+    kind: "never";
+}
+
 export interface TypeError {
     message: string;
     line: number;
@@ -61,6 +66,7 @@ const NUMBER: PrimitiveType = { kind: "primitive", name: "number" };
 const BOOLEAN: PrimitiveType = { kind: "primitive", name: "boolean" };
 const ANY: PrimitiveType = { kind: "primitive", name: "any" };
 const UNKNOWN: UnknownType = { kind: "unknown" };
+const NEVER: NeverType = { kind: "never" };
 
 function isNumeric(t: TypeInfo): boolean {
     return (
@@ -79,6 +85,10 @@ function isAny(t: TypeInfo): boolean {
 
 function typeEq(a: TypeInfo, b: TypeInfo): boolean {
     if (isAny(a) || isAny(b)) return true;
+    // never is the bottom type: b (source) is never means assignable to
+    // any target. a (target) is never means only never is assignable.
+    if (b.kind === "never") return true;
+    if (a.kind === "never") return false; // only never assignable to never
     if (a.kind !== b.kind) return false;
     if (a.kind === "primitive" && b.kind === "primitive") {
         // integer is compatible with number
@@ -105,6 +115,8 @@ function typeName(t: TypeInfo): string {
             return `[${t.elements.map(typeName).join(", ")}]`;
         case "unknown":
             return "unknown";
+        case "never":
+            return "never";
     }
 }
 
@@ -146,6 +158,8 @@ function typeExprToInfo(
                     return BOOLEAN;
                 case "any":
                     return ANY;
+                case "never":
+                    return NEVER;
                 default:
                     onUnknownType?.(te);
                     return UNKNOWN;
@@ -200,6 +214,15 @@ function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
             });
         }
         return { kind: "object", fields };
+    }
+    // { "not": {} } is the JSON Schema equivalent of never
+    if (
+        "not" in schema &&
+        typeof schema["not"] === "object" &&
+        schema["not"] !== null &&
+        Object.keys(schema["not"] as object).length === 0
+    ) {
+        return NEVER;
     }
     return ANY;
 }
@@ -349,7 +372,7 @@ export class TypeChecker {
             }
             case "ThrowStatement":
                 this.inferExpr(s.value, scope);
-                return UNKNOWN;
+                return NEVER;
             case "ReturnStatement":
                 return this.inferExpr(s.value, scope);
             case "BreakStatement":
@@ -493,6 +516,10 @@ export class TypeChecker {
                 }
                 const consType = this.inferExpr(e.consequent, scope);
                 const altType = this.inferExpr(e.alternate, scope);
+                // never is the bottom type: if one arm is never, the
+                // result is the other arm's type (matches TypeScript).
+                if (consType.kind === "never") return altType;
+                if (altType.kind === "never") return consType;
                 if (!typeEq(consType, altType)) {
                     this.addError(
                         `Ternary arms must have the same type: '${typeName(consType)}' vs '${typeName(altType)}'`,
@@ -654,7 +681,11 @@ export class TypeChecker {
 
             case "===":
             case "!==":
-                if (!typeEq(left, right)) {
+                if (
+                    left.kind !== "never" &&
+                    right.kind !== "never" &&
+                    !typeEq(left, right)
+                ) {
                     this.addError(
                         `Operator '${e.op}' requires same types on both sides: '${typeName(left)}' vs '${typeName(right)}'`,
                         e.loc.line,

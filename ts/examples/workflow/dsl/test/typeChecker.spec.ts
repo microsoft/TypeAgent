@@ -58,11 +58,15 @@ function check(source: string): TypeError[] {
     const { tokens, errors: lexErrors } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens);
-    const { ast, errors: parseErrors } = parser.parseSingle();
+    const { workflows, errors: parseErrors } = parser.parse();
     expect(parseErrors).toEqual([]);
-    expect(ast).toBeDefined();
-    const checker = new TypeChecker(TASK_SCHEMAS);
-    return checker.check(ast!);
+    expect(workflows.length).toBeGreaterThan(0);
+    const checker = new TypeChecker(TASK_SCHEMAS, workflows);
+    const errors: TypeError[] = [];
+    for (const wf of workflows) {
+        errors.push(...checker.check(wf));
+    }
+    return errors;
 }
 
 function expectNoErrors(source: string): void {
@@ -469,5 +473,58 @@ describe("type checker", () => {
             }`,
             "maxConcurrency must be numeric",
         );
+    });
+
+    // ---- never type ----
+
+    test("never is accepted as a return type", () => {
+        expectNoErrors(`workflow test(): never { throw "boom" }`);
+    });
+
+    test("never is compatible with any declared return type", () => {
+        expectNoErrors(`workflow test(): string { throw "boom" }`);
+    });
+
+    test("concrete type is not assignable to never", () => {
+        expectError(
+            `workflow test(): never { return "hello" }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("ternary with never arm matches the other arm's type", () => {
+        expectNoErrors(`
+            workflow fail(): never { throw "boom" }
+            workflow test(x: boolean): string {
+                return x ? "ok" : fail()
+            }
+        `);
+    });
+
+    test("ternary with never consequent matches alternate type", () => {
+        expectNoErrors(`
+            workflow fail(): never { throw "boom" }
+            workflow test(x: boolean): string {
+                return x ? fail() : "ok"
+            }
+        `);
+    });
+
+    test("ternary with both arms never is valid", () => {
+        expectNoErrors(`
+            workflow fail(): never { throw "boom" }
+            workflow test(x: boolean): never {
+                return x ? fail() : fail()
+            }
+        `);
+    });
+
+    test("=== with never operand does not error", () => {
+        expectNoErrors(`
+            workflow fail(): never { throw "boom" }
+            workflow test(x: string): boolean {
+                return x === fail()
+            }
+        `);
     });
 });
