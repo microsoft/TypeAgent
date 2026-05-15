@@ -7,19 +7,20 @@ Status: **Accepted.**
 The IR has four places that embed a "sub-workflow" (a sequence of nodes with
 inputs and an output):
 
-| Site | `entry` | `nodes` | `inputSchema` | `inputs` | `output` | `outputSchema` |
-|------|---------|---------|---------------|----------|----------|----------------|
-| WorkflowIR (top-level) | yes | yes | yes | no (runtime-provided) | yes | yes |
-| LoopNode | body.entry | body.nodes | on LoopNode | on LoopNode | on LoopNode | on LoopNode |
-| ForkNode branches | yes | yes | **missing** | **missing** | **missing** | **missing** |
-| ForkMapNode body | yes | yes | **missing** | **missing** | **missing** | **missing** |
+| Site                   | `entry`    | `nodes`    | `inputSchema` | `inputs`              | `output`    | `outputSchema` |
+| ---------------------- | ---------- | ---------- | ------------- | --------------------- | ----------- | -------------- |
+| WorkflowIR (top-level) | yes        | yes        | yes           | no (runtime-provided) | yes         | yes            |
+| LoopNode               | body.entry | body.nodes | on LoopNode   | on LoopNode           | on LoopNode | on LoopNode    |
+| ForkNode branches      | yes        | yes        | **missing**   | **missing**           | **missing** | **missing**    |
+| ForkMapNode body       | yes        | yes        | **missing**   | **missing**           | **missing** | **missing**    |
 
 Three problems:
 
 1. **Fork branches have no declared output.** The runner uses a heuristic
    (find terminal node, fall back to collecting all new bindings). This makes
    the output shape dependent on implementation details and runtime branch
-   execution. (See implementation-decisions.md section 0.2.)
+   execution. (Fork branch output is now resolved from explicit
+   `branch.scope.output`; see ir-v2.md section 2.1.)
 
 2. **LoopNode mixes scope fields with loop-specific fields.** `inputs`,
    `inputSchema`, `output`, `outputSchema` sit alongside `state`,
@@ -42,21 +43,21 @@ a sub-workflow expects, what it contains, and what it produces.
  * forkMap bodies, and the top-level workflow.
  */
 export interface WorkflowScope {
-    /** Schema describing what this scope expects as input. */
-    inputSchema: JSONSchema;
+  /** Schema describing what this scope expects as input. */
+  inputSchema: JSONSchema;
 
-    /** First node to execute. */
-    entry: string;
+  /** First node to execute. */
+  entry: string;
 
-    /** The nodes in this scope. */
-    nodes: Record<string, WorkflowNode>;
+  /** The nodes in this scope. */
+  nodes: Record<string, WorkflowNode>;
 
-    /** Template that produces this scope's output value. Resolved in
-     *  the scope's own binding context after execution completes. */
-    output: Template;
+  /** Template that produces this scope's output value. Resolved in
+   *  the scope's own binding context after execution completes. */
+  output: Template;
 
-    /** Schema of the output value. */
-    outputSchema: JSONSchema;
+  /** Schema of the output value. */
+  outputSchema: JSONSchema;
 }
 ```
 
@@ -70,56 +71,59 @@ what it expects (`inputSchema`) and what it produces (`output` + `outputSchema`)
 ```typescript
 // Top-level: a scope with metadata
 export interface WorkflowIR extends WorkflowScope {
-    kind: "workflow";
-    name: string;
-    description?: string;
-    version: string;
-    types?: Record<string, JSONSchema>;
-    constants?: Record<string, ConstantDef>;
+  kind: "workflow";
+  name: string;
+  description?: string;
+  version: string;
+  types?: Record<string, JSONSchema>;
+  constants?: Record<string, ConstantDef>;
 }
 
 // Loop: inputs + body scope + loop-specific fields
 export interface LoopNode {
-    kind: "loop";
-    inputs: Record<string, Template>;       // wiring: outer -> body
-    body: WorkflowScope;                    // the scope
-    state: Record<string, LoopStateVar>;    // loop-specific
-    iterateState: Record<string, Template>; // loop-specific
-    maxIterations: number;
-    next?: string;
-    onError?: string;
-    bind?: string;
-    timeoutMs?: number;
+  kind: "loop";
+  inputs: Record<string, Template>; // wiring: outer -> body
+  body: WorkflowScope; // the scope
+  state: Record<string, LoopStateVar>; // loop-specific
+  iterateState: Record<string, Template>; // loop-specific
+  maxIterations: number;
+  next?: string;
+  onError?: string;
+  bind?: string;
+  timeoutMs?: number;
 }
 
 // Fork: each branch is inputs + scope
 export interface ForkNode {
-    kind: "fork";
-    branches: Record<string, {
-        inputs: Record<string, Template>;   // wiring: outer -> branch
-        scope: WorkflowScope;               // the scope
-    }>;
-    outputSchema: JSONSchema;               // combined: { branchName: branchOutputSchema }
-    maxConcurrency?: number;
-    next?: string;
-    onError?: string;
-    bind?: string;
+  kind: "fork";
+  branches: Record<
+    string,
+    {
+      inputs: Record<string, Template>; // wiring: outer -> branch
+      scope: WorkflowScope; // the scope
+    }
+  >;
+  outputSchema: JSONSchema; // combined: { branchName: branchOutputSchema }
+  maxConcurrency?: number;
+  next?: string;
+  onError?: string;
+  bind?: string;
 }
 
 // ForkMap: inputs + body scope + collection fields
 export interface ForkMapNode {
-    kind: "forkMap";
-    collection: Template;
-    collectionSchema: JSONSchema;
-    elementParam: string;
-    inputs?: Record<string, Template>;      // wiring: outer -> body (optional)
-    body: WorkflowScope;                    // the scope
-    outputSchema: JSONSchema;               // array of body outputs
-    maxIterations?: number;
-    maxConcurrency?: number;
-    next?: string;
-    onError?: string;
-    bind?: string;
+  kind: "forkMap";
+  collection: Template;
+  collectionSchema: JSONSchema;
+  elementParam: string;
+  inputs?: Record<string, Template>; // wiring: outer -> body (optional)
+  body: WorkflowScope; // the scope
+  outputSchema: JSONSchema; // array of body outputs
+  maxIterations?: number;
+  maxConcurrency?: number;
+  next?: string;
+  onError?: string;
+  bind?: string;
 }
 ```
 
@@ -206,17 +210,17 @@ resolve `branch.inputs` (like loops do today):
 ```typescript
 // Before (fork branch):
 const branchScope: ScopeContext = {
-    input: outerScope.input,                    // direct passthrough
-    constants: outerScope.constants,
-    bindings: new Map(outerScope.bindings),
+  input: outerScope.input, // direct passthrough
+  constants: outerScope.constants,
+  bindings: new Map(outerScope.bindings),
 };
 
 // After (fork branch):
 const branchInput = resolveInputs(branch.inputs, outerScope);
 const branchScope: ScopeContext = {
-    input: branchInput,                         // explicit wiring
-    constants: outerScope.constants,
-    bindings: new Map(),                        // clean scope
+  input: branchInput, // explicit wiring
+  constants: outerScope.constants,
+  bindings: new Map(), // clean scope
 };
 ```
 
@@ -263,13 +267,13 @@ the WorkflowScope fields).
 
 ## What this resolves
 
-From implementation-decisions.md:
+From the original implementation review:
 
-| # | Decision | Resolution |
-|---|----------|------------|
-| 0.2 | Fork branch output collection fallback | Eliminated. Branches have explicit `output`. |
-| 3.5 | Parallel branch names are synthetic | Partially. Branch names still come from the emitter, but each branch now declares its output explicitly regardless of naming. |
-| 3.6 | Parallel branches missing schema fields | Resolved. Branches must have full WorkflowScope. |
+| #   | Decision                                | Resolution                                                                                                                    |
+| --- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 0.2 | Fork branch output collection fallback  | Eliminated. Branches have explicit `output`.                                                                                  |
+| 3.5 | Parallel branch names are synthetic     | Partially. Branch names still come from the emitter, but each branch now declares its output explicitly regardless of naming. |
+| 3.6 | Parallel branches missing schema fields | Resolved. Branches must have full WorkflowScope.                                                                              |
 
 ## Design decisions
 
