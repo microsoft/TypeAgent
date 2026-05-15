@@ -8,6 +8,13 @@ import {
 import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
+import {
+    flatten as flattenYamlConfig,
+    loadConfigSync,
+    type ConfigTree,
+} from "@typeagent/config";
+import { initRuntimeConfigFromProcessEnv } from "aiclient";
+import yaml from "js-yaml";
 
 import { debugShell, debugShellError } from "./debug.js";
 
@@ -19,6 +26,50 @@ export function getKeysPersistencePath(dir: string | undefined) {
 }
 
 type ParsedKeys = dotenv.DotenvParseOutput;
+
+/**
+ * Detect YAML config files by extension and parse them through the
+ * @typeagent/config flattener so they yield the same
+ * `KEY=value` shape that dotenv would have produced. Falls back to
+ * `dotenv.parse` for everything else (including extensionless `.env`).
+ */
+function parseConfigFileContent(fileName: string, content: string): ParsedKeys {
+    const ext = path.extname(fileName).toLowerCase();
+    if (ext === ".yaml" || ext === ".yml") {
+        const tree = yaml.load(content, { filename: fileName });
+        if (tree === null || tree === undefined) {
+            return {};
+        }
+        if (typeof tree !== "object" || Array.isArray(tree)) {
+            throw new Error(`${fileName}: top level must be a YAML mapping.`);
+        }
+        const flat = flattenYamlConfig(tree as ConfigTree);
+        // dotenv.populate (used downstream) accepts a plain object of
+        // string values; coerce any non-strings just in case.
+        const out: ParsedKeys = {};
+        for (const [k, v] of Object.entries(flat)) {
+            out[k] = String(v);
+        }
+        return out;
+    }
+    return dotenv.parse(Buffer.from(content));
+}
+
+/**
+ * Persist parsed keys uniformly as `KEY=value` text so the existing
+ * DPAPI-encrypted cache can re-hydrate them via `dotenv.parse` on
+ * subsequent launches, regardless of the source file's format.
+ */
+function serializeParsedKeysForCache(parsed: ParsedKeys): string {
+    const lines: string[] = [];
+    for (const [k, v] of Object.entries(parsed)) {
+        // Quote to preserve trailing whitespace / special chars; escape
+        // any embedded double quotes and newlines.
+        const escaped = v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        lines.push(`${k}="${escaped}"`);
+    }
+    return lines.join("\n") + "\n";
+}
 
 async function createPersistence(dir: string | undefined) {
     const cachePath = getKeysPersistencePath(dir);
@@ -54,6 +105,11 @@ async function saveKeysToPersistence(dir: string | undefined, keys: string) {
 
 function populateKeys(parsed: ParsedKeys) {
     dotenv.populate(process.env as any, parsed, { override: true });
+    // After process.env is populated, build the typed runtime Config
+    // once so all aiclient consumers can read it via getRuntimeConfig().
+    // Legacy callers still see the same values via process.env.
+    initRuntimeConfigFromProcessEnv();
+    debugShell("Runtime Config initialized from process.env");
 }
 
 function parsedKeysEqual(a: ParsedKeys, b: ParsedKeys) {
@@ -82,9 +138,10 @@ async function getParsedKeys(
         }
         debugShell("Loading service keys from file", envFile);
         const content = await fs.promises.readFile(envFile, "utf-8");
-        const parsedContent = dotenv.parse(Buffer.from(content));
+        const parsedContent = parseConfigFileContent(envFile, content);
+        const cacheText = serializeParsedKeysForCache(parsedContent);
         if (parsed === null) {
-            await saveKeysToPersistence(dir, content);
+            await saveKeysToPersistence(dir, cacheText);
             return parsedContent;
         }
 
@@ -97,7 +154,7 @@ async function getParsedKeys(
             });
 
             if (result.response === 0) {
-                await saveKeysToPersistence(dir, content);
+                await saveKeysToPersistence(dir, cacheText);
                 return parsedContent;
             }
         } else {
@@ -115,12 +172,23 @@ async function getParsedKeys(
             // Use the sync version as nothing else is going on.
             const result = dialog.showOpenDialogSync({
                 properties: ["openFile", "showHiddenFiles"],
-                message: "Select .env file",
+                message: "Select .env or YAML config file",
+                filters: [
+                    { name: "Config", extensions: ["env", "yaml", "yml"] },
+                    { name: "All files", extensions: ["*"] },
+                ],
             });
             if (result && result.length > 0) {
                 const content = await fs.promises.readFile(result[0], "utf-8");
-                await saveKeysToPersistence(dir, content);
-                return dotenv.parse(Buffer.from(content));
+                const parsedContent = parseConfigFileContent(
+                    result[0],
+                    content,
+                );
+                await saveKeysToPersistence(
+                    dir,
+                    serializeParsedKeysForCache(parsedContent),
+                );
+                return parsedContent;
             }
         }
     }
@@ -132,16 +200,50 @@ export async function loadKeysFromEnvFile(envFile: string) {
         throw new Error(`Env file ${envFile} not found`);
     }
     debugShell("Loading service keys from file", envFile);
-    const keys = await fs.promises.readFile(envFile, "utf-8");
-    const parsed = dotenv.parse(Buffer.from(keys));
+    const content = await fs.promises.readFile(envFile, "utf-8");
+    const parsed = parseConfigFileContent(envFile, content);
     populateKeys(parsed);
 }
+
+// Deprecation cutoff: 120 days from 2026-05-11 (the date .env→YAML migration shipped).
+const ENV_DEPRECATION_DATE = new Date("2026-05-11");
+const ENV_SUNSET_DAYS = 120;
+const ENV_SUNSET_DATE = new Date(
+    ENV_DEPRECATION_DATE.getTime() + ENV_SUNSET_DAYS * 24 * 60 * 60 * 1000,
+);
 
 export async function loadKeys(
     dir: string | undefined,
     reset: boolean = false,
     envFile?: string,
 ) {
+    // Hard stop after sunset date — .env key import no longer supported.
+    if (new Date() >= ENV_SUNSET_DATE) {
+        debugShellError(
+            ".env key import has been removed. Use config.local.yaml or Azure Key Vault instead. " +
+                "See config.sample.yaml for the YAML config format.",
+        );
+        await dialog.showMessageBox({
+            type: "error",
+            buttons: ["OK"],
+            title: "Service keys — .env import removed",
+            message:
+                "The .env file import feature has been removed.\n\n" +
+                "Please use config.local.yaml (or Azure Key Vault) to configure service keys.\n" +
+                "See config.sample.yaml in the repo root for the YAML config format.",
+        });
+        return;
+    }
+
+    // Deprecation warning while still functional.
+    const daysRemaining = Math.ceil(
+        (ENV_SUNSET_DATE.getTime() - Date.now()) / (24 * 60 * 60 * 1000),
+    );
+    console.warn(
+        `[DEPRECATED] .env key import will stop working in ${daysRemaining} days (${ENV_SUNSET_DATE.toLocaleDateString()}). ` +
+            `Migrate to config.local.yaml or Azure Key Vault. See config.sample.yaml for details.`,
+    );
+
     const parsed = await getParsedKeys(dir, reset, envFile);
     if (parsed) {
         populateKeys(parsed);
@@ -154,4 +256,33 @@ export async function loadKeys(
             message: `Service keys not loaded. Using existing environment variables.`,
         });
     }
+}
+
+/**
+ * Try loading YAML config (config.defaults.yaml + config.local.yaml).
+ * Returns true if config was loaded, false otherwise.
+ */
+export function tryLoadYamlConfig(envFile?: string): boolean {
+    const isYamlEnv =
+        envFile !== undefined &&
+        (envFile.endsWith(".yaml") || envFile.endsWith(".yml"));
+
+    try {
+        const opts: { strict: boolean; localPath?: string } = {
+            strict: false,
+        };
+        if (isYamlEnv) {
+            opts.localPath = envFile;
+        }
+        const result = loadConfigSync(opts);
+        const keyCount = Object.keys(result.env).length;
+        if (keyCount > 0) {
+            debugShell("Loaded " + keyCount + " config keys from YAML");
+            initRuntimeConfigFromProcessEnv();
+            return true;
+        }
+    } catch (err) {
+        debugShellError("YAML config load failed: " + String(err));
+    }
+    return false;
 }

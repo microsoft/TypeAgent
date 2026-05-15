@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@azure-rest/maps-search": "^2.0.0-beta.3",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "debug": "^4.4.0",
     "exifreader": "^4.30.1",

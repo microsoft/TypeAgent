@@ -116,7 +116,7 @@ export AZURE_SPEECH_KEY=your-speech-key
 export AZURE_SPEECH_REGION=your-region  # e.g., westus2, eastus
 ```
 
-Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+Or add these to `config.local.yaml` (under `speech`) in the TypeAgent repository root (`ts` directory). See `config.sample.yaml` for the full YAML structure. Legacy `.env` files are also supported:
 
 ```
 AZURE_SPEECH_KEY=your-speech-key
@@ -143,7 +143,7 @@ export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 export AZURE_OPENAI_DEPLOYMENT_NAME=whisper  # Optional, defaults to "whisper"
 ```
 
-Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+Or add these to `config.local.yaml` (under `azureOpenAI`):
 
 ```
 AZURE_OPENAI_API_KEY=your-key
@@ -159,7 +159,7 @@ Set your OpenAI API key as an environment variable:
 export OPENAI_API_KEY=sk-...
 ```
 
-Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+Or add it to `config.local.yaml` (under `openAI`):
 
 ```
 OPENAI_API_KEY=sk-...

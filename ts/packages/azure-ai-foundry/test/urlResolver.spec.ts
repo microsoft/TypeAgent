@@ -1,13 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import * as urlResolver from "../src/urlResolver.js";
 import { bingWithGrounding } from "../src/index.js";
 
-dotenv.config({
-    path: new URL("../../../../.env", import.meta.url),
-});
+loadConfigSync();
 
 function testIf(
     runIf: () => boolean,

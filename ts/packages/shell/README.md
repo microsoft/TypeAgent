@@ -71,7 +71,7 @@ In local mode (no agent server), only a single default conversation is available
 
 Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.
 
-To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in the `.env` are needed:
+To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in `config.local.yaml` (under `speech`) or the legacy `.env` are needed:
 
 | Variable              | Value                                                                            |
 | --------------------- | -------------------------------------------------------------------------------- |
@@ -83,7 +83,7 @@ To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure
 
 If you would like to enable keyless Speech API access you must have performed the following steps:
 
-1. Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file.
+1. Specify `identity` as the `SPEECH_SDK_KEY` in `config.local.yaml` (set `speech.key: identity`) or the legacy `.env` file.
 2. Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
 3. Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions
    (typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on cognitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).

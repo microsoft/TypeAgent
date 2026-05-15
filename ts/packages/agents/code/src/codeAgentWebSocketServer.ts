@@ -2,23 +2,81 @@
 // Licensed under the MIT License.
 
 import { WebSocketServer, WebSocket } from "ws";
+import { AddressInfo } from "net";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:code:websocket");
 
 export class CodeAgentWebSocketServer {
-    private server: WebSocketServer;
     private clients: Map<string, WebSocket> = new Map();
     private clientIdCounter = 0;
     public onMessage?: (message: string) => void;
 
-    constructor(port: number = 8082) {
-        this.server = new WebSocketServer({ port });
+    /**
+     * @param server the underlying ws server, already bound and listening.
+     * @param port  the actually bound port (OS-assigned when the caller
+     *              passed 0).
+     *
+     * Construction is private — use {@link CodeAgentWebSocketServer.start}
+     * so callers always get a server that is guaranteed to be bound
+     * before they read {@link port} or pass it to the registrar.
+     */
+    private constructor(
+        private readonly server: WebSocketServer,
+        public readonly port: number,
+    ) {
         this.setupHandlers();
         debug(`CodeAgentWebSocketServer listening on port ${port}`);
+    }
 
-        this.server.on("error", (error) => {
-            debug("Server error:", error);
+    /**
+     * Bind a new server on `port`. Resolves only after the
+     * `listening` event so callers can synchronously read
+     * {@link port}; rejects on the first `error` event so bind
+     * failures (EADDRINUSE under fixed-port overrides) surface
+     * loudly instead of being swallowed by an attached error
+     * handler.
+     *
+     * Pass `0` to let the OS pick a free ephemeral port; the
+     * actual port is then available via {@link port}.
+     */
+    public static start(port: number = 0): Promise<CodeAgentWebSocketServer> {
+        return new Promise((resolve, reject) => {
+            const server = new WebSocketServer({ port });
+            let settled = false;
+            const onError = (error: Error) => {
+                if (settled) {
+                    debug("Server error after listening:", error);
+                    return;
+                }
+                settled = true;
+                server.removeListener("listening", onListening);
+                debug("Server bind error:", error);
+                reject(error);
+            };
+            const onListening = () => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("error", onError);
+                const address = server.address() as AddressInfo | null;
+                if (!address || typeof address === "string") {
+                    server.close();
+                    reject(
+                        new Error(
+                            "ws server.address() did not return an AddressInfo",
+                        ),
+                    );
+                    return;
+                }
+                // Re-attach a permanent error handler so post-listen errors
+                // are logged rather than crashing the process.
+                server.on("error", (error) => {
+                    debug("Server error:", error);
+                });
+                resolve(new CodeAgentWebSocketServer(server, address.port));
+            };
+            server.once("error", onError);
+            server.once("listening", onListening);
         });
     }
 
@@ -47,10 +105,6 @@ export class CodeAgentWebSocketServer {
                 debug("Client error:", error);
                 this.clients.delete(clientId);
             });
-        });
-
-        this.server.on("error", (error) => {
-            debug("Server error:", error);
         });
     }
 
@@ -117,7 +171,14 @@ export class CodeAgentWebSocketServer {
         return states;
     }
 
-    public close(): void {
+    /**
+     * Close all client connections and the underlying server.
+     * Resolves when the server has fully released its port — important
+     * for a rapid disable→enable cycle under a fixed-port override
+     * (`CODE_WEBSOCKET_PORT`), where a synchronous return would race
+     * the new bind into EADDRINUSE.
+     */
+    public close(): Promise<void> {
         debug("Closing CodeAgentWebSocketServer");
         for (const [, client] of this.clients.entries()) {
             if (client.readyState === WebSocket.OPEN) {
@@ -125,6 +186,8 @@ export class CodeAgentWebSocketServer {
             }
         }
         this.clients.clear();
-        this.server.close();
+        return new Promise((resolve) => {
+            this.server.close(() => resolve());
+        });
     }
 }

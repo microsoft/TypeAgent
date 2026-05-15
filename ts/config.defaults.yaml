@@ -1,0 +1,16 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# TypeAgent default configuration.
+# See config.sample.yaml for all available options.
+
+azureOpenAI:
+  defaultAuth: identity
+  maxConcurrency: 4
+  maxTimeoutMs: 120000
+  maxRetryAttempts: 3
+  responseFormat: true
+
+reasoning:
+  timeoutMs: 1200000
+  copilotModel: claude-sonnet-4.5

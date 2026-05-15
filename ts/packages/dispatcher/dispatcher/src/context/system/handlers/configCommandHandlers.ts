@@ -213,6 +213,7 @@ function buildAgentStatusHtml(
     agents: {
         getAppAgentEmoji(name: string): string;
         getReadiness(name: string): ReadinessReport;
+        hasUnknownReadiness(name: string): boolean;
         getLoadError(name: string): Error | undefined;
     },
     showSchema: boolean,
@@ -239,8 +240,9 @@ function buildAgentStatusHtml(
         const tdStyle = `text-align:center;padding:3px 8px;border-bottom:${bb}`;
 
         // Per-agent badges (app-agent rows only): load failure first, then
-        // readiness warning. Distinct icons + colors so they don't get
-        // conflated with the disabled-state ❌ in the status columns.
+        // readiness warning (or unknown indicator). Distinct icons + colors
+        // so they don't get conflated with the disabled-state ❌ in the
+        // status columns.
         let warning = "";
         if (isAppAgent) {
             const loadError = agents.getLoadError(name);
@@ -248,12 +250,23 @@ function buildAgentStatusHtml(
                 const tip = `Failed to load: ${loadError.message ?? String(loadError)}`;
                 warning += ` <span title="${escapeAttr(tip)}" style="color:#dc2626;cursor:help" aria-label="${escapeAttr(tip)}">⛔</span>`;
             }
-            const report = agents.getReadiness(name);
-            if (report.state !== "ready") {
-                const tip = report.message
-                    ? `${report.state}: ${report.message}`
-                    : report.state;
-                warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+            if (agents.hasUnknownReadiness(name)) {
+                // Agent is known to implement checkReadiness but hasn't
+                // been probed this session (typically: currently
+                // disabled). We can't probe it without spinning up its
+                // session context, so surface the uncertainty instead
+                // of implicitly claiming it's ready.
+                const tip =
+                    "Readiness state unknown — agent is not currently loaded. Enable it (or run `@config agent refresh <name>` after enabling) to re-probe its setup state.";
+                warning += ` <span title="${escapeAttr(tip)}" style="color:#64748b;cursor:help" aria-label="${escapeAttr(tip)}">❓</span>`;
+            } else {
+                const report = agents.getReadiness(name);
+                if (report.state !== "ready") {
+                    const tip = report.message
+                        ? `${report.state}: ${report.message}`
+                        : report.state;
+                    warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+                }
             }
         }
 
@@ -272,13 +285,23 @@ function buildAgentStatusHtml(
     return `<table style="border-collapse:collapse;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.4"><thead><tr>${headerCols.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
-function showAgentStatus(
+async function showAgentStatus(
     toggle: AgentToggle,
     context: ActionContext<CommandHandlerContext>,
     changes?: ChangedAgent,
 ) {
     const systemContext = context.sessionContext.agentContext;
     const agents = systemContext.agents;
+
+    // Bring readiness state up to date for any loaded agent before we
+    // render, so the table reflects current reality (env vars, files,
+    // etc. may have changed since the agent's last probe). For agents
+    // that are disabled (no session context), refreshReadiness is a
+    // no-op — only agents known to implement checkReadiness but not
+    // currently loaded get a ❓ badge via hasUnknownReadiness.
+    await Promise.all(
+        agents.getAppAgentNames().map((name) => agents.refreshReadiness(name)),
+    );
 
     const status: StatusRecords = {};
 
@@ -366,9 +389,16 @@ function showAgentStatus(
             if (agents.getLoadError(name) !== undefined) {
                 displayName = `${displayName} ${chalk.red("(err)")}`;
             }
-            const report = agents.getReadiness(name);
-            if (report.state !== "ready") {
-                displayName = `${displayName} ${chalk.yellow("(!)")}`;
+            if (agents.hasUnknownReadiness(name)) {
+                // Implements checkReadiness but not currently loaded.
+                // Distinct "(?)" marker so users don't read silence as
+                // "this agent is fine" when it actually has a probe.
+                displayName = `${displayName} ${chalk.gray("(?)")}`;
+            } else {
+                const report = agents.getReadiness(name);
+                if (report.state !== "ready") {
+                    displayName = `${displayName} ${chalk.yellow("(!)")}`;
+                }
             }
         }
         table.push(
@@ -522,7 +552,7 @@ class AgentToggleCommandHandler implements CommandHandler {
 
         // report modified agent status
         if (!hasParams) {
-            showAgentStatus(this.toggle, context);
+            await showAgentStatus(this.toggle, context);
             return;
         }
 
@@ -534,7 +564,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         if (changed === undefined) {
             displayWarn("No change", context);
         } else {
-            showAgentStatus(this.toggle, context, changed);
+            await showAgentStatus(this.toggle, context, changed);
         }
     }
 
