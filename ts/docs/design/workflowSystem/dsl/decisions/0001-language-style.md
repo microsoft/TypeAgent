@@ -11,13 +11,13 @@ trigger 1: "DSL cannot lower cleanly to the IR").
 
 ## 1. The question
 
-The IR is verbose by design ([ir-v1.md §1.2](../../../ir/ir-v1.md)):
+The IR is verbose by design ([ir-v0.1.md §1.2](../../../ir/ir-v0.1.md)):
 codegen pays the tax once, and the DSL absorbs the authoring cost.
 What should the DSL's surface language look like?
 
 Four options were evaluated against the IR's DSL assumptions (S1-S3,
 T1-T2, A1-A3, W1-W2, D1) and the three reader/writer populations
-in [ir-v1.md §1.1](../../../ir/ir-v1.md).
+in [ir-v0.1.md §1.1](../../../ir/ir-v0.1.md).
 
 ## 2. Options considered
 

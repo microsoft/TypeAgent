@@ -1,6 +1,6 @@
 # CFG / DDG separation (decision 0002)
 
-Status: **Adopted (v1).** Folded into [../ir-v1.md](../ir-v1.md) (§3.2.2).
+Status: **Adopted (v1).** Folded into [../ir-v0.1.md](../ir-v0.1.md) (§3.2.2).
 
 The IR encodes **two distinct graphs over the same node set**: a
 control-flow graph (CFG) from `next`/`cases`/`default`/`onError`/sentinels,

@@ -4,7 +4,7 @@
 /**
  * IR v1 type definitions for the workflow intermediate representation.
  *
- * These types mirror the spec in ir-v1.md. The engine loads a WorkflowIR
+ * These types mirror the spec in ir-v0.1.md. The engine loads a WorkflowIR
  * document (parsed JSON), validates it structurally, then executes it.
  */
 

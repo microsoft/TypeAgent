@@ -1,6 +1,6 @@
 # Post-v1: edge-scoped bind (`$from: "edge"`)
 
-Status: **Post-v1 sketch.** Listed in [../ir-v1.md](../ir-v1.md) §2.2.
+Status: **Post-v1 sketch.** Listed in [../ir-v0.1.md](../ir-v0.1.md) §2.2.
 
 ## 1. Motivation
 

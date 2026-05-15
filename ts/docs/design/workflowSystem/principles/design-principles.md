@@ -59,7 +59,7 @@ P1-P5 govern IR design. These neighboring areas are not governed by the principl
 
 ## Relationship to other design docs
 
-- [../ir/ir-v1.md](../ir/ir-v1.md) - the v1 IR, derived from these principles.
+- [../ir/ir-v0.1.md](../ir/ir-v0.1.md) - the v1 IR, derived from these principles.
 - [principle-gaps.md](principle-gaps.md) - analysis of areas the principles permit but don't drive (deployment/evolution, debugging, performance). Includes v1 scope decisions and forward compatibility checks.
 - [../ir/decisions/](../ir/decisions/) - per-decision records driven by these principles.
 - Earlier design exploration (plan, loops/dataflow/controlflow analysis, initial design decisions) was folded into the current docs and removed.
@@ -85,7 +85,7 @@ If the IR describes a typed boundary that values cross at runtime, the validator
   2. **Compatibility**: the value the producer publishes is compatible with what the consumer expects in that input. The data flowing through the reference must make sense at the destination.
 - **External-contract axis (boundary seams).** Wherever the IR describes the contract of an entity outside itself - a registered task implementation, the workflow's own caller, an external system declared in IR metadata - the IR's description must be statically checked against that entity's declared contract whenever the entity's contract is available at validation time. The check uses the same compatibility relation as the intra-IR axis, applied in the appropriate direction (the IR's input description is a subtype of what the entity accepts; the entity's output is a subtype of the IR's description). When the entity's contract is not available at validation time, the check is deferred to the runtime boundary; in that case P1 is partially satisfied and the gap is documented.
 
-The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [IR](../ir/ir-v1.md), not prescribed by this principle.
+The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [IR](../ir/ir-v0.1.md), not prescribed by this principle.
 
 The two axes share one motivation: every place a value crosses a typed boundary is a place a runtime failure could happen, and every such place that the IR describes can be checked before runtime. P1 says: check it.
 
@@ -107,7 +107,7 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 
 - _Intent:_ Use cached data downstream, where the cache node is behind a branch that usually (but not always) executes.
 - _Why rejected:_ A reference to `cache`'s output in a node reachable via a path that skips `cache` violates the "every path" requirement. The validator cannot distinguish "usually taken" from "sometimes skipped."
-- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see the [IR](../ir/ir-v1.md). What matters for P1 is that the reference's optionality is declared in the IR so the validator can distinguish it from a required reference that would fail.)
+- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see the [IR](../ir/ir-v0.1.md). What matters for P1 is that the reference's optionality is declared in the IR so the validator can distinguish it from a required reference that would fail.)
 - _Tradeoff:_ (a) may run `cache` when unnecessary. (b) adds wiring verbosity. (c) moves the conditional logic inside the task, which is a legitimate boundary choice: the task is the right place to decide what to do when cache data is absent. All three make the data flow explicit.
 
 **5. Optional enrichment.** (Same pattern as scenario 4; the difference is that enrichment is entirely skipped rather than conditionally cached.)

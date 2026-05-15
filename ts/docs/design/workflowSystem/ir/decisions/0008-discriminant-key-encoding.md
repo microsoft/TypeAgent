@@ -4,7 +4,7 @@ Status: **Adopted (v1).** Branch selectors must resolve to strings.
 `selectorSchema` must be string-typed (plain `{ "type": "string" }`
 or `{ "enum": ["a", "b", ...] }` with string members). Non-string
 values require an explicit conversion task. Folded into
-[../ir-v1.md](../ir-v1.md) §3.6 and §5.3. This document is the
+[../ir-v0.1.md](../ir-v0.1.md) §3.6 and §5.3. This document is the
 rationale.
 
 ## Purpose
@@ -20,7 +20,7 @@ A future reviewer should read this document when:
 
 Cross-references:
 
-- [../ir-v1.md](../ir-v1.md) §3.6 (branch node), §8.3 (branch model
+- [../ir-v0.1.md](../ir-v0.1.md) §3.6 (branch node), §8.3 (branch model
   alternatives).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P3 (structural correspondence), P5 (predictability).
@@ -126,7 +126,7 @@ Rationale:
 
 ## 5. Spec changes
 
-Two edits to ir-v1.md:
+Two edits to ir-v0.1.md:
 
 1. **§3.6:** Add after the `selectorSchema` description: "The
    selector must resolve to a string. `selectorSchema` must be

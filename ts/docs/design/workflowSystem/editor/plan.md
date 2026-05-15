@@ -5,7 +5,7 @@ Status: **Plan.** Not yet started.
 Related:
 
 - [../dsl/dsl-v0.1.md](../dsl/dsl-v0.1.md) - the DSL this editor would surface
-- [../ir/ir-v1.md](../ir/ir-v1.md) - the IR the DSL compiles to
+- [../ir/ir-v0.1.md](../ir/ir-v0.1.md) - the IR the DSL compiles to
 - [vision.md (section 5.1)](~/doc/workflow/vision.md) - the visual
   canvas editor vision (targets IR directly)
 

@@ -1,7 +1,7 @@
 # Workflow DSL Design
 
 Design documentation for the workflow DSL: the authoring surface that
-compiles to the [workflow IR](../ir/ir-v1.md).
+compiles to the [workflow IR](../ir/ir-v0.1.md).
 
 ## Reading order
 
@@ -15,6 +15,6 @@ compiles to the [workflow IR](../ir/ir-v1.md).
 Before reading this component's docs, be familiar with:
 
 - [principles/design-principles.md](../principles/design-principles.md) (P1-P5)
-- [ir/ir-v1.md](../ir/ir-v1.md) (the compile target)
+- [ir/ir-v0.1.md](../ir/ir-v0.1.md) (the compile target)
 - [ir/dsl-assumptions.md](../ir/dsl-assumptions.md) (assumptions baked
   into v1 that this DSL must confirm or refute)

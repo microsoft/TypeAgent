@@ -2,7 +2,7 @@
 
 Status: **Implemented.** All phases complete (lexer, parser, type checker, emitter, graph extractor).
 
-Compile target: [ir-v1.md](../ir/ir-v1.md) + [ir-v2.md](../ir/ir-v2.md).
+Compile target: [ir-v0.1.md](../ir/ir-v0.1.md) + [ir-v0.2.md](../ir/ir-v0.2.md).
 Design rationale: [dsl-comparison.md](dsl-comparison.md) (Option E selected).
 Implementation gaps: [dsl-v0.1-gap.md](dsl-v0.1-gap.md).
 
@@ -616,7 +616,7 @@ const [a, b, c, d, e] = parallel(
 - All bodies must be independent (no data dependencies between them)
 
 **AST:** `ParallelNode { bodies: ArrowFunction[], maxConcurrency?: Expr }`
-**IR lowering:** `fork` node ([ir-v2.md](../ir/ir-v2.md) §2.1). Each arrow function
+**IR lowering:** `fork` node ([ir-v0.2.md](../ir/ir-v0.2.md) §2.1). Each arrow function
 becomes a named branch sub-scope. Destructuring bindings become branch names.
 `maxConcurrency` maps directly to the IR field of the same name.
 
@@ -646,7 +646,7 @@ const results = parallelMap(items, (item) => {
 - Returns an array of the body's last expression per item, preserving order
 
 **AST:** `ParallelMapNode { collection: Expr, param: string, body: Statement[], maxConcurrency?: Expr }`
-**IR lowering:** `forkMap` node ([ir-v2.md](../ir/ir-v2.md) §2.2). Collection
+**IR lowering:** `forkMap` node ([ir-v0.2.md](../ir/ir-v0.2.md) §2.2). Collection
 becomes the `collection` reference, body becomes the body sub-scope.
 `maxConcurrency` maps directly to the IR field of the same name.
 
@@ -971,12 +971,12 @@ Strict rules (deviations from TS):
 - SwitchStatement: emit multi-way branch node
 - WorkflowCallExpr: emit sub-workflow invocation (inline or reference)
 - ThrowStatement: emits an `error.fail` built-in task node
-  ([ir-v2.md](../ir/ir-v2.md) §3.5). The preceding node's `next` points
+  ([ir-v0.2.md](../ir/ir-v0.2.md) §3.5). The preceding node's `next` points
   to `error.fail`; `error.fail` has `next: null` (terminal). The engine
   executes `error.fail` and produces a failure result with the thrown
   value, which triggers the enclosing scope's error propagation. In a
   retry fallback body, this causes the fallback handler to fail per
-  ir-v1.md section 3.8 recovery-failure semantics. At workflow top level, it fails the
+  ir-v0.1.md section 3.8 recovery-failure semantics. At workflow top level, it fails the
   workflow. No new IR node kind is needed: `error.fail` is a regular
   task node with `kind: "task"`.
 

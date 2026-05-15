@@ -20,7 +20,7 @@ Three problems:
    (find terminal node, fall back to collecting all new bindings). This makes
    the output shape dependent on implementation details and runtime branch
    execution. (Fork branch output is now resolved from explicit
-   `branch.scope.output`; see ir-v2.md section 2.1.)
+   `branch.scope.output`; see ir-v0.2.md section 2.1.)
 
 2. **LoopNode mixes scope fields with loop-specific fields.** `inputs`,
    `inputSchema`, `output`, `outputSchema` sit alongside `state`,

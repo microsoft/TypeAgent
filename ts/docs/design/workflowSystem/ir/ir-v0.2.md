@@ -2,7 +2,7 @@
 
 Status: **Implemented.** ForkNode, ForkMapNode, and v2 built-in tasks are live.
 
-Extends [ir-v1.md](ir-v1.md). All v1 concepts, validation rules, and
+Extends [ir-v0.1.md](ir-v0.1.md). All v1 concepts, validation rules, and
 execution semantics remain unchanged. v2 adds new node kinds and built-in
 tasks required by the DSL v2 compile target.
 
@@ -37,7 +37,7 @@ sibling fields are present. This fails the §1.3.2 (uniformity) test:
 `kind` is the IR's discriminant key, and overloading a single `kind`
 value with two shapes depending on context is the same pattern the IR
 spec rejects (see §1.3.2's split-candidate rule and the `stateWrites`
-worked example in ir-v1.md).
+worked example in ir-v0.1.md).
 
 The `$from` precedent does not apply. `$from` is a **key** whose
 **value** discriminates; all values obey one behavioral rule
@@ -379,14 +379,14 @@ conversion, use `math.floor`, `math.round`, or `math.ceil`.
 
 ## 4. Relationship to post-v1 sketches
 
-The [post-v1/](post-v1/) directory contains sketches for future IR
+The [future/](future/) directory contains sketches for future IR
 extensions. Their status relative to v2:
 
 | Sketch                                             | v2 status                                                                                                                                           |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [foreach.md](post-v1/foreach.md)                   | Superseded by `forkMap` for the parallel case. Sequential foreach remains a separate post-v2 concern (v2's `map` DSL built-in lowers to v1 `loop`). |
-| [block-scope.md](post-v1/block-scope.md)           | Independent of v2. Still planned for post-v1/v2.                                                                                                    |
-| [edge-scoped-bind.md](post-v1/edge-scoped-bind.md) | Independent of v2. Still planned for post-v1/v2.                                                                                                    |
+| [foreach.md](future/foreach.md)                   | Superseded by `forkMap` for the parallel case. Sequential foreach remains a separate post-v2 concern (v2's `map` DSL built-in lowers to v1 `loop`). |
+| [block-scope.md](future/block-scope.md)           | Independent of v2. Still planned for future/v2.                                                                                                    |
+| [edge-scoped-bind.md](future/edge-scoped-bind.md) | Independent of v2. Still planned for future/v2.                                                                                                    |
 
 ---
 

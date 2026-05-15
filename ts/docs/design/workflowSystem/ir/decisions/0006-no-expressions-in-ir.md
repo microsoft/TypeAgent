@@ -22,7 +22,7 @@ A future reviewer should read this document when:
 
 Cross-references:
 
-- [../ir-v1.md](../ir-v1.md) §1.4 tension table ("engine needs total
+- [../ir-v0.1.md](../ir-v0.1.md) §1.4 tension table ("engine needs total
   dispatch with no expression evaluator on the hot path"), §3.4
   (template model evaluates but does not compute), §8.3 (branch model
   rejects embedded expression language).
@@ -336,7 +336,7 @@ concerns and do not appear in this record.
 - **String interpolation.** Named as the likeliest pressure point
   (§5). If it forces `$expr`, that is a narrow extension, not a
   general expression sublanguage.
-- **Branch predicates.** §8.3 of ir-v1.md rejects predicate branches
+- **Branch predicates.** §8.3 of ir-v0.1.md rejects predicate branches
   for v1. This decision is consistent with that rejection but does
   not depend on it. If predicate branches are later adopted (revisit
   trigger row 2), they could use `$expr` or they could use a

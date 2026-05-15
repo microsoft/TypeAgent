@@ -68,7 +68,7 @@ variable names.
 
 ## G3: Parallel branches missing IR schema fields
 
-**Spec:** ir-v2.md specifies fork branches have the same sub-scope
+**Spec:** ir-v0.2.md specifies fork branches have the same sub-scope
 contract as loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`,
 `output`, `outputSchema`.
 

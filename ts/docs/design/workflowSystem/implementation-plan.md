@@ -2,7 +2,7 @@
 
 Status: **Complete.** All phases implemented and committed.
 
-Implements [dsl-v0.1.md](dsl/dsl-v0.1.md) and [ir-v2.md](ir/ir-v2.md).
+Implements [dsl-v0.1.md](dsl/dsl-v0.1.md) and [ir-v0.2.md](ir/ir-v0.2.md).
 Replaces the v1 compiler; engine and model are extended (not replaced).
 
 ---
@@ -403,7 +403,7 @@ Once v2 is stable:
 ### 5.4 Update documentation
 
 - Mark dsl-v0.1.md status as "Implemented."
-- Mark ir-v2.md status as "Implemented."
+- Mark ir-v0.2.md status as "Implemented."
 - Update README in `examples/workflow/dsl/`.
 
 ### 5.5 Review and commit

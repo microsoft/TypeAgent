@@ -3,7 +3,7 @@
 
 /**
  * Events emitted by the workflow engine during execution.
- * Mirrors the observability contract in ir-v1.md section 5.6.
+ * Mirrors the observability contract in ir-v0.1.md section 5.6.
  */
 export type WorkflowEvent =
     | {

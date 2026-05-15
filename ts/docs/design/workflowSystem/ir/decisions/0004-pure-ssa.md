@@ -1,6 +1,6 @@
 # Pure SSA per namespace (decision 0004)
 
-Status: **Adopted (v1).** Summarized in [../ir-v1.md](../ir-v1.md)
+Status: **Adopted (v1).** Summarized in [../ir-v0.1.md](../ir-v0.1.md)
 §3.2.1 ("v1 is pure SSA") and §8.17. This document is the long-form
 case for the choice.
 
@@ -22,11 +22,11 @@ is the document a future reviewer should read when:
 - asking whether `bind` could be dropped in favor of node-id
   references.
 
-[../ir-v1.md](../ir-v1.md) §8.17 carries the short rationale and
+[../ir-v0.1.md](../ir-v0.1.md) §8.17 carries the short rationale and
 links here. The mechanisms that implement the property
 (hide-by-default `bind`, multiple-binders phi, centralized
 `iterateState`, the snapshot-read rule for `state`, the dominator
-pass) live in §3 and §4 of [../ir-v1.md](../ir-v1.md); the
+pass) live in §3 and §4 of [../ir-v0.1.md](../ir-v0.1.md); the
 discussion below treats them as implementation, not as motivation.
 
 The argument is laid out as: state the property (§1); pick it from
@@ -74,7 +74,7 @@ are well-known:
   them in place; reads see the most recent assignment on the path
   taken. A `set X = ...` form, or a `stateWrites` block on
   individual nodes that mutates a `state` variable (the original
-  v1 design; see §8.5 of [../ir-v1.md](../ir-v1.md)).
+  v1 design; see §8.5 of [../ir-v0.1.md](../ir-v0.1.md)).
 - **Functional / value-flow with no names.** Every node consumes
   immutable values and produces a new one; no concept of a named
   intermediate binding at all (everything is referenced by node id
@@ -122,7 +122,7 @@ audit, and the audience lens; this section's job is only to say
 which model was chosen and why the other two were not.
 
 The **mechanisms** that express pure SSA in this IR are catalogued
-in [../ir-v1.md](../ir-v1.md):
+in [../ir-v0.1.md](../ir-v0.1.md):
 
 - **Hide-by-default `bind`** (decision 0001 / §8.15): the
   named-binding half of SSA, plus the visibility control SSA on
@@ -155,7 +155,7 @@ than treating it as a happy accident.
 
 ### 3.1 Validator falls out of textbook SSA
 
-The dominator pass (§4.1 pass 6 of [../ir-v1.md](../ir-v1.md)) and the
+The dominator pass (§4.1 pass 6 of [../ir-v0.1.md](../ir-v0.1.md)) and the
 multiple-binders join (§3.3) are the standard SSA dominance and phi
 rules, applied per namespace. No bespoke "no-race", "last-writer-
 wins", or write-ordering rules are needed.
@@ -193,7 +193,7 @@ implementation strategies that are all observably equivalent:
 - Schedule independent DDG branches in parallel (post-v1 parallelism).
 
 The IR makes no commitment to which strategy an engine picks. The
-parallelism question (§2.2 of [../ir-v1.md](../ir-v1.md)) is deferred
+parallelism question (§2.2 of [../ir-v0.1.md](../ir-v0.1.md)) is deferred
 to post-v1 _precisely because_ the SSA shape leaves the door open
 without prescribing. An IR built on an imperative model would have
 to commit upfront: "writes are visible in this order"; reopening
@@ -205,7 +205,7 @@ Inserting or removing a node never silently overwrites someone else's
 value. The worst case is a missing binder, which the dominator pass
 catches statically with a localized error (§4.3). This is the property
 that makes DSL fragments compose without rename passes (§1.2 splice
-safety in [../ir-v1.md](../ir-v1.md)).
+safety in [../ir-v0.1.md](../ir-v0.1.md)).
 
 The contrast with imperative models is sharp: in a model where a node
 can `set X = ...`, a fragment that contains such a set silently
@@ -217,7 +217,7 @@ coordinate."
 ### 3.5 Hide-by-default `bind` is the matching half
 
 Pure SSA is "single def"; hide-by-default (§8.15 of
-[../ir-v1.md](../ir-v1.md), full analysis in
+[../ir-v0.1.md](../ir-v0.1.md), full analysis in
 [0001-bound-outputs.md](0001-bound-outputs.md)) is "addressable only
 when the author opts in." Together they give the author full control
 over both _when_ a name is bound and _whether_ it is visible at all.
@@ -262,7 +262,7 @@ This is the same shape as schema redundancy (§8.16), reference
 encoding (§8.2), branch model (§8.3), and bound outputs (§8.15) - the
 canonical §1.1.3 pattern of "writer asked for X, engine needed
 something specific, writer pays via tooling." The §1.1.3 tension
-table in [../ir-v1.md](../ir-v1.md) carries the corresponding row
+table in [../ir-v0.1.md](../ir-v0.1.md) carries the corresponding row
 ("Mutable state / implicit carry-forward").
 
 ---
@@ -283,7 +283,7 @@ entry. This is the natural place a more-permissive design would let
 the author omit the entry and have the previous value carry forward.
 v1 rejects that for the standard P5 reason (an omitted entry is
 ambiguous: did the author mean "carry forward" or "I forgot"?). The
-worked example in §6.3 of [../ir-v1.md](../ir-v1.md) shows the
+worked example in §6.3 of [../ir-v0.1.md](../ir-v0.1.md) shows the
 resulting shape; it reads cleanly.
 
 ### 6.2 No "natural" mutable accumulator
@@ -317,7 +317,7 @@ The original v1 design had each body task carry an optional
 `stateWrites: { <var>: <reference> }` block; the loop's state was
 mutated by whichever writes ran on the path that reached `@iterate`.
 
-**Rejected.** Full analysis in §8.5 of [../ir-v1.md](../ir-v1.md). The
+**Rejected.** Full analysis in §8.5 of [../ir-v0.1.md](../ir-v0.1.md). The
 short version: it forced a no-race validation rule across multiple
 writers, admitted dominance-ordered "dead writes" that were
 unobservable under snapshot reads, and required branches that target
@@ -333,7 +333,7 @@ The previous draft of the IR (before
 output addressable under its node id, with no `bind` switch.
 
 **Rejected.** Full analysis in [0001-bound-outputs.md](0001-bound-outputs.md)
-and §8.15 of [../ir-v1.md](../ir-v1.md). This is not literally an SSA
+and §8.15 of [../ir-v0.1.md](../ir-v0.1.md). This is not literally an SSA
 violation (each node still produced one value per execution), but it
 eliminates the author's ability to mark a value as not-for-export,
 which is the hide-by-default counterpart to single-assignment that
@@ -453,20 +453,20 @@ trigger has to be very strong.
 
 ## 10. Cross-references
 
-- §3.2.1 of [../ir-v1.md](../ir-v1.md): the "v1 is pure SSA" paragraph
+- §3.2.1 of [../ir-v0.1.md](../ir-v0.1.md): the "v1 is pure SSA" paragraph
   and the namespace lifetime table.
-- §3.3 of [../ir-v1.md](../ir-v1.md): multiple-binders phi rule.
-- §3.7.1 of [../ir-v1.md](../ir-v1.md): `iterateState`, snapshot-read
+- §3.3 of [../ir-v0.1.md](../ir-v0.1.md): multiple-binders phi rule.
+- §3.7.1 of [../ir-v0.1.md](../ir-v0.1.md): `iterateState`, snapshot-read
   rule, no implicit carry-forward.
-- §4.1 pass 6 of [../ir-v1.md](../ir-v1.md): dominator pass (the
+- §4.1 pass 6 of [../ir-v0.1.md](../ir-v0.1.md): dominator pass (the
   textbook SSA dominance check).
-- §8.5 of [../ir-v1.md](../ir-v1.md): per-node `stateWrites`
+- §8.5 of [../ir-v0.1.md](../ir-v0.1.md): per-node `stateWrites`
   rejection (Alt A).
-- §8.15 of [../ir-v1.md](../ir-v1.md) and
+- §8.15 of [../ir-v0.1.md](../ir-v0.1.md) and
   [0001-bound-outputs.md](0001-bound-outputs.md): hide-by-default
   `bind` (Alt B).
-- §8.17 of [../ir-v1.md](../ir-v1.md): the short-form rationale.
-- §1.1.3 of [../ir-v1.md](../ir-v1.md): the tension row.
-- §10 of [../ir-v1.md](../ir-v1.md): the audience-lens closure row.
-- §2.2 of [../ir-v1.md](../ir-v1.md): post-v1 work that depends on
+- §8.17 of [../ir-v0.1.md](../ir-v0.1.md): the short-form rationale.
+- §1.1.3 of [../ir-v0.1.md](../ir-v0.1.md): the tension row.
+- §10 of [../ir-v0.1.md](../ir-v0.1.md): the audience-lens closure row.
+- §2.2 of [../ir-v0.1.md](../ir-v0.1.md): post-v1 work that depends on
   the SSA shape (parallelism, checkpointing).
