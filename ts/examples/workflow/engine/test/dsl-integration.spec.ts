@@ -175,7 +175,7 @@ describe("DSL -> Engine integration", () => {
                 `
                 workflow fetch(url: string): unknown {
                     const result = web.fetch(url)
-                    return result
+                    return result.body
                 }
             `,
                 [webFetch],
@@ -194,7 +194,7 @@ describe("DSL -> Engine integration", () => {
                 `
                 workflow fetchAndFormat(url: string): unknown {
                     const page = web.fetch(url)
-                    const msg = text.template("Got: {{body}}", { body: page })
+                    const msg = text.template("Got: {{body}}", { body: page.body })
                     return msg
                 }
             `,
@@ -699,7 +699,7 @@ describe("DSL -> Engine integration", () => {
                 workflow fetchAll(urls: string[]): unknown {
                     const results = map(urls, (url) => {
                         const page = web.fetch(url)
-                        return page
+                        return page.body
                     })
                     return results
                 }
@@ -848,11 +848,11 @@ describe("DSL -> Engine integration", () => {
                     const results = parallel(
                         () => {
                             const a = task.a("")
-                            return a
+                            return a.body
                         },
                         () => {
                             const b = task.b("")
-                            return b
+                            return b.body
                         }
                     )
                     return results
@@ -883,7 +883,7 @@ describe("DSL -> Engine integration", () => {
                 workflow fetchParallel(urls: string[]): unknown {
                     const results = parallelMap(urls, (url) => {
                         const page = web.fetch(url)
-                        return page
+                        return page.body
                     })
                     return results
                 }
@@ -909,7 +909,7 @@ describe("DSL -> Engine integration", () => {
             workflow fetchWithRetry(url: string): unknown {
                 return retry(3, () => {
                     const result = web.fetch(url)
-                    return result
+                    return result.body
                 })
             }
         `;
@@ -1097,7 +1097,7 @@ describe("DSL -> Engine integration", () => {
                 workflow fetchAll(urls: string[]): unknown {
                     const pages = map(urls, (url) => {
                         const page = web.fetch(url)
-                        const msg = text.template("Page: {{body}}", { body: page })
+                        const msg = text.template("Page: {{body}}", { body: page.body })
                         return msg
                     })
                     return pages

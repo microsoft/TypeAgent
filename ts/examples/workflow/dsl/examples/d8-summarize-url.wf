@@ -12,5 +12,5 @@ workflow summarizeUrl(url: string, outputPath: string): { path: string, summary:
     const summaryResult = llm.generate(prompt)
     const writeResult = file.write({ path: outputPath, content: summaryResult })
 
-    return { path: writeResult.path, summary: summaryResult.text }
+    return { path: writeResult, summary: summaryResult }
 }

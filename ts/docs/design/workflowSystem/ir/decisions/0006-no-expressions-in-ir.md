@@ -308,7 +308,7 @@ For clarity, the standard-library tasks are:
 | `int.add`        | Integer addition               | `{ a: integer, b: integer }`                          | `{ result: integer }` |
 | `int.lessThan`   | Integer comparison             | `{ a: integer, b: integer }`                          | `{ result: boolean }` |
 | `list.length`    | Array length                   | `{ list: any[] }`                                     | `{ length: integer }` |
-| `list.elementAt` | Index into array               | `{ list: any[], index: integer }`                     | `{ element: any }`    |
+| `list.elementAt` | Index into array               | `{ list: any[], index: integer }`                     | _(element value)_     |
 | `list.append`    | Append to array                | `{ list: any[], item: any }`                          | `{ list: any[] }`     |
 | `bool.toLabel`   | Boolean to string discriminant | `{ value: boolean, ifTrue: string, ifFalse: string }` | `{ label: string }`   |
 

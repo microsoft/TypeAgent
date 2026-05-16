@@ -73,10 +73,7 @@
       "iterateState": {
         "attempt": {
           "$from": "scope",
-          "name": "nextAttempt",
-          "path": [
-            "result"
-          ]
+          "name": "nextAttempt"
         }
       },
       "maxIterations": 3,
@@ -158,15 +155,7 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "result"
-              ],
-              "properties": {
-                "result": {
-                  "type": "number"
-                }
-              }
+              "type": "number"
             },
             "inputs": {
               "left": {
@@ -197,23 +186,12 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "result"
-              ],
-              "properties": {
-                "result": {
-                  "type": "boolean"
-                }
-              }
+              "type": "boolean"
             },
             "inputs": {
               "left": {
                 "$from": "scope",
-                "name": "nextAttempt",
-                "path": [
-                  "result"
-                ]
+                "name": "nextAttempt"
               },
               "right": {
                 "$from": "input",
@@ -227,10 +205,7 @@
             "kind": "branch",
             "selector": {
               "$from": "scope",
-              "name": "shouldRetry",
-              "path": [
-                "result"
-              ]
+              "name": "shouldRetry"
             },
             "selectorSchema": {
               "type": "boolean"
@@ -274,15 +249,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "{{prefix}}{{content}}",
@@ -315,23 +282,12 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "prompt": {
           "$from": "scope",
-          "name": "prompt",
-          "path": [
-            "text"
-          ]
+          "name": "prompt"
         }
       },
       "next": "writeFile",
@@ -356,15 +312,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "path"
-        ],
-        "properties": {
-          "path": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "path": {
@@ -373,10 +321,7 @@
         },
         "content": {
           "$from": "scope",
-          "name": "summaryResult",
-          "path": [
-            "text"
-          ]
+          "name": "summaryResult"
         }
       },
       "bind": "writeResult"
@@ -386,17 +331,11 @@
   "output": {
     "path": {
       "$from": "scope",
-      "name": "writeResult",
-      "path": [
-        "path"
-      ]
+      "name": "writeResult"
     },
     "summary": {
       "$from": "scope",
-      "name": "summaryResult",
-      "path": [
-        "text"
-      ]
+      "name": "summaryResult"
     }
   }
 }

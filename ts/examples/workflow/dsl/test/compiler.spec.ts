@@ -27,11 +27,7 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
                 vars: { type: "object" },
             },
         },
-        outputSchema: {
-            type: "object",
-            required: ["text"],
-            properties: { text: { type: "string" } },
-        },
+        outputSchema: { type: "string" },
     },
     {
         name: "shell.exec",
@@ -64,11 +60,7 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
                 delimiter: { type: "string" },
             },
         },
-        outputSchema: {
-            type: "object",
-            required: ["text"],
-            properties: { text: { type: "string" } },
-        },
+        outputSchema: { type: "string" },
     },
     {
         name: "web.fetch",
@@ -111,11 +103,7 @@ const D8_SCHEMAS: TaskSchemaInfo[] = [
             required: ["prompt"],
             properties: { prompt: { type: "string" } },
         },
-        outputSchema: {
-            type: "object",
-            required: ["text"],
-            properties: { text: { type: "string" } },
-        },
+        outputSchema: { type: "string" },
     },
     {
         name: "file.write",
@@ -127,11 +115,7 @@ const D8_SCHEMAS: TaskSchemaInfo[] = [
                 content: { type: "string" },
             },
         },
-        outputSchema: {
-            type: "object",
-            required: ["path"],
-            properties: { path: { type: "string" } },
-        },
+        outputSchema: { type: "string" },
     },
 ];
 
@@ -204,7 +188,7 @@ describe("DSL compiler", () => {
     it("compiles a minimal workflow to IR", () => {
         const source = `workflow hello(name: string): string {
             const greeting = text.template("Hello {{name}}", { name: name })
-            return greeting.text
+            return greeting
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -224,7 +208,7 @@ describe("DSL compiler", () => {
     it("generates correct inputSchema from params", () => {
         const source = `workflow test(repos: string[], author: string): string {
             const x = text.template("hi", { name: author })
-            return x.text
+            return x
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -246,7 +230,7 @@ describe("DSL compiler", () => {
                 return result
             })
             const joined = string.join(results, ",")
-            return joined.text
+            return joined
         }`;
         const result = compile(source, TASK_SCHEMAS);
         expect(result.errors).toHaveLength(0);
@@ -271,10 +255,10 @@ describe("DSL compiler", () => {
     });
 
     it("resolves dotted name references", () => {
-        const source = `workflow test(name: string): string {
-            const a = text.template("{{x}}", { x: name })
-            const b = text.template("{{x}}", { x: a.text })
-            return b.text
+        const source = `workflow test(url: string): string {
+            const a = web.fetch(url)
+            const b = text.template("{{x}}", { x: a.body })
+            return b
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -286,13 +270,13 @@ describe("DSL compiler", () => {
         const xRef = varsInput.x as Record<string, unknown>;
         expect(xRef.$from).toBe("scope");
         expect(xRef.name).toBe("a");
-        expect(xRef.path).toEqual(["text"]);
+        expect(xRef.path).toEqual(["body"]);
     });
 
     it("reports errors for unknown tasks", () => {
         const source = `workflow test(x: string): string {
             const a = unknown.task("hi")
-            return a.text
+            return a
         }`;
         const result = compile(source, TASK_SCHEMAS);
         expect(result.errors.length).toBeGreaterThan(0);
@@ -302,9 +286,9 @@ describe("DSL compiler", () => {
     it("threads next edges between sequential nodes", () => {
         const source = `workflow test(x: string): string {
             const a = text.template("1", { x: x })
-            const b = text.template("2", { x: a.text })
-            const c = text.template("3", { x: b.text })
-            return c.text
+            const b = text.template("2", { x: a })
+            const c = text.template("3", { x: b })
+            return c
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);

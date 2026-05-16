@@ -150,15 +150,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "{{base}}...HEAD",
@@ -220,10 +212,7 @@
           "diff",
           {
             "$from": "scope",
-            "name": "diffRange",
-            "path": [
-              "text"
-            ]
+            "name": "diffRange"
           }
         ],
         "cwd": {
@@ -283,10 +272,7 @@
           "--name-status",
           {
             "$from": "scope",
-            "name": "diffRange",
-            "path": [
-              "text"
-            ]
+            "name": "diffRange"
           }
         ],
         "cwd": {
@@ -316,15 +302,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "{{analysisPrompt}}",
@@ -372,47 +350,39 @@
       "outputSchema": {
         "type": "object",
         "required": [
-          "value"
+          "groups"
         ],
         "properties": {
-          "value": {
-            "type": "object",
-            "required": [
-              "groups"
-            ],
-            "properties": {
-              "groups": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "name",
-                    "files",
-                    "commitMessage"
-                  ],
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "description": {
-                      "type": "string"
-                    },
-                    "files": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "dependsOn": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "commitMessage": {
-                      "type": "string"
-                    }
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "files",
+                "commitMessage"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
+                },
+                "dependsOn": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "commitMessage": {
+                  "type": "string"
                 }
               }
             }
@@ -422,10 +392,7 @@
       "inputs": {
         "prompt": {
           "$from": "scope",
-          "name": "analysisInput",
-          "path": [
-            "text"
-          ]
+          "name": "analysisInput"
         },
         "endpoint": "GPT_4_1"
       },
@@ -453,15 +420,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "",
@@ -476,7 +435,6 @@
           "$from": "scope",
           "name": "analysisResult",
           "path": [
-            "value",
             "groups"
           ]
         },
@@ -522,17 +480,11 @@
       "iterateState": {
         "i": {
           "$from": "scope",
-          "name": "nextIdx",
-          "path": [
-            "result"
-          ]
+          "name": "nextIdx"
         },
         "branchNames": {
           "$from": "scope",
-          "name": "updatedBranches",
-          "path": [
-            "list"
-          ]
+          "name": "updatedBranches"
         }
       },
       "maxIterations": 50,
@@ -598,39 +550,31 @@
             "outputSchema": {
               "type": "object",
               "required": [
-                "element"
+                "name",
+                "files",
+                "commitMessage"
               ],
               "properties": {
-                "element": {
-                  "type": "object",
-                  "required": [
-                    "name",
-                    "files",
-                    "commitMessage"
-                  ],
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "description": {
-                      "type": "string"
-                    },
-                    "files": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "dependsOn": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "commitMessage": {
-                      "type": "string"
-                    }
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
+                },
+                "dependsOn": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "commitMessage": {
+                  "type": "string"
                 }
               }
             },
@@ -669,22 +613,13 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "text"
-              ],
-              "properties": {
-                "text": {
-                  "type": "string"
-                }
-              }
+              "type": "string"
             },
             "inputs": {
               "list": {
                 "$from": "scope",
                 "name": "currentGroup",
                 "path": [
-                  "element",
                   "files"
                 ]
               },
@@ -715,22 +650,13 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "text"
-              ],
-              "properties": {
-                "text": {
-                  "type": "string"
-                }
-              }
+              "type": "string"
             },
             "inputs": {
               "list": {
                 "$from": "scope",
                 "name": "currentGroup",
                 "path": [
-                  "element",
                   "dependsOn"
                 ]
               },
@@ -758,15 +684,7 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "text"
-              ],
-              "properties": {
-                "text": {
-                  "type": "string"
-                }
-              }
+              "type": "string"
             },
             "inputs": {
               "template": "set -e\nBRANCH_NAME=\"{{branchPrefix}}{{name}}\"\nDEPS=\"{{deps}}\"\nif [ -n \"$DEPS\" ]; then\n  git checkout -b \"$BRANCH_NAME\" \"{{baseBranch}}\"\n  for dep in $DEPS; do\n    git merge --no-edit \"{{branchPrefix}}$dep\"\n  done\nelse\n  git checkout -b \"$BRANCH_NAME\" \"{{baseBranch}}\"\nfi\nwhile IFS= read -r f; do\n  [ -n \"$f\" ] && git checkout \"{{featureBranch}}\" -- \"$f\"\ndone <<'FILELIST'\n{{files}}\nFILELIST\ngit add .\ngit commit -m \"{{commitMessage}}\"",
@@ -775,7 +693,6 @@
                   "$from": "scope",
                   "name": "currentGroup",
                   "path": [
-                    "element",
                     "name"
                   ]
                 },
@@ -793,23 +710,16 @@
                 },
                 "deps": {
                   "$from": "scope",
-                  "name": "depsJoined",
-                  "path": [
-                    "text"
-                  ]
+                  "name": "depsJoined"
                 },
                 "files": {
                   "$from": "scope",
-                  "name": "fileListJoined",
-                  "path": [
-                    "text"
-                  ]
+                  "name": "fileListJoined"
                 },
                 "commitMessage": {
                   "$from": "scope",
                   "name": "currentGroup",
                   "path": [
-                    "element",
                     "commitMessage"
                   ]
                 }
@@ -866,10 +776,7 @@
                 "-c",
                 {
                   "$from": "scope",
-                  "name": "branchScript",
-                  "path": [
-                    "text"
-                  ]
+                  "name": "branchScript"
                 }
               ],
               "cwd": {
@@ -1019,15 +926,7 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "text"
-              ],
-              "properties": {
-                "text": {
-                  "type": "string"
-                }
-              }
+              "type": "string"
             },
             "inputs": {
               "template": "{{branchPrefix}}{{name}}",
@@ -1040,7 +939,6 @@
                   "$from": "scope",
                   "name": "currentGroup",
                   "path": [
-                    "element",
                     "name"
                   ]
                 }
@@ -1066,15 +964,7 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "list"
-              ],
-              "properties": {
-                "list": {
-                  "type": "array"
-                }
-              }
+              "type": "array"
             },
             "inputs": {
               "list": {
@@ -1083,10 +973,7 @@
               },
               "item": {
                 "$from": "scope",
-                "name": "branchNameStr",
-                "path": [
-                  "text"
-                ]
+                "name": "branchNameStr"
               }
             },
             "next": "returnToBase",
@@ -1170,15 +1057,7 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "result"
-              ],
-              "properties": {
-                "result": {
-                  "type": "number"
-                }
-              }
+              "type": "number"
             },
             "inputs": {
               "left": {
@@ -1205,15 +1084,7 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "length"
-              ],
-              "properties": {
-                "length": {
-                  "type": "integer"
-                }
-              }
+              "type": "integer"
             },
             "inputs": {
               "list": {
@@ -1243,30 +1114,16 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": [
-                "result"
-              ],
-              "properties": {
-                "result": {
-                  "type": "boolean"
-                }
-              }
+              "type": "boolean"
             },
             "inputs": {
               "left": {
                 "$from": "scope",
-                "name": "nextIdx",
-                "path": [
-                  "result"
-                ]
+                "name": "nextIdx"
               },
               "right": {
                 "$from": "scope",
-                "name": "groupCount",
-                "path": [
-                  "length"
-                ]
+                "name": "groupCount"
               }
             },
             "next": "loopDecision",
@@ -1276,10 +1133,7 @@
             "kind": "branch",
             "selector": {
               "$from": "scope",
-              "name": "hasMore",
-              "path": [
-                "result"
-              ]
+              "name": "hasMore"
             },
             "selectorSchema": {
               "type": "boolean"
@@ -1293,10 +1147,7 @@
         },
         "output": {
           "$from": "scope",
-          "name": "updatedBranches",
-          "path": [
-            "list"
-          ]
+          "name": "updatedBranches"
         },
         "outputSchema": {
           "type": "array",
@@ -1325,15 +1176,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "",
@@ -1363,15 +1206,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "list": {
@@ -1402,15 +1237,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "set -e\ngit checkout -b {{branchPrefix}}validation-merge \"{{baseBranch}}\"\nfor branch in {{branches}}; do\n  git merge --no-edit \"$branch\"\ndone",
@@ -1425,10 +1252,7 @@
           },
           "branches": {
             "$from": "scope",
-            "name": "branchNamesJoined",
-            "path": [
-              "text"
-            ]
+            "name": "branchNamesJoined"
           }
         }
       },
@@ -1483,10 +1307,7 @@
           "-c",
           {
             "$from": "scope",
-            "name": "mergeScript",
-            "path": [
-              "text"
-            ]
+            "name": "mergeScript"
           }
         ],
         "cwd": {
@@ -1517,15 +1338,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "{{branchPrefix}}validation-merge",
@@ -1558,15 +1371,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "set -e\nORIGINAL=$(git diff \"{{baseBranch}}\"...\"{{featureBranch}}\" | sha256sum | cut -d' ' -f1)\nVALIDATION=$(git diff \"{{baseBranch}}\"...\"{{branchPrefix}}validation-merge\" | sha256sum | cut -d' ' -f1)\nif [ \"$ORIGINAL\" = \"$VALIDATION\" ]; then\n  echo MATCH\nelse\n  echo MISMATCH\n  echo \"Original SHA: $ORIGINAL\"\n  echo \"Validation SHA: $VALIDATION\"\nfi",
@@ -1636,10 +1441,7 @@
           "-c",
           {
             "$from": "scope",
-            "name": "validationScript",
-            "path": [
-              "text"
-            ]
+            "name": "validationScript"
           }
         ],
         "cwd": {
@@ -1669,15 +1471,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "",
@@ -1704,15 +1498,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "",
@@ -1739,15 +1525,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "BRANCH=$(echo '{{branch}}' | tr -d '\\n'); git merge --abort 2>/dev/null; git cherry-pick --abort 2>/dev/null; git checkout \"$BRANCH\" 2>/dev/null; git branch --list 'reorg/*' | xargs -r git branch -D 2>/dev/null; echo \"cleanup done, restored $BRANCH\"",
@@ -1812,10 +1590,7 @@
           "-c",
           {
             "$from": "scope",
-            "name": "cleanupScript",
-            "path": [
-              "text"
-            ]
+            "name": "cleanupScript"
           }
         ],
         "cwd": {
@@ -1831,9 +1606,6 @@
     "plan": {
       "$from": "scope",
       "name": "analysisResult",
-      "path": [
-        "value"
-      ],
       "optional": true
     },
     "branches": {
@@ -1844,9 +1616,6 @@
     "validationBranch": {
       "$from": "scope",
       "name": "valBranchName",
-      "path": [
-        "text"
-      ],
       "optional": true
     },
     "validated": {

@@ -70,6 +70,8 @@ interface Binding {
     nodeId?: string | undefined;
     /** For "literal": the literal value. */
     value?: Template | undefined;
+    /** Explicit path to project through when resolving this binding. */
+    path?: string[] | undefined;
 }
 
 interface ScopeContext {
@@ -137,11 +139,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: {} },
-                },
+                outputSchema: {},
                 inputs: { value: outputTemplate },
                 bind: wrapId,
             };
@@ -151,7 +149,6 @@ export class Emitter {
             outputTemplate = {
                 $from: "scope",
                 name: wrapId,
-                path: ["result"],
             } as unknown as Template;
         }
 
@@ -390,11 +387,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: {} },
-                },
+                outputSchema: {},
                 inputs: { value: thenOutput },
                 bind: resultBind,
             };
@@ -409,11 +402,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: {} },
-                },
+                outputSchema: {},
                 inputs: { value: elseOutput },
                 bind: resultBind,
             };
@@ -472,7 +461,6 @@ export class Emitter {
                 output: {
                     $from: "scope",
                     name: resultBind,
-                    path: ["result"],
                 } as unknown as Template,
             };
         }
@@ -972,11 +960,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: { type: "boolean" } },
-                },
+                outputSchema: { type: "boolean" },
                 inputs: { value: evalResult },
                 bind: resultBind,
                 next: mergeId,
@@ -994,11 +978,7 @@ export class Emitter {
                 required: ["value"],
                 properties: { value: {} },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "boolean" } },
-            },
+            outputSchema: { type: "boolean" },
             // &&: short-circuit on false; ||: short-circuit on true
             inputs: { value: !isAnd },
             bind: resultBind,
@@ -1031,7 +1011,6 @@ export class Emitter {
         return {
             $from: "scope",
             name: resultBind,
-            path: ["result"],
         } as unknown as Template;
     }
 
@@ -1071,11 +1050,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: {} },
-                },
+                outputSchema: {},
                 inputs: { value: thenResult },
                 bind: resultBind,
                 next: mergeId,
@@ -1109,11 +1084,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: {} },
-                },
+                outputSchema: {},
                 inputs: { value: elseResult },
                 bind: resultBind,
                 next: mergeId,
@@ -1145,7 +1116,6 @@ export class Emitter {
         return {
             $from: "scope",
             name: resultBind,
-            path: ["result"],
         } as unknown as Template;
     }
 
@@ -1189,11 +1159,7 @@ export class Emitter {
                     right: { type: "number" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "number" } },
-            },
+            outputSchema: { type: "number" },
             inputs: {
                 left: {
                     $from: "state",
@@ -1214,16 +1180,11 @@ export class Emitter {
                 required: ["left", "right"],
                 properties: { left: { type: "number" }, right: {} },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "boolean" } },
-            },
+            outputSchema: { type: "boolean" },
             inputs: {
                 left: {
                     $from: "scope",
                     name: stepId,
-                    path: ["result"],
                 } as unknown as Template,
                 right: countTemplate,
             },
@@ -1253,7 +1214,6 @@ export class Emitter {
             selector: {
                 $from: "scope",
                 name: compareId,
-                path: ["result"],
             } as unknown as Template,
             selectorSchema: { type: "boolean" },
             cases: { true: exhaustId },
@@ -1334,7 +1294,6 @@ export class Emitter {
                 attempt: {
                     $from: "scope",
                     name: stepId,
-                    path: ["result"],
                 } as unknown as Template,
             },
             ...(onError ? { onError } : {}),
@@ -1363,11 +1322,7 @@ export class Emitter {
                 required: ["list"],
                 properties: { list: { type: "array" } },
             },
-            outputSchema: {
-                type: "object",
-                required: ["length"],
-                properties: { length: { type: "integer" } },
-            },
+            outputSchema: { type: "integer" },
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
             },
@@ -1387,11 +1342,7 @@ export class Emitter {
                     right: { type: "number" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "boolean" } },
-            },
+            outputSchema: { type: "boolean" },
             inputs: {
                 left: {
                     $from: "state",
@@ -1400,7 +1351,6 @@ export class Emitter {
                 right: {
                     $from: "scope",
                     name: lengthId,
-                    path: ["length"],
                 } as unknown as Template,
             },
             bind: compareId,
@@ -1415,7 +1365,6 @@ export class Emitter {
             selector: {
                 $from: "scope",
                 name: compareId,
-                path: ["result"],
             } as unknown as Template,
             selectorSchema: { type: "boolean" },
             cases: { true: pickId },
@@ -1435,11 +1384,7 @@ export class Emitter {
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["element"],
-                properties: { element: {} },
-            },
+            outputSchema: {},
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1470,11 +1415,7 @@ export class Emitter {
                     item: {},
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["list"],
-                properties: { list: { type: "array" } },
-            },
+            outputSchema: { type: "array" },
             inputs: {
                 list: {
                     $from: "state",
@@ -1499,11 +1440,7 @@ export class Emitter {
                     right: { type: "number" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "number" } },
-            },
+            outputSchema: { type: "number" },
             inputs: {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
@@ -1548,12 +1485,10 @@ export class Emitter {
                 i: {
                     $from: "scope",
                     name: stepId,
-                    path: ["result"],
                 } as unknown as Template,
                 results: {
                     $from: "scope",
                     name: appendId,
-                    path: ["list"],
                 } as unknown as Template,
             },
             bind: loopId,
@@ -1580,11 +1515,7 @@ export class Emitter {
                 required: ["list"],
                 properties: { list: { type: "array" } },
             },
-            outputSchema: {
-                type: "object",
-                required: ["length"],
-                properties: { length: { type: "integer" } },
-            },
+            outputSchema: { type: "integer" },
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
             },
@@ -1604,11 +1535,7 @@ export class Emitter {
                     right: { type: "number" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "boolean" } },
-            },
+            outputSchema: { type: "boolean" },
             inputs: {
                 left: {
                     $from: "state",
@@ -1617,7 +1544,6 @@ export class Emitter {
                 right: {
                     $from: "scope",
                     name: lengthId,
-                    path: ["length"],
                 } as unknown as Template,
             },
             bind: compareId,
@@ -1632,7 +1558,6 @@ export class Emitter {
             selector: {
                 $from: "scope",
                 name: compareId,
-                path: ["result"],
             } as unknown as Template,
             selectorSchema: { type: "boolean" },
             cases: { true: pickId },
@@ -1652,11 +1577,7 @@ export class Emitter {
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["element"],
-                properties: { element: {} },
-            },
+            outputSchema: {},
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1691,11 +1612,7 @@ export class Emitter {
                     item: {},
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["list"],
-                properties: { list: { type: "array" } },
-            },
+            outputSchema: { type: "array" },
             inputs: {
                 list: {
                     $from: "state",
@@ -1704,7 +1621,6 @@ export class Emitter {
                 item: {
                     $from: "scope",
                     name: pickId,
-                    path: ["element"],
                 } as unknown as Template,
             },
             bind: appendId,
@@ -1721,16 +1637,11 @@ export class Emitter {
                 required: ["value"],
                 properties: { value: {} },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: {} },
-            },
+            outputSchema: {},
             inputs: {
                 value: {
                     $from: "scope",
                     name: appendId,
-                    path: ["list"],
                 } as unknown as Template,
             },
             bind: "updated_results",
@@ -1746,11 +1657,7 @@ export class Emitter {
                 required: ["value"],
                 properties: { value: {} },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: {} },
-            },
+            outputSchema: {},
             inputs: {
                 value: {
                     $from: "state",
@@ -1788,11 +1695,7 @@ export class Emitter {
                     right: { type: "number" },
                 },
             },
-            outputSchema: {
-                type: "object",
-                required: ["result"],
-                properties: { result: { type: "number" } },
-            },
+            outputSchema: { type: "number" },
             inputs: {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
@@ -1837,12 +1740,10 @@ export class Emitter {
                 i: {
                     $from: "scope",
                     name: stepId,
-                    path: ["result"],
                 } as unknown as Template,
                 results: {
                     $from: "scope",
                     name: "updated_results",
-                    path: ["result"],
                 } as unknown as Template,
             },
             bind: loopId,
@@ -1860,30 +1761,42 @@ export class Emitter {
 
         for (let i = 0; i < expr.bodies.length; i++) {
             const branchScope = this.childScope(scope);
+            let returnOutput: Template | undefined;
             for (const s of expr.bodies[i].body) {
-                this.emitStatement(s, branchScope);
+                const result = this.emitStatement(s, branchScope);
+                if (result?.output !== undefined) {
+                    returnOutput = result.output;
+                }
             }
             this.threadNext(branchScope);
 
-            // Determine branch output: last node's bind, or null
-            const lastNodeId =
-                branchScope.nodeOrder[branchScope.nodeOrder.length - 1];
-            const lastNode = lastNodeId
-                ? branchScope.nodes[lastNodeId]
-                : undefined;
-            const outputBind =
-                lastNode &&
-                (lastNode.kind === "task" ||
-                    lastNode.kind === "loop" ||
-                    lastNode.kind === "fork" ||
-                    lastNode.kind === "forkMap") &&
-                lastNode.bind
-                    ? lastNode.bind
+            // Use the explicit return template (which may include a path),
+            // falling back to last node's bind.
+            let branchOutput: Template | null;
+            if (returnOutput !== undefined) {
+                branchOutput = returnOutput;
+            } else {
+                const lastNodeId =
+                    branchScope.nodeOrder[branchScope.nodeOrder.length - 1];
+                const lastNode = lastNodeId
+                    ? branchScope.nodes[lastNodeId]
                     : undefined;
-
-            const autoPath = outputBind
-                ? this.getAutoProjectPath(branchScope, outputBind)
-                : undefined;
+                const outputBind =
+                    lastNode &&
+                    (lastNode.kind === "task" ||
+                        lastNode.kind === "loop" ||
+                        lastNode.kind === "fork" ||
+                        lastNode.kind === "forkMap") &&
+                    lastNode.bind
+                        ? lastNode.bind
+                        : undefined;
+                branchOutput = outputBind
+                    ? ({
+                          $from: "scope",
+                          name: outputBind,
+                      } as unknown as Template)
+                    : null;
+            }
 
             branches[`branch_${i}`] = {
                 inputs: {},
@@ -1891,13 +1804,7 @@ export class Emitter {
                     inputSchema: {},
                     entry: branchScope.nodeOrder[0] ?? "",
                     nodes: branchScope.nodes,
-                    output: outputBind
-                        ? ({
-                              $from: "scope",
-                              name: outputBind,
-                              ...(autoPath ? { path: autoPath } : {}),
-                          } as unknown as Template)
-                        : null,
+                    output: branchOutput,
                     outputSchema: {},
                 },
             };
@@ -1937,8 +1844,12 @@ export class Emitter {
             nodeId: expr.param,
         });
 
+        let bodyReturnOutput: Template | undefined;
         for (const s of expr.body) {
-            this.emitStatement(s, bodyScope);
+            const result = this.emitStatement(s, bodyScope);
+            if (result?.output !== undefined) {
+                bodyReturnOutput = result.output;
+            }
         }
         this.threadNext(bodyScope);
 
@@ -1953,22 +1864,33 @@ export class Emitter {
         // Capture outer-scope references used in body
         const outer = this.captureOuterRefs(bodyScope, new Set([expr.param]));
 
-        // Determine body output: last node's bind
-        const lastNodeId = bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
-        const lastNode = lastNodeId ? bodyScope.nodes[lastNodeId] : undefined;
-        const outputBind =
-            lastNode &&
-            (lastNode.kind === "task" ||
-                lastNode.kind === "loop" ||
-                lastNode.kind === "fork" ||
-                lastNode.kind === "forkMap") &&
-            lastNode.bind
-                ? lastNode.bind
+        // Use the explicit return template (which may include a path),
+        // falling back to last node's bind.
+        let bodyOutput: Template | null;
+        if (bodyReturnOutput !== undefined) {
+            bodyOutput = bodyReturnOutput;
+        } else {
+            const lastNodeId =
+                bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
+            const lastNode = lastNodeId
+                ? bodyScope.nodes[lastNodeId]
                 : undefined;
-
-        const autoPath = outputBind
-            ? this.getAutoProjectPath(bodyScope, outputBind)
-            : undefined;
+            const outputBind =
+                lastNode &&
+                (lastNode.kind === "task" ||
+                    lastNode.kind === "loop" ||
+                    lastNode.kind === "fork" ||
+                    lastNode.kind === "forkMap") &&
+                lastNode.bind
+                    ? lastNode.bind
+                    : undefined;
+            bodyOutput = outputBind
+                ? ({
+                      $from: "scope",
+                      name: outputBind,
+                  } as unknown as Template)
+                : null;
+        }
 
         const forkMapNode: ForkMapNode = {
             kind: "forkMap",
@@ -1982,13 +1904,7 @@ export class Emitter {
                 inputSchema: {},
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
-                output: outputBind
-                    ? ({
-                          $from: "scope",
-                          name: outputBind,
-                          ...(autoPath ? { path: autoPath } : {}),
-                      } as unknown as Template)
-                    : null,
+                output: bodyOutput,
                 outputSchema: {},
             },
             outputSchema: { type: "array" },
@@ -2075,10 +1991,7 @@ export class Emitter {
                         return {
                             $from: "scope",
                             name: nodeId,
-                            path:
-                                rest.length > 0
-                                    ? rest
-                                    : this.getAutoProjectPath(current, nodeId),
+                            path: rest.length > 0 ? rest : undefined,
                         } as unknown as Template;
                     }
                     case "param":
@@ -2222,11 +2135,9 @@ export class Emitter {
 
     private scopeRef(nodeId: string, scope: ScopeContext): Template {
         this.referencedNodes.add(nodeId);
-        const path = this.getAutoProjectPath(scope, nodeId);
         return {
             $from: "scope",
             name: nodeId,
-            ...(path ? { path } : {}),
         } as unknown as Template;
     }
 
@@ -2332,30 +2243,6 @@ export class Emitter {
             return expr.segments[expr.segments.length - 1];
         }
         return `v${index}`;
-    }
-
-    private getAutoProjectPath(
-        scope: ScopeContext,
-        nodeId: string,
-    ): string[] | undefined {
-        const node = scope.nodes[nodeId];
-        if (!node || node.kind !== "task") return undefined;
-        return this.getAutoProjectPathFromSchema(node.outputSchema);
-    }
-
-    private getAutoProjectPathFromSchema(
-        schema: JSONSchema | undefined,
-    ): string[] | undefined {
-        if (!schema) return undefined;
-        const outSchema = schema as Record<string, unknown>;
-        if (outSchema.type !== "object") return undefined;
-        const props = outSchema.properties as
-            | Record<string, unknown>
-            | undefined;
-        if (!props) return undefined;
-        const keys = Object.keys(props);
-        if (keys.length === 1) return [keys[0]];
-        return undefined;
     }
 
     private freshId(prefix: string): string {

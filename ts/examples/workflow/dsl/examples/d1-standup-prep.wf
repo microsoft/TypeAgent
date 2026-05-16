@@ -8,5 +8,5 @@ workflow standupPrep(repos: string[], author: string): string {
     })
 
     const joined = string.join(sections, "\n\n")
-    return joined.text
+    return joined
 }

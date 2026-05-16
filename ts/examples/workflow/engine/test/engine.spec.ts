@@ -60,17 +60,13 @@ const emailFetchUnread: TaskDefinition = {
         required: ["max"],
         properties: { max: { type: "integer" } },
     },
-    outputSchema: {
-        type: "object",
-        required: ["messages"],
-        properties: { messages: { type: "array" } },
-    },
+    outputSchema: { type: "array" },
     async execute(input: any) {
         const messages = [];
         for (let i = 0; i < Math.min(input.max, 2); i++) {
             messages.push({ subject: `Email ${i + 1}`, from: "test@test.com" });
         }
-        return { kind: "ok", output: { messages } };
+        return { kind: "ok", output: messages };
     },
 };
 
@@ -78,15 +74,11 @@ const calendarToday: TaskDefinition = {
     name: "calendar.today",
     sideEffects: false,
     inputSchema: { type: "object", properties: {} },
-    outputSchema: {
-        type: "object",
-        required: ["events"],
-        properties: { events: { type: "array" } },
-    },
+    outputSchema: { type: "array" },
     async execute() {
         return {
             kind: "ok",
-            output: { events: [{ title: "Standup", time: "09:00" }] },
+            output: [{ title: "Standup", time: "09:00" }],
         };
     },
 };
@@ -182,18 +174,14 @@ const markdownCompose: TaskDefinition = {
             repoSections: { type: "array" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["brief"],
-        properties: { brief: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input: any) {
         const parts = [
             input.calendarSection.body,
             input.emailSection.body,
             ...input.repoSections.map((s: any) => s.body),
         ];
-        return { kind: "ok", output: { brief: parts.join("\n\n") } };
+        return { kind: "ok", output: parts.join("\n\n") };
     },
 };
 
@@ -232,11 +220,7 @@ function makeA4IR(): WorkflowIR {
                 kind: "task",
                 task: "calendar.today",
                 inputSchema: { type: "object", properties: {} },
-                outputSchema: {
-                    type: "object",
-                    required: ["events"],
-                    properties: { events: { type: "array" } },
-                },
+                outputSchema: { type: "array" },
                 inputs: {},
                 next: "renderCalendar",
                 onError: "calendarUnavailable",
@@ -266,7 +250,6 @@ function makeA4IR(): WorkflowIR {
                     items: {
                         $from: "scope",
                         name: "calendarEvents",
-                        path: ["events"],
                     },
                 },
                 next: "fetchEmail",
@@ -312,11 +295,7 @@ function makeA4IR(): WorkflowIR {
                     required: ["max"],
                     properties: { max: { type: "integer" } },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["messages"],
-                    properties: { messages: { type: "array" } },
-                },
+                outputSchema: { type: "array" },
                 inputs: {
                     max: { $from: "input", name: "maxEmails" },
                 },
@@ -348,7 +327,6 @@ function makeA4IR(): WorkflowIR {
                     items: {
                         $from: "scope",
                         name: "emailMessages",
-                        path: ["messages"],
                     },
                 },
                 next: "repoLoop",
@@ -424,11 +402,7 @@ function makeA4IR(): WorkflowIR {
                                     index: { type: "integer" },
                                 },
                             },
-                            outputSchema: {
-                                type: "object",
-                                required: ["element"],
-                                properties: { element: {} },
-                            },
+                            outputSchema: {},
                             inputs: {
                                 list: { $from: "input", name: "repos" },
                                 index: { $from: "state", name: "i" },
@@ -459,7 +433,6 @@ function makeA4IR(): WorkflowIR {
                                 repo: {
                                     $from: "scope",
                                     name: "picked",
-                                    path: ["element"],
                                 },
                                 max: { $from: "input", name: "maxCommits" },
                             },
@@ -538,11 +511,7 @@ function makeA4IR(): WorkflowIR {
                                     item: {},
                                 },
                             },
-                            outputSchema: {
-                                type: "object",
-                                required: ["list"],
-                                properties: { list: { type: "array" } },
-                            },
+                            outputSchema: { type: "array" },
                             inputs: {
                                 list: { $from: "state", name: "sections" },
                                 item: { $from: "scope", name: "newSection" },
@@ -561,11 +530,7 @@ function makeA4IR(): WorkflowIR {
                                     right: { type: "number" },
                                 },
                             },
-                            outputSchema: {
-                                type: "object",
-                                required: ["result"],
-                                properties: { result: { type: "number" } },
-                            },
+                            outputSchema: { type: "number" },
                             inputs: {
                                 left: { $from: "state", name: "i" },
                                 right: 1,
@@ -581,11 +546,7 @@ function makeA4IR(): WorkflowIR {
                                 required: ["list"],
                                 properties: { list: { type: "array" } },
                             },
-                            outputSchema: {
-                                type: "object",
-                                required: ["length"],
-                                properties: { length: { type: "integer" } },
-                            },
+                            outputSchema: { type: "integer" },
                             inputs: {
                                 list: { $from: "input", name: "repos" },
                             },
@@ -603,21 +564,15 @@ function makeA4IR(): WorkflowIR {
                                     right: { type: "number" },
                                 },
                             },
-                            outputSchema: {
-                                type: "object",
-                                required: ["result"],
-                                properties: { result: { type: "boolean" } },
-                            },
+                            outputSchema: { type: "boolean" },
                             inputs: {
                                 left: {
                                     $from: "scope",
                                     name: "stepped",
-                                    path: ["result"],
                                 },
                                 right: {
                                     $from: "scope",
                                     name: "repoCount",
-                                    path: ["length"],
                                 },
                             },
                             next: "checkDone",
@@ -628,7 +583,6 @@ function makeA4IR(): WorkflowIR {
                             selector: {
                                 $from: "scope",
                                 name: "hasMore",
-                                path: ["result"],
                             },
                             selectorSchema: { type: "boolean" },
                             cases: { true: "@iterate", false: "@exit" },
@@ -642,7 +596,6 @@ function makeA4IR(): WorkflowIR {
                     output: {
                         $from: "scope",
                         name: "appended",
-                        path: ["list"],
                     } as Template,
                     outputSchema: { type: "array" },
                 },
@@ -650,12 +603,10 @@ function makeA4IR(): WorkflowIR {
                     i: {
                         $from: "scope",
                         name: "stepped",
-                        path: ["result"],
                     } as Template,
                     sections: {
                         $from: "scope",
                         name: "appended",
-                        path: ["list"],
                     } as Template,
                 },
                 maxIterations: 1000,
@@ -680,11 +631,7 @@ function makeA4IR(): WorkflowIR {
                         repoSections: { type: "array" },
                     },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["brief"],
-                    properties: { brief: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 inputs: {
                     emailSection: { $from: "scope", name: "emailSection" },
                     calendarSection: {
@@ -697,7 +644,7 @@ function makeA4IR(): WorkflowIR {
             },
         },
         entry: "fetchCalendar",
-        output: { $from: "scope", name: "result", path: ["brief"] } as Template,
+        output: { $from: "scope", name: "result" } as Template,
     };
 }
 
@@ -889,7 +836,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         b: { type: "integer" },
                     },
                 },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     add: {
                         kind: "task",
@@ -902,11 +849,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: { $from: "input", name: "a" } as Template,
                             right: { $from: "input", name: "b" } as Template,
@@ -920,7 +863,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await engine.run(ir, { input: { a: 3, b: 7 } });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ result: 10 });
+            expect(result.output).toBe(10);
         });
 
         it("bool.toLabel converts boolean to string (legacy)", async () => {
@@ -931,7 +874,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "labelTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     label: {
                         kind: "task",
@@ -945,11 +888,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 ifFalse: { type: "string" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["label"],
-                            properties: { label: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             value: true as Template,
                             ifTrue: "yes",
@@ -964,7 +903,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ label: "yes" });
+            expect(result.output).toBe("yes");
         });
     });
 
@@ -975,7 +914,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "branchTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     decide: {
                         kind: "branch",
@@ -995,11 +934,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
                     },
@@ -1014,11 +949,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 0 as Template, right: 0 as Template },
                         bind: "answer",
                     },
@@ -1030,7 +961,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ result: 0 }); // "no" branch
+            expect(result.output).toBe(0); // "no" branch
 
             const completed = events
                 .filter((e) => e.type === "nodeCompleted")
@@ -1076,7 +1007,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "templateTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     tmpl: {
                         kind: "task",
@@ -1089,11 +1020,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 vars: { type: "object" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["text"],
-                            properties: { text: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             template:
                                 "Hello {{name}}, you have {{count}} items",
@@ -1111,9 +1038,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({
-                text: "Hello Alice, you have 3 items",
-            });
+            expect(result.output).toBe("Hello Alice, you have 3 items");
         });
 
         it("replaces multiple occurrences of the same variable", async () => {
@@ -1125,7 +1050,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "multiReplace",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     tmpl: {
                         kind: "task",
@@ -1138,11 +1063,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 vars: { type: "object" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["text"],
-                            properties: { text: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             template: "{{x}} + {{x}} = {{y}}",
                             vars: {
@@ -1159,7 +1080,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ text: "2 + 2 = 4" });
+            expect(result.output).toBe("2 + 2 = 4");
         });
     });
 
@@ -1173,7 +1094,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "joinTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     join: {
                         kind: "task",
@@ -1189,11 +1110,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 delimiter: { type: "string" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["text"],
-                            properties: { text: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             list: ["alpha", "beta", "gamma"] as Template,
                             delimiter: ", ",
@@ -1207,7 +1124,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ text: "alpha, beta, gamma" });
+            expect(result.output).toBe("alpha, beta, gamma");
         });
 
         it("handles empty list", async () => {
@@ -1219,7 +1136,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "joinEmpty",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     join: {
                         kind: "task",
@@ -1235,11 +1152,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 delimiter: { type: "string" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["text"],
-                            properties: { text: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             list: [] as Template,
                             delimiter: "\n",
@@ -1253,7 +1166,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ text: "" });
+            expect(result.output).toBe("");
         });
     });
 
@@ -1267,7 +1180,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "echoTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     echo: {
                         kind: "task",
@@ -1326,7 +1239,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "falseTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fail: {
                         kind: "task",
@@ -1379,7 +1292,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "notFoundTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     bad: {
                         kind: "task",
@@ -1588,11 +1501,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["prompt"],
                     properties: { prompt: { type: "string" } },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["text"],
-                    properties: { text: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     // Verify the prompt contains the diff
                     const prompt = input.prompt as string;
@@ -1600,9 +1509,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     expect(prompt).toContain("conventional commit");
                     return {
                         kind: "ok",
-                        output: {
-                            text: "feat(foo): add new line\n\nAdded a line to foo.ts.",
-                        },
+                        output: "feat(foo): add new line\n\nAdded a line to foo.ts.",
                     };
                 },
             };
@@ -1638,7 +1545,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "splitTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     split: {
                         kind: "task",
@@ -1652,14 +1559,8 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         outputSchema: {
-                            type: "object",
-                            required: ["list"],
-                            properties: {
-                                list: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                            },
+                            type: "array",
+                            items: { type: "string" },
                         },
                         inputs: {
                             text: "foo.ts\nbar.ts\nbaz.ts\n" as Template,
@@ -1674,9 +1575,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({
-                list: ["foo.ts", "bar.ts", "baz.ts"],
-            });
+            expect(result.output).toEqual(["foo.ts", "bar.ts", "baz.ts"]);
         });
 
         it("handles empty input", async () => {
@@ -1688,7 +1587,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "splitEmpty",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     split: {
                         kind: "task",
@@ -1702,14 +1601,8 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         outputSchema: {
-                            type: "object",
-                            required: ["list"],
-                            properties: {
-                                list: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                            },
+                            type: "array",
+                            items: { type: "string" },
                         },
                         inputs: {
                             text: "" as Template,
@@ -1724,7 +1617,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect(result.output).toEqual({ list: [] });
+            expect(result.output).toEqual([]);
         });
     });
 
@@ -1824,11 +1717,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["prompt"],
                     properties: { prompt: { type: "string" } },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["text"],
-                    properties: { text: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     const prompt = input.prompt as string;
                     // Extract the file name from the prompt
@@ -1836,7 +1725,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     const file = match ? match[1] : "unknown";
                     const summary = `Changes to ${file} look good.`;
                     summaries.push(summary);
-                    return { kind: "ok", output: { text: summary } };
+                    return { kind: "ok", output: summary };
                 },
             };
 
@@ -1913,7 +1802,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "httpTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -1970,7 +1859,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "writeTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     write: {
                         kind: "task",
@@ -1983,11 +1872,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 content: { type: "string" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["path"],
-                            properties: { path: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             path: testFile as Template,
                             content: "hello from workflow" as Template,
@@ -2004,7 +1889,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 policy: allowAllPolicy,
             });
             expect(writeResult.success).toBe(true);
-            expect((writeResult.output as any).path).toBe(testFile);
+            expect(writeResult.output).toBe(testFile);
 
             // Read back
             const readIr: WorkflowIR = {
@@ -2012,7 +1897,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "readTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     read: {
                         kind: "task",
@@ -2022,13 +1907,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["path"],
                             properties: { path: { type: "string" } },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["content"],
-                            properties: {
-                                content: { type: "string" },
-                            },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: { path: testFile as Template },
                         bind: "result",
                     },
@@ -2042,9 +1921,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 policy: allowAllPolicy,
             });
             expect(readResult.success).toBe(true);
-            expect((readResult.output as any).content).toBe(
-                "hello from workflow",
-            );
+            expect(readResult.output).toBe("hello from workflow");
         });
     });
 
@@ -2116,18 +1993,12 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["prompt"],
                     properties: { prompt: { type: "string" } },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["text"],
-                    properties: { text: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     expect(input.prompt).toContain("TypeAgent");
                     return {
                         kind: "ok",
-                        output: {
-                            text: "TypeAgent is a framework for personal agents that route requests to specialized plugins.",
-                        },
+                        output: "TypeAgent is a framework for personal agents that route requests to specialized plugins.",
                     };
                 },
             };
@@ -2143,15 +2014,11 @@ describe("WorkflowEngine (IR v1)", () => {
                         content: { type: "string" },
                     },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["path"],
-                    properties: { path: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     return {
                         kind: "ok",
-                        output: { path: input.path },
+                        output: input.path,
                     };
                 },
             };
@@ -2230,15 +2097,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["prompt"],
                     properties: { prompt: { type: "string" } },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["text"],
-                    properties: { text: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute() {
                     return {
                         kind: "ok",
-                        output: { text: "Summary after retry." },
+                        output: "Summary after retry.",
                     };
                 },
             };
@@ -2254,15 +2117,11 @@ describe("WorkflowEngine (IR v1)", () => {
                         content: { type: "string" },
                     },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["path"],
-                    properties: { path: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     return {
                         kind: "ok",
-                        output: { path: input.path },
+                        output: input.path,
                     };
                 },
             };
@@ -2315,7 +2174,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "policyTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -2325,13 +2184,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["path"],
                             properties: { path: { type: "string" } },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["content"],
-                            properties: {
-                                content: { type: "string" },
-                            },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: { path: "/etc/shadow" as Template },
                         bind: "result",
                     },
@@ -2438,7 +2291,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "pureTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     add: {
                         kind: "task",
@@ -2451,13 +2304,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: {
-                                result: { type: "number" },
-                            },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 2 as Template, right: 3 as Template },
                         bind: "result",
                     },
@@ -2470,7 +2317,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const opts: RunOptions = { input: {} };
             const result = await eng.run(ir, opts);
             expect(result.success).toBe(true);
-            expect((result.output as any).result).toBe(5);
+            expect(result.output).toBe(5);
         });
 
         it("existing tests still pass with legacy (ir, input) signature for pure tasks", async () => {
@@ -2483,7 +2330,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "legacyTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     add: {
                         kind: "task",
@@ -2496,13 +2343,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: {
-                                result: { type: "number" },
-                            },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 10 as Template, right: 20 as Template },
                         bind: "result",
                     },
@@ -2513,7 +2354,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: { a: 1, b: 2 } });
             expect(result.success).toBe(true);
-            expect((result.output as any).result).toBe(30);
+            expect(result.output).toBe(30);
         });
 
         it("denies side-effecting tasks without explicit policy", async () => {
@@ -2534,14 +2375,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "bad.output",
                 sideEffects: false,
                 inputSchema: { type: "object", properties: {} },
-                outputSchema: {
-                    type: "object",
-                    required: ["value"],
-                    properties: { value: { type: "integer" } },
-                },
+                outputSchema: { type: "integer" },
                 async execute() {
                     // Returns a string instead of the required integer.
-                    return { kind: "ok", output: { value: "not-an-integer" } };
+                    return { kind: "ok", output: "not-an-integer" };
                 },
             };
 
@@ -2553,17 +2390,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "schemaViolation",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     step: {
                         kind: "task",
                         task: "bad.output",
                         inputSchema: { type: "object", properties: {} },
-                        outputSchema: {
-                            type: "object",
-                            required: ["value"],
-                            properties: { value: { type: "integer" } },
-                        },
+                        outputSchema: { type: "integer" },
                         inputs: {},
                         bind: "result",
                     },
@@ -2583,13 +2416,9 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "good.output",
                 sideEffects: false,
                 inputSchema: { type: "object", properties: {} },
-                outputSchema: {
-                    type: "object",
-                    required: ["value"],
-                    properties: { value: { type: "integer" } },
-                },
+                outputSchema: { type: "integer" },
                 async execute() {
-                    return { kind: "ok", output: { value: 42 } };
+                    return { kind: "ok", output: 42 };
                 },
             };
 
@@ -2601,17 +2430,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "schemaOk",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
                 nodes: {
                     step: {
                         kind: "task",
                         task: "good.output",
                         inputSchema: { type: "object", properties: {} },
-                        outputSchema: {
-                            type: "object",
-                            required: ["value"],
-                            properties: { value: { type: "integer" } },
-                        },
+                        outputSchema: { type: "integer" },
                         inputs: {},
                         bind: "result",
                     },
@@ -2622,7 +2447,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect((result.output as any).value).toBe(42);
+            expect(result.output).toBe(42);
         });
 
         it("static validator detects invalid scope path reference", async () => {
@@ -2636,7 +2461,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badRef",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     producer: {
                         kind: "task",
@@ -2649,11 +2474,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         next: "consumer",
                         bind: "data",
@@ -2669,11 +2490,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "scope",
@@ -2706,7 +2523,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "goodRef",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     producer: {
                         kind: "task",
@@ -2719,11 +2536,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         next: "consumer",
                         bind: "data",
@@ -2739,16 +2552,11 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "scope",
                                 name: "data",
-                                path: ["result"],
                             } as Template,
                             right: 1 as Template,
                         },
@@ -2798,13 +2606,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             right: { type: "number" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["result"],
-                                        properties: {
-                                            result: { type: "number" },
-                                        },
-                                    },
+                                    outputSchema: { type: "number" },
                                     inputs: {
                                         left: 1 as Template,
                                         right: 1 as Template,
@@ -2859,7 +2661,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["count"],
                     properties: { count: { type: "integer" } },
                 },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -2872,11 +2674,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: { $from: "input", name: "count" } as Template,
                             right: 1 as Template,
@@ -2906,7 +2704,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badSentinel",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     decide: {
                         kind: "branch",
@@ -2937,7 +2735,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "branchEvents",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     decide: {
                         kind: "branch",
@@ -2957,11 +2755,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
                     },
@@ -2976,11 +2770,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 0 as Template, right: 0 as Template },
                         bind: "answer",
                     },
@@ -3030,7 +2820,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "loopOnError",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     badLoop: {
                         kind: "loop",
@@ -3073,11 +2863,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 99 as Template, right: 1 as Template },
                         bind: "recovered",
                     },
@@ -3088,7 +2874,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect((result.output as any).result).toBe(100);
+            expect(result.output).toBe(100);
         });
     });
 
@@ -3130,13 +2916,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "timeoutTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.slow",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         bind: "result",
                     },
@@ -3171,7 +2957,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "fastTask",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     add: {
                         kind: "task",
@@ -3184,11 +2970,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: 1 as Template,
                             right: 2 as Template,
@@ -3208,7 +2990,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 taskTimeoutMs: 5000,
             });
             expect(result.success).toBe(true);
-            expect((result.output as any).result).toBe(3);
+            expect(result.output).toBe(3);
         });
     });
 
@@ -3222,7 +3004,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "pathTraversalRead",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     read: {
                         kind: "task",
@@ -3232,13 +3014,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["path"],
                             properties: { path: { type: "string" } },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["content"],
-                            properties: {
-                                content: { type: "string" },
-                            },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             path: "/etc/passwd" as Template,
                         },
@@ -3268,7 +3044,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "pathTraversalWrite",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     write: {
                         kind: "task",
@@ -3281,11 +3057,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 content: { type: "string" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["path"],
-                            properties: { path: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             path: "/etc/evil.txt" as Template,
                             content: "pwned" as Template,
@@ -3325,7 +3097,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     name: "allowedRead",
                     version: "1",
                     inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
+                    outputSchema: { type: "string" },
                     nodes: {
                         read: {
                             kind: "task",
@@ -3335,13 +3107,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 required: ["path"],
                                 properties: { path: { type: "string" } },
                             },
-                            outputSchema: {
-                                type: "object",
-                                required: ["content"],
-                                properties: {
-                                    content: { type: "string" },
-                                },
-                            },
+                            outputSchema: { type: "string" },
                             inputs: { path: testPath as Template },
                             bind: "result",
                         },
@@ -3355,7 +3121,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     policy: allowAllPolicy,
                 });
                 expect(result.success).toBe(true);
-                expect((result.output as any).content).toBe("safe-content");
+                expect(result.output).toBe("safe-content");
             } finally {
                 unlinkSync(testPath);
             }
@@ -3415,7 +3181,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "httpTruncateTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -3466,7 +3232,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "branchNoDefault",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     decide: {
                         kind: "branch",
@@ -3488,11 +3254,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
                     },
@@ -3507,11 +3269,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 0 as Template, right: 0 as Template },
                         bind: "answer",
                     },
@@ -3536,7 +3294,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badConstant",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 constants: {
                     limit: {
                         schema: { type: "integer" },
@@ -3555,11 +3313,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
@@ -3584,7 +3338,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "goodConstant",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 constants: {
                     offset: {
                         schema: { type: "integer" },
@@ -3603,11 +3357,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "constant",
@@ -3624,7 +3374,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
-            expect((result.output as any).result).toBe(50);
+            expect(result.output).toBe(50);
         });
     });
 
@@ -3638,7 +3388,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "approvalTimeout",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -3648,13 +3398,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["path"],
                             properties: { path: { type: "string" } },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["content"],
-                            properties: {
-                                content: { type: "string" },
-                            },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             path: "/some/file.txt" as Template,
                         },
@@ -3711,13 +3455,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "abortTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.slow",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         bind: "result",
                     },
@@ -3741,17 +3485,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "test.counter",
                 sideEffects: false,
                 inputSchema: { type: "object" },
-                outputSchema: {
-                    type: "object",
-                    required: ["value"],
-                    properties: { value: { type: "integer" } },
-                },
+                outputSchema: { type: "integer" },
                 async execute(input: any) {
                     // Simulate a bit of work
                     await new Promise((r) => setTimeout(r, 30));
                     return {
                         kind: "ok" as const,
-                        output: { value: (input.n ?? 0) + 1 },
+                        output: (input.n ?? 0) + 1,
                     };
                 },
             };
@@ -3788,13 +3528,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             n: { type: "integer" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["value"],
-                                        properties: {
-                                            value: { type: "integer" },
-                                        },
-                                    },
+                                    outputSchema: { type: "integer" },
                                     inputs: {
                                         n: {
                                             $from: "state",
@@ -3822,7 +3556,6 @@ describe("WorkflowEngine (IR v1)", () => {
                             count: {
                                 $from: "scope",
                                 name: "incResult",
-                                path: ["value"],
                             } as Template,
                         },
                         maxIterations: 1000,
@@ -3880,13 +3613,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             right: { type: "number" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["result"],
-                                        properties: {
-                                            result: { type: "number" },
-                                        },
-                                    },
+                                    outputSchema: { type: "number" },
                                     inputs: {
                                         left: {
                                             $from: "state",
@@ -3915,7 +3642,6 @@ describe("WorkflowEngine (IR v1)", () => {
                             i: {
                                 $from: "scope",
                                 name: "next",
-                                path: ["result"],
                             } as Template,
                         },
                         maxIterations: 3,
@@ -3978,13 +3704,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             right: { type: "number" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["result"],
-                                        properties: {
-                                            result: { type: "number" },
-                                        },
-                                    },
+                                    outputSchema: { type: "number" },
                                     inputs: {
                                         left: {
                                             $from: "state",
@@ -4009,13 +3729,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             right: { type: "number" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["result"],
-                                        properties: {
-                                            result: { type: "number" },
-                                        },
-                                    },
+                                    outputSchema: { type: "number" },
                                     inputs: {
                                         left: {
                                             $from: "state",
@@ -4031,7 +3745,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                     selector: {
                                         $from: "scope",
                                         name: "nextIter",
-                                        path: ["result"],
                                     } as Template,
                                     selectorSchema: { type: "number" },
                                     cases: { 2: "@exit" },
@@ -4041,7 +3754,6 @@ describe("WorkflowEngine (IR v1)", () => {
                             output: {
                                 $from: "scope",
                                 name: "sum",
-                                path: ["result"],
                             } as Template,
                             outputSchema: { type: "number" },
                         },
@@ -4049,12 +3761,10 @@ describe("WorkflowEngine (IR v1)", () => {
                             total: {
                                 $from: "scope",
                                 name: "sum",
-                                path: ["result"],
                             } as Template,
                             iter: {
                                 $from: "scope",
                                 name: "nextIter",
-                                path: ["result"],
                             } as Template,
                         },
                         maxIterations: 10,
@@ -4105,13 +3815,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "nodeFailedTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "recover",
                         bind: "r",
@@ -4162,13 +3872,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "runFailedTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         bind: "r",
                     },
@@ -4193,7 +3903,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "eventOrderTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -4206,11 +3916,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "r",
                     },
@@ -4251,7 +3957,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "offTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -4264,11 +3970,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "r",
                     },
@@ -4305,7 +4007,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "bindOverwrite",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     first: {
                         kind: "task",
@@ -4318,11 +4020,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "firstAnswer",
                         next: "second",
@@ -4338,11 +4036,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 10 as Template, right: 20 as Template },
                         bind: "answer",
                     },
@@ -4354,7 +4048,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             // Second task's output (30) should override first (3)
-            expect((result.output as any).result).toBe(30);
+            expect(result.output).toBe(30);
         });
     });
 
@@ -4397,13 +4091,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "cascadeError",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "recover",
                         bind: "r",
@@ -4437,7 +4131,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 async execute(input: any) {
                     return {
                         kind: "ok" as const,
-                        output: { value: input.value ?? "default" },
+                        output: input.value ?? "default",
                     };
                 },
             };
@@ -4450,13 +4144,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "optionalRef",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {
                             value: {
                                 $from: "scope",
@@ -4474,7 +4168,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             // null falls through to default in echo task
-            expect((result.output as any).value).toBe("default");
+            expect(result.output).toBe("default");
         });
 
         it("returns null for optional path projection on null", async () => {
@@ -4509,7 +4203,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "optionalPath",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     first: {
                         kind: "task",
@@ -4567,7 +4261,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "cwdTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
@@ -4628,7 +4322,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "stderrTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
@@ -4693,13 +4387,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "literalTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {
                             data: {
                                 $literal: {
@@ -4736,7 +4430,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "ssrfTest",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -4781,7 +4475,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "ssrfMetadata",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -4826,7 +4520,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "ssrf127",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -4871,7 +4565,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "ssrf192",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -4916,7 +4610,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "ssrfFile",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -5033,13 +4727,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "errorStructure",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "capture",
                     },
@@ -5104,13 +4798,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "runtimeError",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.throw",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "capture",
                     },
@@ -5150,7 +4844,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "typeMismatch",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     producer: {
                         kind: "task",
@@ -5164,11 +4858,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 ifFalse: { type: "string" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["label"],
-                            properties: { label: { type: "string" } },
-                        },
+                        outputSchema: { type: "string" },
                         inputs: {
                             value: true as Template,
                             ifTrue: "yes" as Template,
@@ -5188,16 +4878,11 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "scope",
                                 name: "data",
-                                path: ["label"],
                             } as Template,
                             right: 1 as Template,
                         },
@@ -5211,7 +4896,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
-            expect(validation.errors[0].message).toContain("type mismatch");
+            expect(validation.errors[0].message).toContain("Type mismatch");
         });
     });
 
@@ -5248,13 +4933,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             right: { type: "number" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["result"],
-                                        properties: {
-                                            result: { type: "number" },
-                                        },
-                                    },
+                                    outputSchema: { type: "number" },
                                     inputs: {
                                         left: 1 as Template,
                                         right: 1 as Template,
@@ -5287,7 +4966,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "missingRef",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -5300,11 +4979,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "scope",
@@ -5333,7 +5008,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badNamespace",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -5346,11 +5021,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "magic",
@@ -5377,13 +5048,9 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "test.num",
                 sideEffects: false,
                 inputSchema: { type: "object" },
-                outputSchema: {
-                    type: "object",
-                    required: ["value"],
-                    properties: { value: { type: "integer" } },
-                },
+                outputSchema: { type: "integer" },
                 async execute() {
-                    return { kind: "ok" as const, output: { value: 42 } };
+                    return { kind: "ok" as const, output: 42 };
                 },
             };
 
@@ -5395,17 +5062,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "badProjection",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     first: {
                         kind: "task",
                         task: "test.num",
                         inputSchema: { type: "object" },
-                        outputSchema: {
-                            type: "object",
-                            required: ["value"],
-                            properties: { value: { type: "integer" } },
-                        },
+                        outputSchema: { type: "integer" },
                         inputs: {},
                         bind: "data",
                         next: "second",
@@ -5421,11 +5084,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: {
                             left: {
                                 $from: "scope",
@@ -5471,13 +5130,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "unhandledFail",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         bind: "result",
                     },
@@ -5507,7 +5166,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "defaultTimeoutOk",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     add: {
                         kind: "task",
@@ -5520,11 +5179,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
@@ -5557,13 +5212,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "noTimeout",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.slow200",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         bind: "result",
                     },
@@ -5595,7 +5250,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["name"],
                     properties: { name: { type: "string" } },
                 },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -5608,11 +5263,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
@@ -5640,7 +5291,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["value"],
                     properties: { value: { type: "integer" } },
                 },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 nodes: {
                     step: {
                         kind: "task",
@@ -5653,11 +5304,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 right: { type: "number" },
                             },
                         },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "number" } },
-                        },
+                        outputSchema: { type: "number" },
                         inputs: { left: 1 as Template, right: 2 as Template },
                         bind: "result",
                     },
@@ -5717,7 +5364,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "blockedCmd",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
@@ -5798,7 +5445,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "allowedCmd",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
@@ -5845,7 +5492,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "blockedHost",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -5894,7 +5541,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "notAllowedHost",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     fetch: {
                         kind: "task",
@@ -5969,13 +5616,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "cleanupFail",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "cleanup",
                         bind: "happyResult",
@@ -6044,13 +5691,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "recoverSuccess",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     step: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "recover",
                     },
@@ -6109,13 +5756,13 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "nodeIdCheck",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 nodes: {
                     doWork: {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         inputs: {},
                         onError: "cleanup",
                         bind: "workOutput",
@@ -6153,7 +5800,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 { left: 42, right: 42 },
                 {} as any,
             );
-            expect(result).toEqual({ kind: "ok", output: { result: true } });
+            expect(result).toEqual({ kind: "ok", output: true });
         });
 
         it("compare.equals returns false for different values", async () => {
@@ -6161,7 +5808,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 { left: 1, right: 2 },
                 {} as any,
             );
-            expect(result).toEqual({ kind: "ok", output: { result: false } });
+            expect(result).toEqual({ kind: "ok", output: false });
         });
 
         it("compare.notEquals returns true for different values", async () => {
@@ -6169,7 +5816,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 { left: "a", right: "b" },
                 {} as any,
             );
-            expect(result).toEqual({ kind: "ok", output: { result: true } });
+            expect(result).toEqual({ kind: "ok", output: true });
         });
 
         it("compare.greaterThan works", async () => {
@@ -6178,19 +5825,19 @@ describe("WorkflowEngine (IR v1)", () => {
                     { left: 5, right: 3 },
                     {} as any,
                 ),
-            ).toEqual({ kind: "ok", output: { result: true } });
+            ).toEqual({ kind: "ok", output: true });
             expect(
                 await compareGreaterThan.execute(
                     { left: 3, right: 5 },
                     {} as any,
                 ),
-            ).toEqual({ kind: "ok", output: { result: false } });
+            ).toEqual({ kind: "ok", output: false });
         });
 
         it("compare.lessThan works", async () => {
             expect(
                 await compareLessThan.execute({ left: 2, right: 7 }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: true } });
+            ).toEqual({ kind: "ok", output: true });
         });
 
         it("compare.greaterOrEqual works", async () => {
@@ -6199,13 +5846,13 @@ describe("WorkflowEngine (IR v1)", () => {
                     { left: 5, right: 5 },
                     {} as any,
                 ),
-            ).toEqual({ kind: "ok", output: { result: true } });
+            ).toEqual({ kind: "ok", output: true });
             expect(
                 await compareGreaterOrEqual.execute(
                     { left: 4, right: 5 },
                     {} as any,
                 ),
-            ).toEqual({ kind: "ok", output: { result: false } });
+            ).toEqual({ kind: "ok", output: false });
         });
 
         it("compare.lessOrEqual works", async () => {
@@ -6214,13 +5861,13 @@ describe("WorkflowEngine (IR v1)", () => {
                     { left: 3, right: 3 },
                     {} as any,
                 ),
-            ).toEqual({ kind: "ok", output: { result: true } });
+            ).toEqual({ kind: "ok", output: true });
             expect(
                 await compareLessOrEqual.execute(
                     { left: 4, right: 3 },
                     {} as any,
                 ),
-            ).toEqual({ kind: "ok", output: { result: false } });
+            ).toEqual({ kind: "ok", output: false });
         });
     });
 
@@ -6228,11 +5875,11 @@ describe("WorkflowEngine (IR v1)", () => {
         it("bool.not negates", async () => {
             expect(await boolNot.execute({ value: true }, {} as any)).toEqual({
                 kind: "ok",
-                output: { result: false },
+                output: false,
             });
             expect(await boolNot.execute({ value: false }, {} as any)).toEqual({
                 kind: "ok",
-                output: { result: true },
+                output: true,
             });
         });
     });
@@ -6241,25 +5888,25 @@ describe("WorkflowEngine (IR v1)", () => {
         it("math.add adds", async () => {
             expect(
                 await mathAdd.execute({ left: 3, right: 4 }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: 7 } });
+            ).toEqual({ kind: "ok", output: 7 });
         });
 
         it("math.subtract subtracts", async () => {
             expect(
                 await mathSubtract.execute({ left: 10, right: 3 }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: 7 } });
+            ).toEqual({ kind: "ok", output: 7 });
         });
 
         it("math.multiply multiplies", async () => {
             expect(
                 await mathMultiply.execute({ left: 6, right: 7 }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: 42 } });
+            ).toEqual({ kind: "ok", output: 42 });
         });
 
         it("math.divide divides", async () => {
             expect(
                 await mathDivide.execute({ left: 15, right: 3 }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: 5 } });
+            ).toEqual({ kind: "ok", output: 5 });
         });
 
         it("math.divide returns Infinity on zero divisor", async () => {
@@ -6269,14 +5916,14 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             expect(result).toEqual({
                 kind: "ok",
-                output: { result: Infinity },
+                output: Infinity,
             });
         });
 
         it("math.modulo computes remainder", async () => {
             expect(
                 await mathModulo.execute({ left: 17, right: 5 }, {} as any),
-            ).toEqual({ kind: "ok", output: { result: 2 } });
+            ).toEqual({ kind: "ok", output: 2 });
         });
 
         it("math.modulo returns NaN on zero divisor", async () => {
@@ -6284,34 +5931,34 @@ describe("WorkflowEngine (IR v1)", () => {
                 { left: 5, right: 0 },
                 {} as any,
             );
-            expect(result).toEqual({ kind: "ok", output: { result: NaN } });
+            expect(result).toEqual({ kind: "ok", output: NaN });
         });
 
         it("math.negate negates", async () => {
             expect(await mathNegate.execute({ value: 7 }, {} as any)).toEqual({
                 kind: "ok",
-                output: { result: -7 },
+                output: -7,
             });
         });
 
         it("math.floor floors", async () => {
             expect(await mathFloor.execute({ value: 3.7 }, {} as any)).toEqual({
                 kind: "ok",
-                output: { result: 3 },
+                output: 3,
             });
         });
 
         it("math.round rounds", async () => {
             expect(await mathRound.execute({ value: 3.5 }, {} as any)).toEqual({
                 kind: "ok",
-                output: { result: 4 },
+                output: 4,
             });
         });
 
         it("math.ceil ceils", async () => {
             expect(await mathCeil.execute({ value: 3.1 }, {} as any)).toEqual({
                 kind: "ok",
-                output: { result: 4 },
+                output: 4,
             });
         });
     });
@@ -6353,11 +6000,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "mock.branchA",
                 sideEffects: false,
                 inputSchema: { type: "object" },
-                outputSchema: {
-                    type: "object",
-                    required: ["val"],
-                    properties: { val: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute() {
                     callOrder.push("A");
                     return { kind: "ok", output: { val: "resultA" } };
@@ -6367,11 +6010,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "mock.branchB",
                 sideEffects: false,
                 inputSchema: { type: "object" },
-                outputSchema: {
-                    type: "object",
-                    required: ["val"],
-                    properties: { val: { type: "string" } },
-                },
+                outputSchema: { type: "string" },
                 async execute() {
                     callOrder.push("B");
                     return { kind: "ok", output: { val: "resultB" } };
@@ -6384,7 +6023,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "fork-test",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fork_0",
                 nodes: {
                     fork_0: {
@@ -6497,7 +6136,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "fork-concurrency",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fork_0",
                 nodes: {
                     fork_0: {
@@ -6625,7 +6264,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "fork-multinode",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fork_0",
                 nodes: {
                     fork_0: {
@@ -6782,7 +6421,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "fork-error",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fork_0",
                 nodes: {
                     fork_0: {
@@ -6871,15 +6510,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     required: ["n"],
                     properties: { n: { type: "number" } },
                 },
-                outputSchema: {
-                    type: "object",
-                    required: ["result"],
-                    properties: { result: { type: "number" } },
-                },
+                outputSchema: { type: "number" },
                 async execute(input: any) {
                     return {
                         kind: "ok" as const,
-                        output: { result: input.n * 2 },
+                        output: input.n * 2,
                     };
                 },
             });
@@ -6921,13 +6556,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                             n: { type: "number" },
                                         },
                                     },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["result"],
-                                        properties: {
-                                            result: { type: "number" },
-                                        },
-                                    },
+                                    outputSchema: { type: "number" },
                                     inputs: {
                                         n: { $from: "input", name: "n" },
                                     },
@@ -6956,10 +6585,10 @@ describe("WorkflowEngine (IR v1)", () => {
             const out = result.output as any[];
             expect(out).toHaveLength(4);
             // Results are ordered
-            expect(out[0]).toEqual({ result: 2 });
-            expect(out[1]).toEqual({ result: 4 });
-            expect(out[2]).toEqual({ result: 6 });
-            expect(out[3]).toEqual({ result: 8 });
+            expect(out[0]).toBe(2);
+            expect(out[1]).toBe(4);
+            expect(out[2]).toBe(6);
+            expect(out[3]).toBe(8);
         });
 
         it("forkMap respects maxConcurrency", async () => {
@@ -7217,7 +6846,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "fork-events",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fork_0",
                 nodes: {
                     fork_0: {
@@ -7299,7 +6928,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: { type: "object" },
                 outputSchema: { not: {} },
                 async execute() {
-                    return { kind: "ok", output: { value: "oops" } };
+                    return { kind: "ok", output: "oops" };
                 },
             };
 
@@ -7308,7 +6937,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "never-output-violation",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fail_node",
                 nodes: {
                     fail_node: {
@@ -7340,7 +6969,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "proper-throw",
                 version: "1",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: {},
                 entry: "fail_node",
                 nodes: {
                     fail_node: {

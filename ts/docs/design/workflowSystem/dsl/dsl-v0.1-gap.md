@@ -309,3 +309,60 @@ nested calls would obscure the step-by-step execution model.
    types (error if not). There are no union types. This was an
    intentional simplification: returns the consequent type, rejects
    mismatches at compile time.
+
+## G9: Comments not preserved in AST
+
+**Spec:** dsl-v0.1.md section 6 states "The AST preserves comments.
+Each node has an optional `leadingComments` array of `Comment { text, pos }`
+attached to the following AST node." It also claims round-trip fidelity
+between source and AST.
+
+**Current state:**
+
+- The `leadingComments` field exists on most AST node interfaces (ast.ts),
+  and the `Comment` type with `{ text, pos }` is defined.
+- The lexer recognizes `//` and `/* */` comments but skips them entirely.
+  They do not produce tokens.
+- The parser never receives comment tokens and never populates
+  `leadingComments` on any AST node.
+- Comments are lost during parsing. Round-trip (source -> AST -> source)
+  does not preserve them.
+
+**What needs to happen:**
+
+1. The lexer should collect comments (either as tokens or in a side
+   channel) instead of discarding them.
+2. The parser should attach collected comments to the following AST node's
+   `leadingComments` array.
+3. Any AST-to-source serializer should emit `leadingComments` in their
+   original positions.
+4. Until this is implemented, dsl-v0.1.md section 6 overstates the
+   current behavior.
+
+## G10: Bare task calls wrapped as synthetic ConstStatement
+
+**Context:** The parser allows bare task calls in statement position
+(e.g., `audit.log(data)` inside an if body). It wraps them as
+`ConstStatement` with a synthetic name `_<line>_<col>`.
+
+**Current state:** This works end-to-end: the emitter generates a task
+node with the synthetic bind name, and `stripUnreferencedBinds` removes
+the unused `bind` field. The behavior is now documented in dsl-v0.1.md
+section 2.3.
+
+**Question:** Should bare task calls get a dedicated AST node
+(e.g., `ExpressionStatement`) instead of being disguised as const
+bindings with synthetic names? The current approach works but:
+
+- Synthetic names like `_12_5` leak into IR node IDs.
+- A dedicated node would make the AST more honest about intent
+  (side-effect call vs. value-producing binding).
+- The emitter already strips the bind, so the IR impact is minimal.
+
+**What needs to happen:**
+
+1. Decide whether to keep the current synthetic-const approach or add
+   an `ExpressionStatement` AST node.
+2. If keeping current approach: no code change needed, already documented.
+3. If adding `ExpressionStatement`: update parser, ast.ts, emitter, and
+   graph extractor.

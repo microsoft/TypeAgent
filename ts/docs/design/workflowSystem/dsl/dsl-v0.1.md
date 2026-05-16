@@ -10,10 +10,31 @@ Implementation gaps: [dsl-v0.1-gap.md](dsl-v0.1-gap.md).
 
 ## 1. Overview
 
-DSL v0.1 evolved from an earlier v1 (Option A, TS-like) to Option E (TS + built-ins).
-The core change: replace general-purpose imperative control flow (`while`, `for`,
-`try/catch`, `break`, `continue`) with compiler-recognized built-in functions
-(`retry`, `map`, `filter`, `parallel`) that take arrow function arguments.
+The workflow DSL is a TypeScript-like language that compiles to
+[workflow IR JSON](../ir/ir-v0.1.md). Its purpose is to absorb the IR's
+verbosity tax so that workflow authors write familiar imperative code
+while the compiler handles schema restatement, `$from` reference objects,
+`next` edge threading, loop machinery, and scope capture.
+
+The compiler pipeline is: **lex -> parse -> type-check -> emit**, with an
+optional validation pass. Implementation is in `examples/workflow/dsl/src/`:
+
+| File                | Role                                                          |
+| ------------------- | ------------------------------------------------------------- |
+| `ast.ts`            | AST type definitions                                          |
+| `lexer.ts`          | Tokenizer with position tracking                              |
+| `parser.ts`         | Recursive-descent parser producing a typed AST                |
+| `typeChecker.ts`    | Type inference and validation (between parse and emit)        |
+| `emitter.ts`        | AST-to-IR lowering: scopes, name resolution, node generation  |
+| `compiler.ts`       | Public API orchestrating the phases                           |
+| `graphExtractor.ts` | Extracts a visual graph model (nodes, edges, groups) from AST |
+| `visualize.ts`      | Generates HTML visualization of workflow graphs               |
+| `index.ts`          | Public API re-exports                                         |
+
+The public API is `compile(source, taskSchemas, options?)`, which returns
+`{ ir?: WorkflowIR, errors: CompileError[] }`. All compile errors carry
+`{ phase, message, line, col }` for source-position diagnostics. The
+optional `validate` flag runs the IR validator after emit.
 
 Seven high-level principles drove the design. Each one eliminated alternatives
 and shaped specific technical decisions.
@@ -141,6 +162,18 @@ syntax. The compiler validates argument names against the task schema.
 Positional arguments (no `{ }`) are allowed when the task has a single
 input field.
 
+Bare task calls (without `const`) are allowed for side-effect-only calls:
+
+```
+if (check.needsAudit) {
+    audit.log(data)
+}
+```
+
+The parser wraps these as `ConstStatement` with a synthetic name
+(`_<line>_<col>`) so the emitter can generate a node. The binding is
+never referenced.
+
 ### 2.4 Template literals
 
 ```
@@ -149,6 +182,10 @@ const prompt = `Hello ${name}, your order ${order.id} is ready`
 
 Backtick syntax with `${}` interpolation.
 
+Supported escape sequences in template literals: `\n`, `\t`, `\r`,
+`\\`, `` \` ``, `\$`. String literals additionally support `\'` and
+`\"`.
+
 ### 2.5 Constants
 
 ```
@@ -156,7 +193,9 @@ const maxRetries = 2
 const baseUrl = "https://api.example.com"
 ```
 
-String, number, and boolean literals.
+String, number, and boolean literals. Number literals may include a
+decimal point (e.g., `3.14`). The type checker infers `integer` for
+whole-number literals and `number` for literals with a decimal.
 
 ### 2.6 Operators (syntactic sugar)
 
@@ -321,7 +360,7 @@ Valid TS syntax. No deviation from principle 7.
 ```
 return result
 return result.field
-return { path: writeResult.path, summary: summaryResult.text }
+return { path: writeResult, summary: summaryResult }
 ```
 
 Object literal return for multi-field output.
@@ -523,12 +562,13 @@ const result = retry(2, () => {
 
 - `count`: number literal or const reference
 - `body`: arrow function containing one or more task calls
-- `fallback`: optional arrow function with one parameter (the error).
+- `fallback`: optional arrow function with one parameter (the error;
+  defaults to `err` if the parameter name is omitted).
   Can return a substitute value or `throw` to propagate the error.
 - Returns the successful result of the body, or the fallback's return value
 - On exhaustion without fallback: runtime error
 
-**AST:** `RetryNode { count, body: Statement[], fallback?: Statement[] }`
+**AST:** `RetryNode { count: Expr, body: Statement[], fallback?: { param: string, body: Statement[] } }`
 **IR lowering:** Loop node with onError edges and attempt counter.
 
 ### 3.2 `map(collection, body)`
@@ -543,7 +583,8 @@ const sections = map(repos, (repo) => {
 ```
 
 - `collection`: expression resolving to an array
-- `body`: arrow function with one parameter (the item)
+- `body`: arrow function with one parameter (the item; defaults to
+  `item` if the parameter name is omitted)
 - Returns an array of the body's last expression per item
 
 **AST:** `MapNode { collection: Expr, param: string, body: Statement[] }`
@@ -567,7 +608,8 @@ const valid = filter(items, (item) => {
 ```
 
 - `collection`: expression resolving to an array
-- `body`: arrow function returning a boolean-producing task call
+- `body`: arrow function with one parameter (the item; defaults to
+  `item`) returning a boolean-producing task call
 - Returns a filtered array
 
 **AST:** `FilterNode { collection: Expr, param: string, body: Statement[] }`
@@ -615,7 +657,7 @@ const [a, b, c, d, e] = parallel(
 - Returns a tuple of results via destructuring
 - All bodies must be independent (no data dependencies between them)
 
-**AST:** `ParallelNode { bodies: ArrowFunction[], maxConcurrency?: Expr }`
+**AST:** `ParallelNode { bodies: { body: Statement[] }[], maxConcurrency?: Expr }`
 **IR lowering:** `fork` node ([ir-v0.2.md](../ir/ir-v0.2.md) §2.1). Each arrow function
 becomes a named branch sub-scope. Destructuring bindings become branch names.
 `maxConcurrency` maps directly to the IR field of the same name.
@@ -721,7 +763,7 @@ workflow summarizeUrl(url: string, outputPath: string): { path: string, summary:
     const summaryResult = llm.generate(prompt)
     const writeResult = file.write({ path: outputPath, content: summaryResult })
 
-    return { path: writeResult.path, summary: summaryResult.text }
+    return { path: writeResult, summary: summaryResult }
 }
 ```
 
@@ -811,34 +853,36 @@ workflow logUnknown(channel: string, message: string): Result {
 
 ## 6. AST node types
 
-| Node type           | Fields                           | Visual element               |
-| ------------------- | -------------------------------- | ---------------------------- |
-| WorkflowDecl        | name, params, returnType, body   | Top-level container          |
-| ConstStatement      | name, type?, value               | Node with output edge        |
-| TaskCallExpr        | namespace, task, args            | Node (orange)                |
-| WorkflowCallExpr    | name, args                       | Collapsed node (drill-in)    |
-| TemplateLiteralExpr | parts, expressions               | Node (purple)                |
-| StringLiteralExpr   | value                            | Inline label                 |
-| NumberLiteralExpr   | value                            | Inline label                 |
-| BooleanLiteralExpr  | value                            | Inline label                 |
-| NullLiteralExpr     |                                  | Inline label                 |
-| ArrayLiteralExpr    | elements                         | Inline label                 |
-| ObjectLiteralExpr   | fields                           | Inline label                 |
-| DottedNameExpr      | parts                            | Edge label                   |
-| BinaryExpr          | op, left, right                  | Inline in condition/value    |
-| UnaryExpr           | op, operand                      | Inline in condition/value    |
-| TernaryExpr         | condition, consequent, alternate | Diamond + two edges          |
-| IfStatement         | condition, thenBody, elseBody?   | Branch group                 |
-| SwitchStatement     | discriminant, arms, default?     | Multi-branch group           |
-| ThrowStatement      | value                            | Terminal node (red, error)   |
-| ReturnStatement     | value                            | Terminal node (red)          |
-| RetryNode           | count, body, fallback?           | "retry" group (green border) |
-| MapNode             | collection, param, body          | "map" group (blue border)    |
-| FilterNode          | collection, param, body          | "filter" group (teal border) |
-| ParallelNode        | bodies, bindings                 | Side-by-side group           |
-| ParallelMapNode     | collection, param, body          | "parallel map" group         |
+| Node type           | Fields                                   | Visual element               |
+| ------------------- | ---------------------------------------- | ---------------------------- |
+| WorkflowDecl        | name, params, returnType, body           | Top-level container          |
+| ConstStatement      | name, typeAnnotation?, value             | Node with output edge        |
+| DestructuringConst  | names, value                             | Node with multiple edges     |
+| TaskCallExpr        | task, args                               | Node (orange)                |
+| WorkflowCallExpr    | name, args                               | Collapsed node (drill-in)    |
+| TemplateLiteralExpr | parts, expressions                       | Node (purple)                |
+| StringLiteralExpr   | value                                    | Inline label                 |
+| NumberLiteralExpr   | value                                    | Inline label                 |
+| BooleanLiteralExpr  | value                                    | Inline label                 |
+| NullLiteralExpr     |                                          | Inline label                 |
+| ArrayLiteralExpr    | elements                                 | Inline label                 |
+| ObjectLiteralExpr   | entries                                  | Inline label                 |
+| DottedNameExpr      | segments                                 | Edge label                   |
+| BinaryExpr          | op, left, right                          | Inline in condition/value    |
+| UnaryExpr           | op, operand                              | Inline in condition/value    |
+| TernaryExpr         | condition, consequent, alternate         | Diamond + two edges          |
+| IfStatement         | condition, then, else\_?                 | Branch group                 |
+| SwitchStatement     | discriminant, arms, default\_?           | Multi-branch group           |
+| BreakStatement      |                                          | _(structural, not rendered)_ |
+| ThrowStatement      | value                                    | Terminal node (red, error)   |
+| ReturnStatement     | value                                    | Terminal node (red)          |
+| RetryNode           | count, body, fallback?                   | "retry" group (green border) |
+| MapNode             | collection, param, body                  | "map" group (blue border)    |
+| FilterNode          | collection, param, body                  | "filter" group (teal border) |
+| ParallelNode        | bodies, maxConcurrency?                  | Side-by-side group           |
+| ParallelMapNode     | collection, param, body, maxConcurrency? | "parallel map" group         |
 
-Every AST node carries a `pos` field with source location (`{ line, column,
+Every AST node carries a `loc` field with source location (`{ line, col,
 offset }`). This enables:
 
 - **Text editor:** squiggly underlines on type errors, "go to definition"
@@ -956,10 +1000,82 @@ Strict rules (deviations from TS):
 
 ### 7.4 Emitter
 
-- BinaryExpr / UnaryExpr: most operators lower to task nodes (e.g., `===`
-  becomes `compare.equals`, `+` becomes `math.add`). `&&` and `||` lower
-  to branch nodes for short-circuit evaluation (same pattern as ternary).
+The emitter lowers the typed AST to IR. It manages scopes, resolves names,
+generates nodes, and applies several post-processing passes.
+
+#### Scope model
+
+The emitter uses a chain of `ScopeContext` objects with parent pointers
+for lexical scoping. Each scope tracks:
+
+- `nodes`: IR nodes generated in this scope
+- `nodeOrder`: insertion order (drives `next` threading)
+- `bindings`: `Map<string, Binding>` mapping names to resolution info
+- `parent`: enclosing scope (walked for name lookup)
+
+Child scopes are created for if/else branches, switch arms, loop bodies,
+retry bodies, and parallel branches.
+
+#### Binding kinds
+
+| Kind          | Resolves to         | Origin                              |
+| ------------- | ------------------- | ----------------------------------- |
+| `"node"`      | `$from: "scope"`    | `const x = task.call(...)` binding  |
+| `"param"`     | `$from: "input"`    | Workflow parameter                  |
+| `"constant"`  | `$from: "constant"` | `const` with literal value          |
+| `"loopInput"` | `$from: "input"`    | Value captured into loop body scope |
+| `"literal"`   | Inlined value       | Inline template value (not a node)  |
+
+Name resolution walks the scope chain from innermost to outermost.
+There is no `input.` prefix in the DSL: parameter names resolve directly
+(e.g., `url` not `input.url`). Remaining path segments after the binding
+name become the `path` array on the emitted `$from` template reference.
+
+Shadowing follows standard lexical scoping: if an inner loop parameter
+has the same name as an outer binding, the inner binding wins and the
+outer one becomes inaccessible within that scope. No warning is produced.
+
+```
+const results = map(items, (item) => {
+    const inner = map(item.children, (item) => {   // shadows outer "item"
+        task.process(item)                          // refers to inner "item"
+    })
+})
+```
+
+#### Next threading
+
+After all nodes in a scope are emitted, `threadNext` iterates `nodeOrder`
+sequentially. For each non-branch node that does not already have a `next`,
+it sets `next` to the following node in order. Branch nodes are skipped
+(they use `cases`/`default`). Already-set `next` values (from explicit
+wiring like `onError` edges) are preserved.
+
+#### Conditional bind stripping
+
+The emitter tracks which node bindings are actually referenced downstream.
+After emission, `stripUnreferencedBinds` removes the `bind` field from
+task nodes whose names are never used. This keeps the IR minimal without
+requiring the author to think about it.
+
+#### Lowering rules
+
+- BinaryExpr / UnaryExpr: operators lower to built-in task nodes.
+  `&&` and `||` are special-cased to branch nodes for short-circuit
+  evaluation (same pattern as ternary). All other operators map as:
+
+  | Operator  | Task                     | Operator | Task            |
+  | --------- | ------------------------ | -------- | --------------- |
+  | `===`     | `compare.equals`         | `+`      | `math.add`      |
+  | `!==`     | `compare.notEquals`      | `-`      | `math.subtract` |
+  | `>`       | `compare.greaterThan`    | `*`      | `math.multiply` |
+  | `<`       | `compare.lessThan`       | `/`      | `math.divide`   |
+  | `>=`      | `compare.greaterOrEqual` | `%`      | `math.modulo`   |
+  | `<=`      | `compare.lessOrEqual`    | `!`      | `bool.not`      |
+  | unary `-` | `math.negate`            |          |                 |
+
   Syntactic sugar only; invisible to the workflow author.
+
 - RetryNode: emit loop node with onError edges and attempt counter
 - MapNode: emit loop node with index/length/compare/check_done
 - FilterNode: emit loop with branch + `list.append` (see section 3.3 IR lowering)

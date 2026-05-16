@@ -110,15 +110,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "{{prefix}}{{diff}}",
@@ -155,23 +147,12 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "prompt": {
           "$from": "scope",
-          "name": "prompt",
-          "path": [
-            "text"
-          ]
+          "name": "prompt"
         }
       },
       "bind": "llmResult"
@@ -181,10 +162,7 @@
   "output": {
     "message": {
       "$from": "scope",
-      "name": "llmResult",
-      "path": [
-        "text"
-      ]
+      "name": "llmResult"
     }
   }
 }

@@ -236,7 +236,6 @@ describe("Emitter v2", () => {
         expect(ir.output).toEqual({
             $from: "scope",
             name: "return_0",
-            path: ["result"],
         });
         expect(ir.nodes["return_0"]).toBeDefined();
         expect((ir.nodes["return_0"] as any).task).toBe("identity");
@@ -262,7 +261,6 @@ describe("Emitter v2", () => {
         expect(ir.output).toEqual({
             $from: "scope",
             name: "return_0",
-            path: ["result"],
         });
         expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
             $from: "input",
@@ -326,7 +324,6 @@ describe("Emitter v2", () => {
         expect(ir.output).toEqual({
             $from: "scope",
             name: "return_0",
-            path: ["result"],
         });
         expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
             $from: "constant",
@@ -805,7 +802,6 @@ describe("Emitter v2", () => {
         expect(ir.output).toEqual({
             $from: "scope",
             name: "return_0",
-            path: ["result"],
         });
         expect((ir.nodes["return_0"] as any).inputs.value).toBe("hello");
     });
