@@ -266,6 +266,37 @@ else
     echo "Note: Could not resolve .git/hooks directory, skipping hook helper setup"
 fi
 
+# ── Security hardening: restrict sudo to a minimal allowlist ──────────
+# During post-create we needed unrestricted root access to install
+# packages and fix volume ownership.  Now that setup is done, replace
+# the blanket NOPASSWD:ALL rule with the narrowest set of commands the
+# codespace user is likely to need at runtime.
+echo ""
+echo "Hardening sudo access..."
+SUDOERS_FILE="/etc/sudoers.d/codespace-restricted"
+sudo tee "$SUDOERS_FILE" > /dev/null << 'SUDOERS'
+# Restricted sudo for the codespace user (post-setup hardening).
+# Only allow package management, ownership fixes, and directory creation.
+codespace ALL=(root) NOPASSWD: /usr/bin/apt-get update*, \
+    /usr/bin/apt-get install*, \
+    /usr/bin/apt-get upgrade*, \
+    /usr/bin/apt-get autoremove*, \
+    /bin/chown *, \
+    /usr/bin/chown *, \
+    /bin/mkdir *, \
+    /usr/bin/mkdir *, \
+    /usr/sbin/service ssh *
+SUDOERS
+sudo chmod 0440 "$SUDOERS_FILE"
+# Remove the blanket rule that grants unrestricted root.  The common-utils
+# devcontainer feature writes it to /etc/sudoers.d/codespace (filename
+# matches the username).
+if [[ -f /etc/sudoers.d/codespace ]]; then
+    sudo rm /etc/sudoers.d/codespace
+    echo "  Removed blanket NOPASSWD:ALL rule"
+fi
+echo "  Sudo restricted to: apt-get, chown, mkdir, service ssh"
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║          Setup Complete!                                     ║"

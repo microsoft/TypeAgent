@@ -43,11 +43,12 @@
     }
   },
 
-  // Publish SSH port to host so host-side `ssh typeagent-devcontainer` works.
-  "appPort": ["2222:2222"],
-
-  "forwardPorts": [8999, 8081, 8082, 3000, 3443],
+  // SSH is forwarded via forwardPorts (VS Code / Codespaces handles secure
+  // tunnelling).  Avoid "appPort" which binds directly on the Docker host
+  // network and may be reachable from adjacent containers or the LAN.
+  "forwardPorts": [2222, 8999, 8081, 8082, 3000, 3443],
   "portsAttributes": {
+    "2222": { "label": "SSH", "onAutoForward": "silent" },
     "8999": { "label": "Agent Server (WebSocket)", "onAutoForward": "notify" },
     "8081": { "label": "Browser Agent (WebSocket)", "onAutoForward": "notify" },
     "8082": { "label": "Code Agent (WebSocket)", "onAutoForward": "notify" },
