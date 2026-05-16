@@ -42,7 +42,7 @@ Default configuration for most development work. Includes:
 - Azure CLI, GitHub CLI
 - Claude Code
 
-**Note:** The Electron shell requires GUI support. To use the shell with devcontainer, you need to start teh agent-server in the container and run the shell on your host machine. The agent server port is forwarded to the host, so the shell will connect correctly:
+**Note:** The Electron shell requires GUI support. To use the shell with devcontainer, you need to start the agent-server in the container and run the shell on your host machine. The agent server port is forwarded to the host, so the shell will connect correctly:
 
 ```bash
 # In container - start the backend
@@ -189,15 +189,32 @@ Each worktree shares the git history but has independent:
 
 ## Forwarded Ports
 
-| Port | Service                            |
-| ---- | ---------------------------------- |
-| 2222 | Dev Container SSH (host-published) |
-| 3000 | API Server (HTTP)                  |
-| 3443 | API Server (HTTPS)                 |
-| 8999 | Agent Server (WebSocket)           |
-| 8081 | Browser Agent (WebSocket)          |
-| 8082 | Code Agent (WebSocket)             |
-| 6080 | noVNC Desktop (VNC config only)    |
+Standard config (`devcontainer.json`):
+
+| Port | Service                                         |
+| ---- | ----------------------------------------------- |
+| 2222 | Dev Container SSH (host-published on 127.0.0.1) |
+| 3000 | API Server (HTTP)                               |
+| 3443 | API Server (HTTPS)                              |
+| 8999 | Agent Server (WebSocket)                        |
+| 8081 | Browser Agent (WebSocket)                       |
+| 8082 | Code Agent (WebSocket)                          |
+
+VNC config (`vnc/devcontainer.json`) adds:
+
+| Port | Service           |
+| ---- | ----------------- |
+| 6080 | noVNC Web Desktop |
+| 5901 | VNC Client        |
+
+## Container User
+
+The container runs as `codespace` with UID/GID 1001 (matches the Codespaces
+convention and the previous universal base image). All workspace and cache
+paths are accessed via Docker named volumes, not host bind mounts of source
+files, so this UID does not need to match your host user. If you add a host
+bind mount later and your host user shares UID 1001, be aware of the implicit
+file-ownership overlap.
 
 ## Troubleshooting
 

@@ -307,38 +307,46 @@ ensure_ssh_config_block \
     "$USER_KNOWN_HOSTS_FILE" \
     "$GLOBAL_KNOWN_HOSTS_FILE"
 
-if is_wsl && command -v cmd.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
-    WINDOWS_USERPROFILE_WIN=$(cmd.exe /C "echo %USERPROFILE%" 2>/dev/null | tr -d '\r' || true)
-    if [[ -n "$WINDOWS_USERPROFILE_WIN" ]] && [[ "$WINDOWS_USERPROFILE_WIN" != "%USERPROFILE%" ]]; then
-        WINDOWS_USERPROFILE_WSL=$(wslpath -u "$WINDOWS_USERPROFILE_WIN" 2>/dev/null || true)
-        if [[ -n "$WINDOWS_USERPROFILE_WSL" ]]; then
-            WINDOWS_SSH_DIR_WSL="$WINDOWS_USERPROFILE_WSL/.ssh"
-            WINDOWS_KEY_BASENAME=$(basename "$KEY_PATH")
-            WINDOWS_KEY_PATH_WSL="$WINDOWS_SSH_DIR_WSL/$WINDOWS_KEY_BASENAME"
-            WINDOWS_PUB_KEY_PATH_WSL="$WINDOWS_KEY_PATH_WSL.pub"
-            WINDOWS_CONFIG_PATH_WSL="$WINDOWS_SSH_DIR_WSL/config"
-            WINDOWS_KEY_PATH_CONFIG=$(wslpath -m "$WINDOWS_KEY_PATH_WSL" 2>/dev/null || true)
-            WINDOWS_KNOWN_HOSTS_CONFIG=$(wslpath -m "$WINDOWS_SSH_DIR_WSL/known_hosts" 2>/dev/null || true)
-            [[ -n "$WINDOWS_KEY_PATH_CONFIG" ]] || fail "Failed to convert WSL key path to Windows path"
-            [[ -n "$WINDOWS_KNOWN_HOSTS_CONFIG" ]] || fail "Failed to convert WSL known_hosts path to Windows path"
-
-            if [[ $PRINT_ONLY -eq 1 ]]; then
-                log "Would copy keypair to Windows SSH dir: $WINDOWS_SSH_DIR_WSL"
+if is_wsl; then
+    if ! command -v cmd.exe >/dev/null 2>&1 || ! command -v wslpath >/dev/null 2>&1; then
+        log "Warning: WSL detected but cmd.exe / wslpath unavailable; skipping Windows SSH sync"
+    else
+        WINDOWS_USERPROFILE_WIN=$(cmd.exe /C "echo %USERPROFILE%" 2>/dev/null | tr -d '\r' || true)
+        if [[ -z "$WINDOWS_USERPROFILE_WIN" ]] || [[ "$WINDOWS_USERPROFILE_WIN" == "%USERPROFILE%" ]]; then
+            log "Warning: could not resolve Windows %USERPROFILE%; skipping Windows SSH sync"
+        else
+            WINDOWS_USERPROFILE_WSL=$(wslpath -u "$WINDOWS_USERPROFILE_WIN" 2>/dev/null || true)
+            if [[ -z "$WINDOWS_USERPROFILE_WSL" ]]; then
+                log "Warning: wslpath could not translate %USERPROFILE% ($WINDOWS_USERPROFILE_WIN); skipping Windows SSH sync"
             else
-                mkdir -p "$WINDOWS_SSH_DIR_WSL"
-                cp -f "$KEY_PATH" "$WINDOWS_KEY_PATH_WSL"
-                cp -f "$PUB_KEY_PATH" "$WINDOWS_PUB_KEY_PATH_WSL"
-                log "Copied keypair to Windows SSH dir: $WINDOWS_SSH_DIR_WSL"
-            fi
+                WINDOWS_SSH_DIR_WSL="$WINDOWS_USERPROFILE_WSL/.ssh"
+                WINDOWS_KEY_BASENAME=$(basename "$KEY_PATH")
+                WINDOWS_KEY_PATH_WSL="$WINDOWS_SSH_DIR_WSL/$WINDOWS_KEY_BASENAME"
+                WINDOWS_PUB_KEY_PATH_WSL="$WINDOWS_KEY_PATH_WSL.pub"
+                WINDOWS_CONFIG_PATH_WSL="$WINDOWS_SSH_DIR_WSL/config"
+                WINDOWS_KEY_PATH_CONFIG=$(wslpath -m "$WINDOWS_KEY_PATH_WSL" 2>/dev/null || true)
+                WINDOWS_KNOWN_HOSTS_CONFIG=$(wslpath -m "$WINDOWS_SSH_DIR_WSL/known_hosts" 2>/dev/null || true)
+                [[ -n "$WINDOWS_KEY_PATH_CONFIG" ]] || fail "Failed to convert WSL key path to Windows path"
+                [[ -n "$WINDOWS_KNOWN_HOSTS_CONFIG" ]] || fail "Failed to convert WSL known_hosts path to Windows path"
 
-            log "Writing Windows SSH config block for $HOST_ALIAS"
-            ensure_ssh_config_block \
-                "$WINDOWS_CONFIG_PATH_WSL" \
-                "$HOST_ALIAS" \
-                "$WINDOWS_KEY_PATH_CONFIG" \
-                "$STRICT_HOST_KEY_CHECKING" \
-                "$WINDOWS_KNOWN_HOSTS_CONFIG" \
-                "none"
+                if [[ $PRINT_ONLY -eq 1 ]]; then
+                    log "Would copy keypair to Windows SSH dir: $WINDOWS_SSH_DIR_WSL"
+                else
+                    mkdir -p "$WINDOWS_SSH_DIR_WSL"
+                    cp -f "$KEY_PATH" "$WINDOWS_KEY_PATH_WSL"
+                    cp -f "$PUB_KEY_PATH" "$WINDOWS_PUB_KEY_PATH_WSL"
+                    log "Copied keypair to Windows SSH dir: $WINDOWS_SSH_DIR_WSL"
+                fi
+
+                log "Writing Windows SSH config block for $HOST_ALIAS"
+                ensure_ssh_config_block \
+                    "$WINDOWS_CONFIG_PATH_WSL" \
+                    "$HOST_ALIAS" \
+                    "$WINDOWS_KEY_PATH_CONFIG" \
+                    "$STRICT_HOST_KEY_CHECKING" \
+                    "$WINDOWS_KNOWN_HOSTS_CONFIG" \
+                    "none"
+            fi
         fi
     fi
 fi

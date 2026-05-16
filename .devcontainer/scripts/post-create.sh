@@ -167,8 +167,6 @@ if [[ -n "$CURRENT_GIT_NAME" ]]; then
 elif [[ -n "$DESIRED_GIT_NAME" ]]; then
     git config --global user.name "$DESIRED_GIT_NAME"
     echo "  git user.name set"
-else
-    echo "  note: no LOCAL_GIT_USER_NAME provided"
 fi
 
 if [[ -n "$CURRENT_GIT_EMAIL" ]]; then
@@ -176,8 +174,16 @@ if [[ -n "$CURRENT_GIT_EMAIL" ]]; then
 elif [[ -n "$DESIRED_GIT_EMAIL" ]]; then
     git config --global user.email "$DESIRED_GIT_EMAIL"
     echo "  git user.email set"
-else
-    echo "  note: no LOCAL_GIT_USER_EMAIL provided"
+fi
+
+if [[ -z "$CURRENT_GIT_NAME" && -z "$DESIRED_GIT_NAME" ]] || \
+   [[ -z "$CURRENT_GIT_EMAIL" && -z "$DESIRED_GIT_EMAIL" ]]; then
+    echo ""
+    echo "  Warning: no host git identity provided."
+    echo "  Start the container via .devcontainer/scripts/start-devcontainer.sh"
+    echo "  to inherit host ~/.gitconfig, or set it manually inside the container:"
+    echo "    git config --global user.name  \"Your Name\""
+    echo "    git config --global user.email \"you@example.com\""
 fi
 
 # Install dependencies
@@ -191,82 +197,7 @@ if ! pnpm install; then
     exit 1
 fi
 
-# Set up git hooks for lock file sync without clobbering existing hooks (for git-lfs compatibility)
-echo ""
-echo "Configuring TypeAgent git hook helpers..."
-
-HOOKS_DIR=$(git rev-parse --git-path hooks 2>/dev/null || true)
-if [[ -n "$HOOKS_DIR" ]] && [[ -d "$HOOKS_DIR" ]]; then
-    TYPEAGENT_HOOK_DIR="$HOOKS_DIR/typeagent"
-    mkdir -p "$TYPEAGENT_HOOK_DIR"
-
-    cat > "$TYPEAGENT_HOOK_DIR/post-checkout.sh" << 'EOF'
-#!/bin/sh
-PREV_HEAD=$1
-NEW_HEAD=$2
-BRANCH_CHECKOUT=$3
-
-if [ "$BRANCH_CHECKOUT" != "1" ]; then exit 0; fi
-
-LOCKFILE_CHANGED=$(git diff "$PREV_HEAD" "$NEW_HEAD" --name-only 2>/dev/null | grep -c "pnpm-lock.yaml" || true)
-if [ "$LOCKFILE_CHANGED" -gt 0 ]; then
-    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-    if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/ts" ]; then
-        echo "pnpm-lock.yaml changed. Running pnpm install..."
-        cd "$REPO_ROOT/ts" && pnpm install --frozen-lockfile
-        echo "Dependencies synchronized"
-    fi
-fi
-EOF
-    chmod +x "$TYPEAGENT_HOOK_DIR/post-checkout.sh"
-
-    cat > "$TYPEAGENT_HOOK_DIR/post-merge.sh" << 'EOF'
-#!/bin/sh
-LOCKFILE_CHANGED=$(git diff HEAD@{1} HEAD --name-only 2>/dev/null | grep -c "pnpm-lock.yaml" || true)
-if [ "$LOCKFILE_CHANGED" -gt 0 ]; then
-    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-    if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/ts" ]; then
-        echo "pnpm-lock.yaml changed after merge. Running pnpm install..."
-        cd "$REPO_ROOT/ts" && pnpm install --frozen-lockfile
-        echo "Dependencies synchronized"
-    fi
-fi
-EOF
-    chmod +x "$TYPEAGENT_HOOK_DIR/post-merge.sh"
-
-    ensure_hook_chain() {
-        local hook_file=$1
-        local helper_script=$2
-        local marker="# TypeAgent dependency sync"
-
-        if [[ ! -f "$hook_file" ]]; then
-            cat > "$hook_file" << 'EOF'
-#!/bin/sh
-EOF
-            chmod +x "$hook_file"
-        fi
-
-        if ! grep -Fq "$marker" "$hook_file"; then
-            cat >> "$hook_file" << EOF
-
-$marker
-HOOK_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
-if [ -x "\$HOOK_DIR/typeagent/$helper_script" ]; then
-    "\$HOOK_DIR/typeagent/$helper_script" "\$@"
-fi
-EOF
-        fi
-    }
-
-    ensure_hook_chain "$HOOKS_DIR/post-checkout" "post-checkout.sh"
-    ensure_hook_chain "$HOOKS_DIR/post-merge" "post-merge.sh"
-
-    echo "TypeAgent hook helpers installed (compatible with existing hooks)"
-else
-    echo "Note: Could not resolve .git/hooks directory, skipping hook helper setup"
-fi
-
-# ── Security hardening: restrict sudo to a minimal allowlist ──────────
+# - Security hardening: restrict sudo to a minimal allowlist
 # During post-create we needed unrestricted root access to install
 # packages and fix volume ownership.  Now that setup is done, replace
 # the blanket NOPASSWD:ALL rule with the narrowest set of commands the
@@ -281,11 +212,15 @@ codespace ALL=(root) NOPASSWD: /usr/bin/apt-get update*, \
     /usr/bin/apt-get install*, \
     /usr/bin/apt-get upgrade*, \
     /usr/bin/apt-get autoremove*, \
+    /usr/bin/apt-get remove*, \
+    /usr/bin/dpkg -i *, \
+    /usr/bin/dpkg --configure *, \
     /bin/chown *, \
     /usr/bin/chown *, \
     /bin/mkdir *, \
     /usr/bin/mkdir *, \
-    /usr/sbin/service ssh *
+    /usr/sbin/service ssh *, \
+    /usr/sbin/service sshd *
 SUDOERS
 sudo chmod 0440 "$SUDOERS_FILE"
 # Remove the blanket rule that grants unrestricted root.  The common-utils
@@ -295,7 +230,7 @@ if [[ -f /etc/sudoers.d/codespace ]]; then
     sudo rm /etc/sudoers.d/codespace
     echo "  Removed blanket NOPASSWD:ALL rule"
 fi
-echo "  Sudo restricted to: apt-get, chown, mkdir, service ssh"
+echo "  Sudo restricted to: apt-get, dpkg, chown, mkdir, service ssh"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"

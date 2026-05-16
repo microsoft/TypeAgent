@@ -80,8 +80,8 @@
     // - ANTHROPIC_API_KEY (for Claude Code)
   },
 
-  "postCreateCommand": "cat .devcontainer/scripts/post-create.sh | tr -d '\\r' | bash",
-  "postStartCommand": "cat .devcontainer/scripts/post-start.sh | tr -d '\\r' | bash",
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
 
   "customizations": {
     "vscode": {
