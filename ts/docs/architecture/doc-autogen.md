@@ -9,7 +9,10 @@
 > existing automation pattern this mirrors, see
 > `.github/workflows/fix-dependabot-alerts.yml`. For the package
 > conventions enforced by the existing policy check, see
-> `ts/tools/scripts/policyChecks/npmPackage.mjs`.
+> `ts/tools/scripts/policyChecks/npmPackage.mjs`. **For a step-by-step
+> guide to provisioning the pipeline on GitHub** (App, secrets,
+> variables, first-run validation), see
+> [`doc-autogen-setup.md`](./doc-autogen-setup.md).
 
 ## Overview
 

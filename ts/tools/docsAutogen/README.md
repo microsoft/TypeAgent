@@ -136,6 +136,13 @@ The scheduled GitHub Action lives at
 It runs daily at 08:00 UTC and can also be triggered manually via
 `workflow_dispatch` with the same flags as the CLI exposes.
 
+> **First-time pipeline setup** — installing the GitHub App,
+> provisioning secrets and variables, and validating the first run
+> — is covered in
+> [`ts/docs/architecture/doc-autogen-setup.md`](../../docs/architecture/doc-autogen-setup.md).
+> The summary below is reference-only; do not use it as a substitute
+> for the setup guide on a fresh repo.
+
 Required repository configuration (provision once):
 
 | Kind     | Name                       | Purpose                                 |
