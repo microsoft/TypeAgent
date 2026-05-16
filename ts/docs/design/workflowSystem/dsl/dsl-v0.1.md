@@ -1043,6 +1043,37 @@ const results = map(items, (item) => {
 })
 ```
 
+#### Scope capture for loop and fork bodies
+
+Loop bodies (`map`, `filter`, `retry`, `parallelMap`) and fork branches
+execute in isolated sub-scopes in the IR. When the DSL body references a
+variable defined outside (a workflow parameter or an earlier task result),
+the emitter must explicitly pass that value into the sub-scope.
+
+After emitting all nodes in a body scope, the emitter runs
+`captureOuterRefs(bodyScope)`. This walks every `$from` reference in the
+body's nodes and identifies references that target names outside the body:
+
+- **Outer node references** (`$from: "scope"` where the name is not a
+  node in the body) are rewritten in-place to `$from: "input"`. The
+  original outer Template is recorded.
+- **Workflow param references** (`$from: "input"` where the name is not
+  already a declared body input) are recorded as-is.
+
+The captured references are then merged into the loop/fork node:
+
+- `inputs`: `{ items: collectionRef, ...capturedRefs }` - outer values
+  fed into the sub-scope alongside the iteration collection.
+- `body.inputSchema.properties`: declares each captured name.
+- `body.inputSchema.required`: marks each captured name required.
+
+At runtime, the engine resolves `{ $from: "input", name: "x" }` inside
+the body from the enclosing node's `inputs` map, which holds the outer
+Template pointing to the original source.
+
+This mechanism is invisible to the DSL author: they reference outer
+variables freely and the emitter handles plumbing.
+
 #### Next threading
 
 After all nodes in a scope are emitted, `threadNext` iterates `nodeOrder`
@@ -1075,6 +1106,35 @@ requiring the author to think about it.
   | unary `-` | `math.negate`            |          |                 |
 
   Syntactic sugar only; invisible to the workflow author.
+
+- TemplateLiteralExpr: emits a `text.template` task node. Static string
+  segments and interpolation slots are combined into a single template
+  string using `{{varName}}` placeholders. Each interpolated expression
+  is resolved via `emitExpr()` and stored in an `inputs.vars` map:
+
+  ```
+  `Hello ${user.name}, you have ${count} items`
+  ```
+
+  becomes:
+
+  ```json
+  {
+    "kind": "task",
+    "task": "text.template",
+    "inputs": {
+      "template": "Hello {{name}}, you have {{count}} items",
+      "vars": {
+        "name": { "$from": "scope", "name": "userNode", "path": ["name"] },
+        "count": { "$from": "scope", "name": "countNode" }
+      }
+    }
+  }
+  ```
+
+  Variable names in the template are derived from the last segment of
+  dotted names (e.g., `user.name` becomes `{{name}}`), or positional
+  names (`v0`, `v1`) for complex expressions.
 
 - RetryNode: emit loop node with onError edges and attempt counter
 - MapNode: emit loop node with index/length/compare/check_done
