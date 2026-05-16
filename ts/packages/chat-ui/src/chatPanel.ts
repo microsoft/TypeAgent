@@ -1218,13 +1218,39 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
+        // "step" mode — force a new bubble for each reasoning phase so
+        // thinking, tool calls, tool results, and final text each appear
+        // as distinct first-class chat messages instead of being appended
+        // into a single monolithic bubble.
+        if (appendMode === "step") {
+            // Detach the existing container for this request (if any) so
+            // getOrCreateAgentContainer will spin up a fresh one.
+            if (requestId) {
+                this.agentContainersByRequestId.delete(requestId);
+            }
+            this.currentAgentContainer = undefined;
+        }
+
         const container = this.getOrCreateAgentContainer(
             source,
             sourceIcon,
             requestId,
         );
 
-        container.setMessage(content, source, appendMode);
+        // For step bubbles, stamp elapsed time since the request started.
+        if (appendMode === "step" && requestId) {
+            const start = this.requestStartByRequestId.get(requestId);
+            if (start !== undefined) {
+                const elapsed = Date.now() - start;
+                container.setElapsedBadge(elapsed);
+            }
+        }
+
+        container.setMessage(
+            content,
+            source,
+            appendMode === "step" ? "block" : appendMode,
+        );
 
         this.scrollToBottom();
     }
@@ -2539,6 +2565,28 @@ class AgentMessageContainer {
         }
         if (icon) {
             this.iconDiv.textContent = icon;
+        }
+    }
+
+    /**
+     * Show a small elapsed-time badge on this bubble (e.g. "+3.2s").
+     * Used for reasoning step bubbles so the user can see how long
+     * into the reasoning loop each phase occurred.
+     */
+    public setElapsedBadge(elapsedMs: number) {
+        const badge = this.div.querySelector(".chat-step-elapsed");
+        const text =
+            elapsedMs < 1000
+                ? `+${elapsedMs}ms`
+                : `+${(elapsedMs / 1000).toFixed(1)}s`;
+        if (badge) {
+            badge.textContent = text;
+        } else {
+            const span = document.createElement("span");
+            span.className = "chat-step-elapsed";
+            span.textContent = text;
+            // Insert after the agent name in the timestamp row
+            this.nameSpan.parentElement?.appendChild(span);
         }
     }
 

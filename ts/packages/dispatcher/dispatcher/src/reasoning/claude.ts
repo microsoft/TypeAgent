@@ -5,6 +5,7 @@ import {
     ActionContext,
     AppAction,
     TypeAgentAction,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
@@ -46,6 +47,18 @@ const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 const debugMcp = registerDebug("typeagent:dispatcher:reasoning:mcp");
 
 const model = "claude-opus-4-6";
+
+/**
+ * Resolve the display append mode for reasoning phases based on config.
+ * "inline" config → "step" mode (new bubble per phase).
+ * "block" config  → "block" mode (legacy single-bubble behavior).
+ */
+function resolveReasoningDisplayMode(
+    context: ActionContext<CommandHandlerContext>,
+): DisplayAppendMode {
+    const config = context.sessionContext.agentContext.session.getConfig();
+    return config.execution.reasoningDisplay === "inline" ? "step" : "block";
+}
 
 const mcpServerName = "action-executor";
 const allowedTools = [
@@ -842,8 +855,7 @@ async function executeReasoningWithoutPlanning(
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
-
-    // Create query to Claude Agent SDK with chat history context
+    const displayMode = resolveReasoningDisplayMode(context);
     const queryInstance = query({
         prompt: buildPromptWithContext(
             originalRequest,
@@ -876,7 +888,7 @@ async function executeReasoningWithoutPlanning(
                             type: "markdown",
                             content: content.text,
                         },
-                        "block",
+                        displayMode,
                     );
                 } else if (content.type === "tool_use") {
                     toolUseCount++;
@@ -905,7 +917,7 @@ async function executeReasoningWithoutPlanning(
                             ),
                             kind: "info",
                         },
-                        "block",
+                        displayMode,
                     );
                 } else if ((content as any).type === "thinking") {
                     const thinkingContent = (content as any).thinking;
@@ -915,7 +927,7 @@ async function executeReasoningWithoutPlanning(
                                 type: "html",
                                 content: formatThinkingDisplay(thinkingContent),
                             },
-                            "block",
+                            displayMode,
                         );
                     }
                 }
@@ -954,7 +966,7 @@ async function executeReasoningWithoutPlanning(
                                 ),
                                 kind: isError ? "warning" : "info",
                             },
-                            "block",
+                            displayMode,
                         );
                     }
                 }
@@ -1024,6 +1036,7 @@ async function executeReasoningWithTracing(
     try {
         // Display initial message
         context.actionIO.appendDisplay("Thinking...", "temporary");
+        const displayMode = resolveReasoningDisplayMode(context);
 
         // Create query to Claude Agent SDK with chat history context
         const queryInstance = query({
@@ -1059,7 +1072,7 @@ async function executeReasoningWithTracing(
                         context.actionIO.appendDisplay({
                             type: "markdown",
                             content: content.text,
-                        });
+                        }, displayMode);
                     } else if (content.type === "tool_use") {
                         toolUseCount++;
                         reasoningStepCount++;
@@ -1092,7 +1105,7 @@ async function executeReasoningWithTracing(
                                 ),
                                 kind: "info",
                             },
-                            "block",
+                            displayMode,
                         );
                     } else if ((content as any).type === "thinking") {
                         const thinkingContent = (content as any).thinking;
@@ -1103,7 +1116,7 @@ async function executeReasoningWithTracing(
                                     content:
                                         formatThinkingDisplay(thinkingContent),
                                 },
-                                "block",
+                                displayMode,
                             );
                         }
                     }
@@ -1153,7 +1166,7 @@ async function executeReasoningWithTracing(
                                     ),
                                     kind: isError ? "warning" : "info",
                                 },
-                                "block",
+                                displayMode,
                             );
                         }
                     }

@@ -161,6 +161,10 @@ export type DispatcherConfig = {
             legacy: boolean; // use legacy memory behavior
         };
         reasoning: "claude" | "copilot" | "none";
+        // Controls how reasoning events are displayed in the chat UI.
+        // "inline": each reasoning phase (thinking, tool call, result, text) gets its own chat bubble.
+        // "block": all reasoning output is appended into a single chat bubble (legacy behavior).
+        reasoningDisplay: "inline" | "block";
         // Controls how Entity objects are rendered into LLM prompts (translation + reasoning context).
         // "facets" (default): current shape `{id, name, type, facets: [{name, value}, ...]}`.
         // "flat": collapse facets into a `properties` object — `{id, name, type, uniqueId?, properties: {...}}`.
@@ -269,7 +273,8 @@ const defaultSessionConfig: SessionConfig = {
         memory: {
             legacy: true, // use the new memory behavior
         },
-        reasoning: "none",
+        reasoning: "claude",
+        reasoningDisplay: "inline",
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
         // appending the Entity TS type to the reasoning system prompt produced 4 consistent
         // gains / 0 consistent regressions on a 20-test sample (median of 3 runs).

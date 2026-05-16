@@ -197,12 +197,12 @@ export async function processReasoningSession(
                         content: [{ type: "text", text: event.text }],
                     });
                     config.onThinking?.(event.text);
-                    display.appendHtml(formatThinkingDisplay(event.text));
+                    display.appendStep(formatThinkingDisplay(event.text), "html");
                     break;
 
                 case "text":
                     config.onText?.(event.text);
-                    display.appendMarkdown(event.text);
+                    display.appendStep(event.text, "markdown");
                     break;
 
                 case "tool_call":
@@ -211,8 +211,9 @@ export async function processReasoningSession(
                         event.args,
                     );
                     config.onToolCall?.(event.tool, event.args);
-                    display.appendInfo(
+                    display.appendStep(
                         formatToolCallDisplay(event.tool, event.args),
+                        "markdown",
                     );
                     break;
 
@@ -231,9 +232,9 @@ export async function processReasoningSession(
                         event.result,
                         isError,
                     );
-                    display.appendInfo(
+                    display.appendStep(
                         formatToolResultDisplay(content, isError),
-                        isError ? "warning" : "info",
+                        "markdown",
                     );
                     break;
                 }
@@ -275,4 +276,6 @@ export interface ReasoningDisplaySink {
     appendHtml(content: string): void;
     appendInfo(content: string, kind?: "info" | "warning"): void;
     appendTemporary(content: string): void;
+    /** Start a new display container/bubble for this content (used for inline reasoning steps). */
+    appendStep(content: string, type?: "markdown" | "html"): void;
 }

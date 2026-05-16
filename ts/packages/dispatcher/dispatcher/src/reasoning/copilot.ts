@@ -5,6 +5,7 @@ import {
     ActionContext,
     AppAction,
     TypeAgentAction,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
@@ -77,6 +78,18 @@ function resolveReasoningEffort():
         return raw;
     }
     return undefined;
+}
+
+/**
+ * Resolve the display append mode for reasoning phases based on config.
+ * "inline" config → "step" mode (new bubble per phase).
+ * "block" config  → "block" mode (legacy single-bubble behavior).
+ */
+function resolveReasoningDisplayMode(
+    context: ActionContext<CommandHandlerContext>,
+): DisplayAppendMode {
+    const config = context.sessionContext.agentContext.session.getConfig();
+    return config.execution.reasoningDisplay === "inline" ? "step" : "block";
 }
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
@@ -521,6 +534,7 @@ async function executeReasoningWithoutPlanning(
 ): Promise<any> {
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
+    const displayMode = resolveReasoningDisplayMode(context);
 
     const client = await getCopilotClient(context);
     const config = getCopilotSessionConfig(context);
@@ -601,7 +615,7 @@ async function executeReasoningWithoutPlanning(
                             false,
                         ),
                     },
-                    "block",
+                    displayMode,
                 );
             }
         },
@@ -650,7 +664,7 @@ async function executeReasoningWithoutPlanning(
                     content: formatToolCallDisplay(toolName, parameters),
                     kind: "info",
                 },
-                "block",
+                displayMode,
             );
         },
     );
@@ -707,7 +721,7 @@ async function executeReasoningWithoutPlanning(
                     type: "markdown",
                     content: displayContent,
                 },
-                "block",
+                displayMode,
             );
         } else {
             debug("Warning: No content to display!");
@@ -723,7 +737,7 @@ async function executeReasoningWithoutPlanning(
                 type: "text",
                 content: `Error: ${error instanceof Error ? error.message : String(error)}`,
             },
-            "block",
+            displayMode,
         );
         throw error;
     } finally {
@@ -768,6 +782,7 @@ async function executeReasoningWithTracing(
     try {
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
+        const displayMode = resolveReasoningDisplayMode(context);
 
         const client = await getCopilotClient(context);
         const config = getCopilotSessionConfig(context);
@@ -857,7 +872,7 @@ async function executeReasoningWithTracing(
                                 false,
                             ),
                         },
-                        "block",
+                        displayMode,
                     );
                 }
             },
@@ -910,7 +925,7 @@ async function executeReasoningWithTracing(
                         content: formatToolCallDisplay(toolName, parameters),
                         kind: "info",
                     },
-                    "block",
+                    displayMode,
                 );
             },
         );
@@ -960,7 +975,7 @@ async function executeReasoningWithTracing(
                         type: "markdown",
                         content: displayContent,
                     },
-                    "block",
+                    displayMode,
                 );
             } else {
                 debug("Warning: No content to display!");

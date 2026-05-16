@@ -56,6 +56,9 @@ export class ChatView {
     // Client-only MessageGroups that will never receive a server UUID
     // (e.g. notifications, agent-initiated messages). Keyed by clientRequestId.
     private readonly clientMessageGroups: Map<string, MessageGroup> = new Map();
+    // Per-request step counter for "step" display mode — auto-increments
+    // actionIndex so each reasoning phase gets its own agent bubble.
+    private readonly stepCounterByRequest: Map<string, number> = new Map();
     private inputContainer: HTMLDivElement | undefined;
     private _settingsView: SettingsView | undefined;
     private _dispatcher: Dispatcher | undefined;
@@ -722,6 +725,21 @@ export class ChatView {
         const notification = options?.notification ?? false;
         const content: DisplayContent = msg.message;
 
+        // "step" mode — each reasoning phase gets a new agent bubble.
+        // Auto-assign a unique actionIndex so ensureAgentMessage creates
+        // a fresh MessageContainer while keeping the same MessageGroup.
+        let effectiveMode = options?.appendMode;
+        if (effectiveMode === "step") {
+            const reqKey =
+                typeof msg.requestId === "string"
+                    ? msg.requestId
+                    : (msg.requestId as any)?.clientRequestId ?? "";
+            const next = (this.stepCounterByRequest.get(reqKey) ?? 0) + 1;
+            this.stepCounterByRequest.set(reqKey, next);
+            msg = { ...msg, actionIndex: next };
+            effectiveMode = "block";
+        }
+
         // Consolidate the dispatcher's transient "[X] Executing action ..."
         // status (sent with source="dispatcher", actionIndex=undefined,
         // appendMode="temporary") into the most recently created agent
@@ -729,7 +747,7 @@ export class ChatView {
         // dispatcher-sourced status bubble that visually duplicates the
         // upcoming agent reply. Mirrors chat-ui's behavior in chatPanel.ts.
         if (
-            options?.appendMode === "temporary" &&
+            effectiveMode === "temporary" &&
             msg.actionIndex === undefined &&
             msg.source === "dispatcher" &&
             !notification
@@ -759,7 +777,7 @@ export class ChatView {
         agentMessage.setMessage(
             content,
             msg.source,
-            options?.appendMode,
+            effectiveMode,
             msg.sourceIcon,
         );
 

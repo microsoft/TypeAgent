@@ -46,7 +46,8 @@ export type DisplayMessageKind =
 // Block - message will be show with in a separate block from the surrounding message (new line for prev and next message)
 // Inline - message will be show next the previous "inline" message.
 // Temporary - same as "block", but will be replace by the next message.
-export type DisplayAppendMode = "inline" | "block" | "temporary";
+// Step - starts a new, distinct message container/bubble for this content (used by reasoning to show each phase inline).
+export type DisplayAppendMode = "inline" | "block" | "temporary" | "step";
 
 export type ClientAction =
     | "show-camera"
