@@ -43,30 +43,18 @@ sub-workflows are called by name and inlined at compile time.
 - Sub-workflow emit strategy: the current `workflow.<name>` task-node
   approach is a placeholder. The intended v2 behavior is compile-time
   inlining per dsl-v0.1.md section 4.
+- Call classification: the parser uses a syntactic rule to distinguish
+  task calls from workflow calls: dotted names (`ns.task()`) are task
+  calls, single-segment names (`fn()`) are workflow calls. There is no
+  way to call a task without a namespace prefix. This means task naming
+  must always use dotted form, and single-segment task names are
+  unreachable from DSL code. When sub-workflow calls are implemented,
+  this classification rule should be revisited together: if tasks can
+  ever have single-segment names, the disambiguation needs a different
+  strategy (e.g., checking whether the name matches a declared workflow
+  vs. a registered task schema).
 
-## G2: Parallel branch names are synthetic
-
-**Spec:** dsl-v0.1.md section 3.4. Destructuring bindings become branch
-names: `const [text, image] = parallel(...)` should produce branches
-named `text` and `image`.
-
-**Current state:** The emitter uses `branch_0`, `branch_1`, etc. The
-fork node's output is keyed by these positional names, not the
-user-visible destructuring variable names.
-
-**What needs to happen:**
-
-1. Pass destructuring names from `DestructuringConst` through to the
-   fork branch emitter so branches are named after the user's bindings.
-2. Update fork output resolution to use these names.
-
-**Related decision:** Branch naming was confirmed as an internal
-implementation detail for now. The emitter uses positional `branch_0`,
-`branch_1` names. The intended spec behavior is to derive branch names
-from destructuring bindings so fork output keys match user-visible
-variable names.
-
-## G3: Parallel branches missing IR schema fields
+## G2: Parallel branches missing IR schema fields
 
 **Spec:** ir-v0.2.md specifies fork branches have the same sub-scope
 contract as loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`,
@@ -89,7 +77,7 @@ for branches that need outer references. The full sub-scope contract
 spec/implementation mismatch that needs the emitter to populate the
 missing fields.
 
-## G4: TypeScript-style type definitions
+## G3: TypeScript-style type definitions
 
 **Spec:** TypeScript allows named type aliases (`type Foo = { ... }`) and
 interfaces that can be referenced by name in annotations.
@@ -112,7 +100,7 @@ and inline object literals, but rejects any other identifier as
    should distinguish "did you mean to define a type?" from a typo).
 4. Consider whether types should be exportable across workflows.
 
-## G5: `llm.generateJson` needs generics for output typing
+## G4: `llm.generateJson` needs generics for output typing
 
 **Spec:** `llm.generateJson` produces structured output, but its JSON
 schema is only known at the call site, not from the task's static
@@ -135,7 +123,7 @@ to a variable and pass it opaquely to another task.
    type checker support for resolving generic instantiations, and emitter
    support for threading the resolved type into the schema.
 
-## G6: `identity` is covering two distinct IR gaps
+## G5: `identity` is covering two distinct IR gaps
 
 **Context:** The current emitter uses builtin `identity` nodes in several
 places where the DSL produces a value but the IR only allows control flow
@@ -236,7 +224,7 @@ These are related in the emitter, but they are not the same design problem.
    support separately rather than treating all `identity` uses as one
    problem.
 
-## G7: Validator does not handle branch-return convergence patterns
+## G6: Validator does not handle branch-return convergence patterns
 
 **Context:** The IR validator's domination analysis rejects some
 emitter-produced workflows that execute correctly in the runner. Four
@@ -276,7 +264,7 @@ the prefix-based convergence pattern.
 3. The hand-built engine tests that use `skipValidation` for
    error-handling paths are a separate concern and can stay as-is.
 
-## G8: Composition patterns outside current v2 scope
+## G7: Composition patterns outside current v2 scope
 
 **Context:** The DSL parser and type checker intentionally do not support
 certain expression-composition patterns that would be natural in a
@@ -310,7 +298,7 @@ nested calls would obscure the step-by-step execution model.
    intentional simplification: returns the consequent type, rejects
    mismatches at compile time.
 
-## G9: Comments not preserved in AST
+## G8: Comments not preserved in AST
 
 **Spec:** dsl-v0.1.md section 6 states "The AST preserves comments.
 Each node has an optional `leadingComments` array of `Comment { text, pos }`
@@ -339,7 +327,7 @@ between source and AST.
 4. Until this is implemented, dsl-v0.1.md section 6 overstates the
    current behavior.
 
-## G10: Bare task calls wrapped as synthetic ConstStatement
+## G9: Bare task calls wrapped as synthetic ConstStatement
 
 **Context:** The parser allows bare task calls in statement position
 (e.g., `audit.log(data)` inside an if body). It wraps them as
@@ -366,3 +354,64 @@ bindings with synthetic names? The current approach works but:
 2. If keeping current approach: no code change needed, already documented.
 3. If adding `ExpressionStatement`: update parser, ast.ts, emitter, and
    graph extractor.
+
+## G10: integer/number bidirectional compatibility
+
+**Context:** JSON Schema defines `integer` as a subtype of `number`
+(one-way: integer values satisfy a number schema, but not vice versa).
+The DSL type checker treats them as bidirectionally compatible.
+
+**Current state:**
+
+- The type checker's `isAssignable` function treats `integer` and
+  `number` as interchangeable in both directions
+  (typeChecker.ts ~line 99-104).
+- You can pass a `number` value where `integer` is expected without a
+  type error, which is a silent precision-loss bug.
+- Additionally, arithmetic on two `integer` operands always returns
+  `number` (typeChecker.ts ~line 713), even though the result could
+  safely remain `integer` for `+`, `-`, `*`.
+
+**What needs to happen:**
+
+1. Make assignability one-way: `integer` assignable to `number`, but
+   `number` NOT assignable to `integer` without an explicit conversion.
+2. Consider returning `integer` from integer-only arithmetic (`+`, `-`,
+   `*`) and `number` only when a `number` operand is involved or for
+   division.
+3. Add type error tests for cases like passing a `number` variable to
+   an input that expects `integer`.
+4. Audit existing task schemas: some tasks (e.g., `math.floor`,
+   `math.round`, `math.ceil`) correctly return `integer`; verify that
+   their results can still flow into `number`-typed inputs after the
+   one-way fix.
+
+## G11: Bind stripping removes names from side-effect tasks
+
+**Context:** After emission, the emitter runs `stripUnreferencedBinds`
+which removes the `bind` field from any node whose bound name is never
+referenced by another expression.
+
+**Current state:**
+
+- If a user writes `const result = sideEffect.call(x)` but never
+  references `result`, the emitted node loses its `bind` field.
+- The task still executes (node ordering and `next` edges are
+  unaffected), but the output value has no name in the IR.
+- This is correct optimization for most cases, but can surprise users
+  inspecting IR output or debugging, because the `const` binding they
+  wrote has no trace in the compiled IR.
+- G9 covers the specific case of bare task calls (`audit.log(x)`)
+  which get synthetic names that are always stripped. This gap covers
+  the general case of explicit user-written names being stripped.
+
+**What needs to happen:**
+
+1. Decide whether this is acceptable behavior (likely yes for
+   optimization) or whether user-written names should always be
+   preserved even when unreferenced.
+2. If preserving: only strip synthetic names (those matching the
+   `_<line>_<col>` pattern from G10), keep user-written ones.
+3. If current behavior is fine: document it explicitly in the spec
+   (dsl-v0.1.md section on compilation semantics) so users know that
+   unused bindings are elided.

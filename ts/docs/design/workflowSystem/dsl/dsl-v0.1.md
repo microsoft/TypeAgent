@@ -659,7 +659,7 @@ const [a, b, c, d, e] = parallel(
 
 **AST:** `ParallelNode { bodies: { body: Statement[] }[], maxConcurrency?: Expr }`
 **IR lowering:** `fork` node ([ir-v0.2.md](../ir/ir-v0.2.md) §2.1). Each arrow function
-becomes a named branch sub-scope. Destructuring bindings become branch names.
+becomes a branch sub-scope. Destructuring bindings extract results by position.
 `maxConcurrency` maps directly to the IR field of the same name.
 
 ### 3.5 `parallelMap(collection, body, options?)`
