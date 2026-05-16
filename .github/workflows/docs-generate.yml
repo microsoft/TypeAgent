@@ -20,21 +20,20 @@
 # Required repository configuration:
 #   variables:
 #     DOCS_BOT_APP_ID         GitHub App that opens the PR
-#     AZURE_CLIENT_ID         Entra App registration (or User-Assigned MI) trusted by the
-#                             federated credential. The OIDC subject must match
-#                             `repo:<org>/<repo>:ref:refs/heads/main` (or whatever ref/env
-#                             you registered when creating the FIC).
-#     AZURE_TENANT_ID         Directory (tenant) ID for the same App registration.
-#     AZURE_SUBSCRIPTION_ID   Subscription containing the Azure OpenAI resource.
 #   secrets:
 #     DOCS_BOT_APP_PRIVATE_KEY  Private key for the GitHub App
-#     AZURE_OPENAI_ENDPOINT     Azure OpenAI endpoint URL
+#     AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD       \
+#     AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA       | Existing repo secrets shared with
+#     AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 / smoke-tests / build-docker workflows.
 #
 # Auth model: GitHub Actions exchanges its OIDC token for an Azure AD bearer
-# token via `azure/login@v2`. `aiclient` honors the literal value
-# `AZURE_OPENAI_API_KEY=identity` as a sentinel that switches it to
-# DefaultAzureCredential, which then picks up the AZURE_* env vars
-# `azure/login` exports. No long-lived API key is stored in this repo.
+# token via `azure/login@v2`, then `tools/scripts/getKeys.mjs` uses
+# DefaultAzureCredential to pull the consolidated `typeagent-config` secret
+# from the `build-pipeline-kv` Key Vault and writes it to
+# `ts/config.local.yaml`. `aiclient` reads endpoint + key from that file via
+# `@typeagent/config`. No Azure OpenAI key is stored in this repo. The
+# Entra App registration referenced by the secrets above already has
+# Key Vault read access on `build-pipeline-kv`, so no new RBAC is required.
 #
 # The workflow is read-only and emits no PR until those are provisioned;
 # it simply prints what it would have done.
@@ -81,7 +80,7 @@ permissions:
   # Required so `azure/login@v2` can request a short-lived OIDC JWT
   # for federated credential exchange. The token never leaves the
   # runner; Entra exchanges it for an Azure AD bearer token bound to
-  # the App registration named by AZURE_CLIENT_ID.
+  # the existing build-pipeline App registration.
   id-token: write
 
 jobs:
@@ -123,17 +122,24 @@ jobs:
           pnpm --filter aiclient build
           pnpm --filter @typeagent/docs-autogen build
 
-      # Federated-credential login. Exports AZURE_CLIENT_ID,
-      # AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, and
-      # AZURE_FEDERATED_TOKEN_FILE to subsequent steps. `aiclient`'s
-      # DefaultAzureCredential picks them up automatically when
-      # AZURE_OPENAI_API_KEY is set to the literal string "identity".
+      # Federated-credential login. Reuses the same Entra App
+      # registration that smoke-tests.yml and build-docker-container.yml
+      # use, so no new RBAC is required to read build-pipeline-kv.
       - name: Azure login (federated)
-        uses: azure/login@v2
+        uses: azure/login@v2.2.0
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
+
+      # Pull AzOpenAI endpoint + key (and the rest of the shared
+      # service config) from Key Vault into ts/config.local.yaml.
+      # @typeagent/config auto-discovers that file at runtime, so no
+      # further env wiring is needed for the regen step below.
+      - name: Pull config from Key Vault
+        working-directory: ts
+        run: |
+          node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
 
       # Validate dispatch inputs before they reach a shell. Strict
       # allowlists prevent shell-metachar injection and limit blast
@@ -174,10 +180,6 @@ jobs:
         id: regen
         working-directory: ts
         env:
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          # Sentinel value: switches @typeagent/aiclient from
-          # API-key auth to DefaultAzureCredential (federated OIDC).
-          AZURE_OPENAI_API_KEY: identity
           DEBUG: "docs-autogen:*"
           INPUT_PACKAGES: ${{ inputs.packages }}
           INPUT_SINCE: ${{ inputs.since }}

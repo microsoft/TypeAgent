@@ -79,62 +79,60 @@ permissions can be scoped down to exactly what's needed).
 > the PRs a clearly attributed author, and lets you revoke App
 > credentials independently of any human PAT.
 
-## Step 2 — Provision Azure OpenAI access (federated credentials)
+## Step 2 — Azure OpenAI access (reuses existing build-pipeline credential)
 
 The AI-authored portion of each `README.AUTOGEN.md` is generated via
 [`@typeagent/aiclient`](../../packages/aiclient/README.md), which
-supports both API-key and federated-identity (OIDC) auth. The
-recommended path is **federated credentials** — no long-lived secret
-is stored in the repo, and access is gated by Entra RBAC plus the FIC
-subject claim.
+reads its endpoint + key from `ts/config.local.yaml` (loaded by
+[`@typeagent/config`](../../packages/config/README.md)).
 
-### Azure-side setup (one-time)
+For CI, this workflow piggy-backs on the **existing federated
+credential** that `smoke-tests.yml` and `build-docker-container.yml`
+already use. The auth chain is:
 
-1. **Entra App Registration** (or User-Assigned Managed Identity) in
-   the same tenant as the Azure OpenAI resource. Note the
-   **Application (client) ID** and **Directory (tenant) ID**.
-2. **Federated credential** on that App, trusting GitHub Actions:
-   - **Issuer:** `https://token.actions.githubusercontent.com`
-   - **Audience:** `api://AzureADTokenExchange`
-   - **Subject identifier:** `repo:<org>/<repo>:ref:refs/heads/main`
-     for a branch-scoped credential, or
-     `repo:<org>/<repo>:environment:<env-name>` if you wrap the
-     workflow in a GitHub environment (more secure — see
-     [Hardening](#hardening)).
-3. **RBAC** on the Azure OpenAI resource: assign the App the
-   **`Cognitive Services OpenAI User`** role. This is read-only
-   inference access; the docs-bot does not need to create or modify
-   deployments.
-4. **Network access:** if the AzOpenAI resource has public network
-   access disabled, GitHub-hosted runners cannot reach it. Either
-   enable public access (and rely on Entra + RBAC as the security
-   boundary), allowlist the GitHub Actions IP ranges from
-   <https://api.github.com/meta>, or run on a self-hosted runner
-   inside the same VNet as the private endpoint.
+> GitHub OIDC token → existing Entra App registration → Key Vault
+> `build-pipeline-kv` → consolidated `typeagent-config` secret →
+> `ts/config.local.yaml` → `aiclient` reads endpoint + key normally.
 
-### Sentinel value: `AZURE_OPENAI_API_KEY=identity`
+No new Azure resource, no new RBAC, no new secret to configure.
+Concretely, the workflow:
 
-`@typeagent/aiclient` treats the literal string `"identity"` in
-`AZURE_OPENAI_API_KEY` as a switch to `DefaultAzureCredential` from
-`@azure/identity`, which in turn picks up the
-`AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_FEDERATED_TOKEN_FILE`
-env vars that `azure/login@v2` exports after a successful OIDC
-exchange. The workflow already wires this — no code change is
-required.
+1. Calls `azure/login@v2.2.0` with the existing repo secrets
+   `AZUREAPPSERVICE_CLIENTID_*`, `AZUREAPPSERVICE_TENANTID_*`,
+   `AZUREAPPSERVICE_SUBSCRIPTIONID_*` (auto-created when the build
+   pipeline was first wired through the Azure portal). This performs
+   the OIDC handshake and exports the standard Azure env vars.
+2. Runs `node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit`,
+   which uses `DefaultAzureCredential` to read the `typeagent-config`
+   secret from `build-pipeline-kv` and writes it as
+   `ts/config.local.yaml`.
+3. Subsequent `pnpm` invocations (the regen step) read the YAML
+   transparently — same code path that runs on a developer machine.
+
+If your fork or organization does **not** already have those
+secrets, you have two options:
+
+- **Mirror the build pipeline:** in the Azure portal, configure
+  GitHub Actions OIDC trust on an Entra App, and grant it Key Vault
+  read access on the vault you want to source secrets from. Then
+  copy `smoke-tests.yml`'s `Login to Azure` + `Get Keys` step
+  pattern (and update `--vault` to your vault name).
+- **API-key fallback:** drop the OIDC + Key Vault steps entirely
+  and add a literal `AZURE_OPENAI_API_KEY` secret. See the
+  [API-key fallback](#api-key-fallback-non-microsoft-installs)
+  subsection below for the exact workflow edits.
 
 ### Local validation (optional)
 
-To smoke-test from a developer machine instead of CI you'll need to
-log in interactively (or via a service principal) so
-`DefaultAzureCredential` can find a token:
+To smoke-test from a developer machine, populate
+`ts/config.local.yaml` either by running `getKeys.mjs` against the
+same vault (requires you to be `az login`-ed with Key Vault read
+permission) or by hand-editing per `ts/config.sample.yaml`:
 
 ```powershell
 cd ts
 az login --tenant <your-tenant-id>
-# Make sure your user identity has the Cognitive Services OpenAI User
-# role on the resource, or impersonate the App registration.
-
-"AZURE_OPENAI_ENDPOINT=...`nAZURE_OPENAI_API_KEY=identity" | Out-File -Encoding ascii .env
+node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
 
 pnpm install
 pnpm --filter aiclient build
@@ -146,23 +144,25 @@ node tools/docsAutogen/bin/docs-autogen.cjs `
 ```
 
 If the smoke test produces a sensible
-`ts/packages/agents/timer/README.AUTOGEN.md`, federated auth works
-end-to-end and you can proceed.
+`ts/packages/agents/timer/README.AUTOGEN.md`, the auth chain works
+end-to-end.
 
 ### API-key fallback (non-Microsoft installs)
 
 If you do not have a Microsoft tenant or cannot register an Entra
 App — e.g., a personal fork or an external organization — set
-`AZURE_OPENAI_API_KEY` to the actual key value as a repo secret and
-edit the workflow:
+`AZURE_OPENAI_API_KEY` to the actual key value as a repo secret
+and edit the workflow:
 
 - Remove the `Azure login (federated)` step.
-- Change `AZURE_OPENAI_API_KEY: identity` to
+- Remove the `Pull config from Key Vault` step.
+- Drop the `id-token: write` permission.
+- Add an `env:` block to the regen step exposing
+  `AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}` and
   `AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}`.
-- Drop the `id-token: write` permission and the three `AZURE_*`
-  variables.
 
-Everything else is identical.
+`aiclient` reads those env vars when no `config.local.yaml` is
+present.
 
 ## Step 3 — Configure repository secrets and variables
 
@@ -171,33 +171,28 @@ variables → Actions** and add the following entries.
 
 ### Variables (Repository **variables** tab)
 
-| Name                    | Value                                               |
-| ----------------------- | --------------------------------------------------- |
-| `DOCS_BOT_APP_ID`       | Numeric App ID from Step 1 (e.g. `123456`)          |
-| `AZURE_CLIENT_ID`       | Application (client) ID of the Entra App / MI       |
-| `AZURE_TENANT_ID`       | Directory (tenant) ID of the same App               |
-| `AZURE_SUBSCRIPTION_ID` | Subscription ID that contains the AzOpenAI resource |
-
-> The `AZURE_*` IDs are not secrets — they are identifiers, and
-> registering them as **variables** instead of secrets makes the
-> workflow easier to debug. The actual security boundary is the
-> federated-credential subject claim on the Entra side, plus the
-> RBAC role on the AzOpenAI resource.
+| Name              | Value                                      |
+| ----------------- | ------------------------------------------ |
+| `DOCS_BOT_APP_ID` | Numeric App ID from Step 1 (e.g. `123456`) |
 
 ### Secrets (Repository **secrets** tab)
 
-| Name                       | Value                                                                                                                         |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `DOCS_BOT_APP_PRIVATE_KEY` | Full contents of the `.pem` file from Step 1, including the `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----` lines |
-| `AZURE_OPENAI_ENDPOINT`    | Same endpoint URL you used locally                                                                                            |
+| Name                                                              | Value                                                                                                                         |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `DOCS_BOT_APP_PRIVATE_KEY`                                        | Full contents of the `.pem` file from Step 1, including the `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----` lines |
+| `AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD`       | **Already present** — created when the build pipeline was wired                                                               |
+| `AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA`       | **Already present** — same source                                                                                             |
+| `AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30` | **Already present** — same source                                                                                             |
 
 When pasting the GitHub App private key, preserve newlines exactly —
 GitHub strips trailing whitespace but newlines inside the field are
 kept.
 
-> If you fell back to the API-key path, also add an
-> `AZURE_OPENAI_API_KEY` secret here and apply the workflow edits
-> from that section.
+> The three `AZUREAPPSERVICE_*` secrets only need provisioning if
+> this is a fresh fork without the existing build-pipeline wiring.
+> On `microsoft/TypeAgent` they are already configured. If you fell
+> back to the API-key path, add `AZURE_OPENAI_ENDPOINT` and
+> `AZURE_OPENAI_API_KEY` here instead.
 
 ## Step 4 — Enable Actions to write to the repo
 
@@ -330,27 +325,28 @@ the patterns:
 The placeholder body fires when the LLM call short-circuits (no
 endpoint, auth failure, or `--llm` not set). Walk down the list:
 
-- **Federated path:** confirm the `Azure login (federated)` step
-  reports `Login successful`. If it fails, the FIC subject claim
-  registered on the Entra App does not match the runner's actual
-  subject — see the next bullet.
-- **OIDC subject mismatch:** if `azure/login` fails with
+- **Federated login:** confirm the `Azure login (federated)` step
+  reports `Login successful`. If it fails with
   `AADSTS70021: No matching federated identity record found`, the
-  subject the runner is presenting does not match what's registered
-  in Entra. Add a debugging step that prints
-  `${{ steps.app-token.outputs.token == '' }}` plus
-  `echo "${ACTIONS_ID_TOKEN_REQUEST_URL+set}"` to confirm OIDC is
-  being issued; cross-check the registered subject pattern (must
-  match the workflow's branch / environment / event exactly).
-- **RBAC missing:** if `azure/login` succeeds but the LLM call
-  returns 401 / 403, the App registration does not have the
-  `Cognitive Services OpenAI User` role on the AzOpenAI resource.
-- **Endpoint mismatch:** confirm `AZURE_OPENAI_ENDPOINT` is set on
-  the **repository** (not on an environment the workflow doesn't
-  reference) and matches the resource you granted RBAC against.
-- **API-key path:** if you fell back to API-key auth, confirm the
-  secret is named exactly `AZURE_OPENAI_API_KEY` and the workflow
-  was edited as described in Step 2's "API-key fallback" section.
+  subject the runner is presenting does not match the FIC
+  registered on the Entra App. (This is the same App that
+  smoke-tests uses, so if smoke-tests passes the FIC is fine —
+  most often the subject mismatch means you're running on a branch
+  the FIC subject claim doesn't cover.)
+- **Key Vault read:** confirm the `Pull config from Key Vault` step
+  reports `Written ts/config.local.yaml from vault secret`. If it
+  fails with `Forbidden`, the Entra App lost its read role on
+  `build-pipeline-kv`; cross-check Access Control (IAM) on the
+  vault. If it fails with `Secret 'typeagent-config' not found`,
+  the secret was renamed or deleted in the vault.
+- **Stale `config.local.yaml`:** the file is gitignored and freshly
+  written each run, but if the regen step somehow ran before the
+  `Get Keys` step (e.g., a step was reordered), there'd be no
+  endpoint to call. Inspect the step ordering in the workflow file.
+- **API-key fallback:** if you fell back to API-key auth, confirm
+  the secrets are named exactly `AZURE_OPENAI_API_KEY` and
+  `AZURE_OPENAI_ENDPOINT` and that the workflow was edited as
+  described in Step 2's "API-key fallback" section.
 
 ### Daily PR contains hundreds of packages
 
@@ -364,28 +360,35 @@ git push origin docs-bot/last-run --force
 
 ## Hardening
 
-Beyond the baseline setup above, three additional steps tighten the
-trust surface:
+Beyond the baseline setup above, the recommendations below tighten
+the trust surface:
 
-1. **Scope the federated credential to a GitHub environment.**
-   Create an `azure-openai` environment under **Settings →
-   Environments**, optionally with required reviewers, and gate the
-   workflow on it by adding `environment: azure-openai` under the
-   `regenerate` job. Then change the FIC subject on the Entra App
-   from `repo:<org>/<repo>:ref:refs/heads/main` to
-   `repo:<org>/<repo>:environment:azure-openai`. This blocks any
-   other workflow file or branch in the repo from minting tokens
-   for the same App, even if they have `id-token: write`.
+1. **Audit Key Vault access periodically.** The Entra App that
+   `AZUREAPPSERVICE_CLIENTID_*` refers to has Key Vault read access
+   on `build-pipeline-kv`. Verify in Azure Portal → vault → Access
+   Control (IAM) that the App's role is the minimum needed
+   (Key Vault Secrets User), and nothing more. Revoke any
+   Contributor / Owner roles that crept in.
 2. **Don't add `pull_request_target`.** The workflow only fires on
    `schedule` and `workflow_dispatch` today — keep it that way. A
    `pull_request_target` trigger lets fork PRs run with
    write-permission tokens, which would let an attacker impersonate
-   the bot.
-3. **Audit the App registration's permissions periodically.** The
-   App should _only_ have the `Cognitive Services OpenAI User` role
-   on the AzOpenAI resource — nothing else. If you see additional
-   roles on the same SP (Contributor, Owner, Storage roles), revoke
-   them.
+   the bot _and_ exfiltrate the Key Vault payload.
+3. **Optional — scope the FIC to a GitHub environment.** Create an
+   `azure-openai` environment under **Settings → Environments**,
+   optionally with required reviewers, and gate the `regenerate`
+   job on it via `environment: azure-openai`. Then add a second
+   FIC on the Entra App with subject
+   `repo:<org>/<repo>:environment:azure-openai` so even another
+   workflow file in the same repo can't mint tokens for the same
+   App without going through the environment gate. (Skip this if
+   you'd rather share the FIC config with the existing build
+   pipelines.)
+4. **Rotate the GitHub App private key annually.** The
+   `DOCS_BOT_APP_PRIVATE_KEY` secret is the one durable credential
+   in this workflow; everything else is short-lived. GitHub's App
+   settings page supports rotation in-place — generate a new key,
+   replace the repo secret, then delete the old key.
 
 ## Tearing it down
 
@@ -395,7 +398,9 @@ Disable workflow**. To remove it permanently:
 1. Disable / delete the workflow file.
 2. Uninstall the docs-bot GitHub App from the repository.
 3. Remove the `DOCS_BOT_APP_ID` variable and the
-   `DOCS_BOT_APP_PRIVATE_KEY` / `AZURE_OPENAI_*` secrets.
+   `DOCS_BOT_APP_PRIVATE_KEY` secret. The `AZUREAPPSERVICE_*`
+   secrets are shared with `smoke-tests.yml` /
+   `build-docker-container.yml` — **do not delete them**.
 4. (Optional) Delete the `docs-bot/last-run` tag: `git push origin
 :refs/tags/docs-bot/last-run`.
 
