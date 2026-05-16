@@ -19,9 +19,11 @@ jest.mock("../../src/extension/serviceWorker/storage", () => ({
 // stub so the websocket module under test can use it without spinning
 // a real network call.
 jest.mock("@typeagent/agent-server-client/discovery", () => ({
-    discoverPort: jest.fn().mockImplementation(() =>
-        Promise.resolve({ kind: "found", port: 8080 }),
-    ),
+    discoverPort: jest
+        .fn()
+        .mockImplementation(() =>
+            Promise.resolve({ kind: "found", port: 8080 }),
+        ),
 }));
 
 jest.mock("../../src/extension/serviceWorker/ui", () => ({
@@ -125,4 +127,3 @@ describe("WebSocket Module", () => {
         });
     });
 });
-

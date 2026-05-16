@@ -79,10 +79,10 @@ External clients (Chrome extension, VS Code extension, CLI) look up the live por
 
 ```typescript
 export type DiscoveryInvokeFunctions = {
-    lookupPort: (param: {
-        agentName: string;
-        role?: string;
-    }) => Promise<{ port: number | null }>;
+  lookupPort: (param: {
+    agentName: string;
+    role?: string;
+  }) => Promise<{ port: number | null }>;
 };
 ```
 
@@ -94,7 +94,7 @@ To stay in lockstep across hosts, both the standalone `agentServer` process and 
 import { createDiscoveryHandlers } from "@typeagent/agent-server-protocol";
 
 createDiscoveryHandlers((agentName, role) =>
-    portRegistrar.lookup(agentName, role),
+  portRegistrar.lookup(agentName, role),
 );
 ```
 
