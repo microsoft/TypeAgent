@@ -7,6 +7,8 @@
 # Runs once when the container is first created
 #
 
+set -euo pipefail
+
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║          TypeAgent DevContainer Setup                        ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
@@ -14,10 +16,10 @@ echo ""
 
 # Detect environment
 detect_env() {
-    if [[ "$CODESPACES" == "true" ]]; then
+    if [[ "${CODESPACES:-}" == "true" ]]; then
         echo "codespaces"
-    elif [[ -n "$WSL_DISTRO_NAME" ]] || grep -qi "wsl" /proc/version 2>/dev/null; then
-        if [[ -n "$WAYLAND_DISPLAY" ]] || [[ -n "$DISPLAY" ]]; then
+    elif [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi "wsl" /proc/version 2>/dev/null; then
+        if [[ -n "${WAYLAND_DISPLAY:-}" ]] || [[ -n "${DISPLAY:-}" ]]; then
             echo "wsl2-gui"
         else
             echo "wsl2"
@@ -29,6 +31,28 @@ detect_env() {
 
 ENV=$(detect_env)
 echo "Environment: $ENV"
+echo ""
+
+# Ensure worktree roots are writable for agent windows.
+echo "Preparing worktree roots for agent windows..."
+WORKSPACE_DIR=$(pwd -P)
+WORKTREES_DIR="${WORKSPACE_DIR}.worktrees"
+for dir in "$WORKTREES_DIR"; do
+    if [[ ! -d "$dir" ]]; then
+        if sudo mkdir -p "$dir"; then
+            echo "  created $dir"
+        else
+            echo "  warn: could not create $dir"
+            continue
+        fi
+    fi
+
+    if sudo chown codespace:codespace "$dir"; then
+        echo "  $dir owned by codespace"
+    else
+        echo "  warn: could not set ownership for $dir"
+    fi
+done
 echo ""
 
 # Fix ownership of Docker named-volume mount points.
@@ -54,18 +78,25 @@ fi
 
 for p in "${VOLUME_PATHS[@]}"; do
     if [[ -e "$p" ]]; then
-        sudo chown -R codespace:codespace "$p" 2>/dev/null \
-            && echo "  chowned $p" \
-            || echo "  warn: could not chown $p"
+        if sudo chown -R codespace:codespace "$p"; then
+            echo "  chowned $p"
+        else
+            if [[ "$p" == *"/pnpm/store" ]] || [[ "$p" == *"/node_modules" ]]; then
+                echo "Error: failed to chown critical path $p" >&2
+                exit 1
+            fi
+            echo "  warn: could not chown $p"
+        fi
     fi
 done
 echo ""
 
 # Navigate to TypeScript workspace
 echo "Looking for TypeScript workspace..."
-if [[ -d "/workspaces/TypeAgent/ts" ]]; then
-    cd /workspaces/TypeAgent/ts
-    echo "Found: /workspaces/TypeAgent/ts"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [[ -n "$REPO_ROOT" ]] && [[ -d "$REPO_ROOT/ts" ]]; then
+    cd "$REPO_ROOT/ts"
+    echo "Found: $REPO_ROOT/ts"
 else
     # Try glob pattern
     TS_DIR=$(find /workspaces -maxdepth 2 -type d -name "ts" 2>/dev/null | head -1)
@@ -105,25 +136,72 @@ fi
 
 echo "pnpm version: $(pnpm --version)"
 
+echo ""
+echo "Installing system libraries required by TypeAgent..."
+# libsecret is required by keytar / native credential storage used by some
+# TypeAgent packages (libsecret-1.so.0 at runtime, libsecret-1-dev for builds).
+APT_PACKAGES=(
+    libsecret-1-0
+    libsecret-1-dev
+)
+if command -v apt-get &> /dev/null; then
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get update -y; then
+        echo "  warn: apt-get update failed"
+    fi
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"; then
+        echo "  warn: failed to install: ${APT_PACKAGES[*]}"
+    fi
+else
+    echo "  warn: apt-get not available, skipping system library install"
+fi
+
+echo ""
+echo "Configuring Git identity..."
+CURRENT_GIT_NAME=$(git config --global --get user.name 2>/dev/null || true)
+CURRENT_GIT_EMAIL=$(git config --global --get user.email 2>/dev/null || true)
+DESIRED_GIT_NAME="${LOCAL_GIT_USER_NAME:-}"
+DESIRED_GIT_EMAIL="${LOCAL_GIT_USER_EMAIL:-}"
+
+if [[ -n "$CURRENT_GIT_NAME" ]]; then
+    echo "  git user.name already set"
+elif [[ -n "$DESIRED_GIT_NAME" ]]; then
+    git config --global user.name "$DESIRED_GIT_NAME"
+    echo "  git user.name set"
+else
+    echo "  note: no LOCAL_GIT_USER_NAME provided"
+fi
+
+if [[ -n "$CURRENT_GIT_EMAIL" ]]; then
+    echo "  git user.email already set"
+elif [[ -n "$DESIRED_GIT_EMAIL" ]]; then
+    git config --global user.email "$DESIRED_GIT_EMAIL"
+    echo "  git user.email set"
+else
+    echo "  note: no LOCAL_GIT_USER_EMAIL provided"
+fi
+
 # Install dependencies
 echo ""
 echo "Installing pnpm dependencies..."
 echo "This may take a few minutes on first run..."
-pnpm install || {
+if ! pnpm install; then
     echo ""
-    echo "Warning: pnpm install failed. You may need to run it manually."
-    echo "This is often due to network issues or missing system dependencies."
-}
+    echo "Error: pnpm install failed." >&2
+    echo "This is often due to network issues or missing system dependencies." >&2
+    exit 1
+fi
 
-# Set up git hooks for lock file sync (non-critical)
+# Set up git hooks for lock file sync without clobbering existing hooks (for git-lfs compatibility)
 echo ""
-echo "Setting up git hooks for dependency synchronization..."
+echo "Configuring TypeAgent git hook helpers..."
 
-HOOKS_DIR="../.git/hooks"
-if [[ -d "$HOOKS_DIR" ]]; then
-    # Post-checkout hook
-    cat > "$HOOKS_DIR/post-checkout" << 'EOF'
-#!/bin/bash
+HOOKS_DIR=$(git rev-parse --git-path hooks 2>/dev/null || true)
+if [[ -n "$HOOKS_DIR" ]] && [[ -d "$HOOKS_DIR" ]]; then
+    TYPEAGENT_HOOK_DIR="$HOOKS_DIR/typeagent"
+    mkdir -p "$TYPEAGENT_HOOK_DIR"
+
+    cat > "$TYPEAGENT_HOOK_DIR/post-checkout.sh" << 'EOF'
+#!/bin/sh
 PREV_HEAD=$1
 NEW_HEAD=$2
 BRANCH_CHECKOUT=$3
@@ -131,31 +209,61 @@ BRANCH_CHECKOUT=$3
 if [ "$BRANCH_CHECKOUT" != "1" ]; then exit 0; fi
 
 LOCKFILE_CHANGED=$(git diff "$PREV_HEAD" "$NEW_HEAD" --name-only 2>/dev/null | grep -c "pnpm-lock.yaml" || true)
-
 if [ "$LOCKFILE_CHANGED" -gt 0 ]; then
-    echo "pnpm-lock.yaml changed. Running pnpm install..."
-    cd ts && pnpm install --frozen-lockfile
-    echo "Dependencies synchronized"
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/ts" ]; then
+        echo "pnpm-lock.yaml changed. Running pnpm install..."
+        cd "$REPO_ROOT/ts" && pnpm install --frozen-lockfile
+        echo "Dependencies synchronized"
+    fi
 fi
 EOF
-    chmod +x "$HOOKS_DIR/post-checkout"
+    chmod +x "$TYPEAGENT_HOOK_DIR/post-checkout.sh"
 
-    # Post-merge hook
-    cat > "$HOOKS_DIR/post-merge" << 'EOF'
-#!/bin/bash
-LOCKFILE_CHANGED=$(git diff HEAD@{1} HEAD --name-only | grep -c "pnpm-lock.yaml" || true)
-
+    cat > "$TYPEAGENT_HOOK_DIR/post-merge.sh" << 'EOF'
+#!/bin/sh
+LOCKFILE_CHANGED=$(git diff HEAD@{1} HEAD --name-only 2>/dev/null | grep -c "pnpm-lock.yaml" || true)
 if [ "$LOCKFILE_CHANGED" -gt 0 ]; then
-    echo "pnpm-lock.yaml changed after merge. Running pnpm install..."
-    cd ts && pnpm install --frozen-lockfile
-    echo "Dependencies synchronized"
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/ts" ]; then
+        echo "pnpm-lock.yaml changed after merge. Running pnpm install..."
+        cd "$REPO_ROOT/ts" && pnpm install --frozen-lockfile
+        echo "Dependencies synchronized"
+    fi
 fi
 EOF
-    chmod +x "$HOOKS_DIR/post-merge"
+    chmod +x "$TYPEAGENT_HOOK_DIR/post-merge.sh"
 
-    echo "Git hooks installed for automatic dependency sync"
+    ensure_hook_chain() {
+        local hook_file=$1
+        local helper_script=$2
+        local marker="# TypeAgent dependency sync"
+
+        if [[ ! -f "$hook_file" ]]; then
+            cat > "$hook_file" << 'EOF'
+#!/bin/sh
+EOF
+            chmod +x "$hook_file"
+        fi
+
+        if ! grep -Fq "$marker" "$hook_file"; then
+            cat >> "$hook_file" << EOF
+
+$marker
+HOOK_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+if [ -x "\$HOOK_DIR/typeagent/$helper_script" ]; then
+    "\$HOOK_DIR/typeagent/$helper_script" "\$@"
+fi
+EOF
+        fi
+    }
+
+    ensure_hook_chain "$HOOKS_DIR/post-checkout" "post-checkout.sh"
+    ensure_hook_chain "$HOOKS_DIR/post-merge" "post-merge.sh"
+
+    echo "TypeAgent hook helpers installed (compatible with existing hooks)"
 else
-    echo "Note: .git/hooks directory not found, skipping git hooks setup"
+    echo "Note: Could not resolve .git/hooks directory, skipping hook helper setup"
 fi
 
 echo ""
