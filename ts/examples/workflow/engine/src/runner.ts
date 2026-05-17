@@ -418,8 +418,10 @@ export class WorkflowEngine {
 
             debug("run %s completed", runId);
 
-            // Validate workflow output against outputSchema
-            if (ir.outputSchema) {
+            // Defense-in-depth: static validator checks output template type
+            // compatibility; runtime #9 (task output schema) ensures upstream
+            // values match declared types, so this is redundant.
+            if (this.defenseInDepth && ir.outputSchema) {
                 const validate = this.getValidator(ir.outputSchema);
                 if (!validate(output)) {
                     const msg = this.ajv.errorsText(validate.errors);
@@ -486,7 +488,9 @@ export class WorkflowEngine {
             }
 
             const node = nodes[currentId];
-            if (!node) {
+            // Defense-in-depth: static validator's name-resolution pass
+            // verifies all node references exist.
+            if (this.defenseInDepth && !node) {
                 throw new EngineError(`Node "${currentId}" not found`);
             }
 
@@ -664,29 +668,34 @@ export class WorkflowEngine {
 
         try {
             const task = this.registry.get(node.task);
-            if (!task) {
+            // Defense-in-depth: static validator checks all task names
+            // against the registry.
+            if (this.defenseInDepth && !task) {
                 throw new EngineError(
                     `Task "${node.task}" not found in registry`,
                 );
             }
+            // Static validation guarantees the task exists.
+            const validTask = task!;
 
             // Policy check: secure-by-default.
             // ALL tasks are gated unless explicitly marked sideEffects: false.
             // This ensures new or third-party tasks cannot bypass policy.
-            if (task.sideEffects !== false) {
-                const mode: TaskPolicyMode = policy?.[task.name] ?? "prompt";
+            if (validTask.sideEffects !== false) {
+                const mode: TaskPolicyMode =
+                    policy?.[validTask.name] ?? "prompt";
                 if (mode === "deny") {
                     throw new EngineError(
-                        `Task "${task.name}" denied by policy`,
+                        `Task "${validTask.name}" denied by policy`,
                     );
                 }
                 if (mode === "prompt") {
                     const decision = approveFn
-                        ? await approveFn(task.name, resolvedInput)
+                        ? await approveFn(validTask.name, resolvedInput)
                         : { kind: "denied" as const };
                     if (decision.kind !== "approved") {
                         throw new EngineError(
-                            `Task "${task.name}" denied: approval ${decision.kind}`,
+                            `Task "${validTask.name}" denied: approval ${decision.kind}`,
                         );
                     }
                 }
@@ -739,7 +748,7 @@ export class WorkflowEngine {
                     once: true,
                 });
                 try {
-                    result = await task.execute(resolvedInput, ctx);
+                    result = await validTask.execute(resolvedInput, ctx);
                 } catch (e) {
                     if (timeoutSignal.aborted) {
                         throw new EngineError(
@@ -757,7 +766,7 @@ export class WorkflowEngine {
                     );
                 }
             } else {
-                result = await task.execute(resolvedInput, ctx);
+                result = await validTask.execute(resolvedInput, ctx);
             }
 
             if (result.kind === "fail") {
@@ -889,7 +898,10 @@ export class WorkflowEngine {
             unknown
         >;
 
-        if (node.body.inputSchema) {
+        // Defense-in-depth: static validator checks input template type
+        // compatibility; runtime task-output checks (#9) ensure upstream
+        // values match declared types, making this redundant.
+        if (this.defenseInDepth && node.body.inputSchema) {
             const validate = this.getValidator(node.body.inputSchema);
             if (!validate(loopInput)) {
                 const msg = this.ajv.errorsText(validate.errors);
@@ -900,10 +912,13 @@ export class WorkflowEngine {
         }
 
         // Initialize state and validate against state[*].schema (§5.4 step 2)
+        // Defense-in-depth: static validator checks initial-value template
+        // types against state schemas; runtime task-output checks (#9)
+        // ensure upstream values are correct.
         let state: Record<string, unknown> = {};
         for (const [name, stateVar] of Object.entries(node.state)) {
             state[name] = resolveTemplate(stateVar.initial, outerScope);
-            if (stateVar.schema) {
+            if (this.defenseInDepth && stateVar.schema) {
                 const validate = this.getValidator(stateVar.schema);
                 if (!validate(state[name])) {
                     const msg = this.ajv.errorsText(validate.errors);
@@ -965,8 +980,10 @@ export class WorkflowEngine {
                     // Resolve output in body scope (state + body bindings)
                     const output = resolveTemplate(node.body.output, bodyScope);
 
-                    // Validate output against outputSchema (§5.4 step 4)
-                    if (node.body.outputSchema) {
+                    // Defense-in-depth: static validator checks output template
+                    // type compatibility; runtime task-output checks (#9)
+                    // ensure body bindings are correct.
+                    if (this.defenseInDepth && node.body.outputSchema) {
                         const validate = this.getValidator(
                             node.body.outputSchema,
                         );
@@ -1005,6 +1022,9 @@ export class WorkflowEngine {
                 }
 
                 // @iterate: compute next state and validate (§5.4 step 4)
+                // Defense-in-depth: static validator checks iterateState
+                // template types against state schemas; runtime task-output
+                // checks (#9) ensure body bindings are correct.
                 const nextState: Record<string, unknown> = {};
                 for (const [name, ref] of Object.entries(node.iterateState)) {
                     nextState[name] = resolveTemplate(
@@ -1012,7 +1032,7 @@ export class WorkflowEngine {
                         bodyScope,
                     );
                     const stateVar = node.state[name];
-                    if (stateVar?.schema) {
+                    if (this.defenseInDepth && stateVar?.schema) {
                         const validate = this.getValidator(stateVar.schema);
                         if (!validate(nextState[name])) {
                             const msg = this.ajv.errorsText(validate.errors);
@@ -1229,7 +1249,10 @@ export class WorkflowEngine {
                 node.collection,
                 outerScope,
             ) as unknown[];
-            if (!Array.isArray(collection)) {
+            // Defense-in-depth: static validator checks collection template
+            // resolves to array type; runtime task-output checks (#9)
+            // ensure upstream values match declared types.
+            if (this.defenseInDepth && !Array.isArray(collection)) {
                 throw new EngineError(
                     `forkMap at "${nodeId}": collection did not resolve to an array`,
                 );
