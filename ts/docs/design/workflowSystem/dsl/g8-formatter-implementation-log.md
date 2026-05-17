@@ -73,7 +73,8 @@ AST round trip.
 ## Test results
 
 Baseline: **223 passed**.
-After changes: **248 passed** (25 new, 0 regressions).
+After all changes (G8 + formatter + review fixes + 2 test-gap passes):
+**286 passed** (63 new, 0 regressions, 0 skipped).
 
 `pnpm -C examples/workflow/dsl run prettier` (the project's own
 formatter check) clean.
@@ -84,8 +85,21 @@ comments preserved.
 
 ## Commit stages
 
-1. Lexer + parser: comments collected and attached.
-2. Formatter implementation and exports; compiler/visualize wired
-   through.
-3. Tests for comments and formatter.
-4. Documentation updates (gap doc, decisions, this log).
+1. `a931f891` Lexer + parser: comments collected and attached.
+2. `976e2419` Formatter implementation and exports; compiler/visualize
+   wired through.
+3. `8ad1fd36` Tests for comments and formatter (25 tests).
+4. `b07dd3fb` Documentation updates (gap doc, decisions, this log).
+5. `c97b36b6` Address review pass 1 feedback (synthetic-name flag,
+   switch defaultIndex).
+6. `002a8c56` Test-gap pass 1: +16 tests, record unaddressed review
+   feedback.
+7. `8815ae3b` Test-gap pass 2: +19 tests (component interaction,
+   format options, parser robustness).
+
+## Review / test-gap artifacts
+
+- `g8-review-feedback-unaddressed.md` — code-review items deliberately
+  not acted upon, with rationale.
+- `g8-test-gaps-unaddressed.md` — test gaps deliberately not filled,
+  with rationale.
