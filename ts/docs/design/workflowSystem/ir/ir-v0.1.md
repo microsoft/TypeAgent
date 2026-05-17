@@ -1636,8 +1636,7 @@ error-recovery paths.  Path projections are verified by
 properties.  Combined with the essential task output check (§5.8.1),
 which ensures actual values match declared schemas, path projection
 type errors at runtime are unreachable.  These runtime guards are
-therefore inherent to template resolution execution but cannot fire
-after static validation.
+gated on `defenseInDepth`.
 
 | Check | Static guarantee | Reasoning |
 |---|---|---|

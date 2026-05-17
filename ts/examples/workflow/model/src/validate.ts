@@ -2420,7 +2420,25 @@ function checkReservedTemplateKeys(
         }
     }
     // Don't recurse into $from or $literal — they have their own semantics.
-    if ("$from" in obj || "$literal" in obj) return;
+    if ("$from" in obj) {
+        const VALID_NAMESPACES = new Set([
+            "input",
+            "constant",
+            "scope",
+            "state",
+        ]);
+        const from = obj["$from"];
+        if (typeof from !== "string" || !VALID_NAMESPACES.has(from)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $from namespace "${from}". ` +
+                    `Valid namespaces are: input, constant, scope, state.`,
+            });
+        }
+        return;
+    }
+    if ("$literal" in obj) return;
     for (const [, value] of Object.entries(obj)) {
         checkReservedTemplateKeys(value as Template, templatePath, errors);
     }
