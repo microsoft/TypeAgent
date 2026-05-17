@@ -37,7 +37,7 @@
  *                | "(" Expr ")" (parenthesized or arrow function start)
  */
 
-import { Token, TokenKind } from "./lexer.js";
+import { Token, TokenKind, LexComment } from "./lexer.js";
 import {
     WorkflowDecl,
     ParamDecl,
@@ -59,6 +59,7 @@ import {
     AttemptsNode,
     ParallelNode,
     ParallelMapNode,
+    Comment,
 } from "./ast.js";
 
 /** Names recognized as compiler built-in functions. */
@@ -91,8 +92,37 @@ export class Parser {
     private pos = 0;
     private errors: ParseError[] = [];
     private inSwitchDepth = 0;
+    private comments: LexComment[];
+    private commentIdx = 0;
 
-    constructor(private tokens: Token[]) {}
+    constructor(
+        private tokens: Token[],
+        comments: LexComment[] = [],
+    ) {
+        // Comments are kept sorted by offset (the lexer emits them in order).
+        this.comments = comments;
+    }
+
+    /**
+     * Collect any unconsumed comments that appear before the current
+     * parsing position. Returns undefined when there are none so callers
+     * can omit the optional `leadingComments` field entirely.
+     */
+    private takeLeadingComments(): Comment[] | undefined {
+        if (this.commentIdx >= this.comments.length) return undefined;
+        const tokOffset = this.peek().offset;
+        const out: Comment[] = [];
+        while (this.commentIdx < this.comments.length) {
+            const c = this.comments[this.commentIdx];
+            if (c.offset >= tokOffset) break;
+            out.push({
+                text: c.text,
+                pos: { line: c.line, col: c.col, offset: c.offset },
+            });
+            this.commentIdx++;
+        }
+        return out.length > 0 ? out : undefined;
+    }
 
     parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
         const workflows: WorkflowDecl[] = [];
@@ -159,6 +189,7 @@ export class Parser {
     // ---- Workflow ----
 
     private parseWorkflow(): WorkflowDecl | undefined {
+        const leadingComments = this.takeLeadingComments();
         const l = this.loc();
         if (this.peek().kind !== TokenKind.Workflow) {
             this.error(`Expected 'workflow', got ${this.peek().kind}`);
@@ -175,7 +206,16 @@ export class Parser {
         this.expect(TokenKind.LBrace);
         const body = this.parseStatements();
         this.expect(TokenKind.RBrace);
-        return { kind: "WorkflowDecl", name, params, returnType, body, loc: l };
+        const decl: WorkflowDecl = {
+            kind: "WorkflowDecl",
+            name,
+            params,
+            returnType,
+            body,
+            loc: l,
+        };
+        if (leadingComments) decl.leadingComments = leadingComments;
+        return decl;
     }
 
     private parseParamList(): ParamDecl[] {
@@ -266,6 +306,15 @@ export class Parser {
     }
 
     private parseStatement(): Statement | undefined {
+        const leadingComments = this.takeLeadingComments();
+        const stmt = this.parseStatementInner();
+        if (stmt && leadingComments) {
+            stmt.leadingComments = leadingComments;
+        }
+        return stmt;
+    }
+
+    private parseStatementInner(): Statement | undefined {
         switch (this.peek().kind) {
             case TokenKind.Const:
                 return this.parseConstOrDestructuring();

@@ -106,9 +106,33 @@ const KEYWORDS = new Map<string, TokenKind>([
     ["null", TokenKind.NullLiteral],
 ]);
 
-export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
+/**
+ * A comment captured by the lexer.
+ *
+ * `text` stores the FULL lexeme including the leading `//` (line) or
+ * `/* ... *​/` (block) delimiters so that an AST-to-source serializer
+ * can reproduce the original spelling without ambiguity. This is a
+ * superset of the spec's `{ text, pos }` shape; the extra `block` flag
+ * makes downstream serializers cheaper.
+ */
+export interface LexComment {
+    /** Full comment text, including `//` or `/* *​/` delimiters. */
+    text: string;
+    line: number;
+    col: number;
+    offset: number;
+    /** True for `/* *​/`, false for `//`. */
+    block: boolean;
+}
+
+export function lex(source: string): {
+    tokens: Token[];
+    errors: LexError[];
+    comments: LexComment[];
+} {
     const tokens: Token[] = [];
     const errors: LexError[] = [];
+    const comments: LexComment[] = [];
     let pos = 0;
     let line = 1;
     let col = 1;
@@ -259,14 +283,23 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
 
         // Line comments
         if (ch === "/" && peekAt(1) === "/") {
+            const commentStartOffset = pos;
             while (pos < source.length && source[pos] !== "\n") {
                 advance();
             }
+            comments.push({
+                text: source.slice(commentStartOffset, pos),
+                line: startLine,
+                col: startCol,
+                offset: startOffset,
+                block: false,
+            });
             continue;
         }
 
         // Block comments
         if (ch === "/" && peekAt(1) === "*") {
+            const commentStartOffset = pos;
             advance(); // /
             advance(); // *
             let closed = false;
@@ -287,6 +320,13 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                     offset: startOffset,
                 });
             }
+            comments.push({
+                text: source.slice(commentStartOffset, pos),
+                line: startLine,
+                col: startCol,
+                offset: startOffset,
+                block: true,
+            });
             continue;
         }
 
@@ -829,5 +869,5 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
     }
 
     tokens.push(token(TokenKind.EOF, "", line, col, pos));
-    return { tokens, errors };
+    return { tokens, errors, comments };
 }
