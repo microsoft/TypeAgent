@@ -38,16 +38,17 @@ interface ScopeContext {
     bindings: Map<string, unknown>;
     /** The state namespace ($from: "state") - only set inside loop bodies. */
     state?: Record<string, unknown>;
-    /** Whether defense-in-depth checks are enabled. */
-    defenseInDepth: boolean;
 }
 
 // ---- Template resolution ----
-// Defense-in-depth: all error throws below (unknown namespace, unresolved
-// reference, path projection failures) are gated on scope.defenseInDepth.
-// The static validator's dominator analysis with onError-split coverage
-// (§4.1) proves binding availability on all paths, and checkSchemaCompat
-// verifies path projections against declared schemas.
+// Note: the error throws below (unknown namespace, unresolved reference,
+// path projection failures) should never fire when static validation is
+// enabled. The static validator's dominator analysis with onError-split
+// coverage (§4.1) proves binding availability on all paths, namespace
+// validation rejects unknown $from values, and checkSchemaCompat verifies
+// path projections against declared schemas. These checks are kept
+// unconditional because they are cheap and provide clear diagnostics if
+// an IR somehow bypasses static validation.
 
 /**
  * Recursively evaluate a template against a scope context.
@@ -113,24 +114,16 @@ function resolveFromRef(
             value = scope.state?.[name];
             break;
         default:
-            // Defense-in-depth: static validator's template pass checks
-            // that $from namespaces are valid (input, constant, scope, state).
-            if (scope.defenseInDepth) {
-                throw new EngineError(
-                    `Unknown $from namespace: "${from}"`,
-                );
-            }
+            // Unreachable after static validation (namespace check).
+            throw new EngineError(`Unknown $from namespace: "${from}"`);
     }
 
     if (value === undefined) {
         if (optional) return null;
-        // Defense-in-depth: static validator's dominator pass with
-        // onError-split coverage proves binding availability on all paths.
-        if (scope.defenseInDepth) {
-            throw new EngineError(
-                `Reference unresolved: $from "${from}", name "${name}"`,
-            );
-        }
+        // Unreachable after static validation (dominator + onError-split coverage).
+        throw new EngineError(
+            `Reference unresolved: $from "${from}", name "${name}"`,
+        );
     }
 
     // Path projection (RFC 6901 semantics)
@@ -138,32 +131,27 @@ function resolveFromRef(
         for (const segment of path) {
             if (value === null || value === undefined) {
                 if (optional) return null;
-                // Defense-in-depth: static type-compat + resolveSchemaPath
-                // verifies path segments against declared schemas.
-                if (scope.defenseInDepth) {
-                    throw new EngineError(
-                        `Path projection failed at "${segment}" on null/undefined`,
-                    );
-                }
+                // Unreachable after static validation (type-compat + resolveSchemaPath).
+                throw new EngineError(
+                    `Path projection failed at "${segment}" on null/undefined`,
+                );
             }
             if (typeof segment === "number") {
                 if (!Array.isArray(value)) {
                     if (optional) return null;
-                    if (scope.defenseInDepth) {
-                        throw new EngineError(
-                            `Path projection: expected array at index ${segment}`,
-                        );
-                    }
+                    // Unreachable after static validation.
+                    throw new EngineError(
+                        `Path projection: expected array at index ${segment}`,
+                    );
                 }
                 value = (value as unknown[])[segment];
             } else {
                 if (typeof value !== "object" || Array.isArray(value)) {
                     if (optional) return null;
-                    if (scope.defenseInDepth) {
-                        throw new EngineError(
-                            `Path projection: expected object at key "${segment}"`,
-                        );
-                    }
+                    // Unreachable after static validation.
+                    throw new EngineError(
+                        `Path projection: expected object at key "${segment}"`,
+                    );
                 }
                 value = (value as Record<string, unknown>)[segment];
             }
@@ -387,7 +375,6 @@ export class WorkflowEngine {
             input: input ?? {},
             constants,
             bindings: new Map(),
-            defenseInDepth,
         };
 
         const scopePath = [ir.name];
@@ -979,7 +966,6 @@ export class WorkflowEngine {
                     constants: outerScope.constants,
                     bindings: new Map(),
                     state: { ...state },
-                    defenseInDepth: outerScope.defenseInDepth,
                 };
 
                 // Execute body
@@ -1159,7 +1145,6 @@ export class WorkflowEngine {
                     input: branchInput,
                     constants: outerScope.constants,
                     bindings: new Map(),
-                    defenseInDepth: outerScope.defenseInDepth,
                 };
                 const branchScopePath = [...scopePath, `${nodeId}.${bName}`];
                 await this.executeScope(
@@ -1318,7 +1303,6 @@ export class WorkflowEngine {
                     input: itemInput,
                     constants: outerScope.constants,
                     bindings: new Map(),
-                    defenseInDepth: outerScope.defenseInDepth,
                 };
                 const itemScopePath = [...scopePath, `${nodeId}[${index}]`];
                 await this.executeScope(

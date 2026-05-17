@@ -1635,8 +1635,9 @@ error-recovery paths.  Path projections are verified by
 `checkSchemaCompat` which rejects paths into undeclared schema
 properties.  Combined with the essential task output check (§5.8.1),
 which ensures actual values match declared schemas, path projection
-type errors at runtime are unreachable.  These runtime guards are
-gated on `defenseInDepth`.
+type errors at runtime are unreachable.  These checks are kept
+unconditional because they are cheap and provide clear diagnostics
+if an IR somehow bypasses static validation.
 
 | Check | Static guarantee | Reasoning |
 |---|---|---|
