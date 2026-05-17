@@ -2,10 +2,13 @@
 // Licensed under the MIT License.
 
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { connectDispatcher } from "@typeagent/agent-server-client";
+import {
+    connectDispatcher,
+    AGENT_SERVER_DEFAULT_PORT,
+} from "@typeagent/agent-server-client";
 
 function parseArgs() {
-    let port: number = 8999;
+    let port: number = AGENT_SERVER_DEFAULT_PORT;
     let uri: string | undefined = undefined;
     for (let i = 2; i < process.argv.length; i++) {
         const arg = process.argv[i];

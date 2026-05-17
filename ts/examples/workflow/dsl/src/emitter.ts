@@ -1153,10 +1153,12 @@ export class Emitter {
             task: "math.add",
             inputSchema: {
                 type: "object",
-                required: ["left", "right"],
+                required: ["left", "right", "error", "trigger"],
                 properties: {
                     left: { type: "number" },
                     right: { type: "number" },
+                    error: { type: "object" },
+                    trigger: { type: "object" },
                 },
             },
             outputSchema: { type: "number" },
@@ -1263,6 +1265,24 @@ export class Emitter {
             }
             if (fbScope.nodeOrder.length > 0) {
                 onError = `${fbPrefix}${fbScope.nodeOrder[0]}`;
+
+                // The first fallback node is a recovery task reached via
+                // onError. The validator requires "error" and "trigger" in
+                // its inputSchema (section 3.8).
+                const entryNode = scope.nodes[onError];
+                if (entryNode && entryNode.kind === "task") {
+                    const schema = entryNode.inputSchema;
+                    if (!schema.required) schema.required = [];
+                    for (const f of ["error", "trigger"] as const) {
+                        if (!schema.required.includes(f)) {
+                            schema.required.push(f);
+                        }
+                        if (!schema.properties?.[f]) {
+                            schema.properties = schema.properties ?? {};
+                            schema.properties[f] = { type: "object" };
+                        }
+                    }
+                }
             }
         }
 

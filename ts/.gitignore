@@ -22,3 +22,11 @@ examples/schemaStudio/output/
 # Per-subscription inventory snapshot written by inventoryEndpoints.mjs.
 # Contains actual account names, endpoints, and subdomain names — never commit.
 tools/scripts/pools.inventory.json
+
+# Per-developer YAML config overrides loaded by @typeagent/config.
+# Holds local endpoints, deployment names, and (in Phase 1) secrets.
+# Never commit.
+config.local.yaml
+
+# Legacy .env files — deprecated, will stop working September 2026.
+.env

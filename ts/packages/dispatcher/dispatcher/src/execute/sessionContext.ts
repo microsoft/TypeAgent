@@ -28,6 +28,7 @@ export function createSessionContext<T = unknown>(
     agentContext: T,
     context: CommandHandlerContext,
     allowDynamicAgent: boolean,
+    sessionContextId: string,
 ): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storageProvider = context.storageProvider;
@@ -100,6 +101,9 @@ export function createSessionContext<T = unknown>(
         },
         get instanceStorage() {
             return instanceStorage;
+        },
+        get sessionContextId() {
+            return sessionContextId;
         },
         notify(
             event: AppAgentEvent,
@@ -189,6 +193,18 @@ export function createSessionContext<T = unknown>(
         },
         setLocalHostPort(port: number) {
             context.agents.setLocalHostPort(name, port);
+        },
+        registerPort(role: string, port: number) {
+            const regId = context.portRegistrar.register(
+                name,
+                role,
+                port,
+                sessionContextId,
+            );
+            return {
+                release: () =>
+                    context.portRegistrar.release(regId, sessionContextId),
+            };
         },
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {

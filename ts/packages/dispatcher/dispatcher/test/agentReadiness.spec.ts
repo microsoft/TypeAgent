@@ -13,6 +13,7 @@
  */
 
 import { AppAgentManager } from "../src/context/appAgentManager.js";
+import { PortRegistrar } from "../src/context/portRegistrar.js";
 import { checkAgentReady } from "../src/execute/actionHandlers.js";
 import type {
     ActionContext,
@@ -25,7 +26,7 @@ import type {
 // agent records — the alternative is to load real agents via providers,
 // which crosses too many seams for a unit test.
 function makeManager(): AppAgentManager {
-    return new AppAgentManager(undefined);
+    return new AppAgentManager(undefined, new PortRegistrar());
 }
 
 // Drop a synthetic agent record so getReadiness/runSetup/refresh see it.

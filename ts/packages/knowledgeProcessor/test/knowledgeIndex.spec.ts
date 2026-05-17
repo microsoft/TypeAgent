@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import path from "path";
 import { getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
 import { cleanDir } from "typeagent";
 import { createTextIndex } from "../src/textIndex.js";
 import { TextBlock, TextBlockType } from "../src/text.js";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
+loadConfigSync();
 
 describe("KnowledgeIndex", () => {
     const testTimeout = 120000;

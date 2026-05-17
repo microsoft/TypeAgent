@@ -11,6 +11,11 @@ import { CompletionUsageStats } from "./openai.js";
 export type CompletionSettings = {
     n?: number;
     temperature?: number;
+    /**
+     * @deprecated Use `max_completion_tokens` instead.  The runtime
+     * auto-promotes this to `max_completion_tokens` before sending the
+     * request, but new code should set `max_completion_tokens` directly.
+     */
     max_tokens?: number;
     response_format?: { type: "json_object" };
     // Use fixed seed parameter to improve determinism
@@ -18,7 +23,6 @@ export type CompletionSettings = {
     seed?: number;
     top_p?: number;
 
-    // GPT-5 specific settings
     max_completion_tokens?: number;
     reasoning_effort?: "minimal" | "low" | "medium" | "high";
     verbosity?: "low" | "medium" | "high";
@@ -123,6 +127,23 @@ export interface TextEmbeddingModel extends EmbeddingModel<string> {
  */
 export interface ImageModel {
     generateImage(
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>>;
+
+    /**
+     * Edit an existing image with a natural-language prompt. The
+     * source image is supplied as raw bytes (typically the contents
+     * of a PNG / JPG file the user attached). Implementations should
+     * route this to the provider's image-edit endpoint
+     * (e.g. Azure / OpenAI `/images/edits`).
+     */
+    editImage?(
+        sourceImage: Buffer,
+        sourceMimeType: string,
+        sourceFileName: string,
         prompt: string,
         imageCount: number,
         width: number,

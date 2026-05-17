@@ -439,6 +439,7 @@ export class WorkflowEngine {
         approve?: ApprovalFn,
         taskTimeoutMs?: number,
         constraints?: TaskConstraints,
+        iteration?: number,
     ): Promise<ScopeExit> {
         let currentId: string | undefined = entryId;
         let pendingError:
@@ -502,6 +503,7 @@ export class WorkflowEngine {
                         approve,
                         taskTimeoutMs,
                         constraints,
+                        iteration,
                     );
                     break;
 
@@ -512,6 +514,7 @@ export class WorkflowEngine {
                         runId,
                         nodeId: branchNodeId,
                         scopePath: [...scopePath],
+                        ...(iteration !== undefined ? { iteration } : {}),
                         timestamp: Date.now(),
                     });
                     currentId = this.executeBranch(node, activeScope);
@@ -520,6 +523,7 @@ export class WorkflowEngine {
                         runId,
                         nodeId: branchNodeId,
                         scopePath: [...scopePath],
+                        ...(iteration !== undefined ? { iteration } : {}),
                         output: currentId,
                         timestamp: Date.now(),
                     });
@@ -621,12 +625,14 @@ export class WorkflowEngine {
         approveFn?: ApprovalFn,
         taskTimeoutMs?: number,
         constraints?: TaskConstraints,
+        iteration?: number,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
             runId,
             nodeId,
             scopePath: [...scopePath],
+            ...(iteration !== undefined ? { iteration } : {}),
             timestamp: Date.now(),
         });
 
@@ -767,6 +773,7 @@ export class WorkflowEngine {
                 runId,
                 nodeId,
                 scopePath: [...scopePath],
+                ...(iteration !== undefined ? { iteration } : {}),
                 output: result.output,
                 timestamp: Date.now(),
             });
@@ -786,6 +793,7 @@ export class WorkflowEngine {
                     runId,
                     nodeId,
                     scopePath: [...scopePath],
+                    ...(iteration !== undefined ? { iteration } : {}),
                     error: { message: errorObj["message"] as string },
                     timestamp: Date.now(),
                 });
@@ -901,6 +909,7 @@ export class WorkflowEngine {
                     approve,
                     taskTimeoutMs,
                     constraints,
+                    i,
                 );
 
                 if (exit.kind === "terminal") {

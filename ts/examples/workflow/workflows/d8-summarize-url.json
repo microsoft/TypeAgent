@@ -127,13 +127,19 @@
             "task": "math.add",
             "inputSchema": {
               "type": "object",
-              "required": ["left", "right"],
+              "required": ["left", "right", "error", "trigger"],
               "properties": {
                 "left": {
                   "type": "number"
                 },
                 "right": {
                   "type": "number"
+                },
+                "error": {
+                  "type": "object"
+                },
+                "trigger": {
+                  "type": "object"
                 }
               }
             },

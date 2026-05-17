@@ -211,7 +211,7 @@ Command Executor MCP Server
 TypeAgent Dispatcher (WebSocket)
     ↓
     ├─ TypeAgent Agents (Music, Lists, Calendar, etc.)
-    └─ Coda VSCode Extension (via WebSocket on port 8082)
+    └─ Coda VSCode Extension (via WebSocket; port discovered through agent-server)
        └─ VSCode APIs (theme, editor, files, terminal, etc.)
 ```
 

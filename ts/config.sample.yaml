@@ -1,0 +1,243 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# ──────────────────────────────────────────────────────────────────────
+# TypeAgent — Sample Configuration
+# ──────────────────────────────────────────────────────────────────────
+#
+# Copy this file to `config.local.yaml` (gitignored) and fill in your
+# values.  Only the sections you need are required — everything is
+# optional except `azureOpenAI` which has sensible defaults in
+# `config.defaults.yaml`.
+#
+# Precedence (lowest → highest):
+#   .env file  →  config.defaults.yaml  →  Key Vault  →  config.local.yaml  →  process.env
+#
+# See packages/config/README.md for full documentation.
+# ──────────────────────────────────────────────────────────────────────
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Azure OpenAI                                                    ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Core AI model configuration.  Auth can be "identity" (managed
+# identity / DefaultAzureCredential) or an API key string.
+#
+# `defaultCapacity` cascades: section → deployment → endpoint.
+# Endpoints inherit from deployment, deployments inherit from section.
+
+azureOpenAI:
+  defaultAuth: identity # "identity" or an API key string
+  defaultCapacity: 150 # TPM capacity shared by all endpoints
+  maxConcurrency: 40 # max parallel requests to Azure OpenAI
+  maxTimeoutMs: 60000 # per-request timeout in milliseconds
+  maxRetryAttempts: 3 # retries on transient failures
+  responseFormat: true # send response_format: json_object
+
+  # Named model deployments.  Each deployment has one or more regional
+  # endpoints that form a routing pool.
+  deployments:
+    gpt_4_o:
+      # Per-deployment defaultCapacity overrides the section-level value.
+      # defaultCapacity: 200
+      endpoints:
+        # PTU (provisioned throughput) endpoints get priority 1 by default.
+        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+          mode: PTU
+          capacity: 300
+
+        # PAYG endpoints get priority 2 by default.  Capacity is optional.
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+          capacity: 450
+
+        # Region is auto-derived from the hostname (e.g. "eastus" from
+        # "my-resource-eastus").  Override when the hostname is ambiguous:
+        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+          region: eastus2
+
+        # Use `capacity: null` to explicitly opt out of capacity
+        # inheritance for this endpoint.
+        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+          capacity: null
+
+        # Per-endpoint auth override (uses an API key instead of identity):
+        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+          auth: sk-abc123...
+
+    gpt_4_o_mini:
+      endpoints:
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview
+          capacity: 2000
+        - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview
+
+    embedding:
+      defaultCapacity: 120
+      endpoints:
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
+          capacity: 115
+        - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
+
+    gpt_image_1_5:
+      defaultCapacity: 30
+      endpoints:
+        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-image-1.5/images/generations?api-version=2025-04-01-preview
+
+    # Shorthand: a deployment with a single endpoint can be a bare list.
+    gpt_v:
+      - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-v/chat/completions?api-version=2025-01-01-preview
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  OpenAI (non-Azure)                                              ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Direct OpenAI API access.  The `local` sub-section targets Ollama
+# or any local OpenAI-compatible server.
+
+openAI:
+  apiKey: sk-proj-...
+  endpoint: https://api.openai.com/v1/chat/completions
+  endpointEmbedding: https://api.openai.com/v1/embeddings
+  model: gpt-4o
+  modelEmbedding: text-embedding-3-small
+  organization: org-...
+  responseFormat: true
+  maxConcurrency: 4
+  maxTimeoutMs: 60000
+  maxRetryAttempts: 3
+
+  # Ollama / local OpenAI-compatible endpoint.
+  # Also emits OLLAMA_ENDPOINT for backward compatibility.
+  local:
+    apiKey: None # Ollama doesn't require a key
+    endpoint: http://localhost:11434/v1/chat/completions
+    model: phi3
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Azure Speech SDK                                                ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Voice input / speech-to-text.  Auth is "identity" or a subscription
+# key string.
+
+speech:
+  auth: identity
+  region: westus
+  endpoint: /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Microsoft Graph                                                 ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Used by the calendar and email agents for M365 integration.
+
+msGraph:
+  clientId: 00000000-0000-0000-0000-000000000000
+  clientSecret: your-client-secret
+  tenantId: 00000000-0000-0000-0000-000000000000
+  # Optional — for username/password (ROPC) auth flow:
+  # username: user@contoso.com
+  # password: your-password
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Google Calendar                                                 ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# OAuth credentials for Google Calendar integration.
+
+googleCalendar:
+  clientId: 123456789-abc.apps.googleusercontent.com
+  clientSecret: GOCSPX-...
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Spotify                                                         ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Spotify app credentials for the player agent.
+
+spotify:
+  clientId: your-spotify-client-id
+  clientSecret: your-spotify-client-secret
+  port: 9998 # local callback port for OAuth flow
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Azure AI Foundry / Bing with Grounding                         ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Azure AI Foundry agent IDs and Bing-with-Grounding endpoints.
+
+azureFoundry:
+  bingEndpoint: https://my-resource.services.ai.azure.com/api/projects/my-project
+  bingAgentId: asst_xxxxxxxxxxxxxxxxxxxxxxxx
+  bingUrlResolutionAgentId: asst_xxxxxxxxxxxxxxxxxxxxxxxx
+  bingUrlResolutionConnectionId: /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>/connections/<connection>
+  validatorAgentId: asst_xxxxxxxxxxxxxxxxxxxxxxxx
+  aliasKeywordExtractorAgentId: asst_xxxxxxxxxxxxxxxxxxxxxxxx
+  openPhraseGeneratorAgentId: asst_xxxxxxxxxxxxxxxxxxxxxxxx
+  httpEndpointLogicAppConnectionId: /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>/connections/<connection>
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Storage                                                         ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Backends for session persistence, telemetry, and search indexes.
+
+storage:
+  # Azure Blob Storage (session persistence).
+  azure:
+    account: mystorageaccount
+    container: sessions
+
+  # AWS S3 (alternative session storage).
+  aws:
+    bucketName: my-typeagent-bucket
+    region: us-east-1
+    accessKeyId: AKIA...
+    secretAccessKey: wJalr...
+
+  # Databases (telemetry sinks).
+  database:
+    cosmosDbConnectionString: https://my-cosmos-db.documents.azure.com:443/
+    mongoDbConnectionString: mongodb+srv://user:pass@cluster.mongodb.net/telemetrydb
+
+  # Elasticsearch (memory provider).
+  elastic:
+    apiKey: your-elastic-api-key
+    uri: https://my-cluster.es.us-east-1.aws.elastic.cloud
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Azure Maps                                                     ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+
+maps:
+  clientId: 00000000-0000-0000-0000-000000000000
+  endpoint: https://atlas.microsoft.com/
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Wikipedia                                                       ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+
+wikipedia:
+  clientId: your-wikimedia-client-id
+  clientSecret: your-wikimedia-client-secret
+  endpoint: https://api.wikimedia.org/core/v1/wikipedia/
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Reasoning                                                       ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Tuning knobs for the reasoning loop (Claude / Copilot backends).
+
+reasoning:
+  timeoutMs: 1200000 # reasoning-loop timeout (0 = disabled)
+  copilotModel: claude-sonnet-4.5 # override default Copilot reasoning model
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Key Vault                                                       ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Azure Key Vault name for automatic secret retrieval at startup.
+# When set, server entry points call loadConfig({ keyVault: {} }) and
+# the vault name is auto-discovered from this field.
+
+vault:
+  shared: aisystems

@@ -371,7 +371,17 @@ describe("validateWorkflowIR", () => {
                         },
                     },
                 ),
-                recover: makeTaskNode({ bind: "out" }),
+                recover: makeTaskNode({
+                    inputSchema: {
+                        type: "object",
+                        required: ["error", "trigger"],
+                        properties: {
+                            error: { type: "object" },
+                            trigger: { type: "object" },
+                        },
+                    },
+                    bind: "out",
+                }),
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -1381,7 +1391,14 @@ describe("validateWorkflowIR", () => {
                     recover: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "out",
@@ -1905,7 +1922,14 @@ describe("validateWorkflowIR", () => {
                     recover: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "out",
@@ -2269,7 +2293,14 @@ describe("validateWorkflowIR", () => {
                     recover: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "data",
@@ -2770,7 +2801,14 @@ describe("validateWorkflowIR", () => {
                     recovery: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: {
                             type: "object",
                             required: ["x"],
@@ -3512,6 +3550,559 @@ describe("validateWorkflowIR", () => {
 
         it("returns false for undefined", () => {
             expect(isNeverSchema(undefined)).toBe(false);
+        });
+    });
+
+    // ---- Gap 3: Version field validation ----
+
+    describe("version validation", () => {
+        it("rejects IR with wrong version", () => {
+            const ir = makeMinimalIR();
+            (ir as any).version = "2";
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(result.errors.some((e) => e.message.includes('"1"'))).toBe(
+                true,
+            );
+        });
+
+        it("rejects IR with missing version", () => {
+            const ir = makeMinimalIR();
+            delete (ir as any).version;
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+        });
+
+        it("accepts IR with version 1", () => {
+            const result = validateWorkflowIR(makeMinimalIR(), taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- Gap 2: Reserved $-key check ----
+
+    describe("reserved $-key check", () => {
+        it("rejects unknown $-prefixed key in task inputs", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        inputs: { x: { $foo: "bar" } as any },
+                        bind: "out",
+                    }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$foo"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key nested in inputs", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        inputs: { outer: { inner: { $magic: 1 } as any } },
+                        bind: "out",
+                    }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$magic"')),
+            ).toBe(true);
+        });
+
+        it("accepts $from and $literal as the only valid $-keys", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        inputs: {
+                            a: { $from: "input", name: "x" },
+                            b: { $literal: { nested: "value" } },
+                        },
+                        bind: "out",
+                    }),
+                },
+                inputSchema: {
+                    type: "object",
+                    properties: { x: { type: "string" } },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            // Should not have any $-key errors (may have other errors, but not
+            // about reserved keys)
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("$-prefixed key") ||
+                        e.message.includes('"$from"') ||
+                        e.message.includes('"$literal"'),
+                ),
+            ).toBe(false);
+        });
+
+        it("rejects unknown $-prefixed key in workflow output template", () => {
+            const ir = makeMinimalIR({
+                output: { $bad: "value" } as any,
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$bad"')),
+            ).toBe(true);
+        });
+    });
+
+    // ---- Gap 4: bind on branch node ----
+
+    describe("bind on branch node", () => {
+        it("rejects branch node with bind field", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: "end", false: "end" },
+                        default: "end",
+                        bind: "shouldNotExist",
+                    } as any,
+                    end: makeTaskNode({ bind: "out" }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.toLowerCase().includes("bind") &&
+                        e.message.toLowerCase().includes("branch"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts branch node without bind field", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: "end", false: "end" },
+                        default: "end",
+                    } as any,
+                    end: makeTaskNode({ bind: "out" }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- Gap 5: recovery task inputSchema must declare error and trigger ----
+
+    describe("recovery task error/trigger fields", () => {
+        it("rejects recovery task missing error in required", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            // "trigger" present but not "error"
+                            required: ["trigger"],
+                            properties: {
+                                trigger: { type: "object" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"error"')),
+            ).toBe(true);
+        });
+
+        it("rejects recovery task missing trigger in required", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            // "error" present but not "trigger"
+                            required: ["error"],
+                            properties: {
+                                error: { type: "object" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"trigger"')),
+            ).toBe(true);
+        });
+
+        it("rejects recovery task with no required array at all", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            const msgs = result.errors.map((e) => e.message);
+            expect(
+                msgs.some((m) => m.includes('"error"')) &&
+                    msgs.some((m) => m.includes('"trigger"')),
+            ).toBe(true);
+        });
+
+        it("accepts recovery task with both error and trigger in required", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- Gap 16: anyOf / oneOf / allOf structural subtyping ----
+
+    describe("anyOf/oneOf/allOf subtyping", () => {
+        it("accepts producer anyOf when both variants are compatible with consumer", () => {
+            // producer: { value: anyOf [string, integer] }
+            // consumer: { value: anyOf [string, integer] }  — widened consumer
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: {
+                                    anyOf: [
+                                        { type: "string" },
+                                        { type: "integer" },
+                                    ],
+                                },
+                            },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: {
+                                x: {
+                                    anyOf: [
+                                        { type: "string" },
+                                        { type: "integer" },
+                                        { type: "boolean" },
+                                    ],
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects producer anyOf when one variant has no compatible consumer variant", () => {
+            // producer: anyOf [string, boolean]; consumer: string only
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: {
+                                    anyOf: [
+                                        { type: "string" },
+                                        { type: "boolean" },
+                                    ],
+                                },
+                            },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: { x: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("not compatible")),
+            ).toBe(true);
+        });
+
+        it("accepts producer when consumer is oneOf and producer matches one variant", () => {
+            // producer: string; consumer: oneOf [string, integer]
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: { type: "string" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: {
+                                x: {
+                                    oneOf: [
+                                        { type: "string" },
+                                        { type: "integer" },
+                                    ],
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects producer when consumer is oneOf and producer matches no variant", () => {
+            // producer: boolean; consumer: oneOf [string, integer]
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: {
+                                x: {
+                                    oneOf: [
+                                        { type: "string" },
+                                        { type: "integer" },
+                                    ],
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("not compatible")),
+            ).toBe(true);
+        });
+
+        it("accepts producer when consumer is allOf all members are satisfied", () => {
+            // producer: object with required [a, b]; consumer allOf: needs a, needs b
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: {
+                                    type: "object",
+                                    required: ["a", "b"],
+                                    properties: {
+                                        a: { type: "string" },
+                                        b: { type: "integer" },
+                                    },
+                                },
+                            },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: {
+                                x: {
+                                    allOf: [
+                                        {
+                                            type: "object",
+                                            required: ["a"],
+                                            properties: {
+                                                a: { type: "string" },
+                                            },
+                                        },
+                                        {
+                                            type: "object",
+                                            required: ["b"],
+                                            properties: {
+                                                b: { type: "integer" },
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            x: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
         });
     });
 });

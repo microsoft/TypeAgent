@@ -36,8 +36,16 @@ export async  function getAzCliLoggedInInfo(print = true) {
 }
 
 export async function execAzCliCommand(args) {
+    // Ensure an explicit output format so we don't depend on the user's
+    // configured az CLI default (which can be set to table/tsv/etc. via
+    // `az configure`). Default to JSON unless the caller already specified
+    // an output format.
+    const hasOutputFlag = args.some(
+        (a) => a === "-o" || a === "--output" || a.startsWith("--output="),
+    );
+    const finalArgs = hasOutputFlag ? args : [...args, "-o", "json"];
     return new Promise((res, rej) => {
-        child_process.execFile("az", args, { shell: true }, (err, stdout, stderr) => {
+        child_process.execFile("az", finalArgs, { shell: true }, (err, stdout, stderr) => {
             if (err) {
                 debugError(err.stdout);
                 debugError(err.stderr);

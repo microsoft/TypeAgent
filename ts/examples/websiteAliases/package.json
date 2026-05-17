@@ -29,6 +29,7 @@
     "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/identity": "^4.10.0",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
@@ -48,6 +49,6 @@
     "typescript": "~5.4.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

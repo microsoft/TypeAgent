@@ -26,6 +26,8 @@ import {
     EndpointPool,
     makeSingleMemberPool,
 } from "./endpointPool.js";
+import { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
+import { getRuntimeConfig } from "./runtimeConfig.js";
 import {
     PromptSection,
     Result,
@@ -118,9 +120,9 @@ export enum EnvVars {
 
     AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5 = "AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5",
     AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5 = "AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5",
-    // Deprecated: use AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5 / AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5
-    AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
-    AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
+    // Generic fallback for any current/future image model
+    AZURE_OPENAI_API_KEY_GPT_IMAGE = "AZURE_OPENAI_API_KEY_GPT_IMAGE",
+    AZURE_OPENAI_ENDPOINT_GPT_IMAGE = "AZURE_OPENAI_ENDPOINT_GPT_IMAGE",
     AZURE_OPENAI_API_KEY_SORA_2 = "AZURE_OPENAI_API_KEY_SORA_2",
     AZURE_OPENAI_ENDPOINT_SORA_2 = "AZURE_OPENAI_ENDPOINT_SORA_2",
 
@@ -143,6 +145,16 @@ export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
  * @param env Environment variables or arbitrary Record
  * @param endpointName optional suffix to add to env variable names. Lets you target different backends
  * @returns
+ *
+ * @deprecated Use the typed-config entry points instead
+ * (`azureApiSettingsFromConfig` / `openAIApiSettingsFromConfig` in
+ * `apiSettingsFromConfig.ts`). The env-based path bypasses the YAML
+ * config loaded via `@typeagent/config` and will fail when only
+ * suffixed deployments (e.g. `AZURE_OPENAI_ENDPOINT_GPT_4_O`) are
+ * configured without a bare `AZURE_OPENAI_ENDPOINT`. Existing
+ * callers continue to work because this function now consults the
+ * typed config before falling back to env scanning, but new code
+ * should call the typed entry points directly.
  */
 export function apiSettingsFromEnv(
     modelType: ModelType = ModelType.Chat,
@@ -270,9 +282,35 @@ function getModelPool(
     const key = `${modelType}:${provider}:${endpointName ?? ""}`;
     const existing = modelPools.get(key);
     if (existing) return existing;
-    const pool = discoverEndpointPool(provider, modelType, endpointName);
+    const pool = buildModelPool(provider, modelType, endpointName);
     modelPools.set(key, pool);
     return pool;
+}
+
+// Try the typed-Config path first; if it fails (typically because the
+// caller's deployment uses a non-canonical region alias that the typed
+// REGIONS set doesn't carry), fall back to the legacy env-scanning
+// discovery. Both paths read the same underlying values via process.env
+// / the singleton built from it, so the pool contents converge.
+function buildModelPool(
+    provider: ModelProviders,
+    modelType: ModelType,
+    endpointName?: string,
+): EndpointPool {
+    if (provider !== "ollama") {
+        try {
+            const typedName = endpointName?.toLowerCase();
+            return discoverEndpointPoolFromConfig(
+                getRuntimeConfig(),
+                provider,
+                modelType,
+                typedName,
+            );
+        } catch {
+            // Fall through to legacy.
+        }
+    }
+    return discoverEndpointPool(provider, modelType, endpointName);
 }
 
 export function getChatModelPool(endpoint?: string): EndpointPool {
@@ -484,6 +522,18 @@ function createAzureOpenAIChatModel(
     completionSettings ??= {};
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
+
+    // Normalize max_tokens → max_completion_tokens.  Newer models (GPT-5,
+    // o3, o4, GPT-4.1, etc.) reject the legacy `max_tokens` parameter.
+    // Promote it unconditionally — all supported models accept the new name.
+    if (
+        completionSettings.max_tokens !== undefined &&
+        completionSettings.max_completion_tokens === undefined
+    ) {
+        completionSettings.max_completion_tokens =
+            completionSettings.max_tokens;
+    }
+    delete completionSettings.max_tokens;
 
     const disableResponseFormat =
         !settings.supportsResponseFormat &&
@@ -979,6 +1029,7 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
               };
     const model: ImageModel = {
         generateImage,
+        editImage,
     };
     return model;
 
@@ -1030,6 +1081,86 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
         return success(retValue);
     }
 
+    async function editImage(
+        sourceImage: Buffer,
+        sourceMimeType: string,
+        sourceFileName: string,
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>> {
+        if (imageCount !== 1) {
+            throw Error("n MUST equal 1");
+        }
+        // Derive the edits URL from the configured generations URL.
+        // Azure deployments expose `/images/generations` and a parallel
+        // `/images/edits` on the same deployment path; preserve any
+        // `?api-version=...` querystring.
+        const member = pool.members[0];
+        const generationsUrl = member.settings.endpoint;
+        const editsUrl = generationsUrl.replace(
+            "/images/generations",
+            "/images/edits",
+        );
+        if (editsUrl === generationsUrl) {
+            return error(
+                `Configured image endpoint does not contain '/images/generations'; cannot derive edits URL: ${generationsUrl}`,
+            );
+        }
+
+        const headerResult = await createApiHeaders(member.settings);
+        if (!headerResult.success) {
+            return headerResult;
+        }
+        // Strip Content-Type if present; let fetch set the multipart boundary.
+        const headers: Record<string, string> = { ...headerResult.data };
+        delete headers["Content-Type"];
+        delete headers["content-type"];
+
+        const form = new FormData();
+        const blob = new Blob([sourceImage as unknown as ArrayBuffer], {
+            type: sourceMimeType,
+        });
+        form.append("image", blob, sourceFileName);
+        form.append("prompt", prompt);
+        form.append("n", String(imageCount));
+        form.append("size", `${width}x${height}`);
+        if (member.settings.provider !== "azure" && settings.modelName) {
+            form.append("model", settings.modelName);
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(editsUrl, {
+                method: "POST",
+                headers,
+                body: form,
+            });
+        } catch (e) {
+            return error(`Image edit request failed: ${(e as Error).message}`);
+        }
+        if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            return error(
+                `Image edit request returned ${response.status} ${response.statusText}: ${body}`,
+            );
+        }
+        const data = (await response.json()) as ImageCompletion;
+        const retValue: ImageGeneration = { images: [] };
+        data.data.map((i) => {
+            verifyContentSafety(i);
+            const image_url = i.b64_json
+                ? `data:image/png;base64,${i.b64_json}`
+                : (i.url ?? "");
+            retValue.images.push({
+                revised_prompt: i.revised_prompt ?? prompt,
+                image_url,
+            });
+        });
+        return success(retValue);
+    }
+
     function verifyContentSafety(data: ImageData): boolean {
         verifyFilterResults(data.content_filter_results as FilterResult);
         verifyFilterResults(data.prompt_filter_results as FilterResult);
@@ -1077,7 +1208,10 @@ function getPromptLength(prompt: string | PromptSection[]) {
  * @param apiSettings: settings to use to create the client
  */
 export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
-    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Video);
+    const pool = apiSettings
+        ? makeSingleMemberPool(apiSettings, `custom:${apiSettings.provider}`)
+        : getModelPool(defaultProvider(), ModelType.Video);
+    const settings = pool.members[0].settings;
     const defaultParams =
         settings.provider === "azure"
             ? {}
@@ -1097,10 +1231,6 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         height: number = 720,
         inpaintItems?: ImageInPaintItem[],
     ): Promise<Result<VideoGenerationJob>> {
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
         if (numVariants < 0 || numVariants > 2) {
             throw Error("n MUST equal 1"); // as of 10.09.2025 API will only accept n<2
         }
@@ -1139,22 +1269,26 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             else formData.append(k, v);
         }
 
-        // send it
+        const response = await callApiWithPool(
+            pool,
+            async (member) => {
+                const headerResult = await createApiHeaders(member.settings);
+                if (!headerResult.success) return headerResult;
+                return success({
+                    headers: headerResult.data,
+                    body: formData,
+                });
+            },
+            { retryPauseMs: settings.retryPauseMs },
+        );
+        if (!response.success) return response;
+
         try {
-            const result = await fetch(settings.endpoint, {
-                method: "POST",
-                headers: headerResult.data,
-                body: formData,
-            });
-
-            if (!result.ok) {
-                return error(`Error ${result.status}: ${await result.text()}`);
-            }
-
+            const jobJson = (await response.data.json()) as VideoGenerationJob;
             return success({
                 endpoint: new URL(settings.endpoint),
-                headers: headerResult.data,
-                ...((await result.json()) as VideoGenerationJob),
+                headers: {},
+                ...jobJson,
             });
         } catch (err) {
             return error(`Error: ${err}`);

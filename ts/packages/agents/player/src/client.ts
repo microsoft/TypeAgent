@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import path from "node:path";
 import {
     DeletePlaylistAction,
     GetFavoritesAction,
@@ -24,7 +23,7 @@ import {
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 //import * as Filter from "./trackFilter.js";
 import { TypeChatLanguageModel, createLanguageModel } from "typechat";
 import {
@@ -56,7 +55,6 @@ import {
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
-import { fileURLToPath } from "node:url";
 import {
     initializeUserData,
     mergeUserDataKind,
@@ -131,8 +129,7 @@ function createNotFoundActionResult(kind: string, queryString?: string) {
 let languageModel: TypeChatLanguageModel | undefined;
 export function getTypeChatLanguageModel() {
     if (languageModel === undefined) {
-        const __dirname = path.dirname(fileURLToPath(import.meta.url));
-        dotenv.config({ path: path.join(__dirname, "../../../.env") });
+        loadConfigSync();
         languageModel = createLanguageModel(process.env);
     }
     return languageModel;

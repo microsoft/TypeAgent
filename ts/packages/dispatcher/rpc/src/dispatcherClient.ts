@@ -67,5 +67,17 @@ export function createDispatcherRpcClient(
         cancelCommandByClientId(...args) {
             return rpc.send("cancelCommandByClientId", ...args);
         },
+        async recordUserFeedback(...args) {
+            return rpc.invoke("recordUserFeedback", ...args);
+        },
+        async recordUserHide(...args) {
+            return rpc.invoke("recordUserHide", ...args);
+        },
+        async restoreAllHidden() {
+            return rpc.invoke("restoreAllHidden");
+        },
+        async flushHidden() {
+            return rpc.invoke("flushHidden");
+        },
     };
 }

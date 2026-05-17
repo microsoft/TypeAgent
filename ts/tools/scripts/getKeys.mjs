@@ -6,19 +6,22 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { getClient as getPIMClient } from "./lib/pimClient.mjs";
-import { getAzCliLoggedInInfo } from "./lib/azureUtils.mjs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import chalk from "chalk";
-import { exit } from "node:process";
-import { DefaultAzureCredential } from "@azure/identity";
+import {
+    DefaultAzureCredential,
+    InteractiveBrowserCredential,
+} from "@azure/identity";
 import { SecretClient } from "@azure/keyvault-secrets";
+import yaml from "js-yaml";
 
 const require = createRequire(import.meta.url);
 const config = require("./getKeys.config.json");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dotenvPath = path.resolve(__dirname, config.defaultDotEnvPath);
+const yamlPath = path.resolve(__dirname, "../../config.local.yaml");
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
@@ -29,6 +32,7 @@ let paramSharedVault = undefined;
 let paramPrivateVault = undefined;
 let paramCommit = true;
 let paramVerbose = false;
+let paramFormat = undefined; // "yaml" | "dotenv" | undefined (defaults to yaml)
 
 function nowHHMMSS() {
     const d = new Date();
@@ -200,19 +204,77 @@ async function getSecrets(keyVaultClient, vaultName, shared) {
     return { results, failures };
 }
 
+// Decode a JWT (no signature verification — we only want the claims to
+// print friendly identity info).
+function decodeJwtClaims(token) {
+    try {
+        const [, payload] = token.split(".");
+        if (!payload) return undefined;
+        const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+        const pad =
+            b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+        const json = Buffer.from(b64 + pad, "base64").toString("utf8");
+        return JSON.parse(json);
+    } catch {
+        return undefined;
+    }
+}
+
+const KEY_VAULT_SCOPE = "https://vault.azure.net/.default";
+
+// Resolve an Azure credential without shelling out to `az`. Tries
+// DefaultAzureCredential first (which already covers az cli, az
+// powershell, VS Code, managed identity, env vars, etc.), and if no
+// silent credential is available, falls back to InteractiveBrowserCredential
+// to force an interactive login. Prints friendly identity info from the
+// access token's claims.
+async function getAzureCredential() {
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const defaultCred = new DefaultAzureCredential(
+        tenantId ? { tenantId } : undefined,
+    );
+    let token;
+    try {
+        token = await defaultCred.getToken(KEY_VAULT_SCOPE);
+    } catch (e) {
+        vlog(`silent credential failed: ${e?.message}`);
+    }
+
+    if (!token) {
+        console.warn(
+            chalk.yellowBright(
+                "No silent Azure credential available — launching interactive browser login...",
+            ),
+        );
+        const interactive = new InteractiveBrowserCredential({
+            ...(tenantId ? { tenantId } : {}),
+            // Allow the credential to acquire tokens for any tenant the
+            // user has access to — Key Vaults often live in a different
+            // tenant than the user's home tenant.
+            additionallyAllowedTenants: ["*"],
+        });
+        token = await interactive.getToken(KEY_VAULT_SCOPE);
+        const claims = decodeJwtClaims(token.token);
+        const who = claims?.upn ?? claims?.preferred_username ?? claims?.name;
+        if (who) console.log(`Logged in as ${chalk.cyanBright(who)}`);
+        // Return the interactive credential directly. Wrapping it in a
+        // ChainedTokenCredential with DefaultAzureCredential causes the
+        // SDK's downstream getToken calls to incorrectly route through
+        // DefaultAzureCredential (which has already failed) instead of
+        // reusing the just-acquired interactive token.
+        return interactive;
+    }
+
+    const claims = decodeJwtClaims(token.token);
+    const who = claims?.upn ?? claims?.preferred_username ?? claims?.name;
+    if (who) console.log(`Logged in as ${chalk.cyanBright(who)}`);
+    return defaultCred;
+}
+
 class SdkKeyVaultClient {
     static async get() {
-        // Print friendly identity info (one az call, like before). The actual
-        // secret operations below use DefaultAzureCredential — no more shell-outs.
-        try {
-            await getAzCliLoggedInInfo();
-        } catch (e) {
-            console.error(
-                "ERROR: User not logged in to Azure CLI. Run 'az login'.",
-            );
-            process.exit(1);
-        }
-        return new SdkKeyVaultClient(new DefaultAzureCredential());
+        const credential = await getAzureCredential();
+        return new SdkKeyVaultClient(credential);
     }
 
     constructor(credential) {
@@ -283,6 +345,69 @@ async function readDotenv() {
             return [trimmedKey, value.join("=").trimEnd()];
         });
     return dotEnv;
+}
+
+/**
+ * Read config.local.yaml and flatten to [key, value] pairs compatible with
+ * the .env format used by Key Vault secrets.
+ */
+async function readYamlConfig() {
+    if (!fs.existsSync(yamlPath)) {
+        return [];
+    }
+    // Dynamic import — @typeagent/config provides the flatten function that
+    // converts the YAML tree to flat KEY=VALUE pairs identical to .env format.
+    const { flatten } = await import("@typeagent/config");
+    const raw = await fs.promises.readFile(yamlPath, "utf8");
+    const tree = yaml.load(raw);
+    if (!tree || typeof tree !== "object") return [];
+    const flat = flatten(tree);
+    return Object.entries(flat);
+}
+
+/**
+ * Write a Map of env entries back to config.local.yaml by converting
+ * flat KEY=VALUE pairs through the config pipeline into a structured
+ * YAML tree.
+ */
+async function writeYamlConfig(envMap) {
+    const { envToYamlTree } = await import("@typeagent/config");
+    const flat = Object.fromEntries(envMap);
+    const tree = envToYamlTree(flat);
+    const header = `# TypeAgent configuration — auto-generated by getKeys on ${new Date().toISOString().slice(0, 10)}\n`;
+    await fs.promises.writeFile(
+        yamlPath,
+        header +
+            yaml.dump(tree, {
+                lineWidth: -1,
+                noRefs: true,
+                sortKeys: false,
+            }),
+    );
+}
+
+/**
+ * Detect output format: explicit --dotenv flag selects legacy dotenv mode.
+ * Otherwise default to YAML (the current standard format).
+ */
+function resolveFormat() {
+    if (paramFormat) return paramFormat;
+    return "yaml";
+}
+
+/**
+ * Read config from the appropriate format.
+ */
+async function readConfig() {
+    const format = resolveFormat();
+    if (format === "yaml") {
+        return {
+            entries: await readYamlConfig(),
+            format: "yaml",
+            path: yamlPath,
+        };
+    }
+    return { entries: await readDotenv(), format: "dotenv", path: dotenvPath };
 }
 
 function toSecretKey(envKey) {
@@ -375,19 +500,88 @@ function getVaultNames(dotEnv) {
 }
 
 async function pushSecrets() {
-    const dotEnv = await readDotenv();
+    const format = resolveFormat();
+
+    // YAML mode: push the whole file as a single secret
+    if (format === "yaml") {
+        return pushYamlConfig();
+    }
+
+    // Legacy dotenv mode: push individual secrets
+    console.log(
+        chalk.yellow(
+            "[DEPRECATED] Pushing individual .env secrets. Use YAML format instead.\n" +
+                "  Run without --dotenv to push config.local.yaml as a single secret.\n",
+        ),
+    );
+    return pushDotenvSecrets();
+}
+
+/**
+ * Push config.local.yaml as a single secret to Key Vault.
+ */
+async function pushYamlConfig() {
+    if (!fs.existsSync(yamlPath)) {
+        console.error(chalk.red(`${yamlPath} not found. Nothing to push.`));
+        process.exitCode = 1;
+        return;
+    }
+
+    const keyVaultClient = await timed("az login check", () =>
+        getKeyVaultClient(),
+    );
+    const vaultName = paramSharedVault ?? config.vault.shared;
+    const secretName = config.vault.configSecret ?? "typeagent-config";
+    const yamlContent = await fs.promises.readFile(yamlPath, "utf8");
+
+    console.log(
+        `Pushing ${chalk.cyanBright(yamlPath)} as '${chalk.cyanBright(secretName)}' to ${chalk.cyanBright(vaultName)} key vault.`,
+    );
+
+    if (!paramCommit) {
+        console.log(
+            `\n[dry-run] Would write secret '${secretName}' to vault '${vaultName}'.\n` +
+                `Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
+        );
+        return;
+    }
+
+    try {
+        await keyVaultClient.writeSecret(vaultName, secretName, yamlContent);
+        console.log(
+            chalk.green(
+                `\nSecret '${secretName}' updated in vault '${vaultName}'.`,
+            ),
+        );
+    } catch (e) {
+        console.error(
+            chalk.red(`Failed to write '${secretName}': ${e.message}`),
+        );
+        process.exitCode = 1;
+    }
+}
+
+/**
+ * Legacy path: push individual secrets from .env to Key Vault.
+ */
+async function pushDotenvSecrets() {
+    const { entries, format, path: cfgPath } = await readConfig();
+    const dotEnv = entries;
     const keyVaultClient = await getKeyVaultClient();
-    const vaultNames = getVaultNames(dotEnv);
+    const vaultNames = getVaultNames(new Map(dotEnv));
     const sharedSecrets = new Map(
-        await getSecrets(keyVaultClient, vaultNames.shared, true),
+        (await getSecrets(keyVaultClient, vaultNames.shared, true)).results,
     );
     const privateSecrets = new Map(
         vaultNames.private
-            ? await getSecrets(keyVaultClient, vaultNames.private, false)
-            : undefined,
+            ? (await getSecrets(keyVaultClient, vaultNames.private, false))
+                  .results
+            : [],
     );
 
-    console.log(`Pushing secrets from ${dotenvPath} to key vault.`);
+    console.log(
+        `Pushing secrets from ${chalk.cyanBright(cfgPath)} (${format}) to key vault.`,
+    );
     let skipped = 0;
     const jobs = [];
     const stdio = readline.createInterface(process.stdin, process.stdout);
@@ -511,12 +705,107 @@ async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
 
 async function pullSecrets() {
     const overallStart = Date.now();
+    const format = resolveFormat();
+
+    // YAML mode: pull the single consolidated config secret directly
+    if (format === "yaml") {
+        return pullYamlConfig(overallStart);
+    }
+
+    // Legacy dotenv mode: pull individual secrets
+    console.log(
+        chalk.yellow(
+            "[DEPRECATED] Pulling individual .env secrets. Use YAML format instead (default for new installs).\n" +
+                "  Run without --dotenv to get config.local.yaml.\n",
+        ),
+    );
+    return pullDotenvSecrets(overallStart);
+}
+
+/**
+ * Pull the single typeagent-config YAML secret from Key Vault and write
+ * it directly as config.local.yaml.
+ */
+async function pullYamlConfig(overallStart) {
+    const keyVaultClient = await timed("az login check", () =>
+        getKeyVaultClient(),
+    );
+    const vaultName = paramSharedVault ?? config.vault.shared;
+    const secretName = config.vault.configSecret ?? "typeagent-config";
+
+    console.log(
+        `Pulling ${chalk.cyanBright(secretName)} from ${chalk.cyanBright(vaultName)} key vault...`,
+    );
+
+    let secretValue;
+    try {
+        const response = await keyVaultClient.readSecret(vaultName, secretName);
+        secretValue = response.value;
+    } catch (e) {
+        console.error(
+            chalk.red(
+                `Failed to read '${secretName}' from vault '${vaultName}': ${e.message}`,
+            ),
+        );
+        console.log(
+            chalk.yellow(
+                `\nHint: Make sure the '${secretName}' secret exists in the vault.\n` +
+                    `  To push your local config: npm run getKeys -- push --yaml --commit`,
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    if (!secretValue) {
+        console.error(
+            chalk.red(
+                `Secret '${secretName}' is empty in vault '${vaultName}'.`,
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    vlog(`pull total elapsed: ${Date.now() - overallStart}ms`);
+
+    if (!paramCommit) {
+        console.log(
+            `\n[dry-run] Would write ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.\n` +
+                `Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
+        );
+        return;
+    }
+
+    await fs.promises.writeFile(yamlPath, secretValue, "utf8");
+    console.log(
+        `\nWritten ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.`,
+    );
+
+    // If a legacy .env file exists alongside the new YAML config, warn the
+    // user so the two formats don't drift out of sync.
+    if (fs.existsSync(dotenvPath)) {
+        console.warn(
+            chalk.yellowBright(
+                `\nWARNING: Legacy ${chalk.cyanBright(dotenvPath)} still exists.\n` +
+                    `  Only ${chalk.cyanBright(yamlPath)} is used going forward. ` +
+                    `Consider deleting the .env file to avoid confusion.`,
+            ),
+        );
+    }
+}
+
+/**
+ * Legacy path: pull individual secrets and assemble into a .env file.
+ */
+async function pullDotenvSecrets(overallStart) {
+    const cfgPath = dotenvPath;
     const dotEnv = new Map(await timed("readDotenv", () => readDotenv()));
     const keyVaultClient = await timed("az login check", () =>
         getKeyVaultClient(),
     );
     const vaultNames = getVaultNames(dotEnv);
-    console.log(`Pulling secrets to ${chalk.cyanBright(dotenvPath)}`);
+    console.log(`Pulling secrets to ${chalk.cyanBright(cfgPath)} (dotenv)`);
     const sharedResult = await timed(
         `pullSecretsFromVault(shared=${vaultNames.shared})`,
         () =>
@@ -578,7 +867,7 @@ async function pullSecrets() {
     if (allFailures.length > 0) {
         console.warn(
             chalk.yellow(
-                `\nWARNING: Failed to fetch ${allFailures.length} secret(s) — these values were not updated in .env:`,
+                `\nWARNING: Failed to fetch ${allFailures.length} secret(s) — these values were not updated:`,
             ),
         );
         for (const { name, error } of allFailures) {
@@ -588,27 +877,59 @@ async function pullSecrets() {
     }
 
     if (updated === 0) {
-        console.log(
-            `\nAll values up to date in ${chalk.cyanBright(dotenvPath)}`,
-        );
+        console.log(`\nAll values up to date in ${chalk.cyanBright(cfgPath)}`);
         return;
     }
     if (!paramCommit) {
         console.log(
-            `\n[dry-run] ${updated} value(s) would be updated in ${chalk.cyanBright(dotenvPath)}. Re-run with ${chalk.yellowBright("--commit")} to write.`,
+            `\n[dry-run] ${updated} value(s) would be updated in ${chalk.cyanBright(cfgPath)}. Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
         );
         return;
     }
     console.log(
-        `\n${updated} values updated.\nWriting '${chalk.cyanBright(dotenvPath)}'.`,
+        `\n${updated} values updated.\nWriting '${chalk.cyanBright(cfgPath)}'.`,
     );
 
     await fs.promises.writeFile(
-        dotenvPath,
+        cfgPath,
         [...dotEnv.entries()]
             .map(([key, value]) => (key ? `${key}=${value}` : ""))
             .join("\n"),
     );
+}
+
+function printHelp() {
+    console.log(`
+${chalk.bold("getKeys")} — Manage TypeAgent secrets in Azure Key Vault
+
+${chalk.bold("Usage:")}
+  node getKeys.mjs [command] [options]
+
+${chalk.bold("Commands:")}
+  pull        Pull config from Key Vault to local file (default)
+  push        Push local config to Key Vault
+  help        Show this help message
+
+${chalk.bold("Options:")}
+  --yaml      Force YAML format (config.local.yaml) — pulls/pushes a single secret
+  --dotenv    Force legacy .env format — pulls/pushes individual secrets (deprecated)
+  --vault     Shared vault name (default: aisystems)
+  --private   Private vault name
+  --commit    Write changes (default)
+  --dry-run   Preview changes without writing
+  --verbose   Show detailed timing info
+
+${chalk.bold("Default format:")}
+  YAML is the default. Pass --dotenv to use the deprecated .env format.
+
+${chalk.bold("YAML mode (default):")}
+  pull: Downloads the '${config.vault.configSecret}' secret as config.local.yaml
+  push: Uploads config.local.yaml as the '${config.vault.configSecret}' secret
+
+${chalk.bold("Legacy .env mode (--dotenv):")}
+  pull: Enumerates individual secrets and assembles .env file
+  push: Pushes individual key=value pairs as separate secrets
+`);
 }
 
 const commands = ["push", "pull", "help"];
@@ -653,6 +974,16 @@ const commands = ["push", "pull", "help"];
             continue;
         }
 
+        if (arg === "--dotenv") {
+            paramFormat = "dotenv";
+            continue;
+        }
+
+        if (arg === "--yaml") {
+            paramFormat = "yaml";
+            continue;
+        }
+
         throw new Error(`Unknown argument: ${arg}`);
     }
     switch (command) {
@@ -670,20 +1001,6 @@ const commands = ["push", "pull", "help"];
             throw new Error(`Unknown argument '${process.argv[2]}'`);
     }
 })().catch((e) => {
-    if (
-        e.message.includes(
-            "'az' is not recognized as an internal or external command",
-        )
-    ) {
-        console.error(
-            chalk.red(
-                `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
-            ),
-        );
-        // eslint-disable-next-line no-undef
-        exit(0);
-    }
-
     console.error(chalk.red(`FATAL ERROR: ${e.stack}`));
     process.exit(-1);
 });

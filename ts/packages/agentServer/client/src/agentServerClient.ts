@@ -18,6 +18,7 @@ import registerDebug from "debug";
 import {
     AgentServerInvokeFunctions,
     AgentServerChannelName,
+    AGENT_SERVER_DEFAULT_PORT,
     DispatcherConnectOptions,
     ConversationInfo,
     JoinConversationResult,
@@ -435,7 +436,7 @@ async function waitForServer(
 }
 
 export async function ensureAgentServer(
-    port: number = 8999,
+    port: number = AGENT_SERVER_DEFAULT_PORT,
     hidden: boolean = false,
     idleTimeout: number = 0,
 ): Promise<void> {
@@ -459,7 +460,7 @@ export async function ensureAgentServer(
 
 export async function ensureAndConnectDispatcher(
     clientIO: ClientIO,
-    port: number = 8999,
+    port: number = AGENT_SERVER_DEFAULT_PORT,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
     hidden: boolean = false,
@@ -471,7 +472,7 @@ export async function ensureAndConnectDispatcher(
 
 export async function ensureAndConnectConversation(
     clientIO: ClientIO,
-    port: number = 8999,
+    port: number = AGENT_SERVER_DEFAULT_PORT,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
     hidden: boolean = false,
@@ -488,7 +489,7 @@ export async function ensureAndConnectConversation(
 }
 
 export async function stopAgentServer(
-    port: number = 8999,
+    port: number = AGENT_SERVER_DEFAULT_PORT,
     force: boolean = false,
 ): Promise<void> {
     const url = `ws://localhost:${port}`;

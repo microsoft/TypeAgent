@@ -34,6 +34,7 @@
     "@anthropic-ai/sdk": "^0.91.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
@@ -46,7 +47,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/node": "^20.17.28",
+    "@types/node": "^22.0.0",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
     "typescript": "~5.4.5"

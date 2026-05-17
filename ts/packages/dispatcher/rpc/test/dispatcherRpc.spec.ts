@@ -76,6 +76,20 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         cancelInteraction(...args) {
             calls.push({ method: "cancelInteraction", args });
         },
+        async recordUserFeedback(...args) {
+            calls.push({ method: "recordUserFeedback", args });
+        },
+        async recordUserHide(...args: unknown[]) {
+            calls.push({ method: "recordUserHide", args });
+        },
+        async restoreAllHidden() {
+            calls.push({ method: "restoreAllHidden", args: [] });
+            return 0;
+        },
+        async flushHidden() {
+            calls.push({ method: "flushHidden", args: [] });
+            return 0;
+        },
         ...overrides,
         calls,
     };
