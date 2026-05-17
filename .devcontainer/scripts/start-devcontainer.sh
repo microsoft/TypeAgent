@@ -17,7 +17,8 @@ Start the TypeAgent devcontainer. Optionally configure host SSH access.
 Options:
   --workspace-folder PATH        Workspace folder to open (default: repo root)
   --config PATH                  Devcontainer config file (optional)
-  --remove-existing-container    Recreate container before startup
+  --recreate                     Recreate container before startup
+  --rebuild                      Rebuild image and recreate container before startup
   --ssh                          After startup, run setup-ssh-access.sh
   --insecure-local               Pass through to setup-ssh-access.sh (implies --ssh)
   -h, --help                     Show this help text
@@ -25,7 +26,8 @@ Options:
 Examples:
   $(basename "$0")
   $(basename "$0") --ssh
-  $(basename "$0") --remove-existing-container --ssh
+  $(basename "$0") --recreate --ssh
+  $(basename "$0") --rebuild
   $(basename "$0") --config .devcontainer/vnc/devcontainer.json
 EOF
 }
@@ -47,6 +49,7 @@ read_git_identity() {
 WORKSPACE_FOLDER="$DEFAULT_WORKSPACE_FOLDER"
 CONFIG_PATH=""
 REMOVE_EXISTING=0
+REBUILD=0
 SETUP_SSH=0
 INSECURE_LOCAL=0
 
@@ -62,8 +65,13 @@ while [[ $# -gt 0 ]]; do
             CONFIG_PATH=$(cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
             shift 2
             ;;
-        --remove-existing-container)
+        --recreate|--remove-existing-container)
             REMOVE_EXISTING=1
+            shift
+            ;;
+        --rebuild)
+            REMOVE_EXISTING=1
+            REBUILD=1
             shift
             ;;
         --ssh)
@@ -113,6 +121,9 @@ if [[ -n "$CONFIG_PATH" ]]; then
 fi
 if [[ $REMOVE_EXISTING -eq 1 ]]; then
     UP_CMD+=(--remove-existing-container)
+fi
+if [[ $REBUILD -eq 1 ]]; then
+    UP_CMD+=(--build-no-cache)
 fi
 
 log "Starting devcontainer..."

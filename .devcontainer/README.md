@@ -111,7 +111,10 @@ Useful options:
 
 ```bash
 # Recreate container first
-.devcontainer/scripts/start-devcontainer.sh --remove-existing-container --ssh
+.devcontainer/scripts/start-devcontainer.sh --recreate --ssh
+
+# Rebuild the devcontainer image
+.devcontainer/scripts/start-devcontainer.sh --rebuild
 
 # Use alternate devcontainer config
 .devcontainer/scripts/start-devcontainer.sh --config .devcontainer/vnc/devcontainer.json

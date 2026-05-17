@@ -119,7 +119,7 @@ echo ""
 echo "Enabling corepack and pnpm..."
 if command -v corepack &> /dev/null; then
     corepack enable || echo "Warning: corepack enable failed"
-    corepack prepare pnpm@latest --activate || echo "Warning: corepack prepare failed"
+    corepack install || echo "Warning: corepack install failed"
 else
     echo "Warning: corepack not found, checking for pnpm..."
     if ! command -v pnpm &> /dev/null; then
@@ -135,6 +135,10 @@ if ! command -v pnpm &> /dev/null; then
 fi
 
 echo "pnpm version: $(pnpm --version)"
+
+# Point pnpm store at the Docker named volume so it persists across rebuilds
+pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
+echo "pnpm store-dir: $(pnpm store path)"
 
 echo ""
 echo "Installing system libraries required by TypeAgent..."

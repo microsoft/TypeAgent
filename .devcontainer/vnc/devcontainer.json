@@ -70,7 +70,6 @@
   ],
 
   "containerEnv": {
-    "PNPM_HOME": "/home/codespace/.local/share/pnpm",
     "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
     "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
   },
