@@ -223,6 +223,14 @@ export interface RunOptions {
      * intentionally exercise invalid IRs for error-path coverage.
      */
     skipValidation?: boolean;
+    /**
+     * Enable defense-in-depth runtime checks that duplicate static validation.
+     * When true (the default), the engine re-checks invariants already proven
+     * by the static validator (e.g. constant schema conformance, fork min-2
+     * branches, forkMap state-ref rejection). Disable for performance if you
+     * trust the static validator has run.
+     */
+    defenseInDepth?: boolean;
 }
 
 export interface RunResult {
@@ -241,6 +249,7 @@ export class WorkflowEngine {
         string,
         ReturnType<typeof this.ajv.compile>
     >();
+    private defenseInDepth = true;
 
     constructor(private readonly registry: TaskRegistry) {}
 
@@ -280,6 +289,8 @@ export class WorkflowEngine {
         const approve = options?.approve;
         const abortSignalArg = options?.signal;
         const constraints = options?.constraints;
+        const defenseInDepth = options?.defenseInDepth ?? true;
+        this.defenseInDepth = defenseInDepth;
 
         // Default timeout: 60 seconds. 0 or Infinity disables.
         const DEFAULT_TIMEOUT_MS = 60_000;
@@ -327,9 +338,11 @@ export class WorkflowEngine {
         }
 
         // Build constants, validating each against its declared schema.
+        // Defense-in-depth: static validator already checks this via
+        // jsonValueToSchema + isStructuralSubtype.
         const constants = new Map<string, unknown>();
         for (const [name, def] of Object.entries(ir.constants ?? {})) {
-            if (def.schema) {
+            if (this.defenseInDepth && def.schema) {
                 const validate = this.getValidator(def.schema);
                 if (!validate(def.value)) {
                     const msg = this.ajv.errorsText(validate.errors);
@@ -1057,7 +1070,8 @@ export class WorkflowEngine {
     ): Promise<string | undefined> {
         const branchNames = Object.keys(node.branches);
 
-        if (branchNames.length < 2) {
+        // Defense-in-depth: static validator already checks fork min-2 branches.
+        if (this.defenseInDepth && branchNames.length < 2) {
             throw new EngineError(
                 `Fork "${nodeId}" must have at least 2 branches, got ${branchNames.length}`,
             );
@@ -1195,8 +1209,8 @@ export class WorkflowEngine {
         taskTimeoutMs?: number,
         constraints?: TaskConstraints,
     ): Promise<string | undefined> {
-        // Reject $from: "state" in forkMap bodies (v0.2 §2.2 validation)
-        if (containsStateRef(node.body)) {
+        // Defense-in-depth: static validator already checks forkMap state refs.
+        if (this.defenseInDepth && containsStateRef(node.body)) {
             throw new EngineError(
                 `forkMap "${nodeId}": body must not reference $from "state" (forkMap has no state; use loop for stateful iteration)`,
             );
