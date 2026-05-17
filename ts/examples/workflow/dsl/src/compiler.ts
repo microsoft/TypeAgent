@@ -38,7 +38,7 @@ export function compile(
     const errors: CompileError[] = [];
 
     // Lex
-    const { tokens, errors: lexErrors } = lex(source);
+    const { tokens, errors: lexErrors, comments } = lex(source);
     for (const e of lexErrors) {
         errors.push({
             phase: "lex",
@@ -52,7 +52,7 @@ export function compile(
     }
 
     // Parse
-    const parser = new Parser(tokens);
+    const parser = new Parser(tokens, comments);
     const { ast, errors: parseErrors } = parser.parseSingle();
     for (const e of parseErrors) {
         errors.push({
