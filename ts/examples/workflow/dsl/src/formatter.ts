@@ -179,9 +179,12 @@ class Printer {
         switch (s.kind) {
             case "ConstStatement": {
                 // Bare expression statements are represented as ConstStatement
-                // with a synthetic name `_<line>_<col>` (see G9). Emit them
-                // as bare expressions so format -> parse -> format is stable.
-                if (isSyntheticName(s.name)) {
+                // with `isSynthetic: true` (the parser wraps them in a const
+                // with a synthetic name; see G9). Emit them as bare expressions
+                // so format -> parse -> format is stable, and so legitimate
+                // user variables that happen to match the synthetic name
+                // pattern are not silently rewritten.
+                if (s.isSynthetic) {
                     this.printExpr(s.value);
                     this.line(";");
                     return;
@@ -238,22 +241,32 @@ class Printer {
                 this.printExpr(s.discriminant);
                 this.write(") {");
                 this.newline();
+                const defaultIdx =
+                    s.default_ === undefined
+                        ? -1
+                        : s.defaultIndex !== undefined
+                          ? s.defaultIndex
+                          : s.arms.length;
                 this.indent(() => {
-                    for (const arm of s.arms) {
-                        this.write("case ");
-                        this.printExpr(arm.value);
-                        this.write(":");
-                        this.newline();
-                        this.indent(() => {
-                            for (const st of arm.body) this.printStatement(st);
-                        });
-                    }
-                    if (s.default_) {
-                        this.line("default:");
-                        this.indent(() => {
-                            for (const st of s.default_!)
-                                this.printStatement(st);
-                        });
+                    for (let i = 0; i <= s.arms.length; i++) {
+                        if (i === defaultIdx) {
+                            this.line("default:");
+                            this.indent(() => {
+                                for (const st of s.default_!)
+                                    this.printStatement(st);
+                            });
+                        }
+                        if (i < s.arms.length) {
+                            const arm = s.arms[i];
+                            this.write("case ");
+                            this.printExpr(arm.value);
+                            this.write(":");
+                            this.newline();
+                            this.indent(() => {
+                                for (const st of arm.body)
+                                    this.printStatement(st);
+                            });
+                        }
                     }
                 });
                 this.line("}");
@@ -524,9 +537,4 @@ function escapeTemplateText(s: string): string {
         .replace(/\\/g, "\\\\")
         .replace(/`/g, "\\`")
         .replace(/\$\{/g, "\\${");
-}
-
-function isSyntheticName(name: string): boolean {
-    // Synthetic names produced for bare-call statements look like `_12_5`.
-    return /^_\d+_\d+$/.test(name);
 }

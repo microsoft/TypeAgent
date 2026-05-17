@@ -194,6 +194,51 @@ describe("formatter: round-trip stability", () => {
         expect(out).toContain("const [a, b] = parallel(");
     });
 
+    test("user variable matching synthetic name pattern is preserved", () => {
+        // Regression: previously the formatter detected synthetic bare-call
+        // names by regex `/^_\d+_\d+$/`, which collides with legitimate
+        // identifiers. The fix uses an `isSynthetic` flag on the AST node.
+        const out = roundTrip(`workflow w(): string {
+            const _1_2 = "user";
+            return _1_2;
+        }`);
+        expect(out).toContain('const _1_2 = "user";');
+        expect(out).toContain("return _1_2;");
+    });
+
+    test("switch default-first ordering preserved", () => {
+        const src = `workflow w(x: string): string {
+            switch (x) {
+                default: return "d";
+                case "a": return "a";
+            }
+        }`;
+        const out = roundTrip(src);
+        const defaultPos = out.indexOf("default:");
+        const casePos = out.indexOf('case "a"');
+        expect(defaultPos).toBeGreaterThan(-1);
+        expect(casePos).toBeGreaterThan(-1);
+        expect(defaultPos).toBeLessThan(casePos);
+        assertStable(src);
+    });
+
+    test("switch default-middle ordering preserved", () => {
+        const src = `workflow w(x: string): string {
+            switch (x) {
+                case "a": return "a";
+                default: return "d";
+                case "b": return "b";
+            }
+        }`;
+        const out = roundTrip(src);
+        const posA = out.indexOf('case "a"');
+        const posDef = out.indexOf("default:");
+        const posB = out.indexOf('case "b"');
+        expect(posA).toBeLessThan(posDef);
+        expect(posDef).toBeLessThan(posB);
+        assertStable(src);
+    });
+
     test("bare task call (synthetic const) re-emits as expression statement", () => {
         const src = `workflow w(d: string): string {
             audit.log(d);

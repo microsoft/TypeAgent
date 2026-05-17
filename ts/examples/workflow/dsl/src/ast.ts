@@ -85,6 +85,13 @@ export interface ConstStatement {
     value: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    /**
+     * True when the parser wrapped a bare statement-position task/workflow
+     * call (e.g. `audit.log(x);`) in a ConstStatement with a synthetic
+     * name. Round-trip serialization re-emits these as bare expression
+     * statements so format -> parse -> format is stable. See G9.
+     */
+    isSynthetic?: boolean;
 }
 
 export interface DestructuringConst {
@@ -109,6 +116,14 @@ export interface SwitchStatement {
     discriminant: Expr;
     arms: SwitchArm[];
     default_?: Statement[];
+    /**
+     * Index into the original source-order arm sequence at which the
+     * `default:` arm appeared (0..arms.length). `undefined` when there
+     * is no default arm. Used by the formatter to round-trip the source
+     * ordering since the spec allows fallthrough and therefore order is
+     * semantically significant.
+     */
+    defaultIndex?: number;
     loc: SourceLocation;
     leadingComments?: Comment[];
 }

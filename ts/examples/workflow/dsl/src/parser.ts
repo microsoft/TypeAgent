@@ -343,6 +343,7 @@ export class Parser {
                     name: `_${expr.loc.line}_${expr.loc.col}`,
                     value: expr,
                     loc: expr.loc,
+                    isSynthetic: true,
                 };
             }
             default:
@@ -426,6 +427,7 @@ export class Parser {
 
         const arms: SwitchArm[] = [];
         let default_: Statement[] | undefined;
+        let defaultIndex: number | undefined;
 
         while (
             this.peek().kind !== TokenKind.RBrace &&
@@ -441,6 +443,10 @@ export class Parser {
             } else if (this.peek().kind === TokenKind.Default) {
                 this.advance(); // default
                 this.expect(TokenKind.Colon);
+                // Record the position relative to the case arms parsed so
+                // far so the formatter can reconstruct the original source
+                // order (fallthrough makes this semantically meaningful).
+                defaultIndex = arms.length;
                 default_ = this.parseSwitchArmBody();
             } else {
                 this.error(
@@ -457,7 +463,12 @@ export class Parser {
             arms,
             loc: l,
         };
-        if (default_) result.default_ = default_;
+        if (default_) {
+            result.default_ = default_;
+            if (defaultIndex !== undefined) {
+                result.defaultIndex = defaultIndex;
+            }
+        }
         return result;
     }
 
