@@ -61,6 +61,9 @@ function stripTrivia(value: unknown): unknown {
         const out: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(value)) {
             if (k === "leadingComments") continue;
+            if (k === "trailingComments") continue;
+            if (k === "innerComments") continue;
+            if (k === "endLine") continue;
             // Drop every source-position field. These shift when comments
             // appear or when the formatter re-emits the same AST.
             if (
@@ -104,9 +107,7 @@ describe("pass2: comments don't affect typeChecker", () => {
                 return "n";
             }
         }`;
-        const errsBare = new TypeChecker(SCHEMAS).check(
-            parseNoComments(bare),
-        );
+        const errsBare = new TypeChecker(SCHEMAS).check(parseNoComments(bare));
         const errsCommented = new TypeChecker(SCHEMAS).check(
             parseWithComments(commented),
         );

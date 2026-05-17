@@ -282,7 +282,7 @@ describe("formatter: expression edge cases", () => {
         // same canonical form; the ternary is right-associative so the
         // formatter is permitted to drop the redundant parens.
         const out = assertStable(src);
-        expect(out).toContain('a ? ');
+        expect(out).toContain("a ? ");
         expect(out).toContain('"x"');
         expect(out).toContain('"w"');
     });
@@ -302,7 +302,9 @@ describe("formatter: expression edge cases", () => {
     });
 
     test("non-commutative '/' preserves grouping", () => {
-        const left = assertStable(`workflow w(): number { return 10 / 2 / 5; }`);
+        const left = assertStable(
+            `workflow w(): number { return 10 / 2 / 5; }`,
+        );
         expect(left).toContain("return 10 / 2 / 5;");
         const right = assertStable(
             `workflow w(): number { return 10 / (2 / 5); }`,
