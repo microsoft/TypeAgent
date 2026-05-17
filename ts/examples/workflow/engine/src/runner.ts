@@ -405,6 +405,17 @@ export class WorkflowEngine {
 
             debug("run %s completed", runId);
 
+            // Validate workflow output against outputSchema
+            if (ir.outputSchema) {
+                const validate = this.getValidator(ir.outputSchema);
+                if (!validate(output)) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    throw new EngineError(
+                        `Workflow output schema violation: ${msg}`,
+                    );
+                }
+            }
+
             this.emit({
                 type: "runCompleted",
                 runId,
@@ -859,16 +870,35 @@ export class WorkflowEngine {
             timestamp: Date.now(),
         });
 
-        // Resolve loop inputs from outer scope
+        // Resolve loop inputs from outer scope and validate against inputSchema (§5.4 step 1)
         const loopInput = resolveTemplate(node.inputs, outerScope) as Record<
             string,
             unknown
         >;
 
-        // Initialize state
+        if (node.body.inputSchema) {
+            const validate = this.getValidator(node.body.inputSchema);
+            if (!validate(loopInput)) {
+                const msg = this.ajv.errorsText(validate.errors);
+                throw new EngineError(
+                    `Loop "${nodeId}" input schema violation: ${msg}`,
+                );
+            }
+        }
+
+        // Initialize state and validate against state[*].schema (§5.4 step 2)
         let state: Record<string, unknown> = {};
         for (const [name, stateVar] of Object.entries(node.state)) {
             state[name] = resolveTemplate(stateVar.initial, outerScope);
+            if (stateVar.schema) {
+                const validate = this.getValidator(stateVar.schema);
+                if (!validate(state[name])) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    throw new EngineError(
+                        `Loop "${nodeId}" state "${name}" initial value schema violation: ${msg}`,
+                    );
+                }
+            }
         }
 
         const bodyScopePath = [...scopePath, `${nodeId}.body`];
@@ -922,6 +952,19 @@ export class WorkflowEngine {
                     // Resolve output in body scope (state + body bindings)
                     const output = resolveTemplate(node.body.output, bodyScope);
 
+                    // Validate output against outputSchema (§5.4 step 4)
+                    if (node.body.outputSchema) {
+                        const validate = this.getValidator(
+                            node.body.outputSchema,
+                        );
+                        if (!validate(output)) {
+                            const msg = this.ajv.errorsText(validate.errors);
+                            throw new EngineError(
+                                `Loop "${nodeId}" output schema violation: ${msg}`,
+                            );
+                        }
+                    }
+
                     if (node.bind) {
                         outerScope.bindings.set(node.bind, output);
                     }
@@ -948,13 +991,23 @@ export class WorkflowEngine {
                     return node.next;
                 }
 
-                // @iterate: compute next state
+                // @iterate: compute next state and validate (§5.4 step 4)
                 const nextState: Record<string, unknown> = {};
                 for (const [name, ref] of Object.entries(node.iterateState)) {
                     nextState[name] = resolveTemplate(
                         ref as Template,
                         bodyScope,
                     );
+                    const stateVar = node.state[name];
+                    if (stateVar?.schema) {
+                        const validate = this.getValidator(stateVar.schema);
+                        if (!validate(nextState[name])) {
+                            const msg = this.ajv.errorsText(validate.errors);
+                            throw new EngineError(
+                                `Loop "${nodeId}" iterateState "${name}" schema violation: ${msg}`,
+                            );
+                        }
+                    }
                 }
                 state = nextState;
             }
@@ -1003,6 +1056,12 @@ export class WorkflowEngine {
         constraints?: TaskConstraints,
     ): Promise<string | undefined> {
         const branchNames = Object.keys(node.branches);
+
+        if (branchNames.length < 2) {
+            throw new EngineError(
+                `Fork "${nodeId}" must have at least 2 branches, got ${branchNames.length}`,
+            );
+        }
 
         this.emit({
             type: "nodeStarted",
@@ -1136,6 +1195,13 @@ export class WorkflowEngine {
         taskTimeoutMs?: number,
         constraints?: TaskConstraints,
     ): Promise<string | undefined> {
+        // Reject $from: "state" in forkMap bodies (v0.2 §2.2 validation)
+        if (containsStateRef(node.body)) {
+            throw new EngineError(
+                `forkMap "${nodeId}": body must not reference $from "state" (forkMap has no state; use loop for stateful iteration)`,
+            );
+        }
+
         this.emit({
             type: "nodeStarted",
             runId,
@@ -1293,4 +1359,31 @@ function buildErrorObject(
         node: nodeId,
         scopePath: [...scopePath],
     };
+}
+
+/**
+ * Recursively check whether any template in a WorkflowScope contains
+ * `$from: "state"` references. Used to reject state refs in forkMap bodies.
+ */
+function containsStateRef(scope: {
+    nodes: Record<string, WorkflowNode>;
+    output: Template;
+}): boolean {
+    function checkTemplate(t: Template): boolean {
+        if (t === null || t === undefined || typeof t !== "object") return false;
+        if (Array.isArray(t)) return t.some(checkTemplate);
+        const obj = t as Record<string, unknown>;
+        if (obj["$from"] === "state") return true;
+        if ("$literal" in obj) return false;
+        return Object.values(obj).some((v) => checkTemplate(v as Template));
+    }
+    for (const node of Object.values(scope.nodes)) {
+        if ("inputs" in node && node.inputs) {
+            if (checkTemplate(node.inputs as Template)) return true;
+        }
+        if ("selector" in node) {
+            if (checkTemplate(node.selector as Template)) return true;
+        }
+    }
+    return checkTemplate(scope.output);
 }
