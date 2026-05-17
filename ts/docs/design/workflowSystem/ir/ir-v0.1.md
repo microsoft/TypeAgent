@@ -1617,7 +1617,6 @@ re-verifies an invariant that the static validator already proves
 | Check | Static guarantee | Reasoning |
 |---|---|---|
 | **Constant value schema** | `jsonValueToSchema` + `isStructuralSubtype` (§4.1 type compat) | Constant values are in the IR; static validator derives their type and checks compatibility |
-| **forkMap `$from: "state"` rejection** | §4.1 scope-closure check on forkMap bodies | State refs in forkMap are a static IR property |
 
 **Propagation (static type compat + essential task output check)**
 

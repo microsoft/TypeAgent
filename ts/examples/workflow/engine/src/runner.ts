@@ -1242,12 +1242,9 @@ export class WorkflowEngine {
         taskTimeoutMs?: number,
         constraints?: TaskConstraints,
     ): Promise<string | undefined> {
-        // Defense-in-depth: static validator already checks forkMap state refs.
-        if (this.defenseInDepth && containsStateRef(node.body)) {
-            throw new EngineError(
-                `forkMap "${nodeId}": body must not reference $from "state" (forkMap has no state; use loop for stateful iteration)`,
-            );
-        }
+        // Note: $from "state" refs in forkMap bodies are rejected statically
+        // by the scope-closure check; at runtime they would surface as
+        // "Unresolved reference" since item scope has no state.
 
         this.emit({
             type: "nodeStarted",
@@ -1409,31 +1406,4 @@ function buildErrorObject(
         node: nodeId,
         scopePath: [...scopePath],
     };
-}
-
-/**
- * Recursively check whether any template in a WorkflowScope contains
- * `$from: "state"` references. Used to reject state refs in forkMap bodies.
- */
-function containsStateRef(scope: {
-    nodes: Record<string, WorkflowNode>;
-    output: Template;
-}): boolean {
-    function checkTemplate(t: Template): boolean {
-        if (t === null || t === undefined || typeof t !== "object") return false;
-        if (Array.isArray(t)) return t.some(checkTemplate);
-        const obj = t as Record<string, unknown>;
-        if (obj["$from"] === "state") return true;
-        if ("$literal" in obj) return false;
-        return Object.values(obj).some((v) => checkTemplate(v as Template));
-    }
-    for (const node of Object.values(scope.nodes)) {
-        if ("inputs" in node && node.inputs) {
-            if (checkTemplate(node.inputs as Template)) return true;
-        }
-        if ("selector" in node) {
-            if (checkTemplate(node.selector as Template)) return true;
-        }
-    }
-    return checkTemplate(scope.output);
 }
