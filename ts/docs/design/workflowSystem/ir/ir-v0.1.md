@@ -1605,11 +1605,12 @@ the static validator has no visibility into.
 | **Task failure** | Task throws or returns `{ kind: "fail" }` | External services fail; legitimate runtime error |
 | **Unrecoverable failure** | Task fails with no `onError` | Failure propagation; the task threw and no handler is declared |
 
-#### 5.8.2 Defense-in-depth runtime checks
+#### 5.8.2 Defense-in-depth runtime checks (gated)
 
 These checks MAY be skipped when static validation has passed.  Each
 re-verifies an invariant that the static validator already proves
-(column "Static guarantee").
+(column "Static guarantee").  They are controlled by the
+`defenseInDepth` flag described above.
 
 **Structural (static IR properties)**
 
@@ -1625,25 +1626,6 @@ re-verifies an invariant that the static validator already proves
 |---|---|---|
 | **Node not found** | §4.1 name-resolution pass | All node references are verified statically |
 | **Unregistered task** | §4.1 IR/task drift pass | All task names are checked against the registry at validation time |
-
-**Template resolution (dominator analysis + type checking)**
-
-The static validator's dominator analysis with onError-split awareness
-(§4.1 scope-closure and dominator passes) proves that every non-optional
-`$from: "scope"` reference is bound on all execution paths, including
-error-recovery paths.  Path projections are verified by
-`checkSchemaCompat` which rejects paths into undeclared schema
-properties.  Combined with the essential task output check (§5.8.1),
-which ensures actual values match declared schemas, path projection
-type errors at runtime are unreachable.  These checks are kept
-unconditional because they are cheap and provide clear diagnostics
-if an IR somehow bypasses static validation.
-
-| Check | Static guarantee | Reasoning |
-|---|---|---|
-| **Unknown `$from` namespace** | §4.1 schema-syntax pass | Only valid namespaces (`input`, `constant`, `scope`, `state`) are accepted |
-| **Unresolved reference** | §4.1 dominator pass with onError-split coverage | Binding coverage is proven on all paths including error-recovery paths; uncovered non-optional refs are rejected |
-| **Path projection on null/wrong type** | §4.1 type-compatibility + `resolveSchemaPath` | Path segments are checked against declared schema structure; task output check ensures actual values match |
 
 **Propagation (static type compat + essential task output check)**
 
@@ -1662,6 +1644,27 @@ statically and values are proven conformant at each task boundary.
 | **Loop output schema** | §4.1 type-compatibility pass + essential task output check | Static proves output template types match `outputSchema`; task output check validates body bindings |
 | **Loop iterateState schema** | §4.1 type-compatibility pass + essential task output check | Static proves iterateState template types match state schemas; task output check validates body bindings |
 | **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | Static proves collection template resolves to array type; task output check validates upstream values |
+
+#### 5.8.3 Template resolution checks (unconditional)
+
+The static validator's dominator analysis with onError-split awareness
+(§4.1 scope-closure and dominator passes) proves that every non-optional
+`$from: "scope"` reference is bound on all execution paths, including
+error-recovery paths.  Path projections are verified by
+`checkSchemaCompat` which rejects paths into undeclared schema
+properties.  Combined with the essential task output check (§5.8.1),
+which ensures actual values match declared schemas, path projection
+type errors at runtime are unreachable.
+
+These checks are statically proven but kept **unconditional** (not
+gated by `defenseInDepth`) because they are cheap and provide clear
+diagnostics if an IR somehow bypasses static validation.
+
+| Check | Static guarantee | Reasoning |
+|---|---|---|
+| **Unknown `$from` namespace** | §4.1 schema-syntax pass | Only valid namespaces (`input`, `constant`, `scope`, `state`) are accepted |
+| **Unresolved reference** | §4.1 dominator pass with onError-split coverage | Binding coverage is proven on all paths including error-recovery paths; uncovered non-optional refs are rejected |
+| **Path projection on null/wrong type** | §4.1 type-compatibility + `resolveSchemaPath` | Path segments are checked against declared schema structure; task output check ensures actual values match |
 
 ---
 
