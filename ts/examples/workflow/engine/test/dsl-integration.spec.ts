@@ -104,7 +104,7 @@ describe("DSL -> Engine integration", () => {
     describe("literals and constants", () => {
         it("returns a string literal", async () => {
             const ir = compileOk(`
-                workflow hello(): string { return "hello world" }
+                workflow hello(): string { return "hello world"; }
             `);
             const { eng } = makeEngine();
             const result = await eng.run(ir, { input: {} });
@@ -115,7 +115,7 @@ describe("DSL -> Engine integration", () => {
 
         it("returns a number literal", async () => {
             const ir = compileOk(`
-                workflow answer(): number { return 42 }
+                workflow answer(): number { return 42; }
             `);
             const { eng } = makeEngine();
             const result = await eng.run(ir, { input: {} });
@@ -126,7 +126,7 @@ describe("DSL -> Engine integration", () => {
 
         it("returns a boolean literal", async () => {
             const ir = compileOk(`
-                workflow flag(): boolean { return true }
+                workflow flag(): boolean { return true; }
             `);
             const { eng } = makeEngine();
             const result = await eng.run(ir, { input: {} });
@@ -137,7 +137,7 @@ describe("DSL -> Engine integration", () => {
 
         it("returns an input parameter", async () => {
             const ir = compileOk(`
-                workflow echo(msg: string): string { return msg }
+                workflow echo(msg: string): string { return msg; }
             `);
             const { eng } = makeEngine();
             const result = await eng.run(ir, { input: { msg: "ping" } });
@@ -149,7 +149,7 @@ describe("DSL -> Engine integration", () => {
         it("returns an object literal with mixed refs", async () => {
             const ir = compileOk(`
                 workflow pack(name: string, age: integer): unknown {
-                    return { name: name, age: age, active: true }
+                    return { name: name, age: age, active: true };
                 }
             `);
             const { eng } = makeEngine();
@@ -174,8 +174,8 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(
                 `
                 workflow fetch(url: string): unknown {
-                    const result = web.fetch(url)
-                    return result.body
+                    const result = web.fetch(url);
+                    return result.body;
                 }
             `,
                 [webFetch],
@@ -193,9 +193,9 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(
                 `
                 workflow fetchAndFormat(url: string): unknown {
-                    const page = web.fetch(url)
-                    const msg = text.template("Got: {{body}}", { body: page.body })
-                    return msg
+                    const page = web.fetch(url);
+                    const msg = text.template("Got: {{body}}", { body: page.body });
+                    return msg;
                 }
             `,
                 [webFetch],
@@ -237,8 +237,8 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(
                 `
                 workflow getVal(key: string): unknown {
-                    const data = data.get(key)
-                    return data.value
+                    const data = data.get(key);
+                    return data.value;
                 }
             `,
                 [multiPropTask],
@@ -256,8 +256,8 @@ describe("DSL -> Engine integration", () => {
         it("interpolates variables into a template", async () => {
             const ir = compileOk(`
                 workflow greet(name: string): unknown {
-                    const msg = text.template("Hello {{name}}!", { name: name })
-                    return msg
+                    const msg = text.template("Hello {{name}}!", { name: name });
+                    return msg;
                 }
             `);
             const { eng } = makeEngine();
@@ -274,8 +274,8 @@ describe("DSL -> Engine integration", () => {
         it("adds two numbers", async () => {
             const ir = compileOk(`
                 workflow add(a: number, b: number): unknown {
-                    const sum = a + b
-                    return sum
+                    const sum = a + b;
+                    return sum;
                 }
             `);
             const { eng } = makeEngine();
@@ -288,8 +288,8 @@ describe("DSL -> Engine integration", () => {
         it("subtracts two numbers", async () => {
             const ir = compileOk(`
                 workflow sub(a: number, b: number): unknown {
-                    const diff = a - b
-                    return diff
+                    const diff = a - b;
+                    return diff;
                 }
             `);
             const { eng } = makeEngine();
@@ -302,8 +302,8 @@ describe("DSL -> Engine integration", () => {
         it("multiplies two numbers", async () => {
             const ir = compileOk(`
                 workflow mul(a: number, b: number): unknown {
-                    const prod = a * b
-                    return prod
+                    const prod = a * b;
+                    return prod;
                 }
             `);
             const { eng } = makeEngine();
@@ -316,8 +316,8 @@ describe("DSL -> Engine integration", () => {
         it("divides two numbers", async () => {
             const ir = compileOk(`
                 workflow div(a: number, b: number): unknown {
-                    const quot = a / b
-                    return quot
+                    const quot = a / b;
+                    return quot;
                 }
             `);
             const { eng } = makeEngine();
@@ -330,8 +330,8 @@ describe("DSL -> Engine integration", () => {
         it("computes modulo", async () => {
             const ir = compileOk(`
                 workflow mod(a: number, b: number): unknown {
-                    const rem = a % b
-                    return rem
+                    const rem = a % b;
+                    return rem;
                 }
             `);
             const { eng } = makeEngine();
@@ -344,8 +344,8 @@ describe("DSL -> Engine integration", () => {
         it("compares with ===", async () => {
             const ir = compileOk(`
                 workflow eq(a: number, b: number): unknown {
-                    const same = a === b
-                    return same
+                    const same = a === b;
+                    return same;
                 }
             `);
             const { eng } = makeEngine();
@@ -360,8 +360,8 @@ describe("DSL -> Engine integration", () => {
         it("compares with !==", async () => {
             const ir = compileOk(`
                 workflow neq(a: number, b: number): unknown {
-                    const diff = a !== b
-                    return diff
+                    const diff = a !== b;
+                    return diff;
                 }
             `);
             const { eng } = makeEngine();
@@ -376,8 +376,8 @@ describe("DSL -> Engine integration", () => {
         it("compares with > and <", async () => {
             const ir = compileOk(`
                 workflow cmp(a: number, b: number): unknown {
-                    const gt = a > b
-                    return gt
+                    const gt = a > b;
+                    return gt;
                 }
             `);
             const { eng } = makeEngine();
@@ -392,14 +392,14 @@ describe("DSL -> Engine integration", () => {
         it("computes boolean && and ||", async () => {
             const irAnd = compileOk(`
                 workflow both(a: boolean, b: boolean): unknown {
-                    const r = a && b
-                    return r
+                    const r = a && b;
+                    return r;
                 }
             `);
             const irOr = compileOk(`
                 workflow either(a: boolean, b: boolean): unknown {
-                    const r = a || b
-                    return r
+                    const r = a || b;
+                    return r;
                 }
             `);
             const { eng } = makeEngine();
@@ -422,8 +422,8 @@ describe("DSL -> Engine integration", () => {
         it("short-circuits && (rhs not executed when lhs is false)", async () => {
             const ir = compileOk(`
                 workflow sc(a: boolean, b: boolean): unknown {
-                    const r = a && b
-                    return r
+                    const r = a && b;
+                    return r;
                 }
             `);
             // Find the RHS-evaluation and short-circuit arm node IDs
@@ -460,8 +460,8 @@ describe("DSL -> Engine integration", () => {
         it("short-circuits || (rhs not executed when lhs is true)", async () => {
             const ir = compileOk(`
                 workflow sc(a: boolean, b: boolean): unknown {
-                    const r = a || b
-                    return r
+                    const r = a || b;
+                    return r;
                 }
             `);
             const rhsNode = Object.keys(ir.nodes).find((id) =>
@@ -497,8 +497,8 @@ describe("DSL -> Engine integration", () => {
         it("respects operator precedence (a + b * c)", async () => {
             const ir = compileOk(`
                 workflow calc(a: number, b: number, c: number): unknown {
-                    const r = a + b * c
-                    return r
+                    const r = a + b * c;
+                    return r;
                 }
             `);
             const { eng } = makeEngine();
@@ -518,8 +518,8 @@ describe("DSL -> Engine integration", () => {
         it("negates a boolean with !", async () => {
             const ir = compileOk(`
                 workflow neg(flag: boolean): unknown {
-                    const r = !flag
-                    return r
+                    const r = !flag;
+                    return r;
                 }
             `);
             const { eng } = makeEngine();
@@ -534,8 +534,8 @@ describe("DSL -> Engine integration", () => {
         it("negates a number with -", async () => {
             const ir = compileOk(`
                 workflow neg(x: number): unknown {
-                    const r = -x
-                    return r
+                    const r = -x;
+                    return r;
                 }
             `);
             const { eng } = makeEngine();
@@ -556,13 +556,13 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(
                 `
                 workflow check(x: number): unknown {
-                    const big = x > 10
+                    const big = x > 10;
                     if (big) {
-                        const r = text.template("big: {{x}}", { x: x })
-                        return r
+                        const r = text.template("big: {{x}}", { x: x });
+                        return r;
                     } else {
-                        const r = text.template("small: {{x}}", { x: x })
-                        return r
+                        const r = text.template("small: {{x}}", { x: x });
+                        return r;
                     }
                 }
             `,
@@ -589,8 +589,8 @@ describe("DSL -> Engine integration", () => {
         it("ternary expression picks the right value", async () => {
             const ir = compileOk(`
                 workflow pick(flag: boolean): unknown {
-                    const r = flag ? "yes" : "no"
-                    return r
+                    const r = flag ? "yes" : "no";
+                    return r;
                 }
             `);
             const { eng } = makeEngine();
@@ -614,14 +614,14 @@ describe("DSL -> Engine integration", () => {
                 workflow route(cmd: string): unknown {
                     switch (cmd) {
                         case "hello":
-                            const r = text.template("greeting", {})
-                            return r
+                            const r = text.template("greeting", {});
+                            return r;
                         case "bye":
-                            const r = text.template("farewell", {})
-                            return r
+                            const r = text.template("farewell", {});
+                            return r;
                         default:
-                            const r = text.template("unknown", {})
-                            return r
+                            const r = text.template("unknown", {});
+                            return r;
                     }
                 }
             `,
@@ -655,14 +655,14 @@ describe("DSL -> Engine integration", () => {
         it("if/else with continuation after branch", async () => {
             const ir = compileOk(`
                 workflow classify(x: number): unknown {
-                    const big = x > 10
+                    const big = x > 10;
                     if (big) {
-                        const label = text.template("big", {})
+                        const label = text.template("big", {});
                     } else {
-                        const label = text.template("small", {})
+                        const label = text.template("small", {});
                     }
-                    const result = text.template("done", {})
-                    return result
+                    const result = text.template("done", {});
+                    return result;
                 }
             `);
             const { eng } = makeEngine();
@@ -679,7 +679,7 @@ describe("DSL -> Engine integration", () => {
         it("throw causes workflow failure", async () => {
             const ir = compileOk(`
                 workflow fail(): unknown {
-                    throw "something went wrong"
+                    throw "something went wrong";
                 }
             `);
             const { eng } = makeEngine();
@@ -698,10 +698,10 @@ describe("DSL -> Engine integration", () => {
                 `
                 workflow fetchAll(urls: string[]): unknown {
                     const results = map(urls, (url) => {
-                        const page = web.fetch(url)
-                        return page.body
-                    })
-                    return results
+                        const page = web.fetch(url);
+                        return page.body;
+                    });
+                    return results;
                 }
             `,
                 [webFetch],
@@ -724,10 +724,10 @@ describe("DSL -> Engine integration", () => {
                 `
                 workflow fetchAll(urls: string[]): unknown {
                     const results = map(urls, (url) => {
-                        const page = web.fetch(url)
-                        return page
-                    })
-                    return results
+                        const page = web.fetch(url);
+                        return page;
+                    });
+                    return results;
                 }
             `,
                 [webFetch],
@@ -742,10 +742,10 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(`
                 workflow addToAll(items: number[], offset: number): unknown {
                     const results = map(items, (item) => {
-                        const sum = item + offset
-                        return sum
-                    })
-                    return results
+                        const sum = item + offset;
+                        return sum;
+                    });
+                    return results;
                 }
             `);
             const { eng } = makeEngine();
@@ -765,10 +765,10 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(`
                 workflow positives(nums: number[]): unknown {
                     const results = filter(nums, (n) => {
-                        const ok = n > 0
-                        return ok
-                    })
-                    return results
+                        const ok = n > 0;
+                        return ok;
+                    });
+                    return results;
                 }
             `);
             const { eng } = makeEngine();
@@ -784,10 +784,10 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(`
                 workflow none(nums: number[]): unknown {
                     const results = filter(nums, (n) => {
-                        const ok = n > 100
-                        return ok
-                    })
-                    return results
+                        const ok = n > 100;
+                        return ok;
+                    });
+                    return results;
                 }
             `);
             const { eng } = makeEngine();
@@ -803,10 +803,10 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(`
                 workflow above(nums: number[], threshold: number): unknown {
                     const results = filter(nums, (n) => {
-                        const ok = n > threshold
-                        return ok
-                    })
-                    return results
+                        const ok = n > threshold;
+                        return ok;
+                    });
+                    return results;
                 }
             `);
             const { eng } = makeEngine();
@@ -847,15 +847,15 @@ describe("DSL -> Engine integration", () => {
                 workflow both(): unknown {
                     const results = parallel(
                         () => {
-                            const a = task.a("")
-                            return a.body
+                            const a = task.a("");
+                            return a.body;
                         },
                         () => {
-                            const b = task.b("")
-                            return b.body
+                            const b = task.b("");
+                            return b.body;
                         }
-                    )
-                    return results
+                    );
+                    return results;
                 }
             `,
                 [taskA, taskB],
@@ -882,10 +882,10 @@ describe("DSL -> Engine integration", () => {
                 `
                 workflow fetchParallel(urls: string[]): unknown {
                     const results = parallelMap(urls, (url) => {
-                        const page = web.fetch(url)
-                        return page.body
-                    })
-                    return results
+                        const page = web.fetch(url);
+                        return page.body;
+                    });
+                    return results;
                 }
             `,
                 [webFetch],
@@ -908,9 +908,9 @@ describe("DSL -> Engine integration", () => {
         const ATTEMPTS_SOURCE = `
             workflow fetchWithAttempts(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result.body
-                })
+                    const result = web.fetch(url);
+                    return result.body;
+                });
             }
         `;
 
@@ -1009,14 +1009,14 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(`
                 workflow pipeline(nums: number[]): unknown {
                     const doubled = map(nums, (n) => {
-                        const r = n * 2
-                        return r
-                    })
+                        const r = n * 2;
+                        return r;
+                    });
                     const big = filter(doubled, (n) => {
-                        const ok = n > 5
-                        return ok
-                    })
-                    return big
+                        const ok = n > 5;
+                        return ok;
+                    });
+                    return big;
                 }
             `);
             const { eng } = makeEngine();
@@ -1033,12 +1033,12 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(
                 `
                 workflow absVal(x: number): unknown {
-                    const negative = x < 0
+                    const negative = x < 0;
                     if (negative) {
-                        const r = -x
-                        return r
+                        const r = -x;
+                        return r;
                     } else {
-                        return x
+                        return x;
                     }
                 }
             `,
@@ -1065,10 +1065,10 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(
                 `
                 workflow checkPage(url: string, minLen: number): unknown {
-                    const page = web.fetch(url)
-                    const ok = minLen > 5
-                    const status = ok ? "long enough" : "too short"
-                    return status
+                    const page = web.fetch(url);
+                    const ok = minLen > 5;
+                    const status = ok ? "long enough" : "too short";
+                    return status;
                 }
             `,
                 [webFetch],
@@ -1096,11 +1096,11 @@ describe("DSL -> Engine integration", () => {
                 `
                 workflow fetchAll(urls: string[]): unknown {
                     const pages = map(urls, (url) => {
-                        const page = web.fetch(url)
-                        const msg = text.template("Page: {{body}}", { body: page.body })
-                        return msg
-                    })
-                    return pages
+                        const page = web.fetch(url);
+                        const msg = text.template("Page: {{body}}", { body: page.body });
+                        return msg;
+                    });
+                    return pages;
                 }
             `,
                 [webFetch],
@@ -1142,14 +1142,14 @@ describe("DSL -> Engine integration", () => {
             const ir = compileOk(`
                 workflow pipeline(nums: number[]): unknown {
                     const pos = filter(nums, (n) => {
-                        const ok = n > 0
-                        return ok
-                    })
+                        const ok = n > 0;
+                        return ok;
+                    });
                     const doubled = map(pos, (n) => {
-                        const r = n * 2
-                        return r
-                    })
-                    return doubled
+                        const r = n * 2;
+                        return r;
+                    });
+                    return doubled;
                 }
             `);
             const { eng } = makeEngine();

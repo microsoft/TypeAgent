@@ -151,11 +151,9 @@ export class Parser {
         return { line: t.line, col: t.col, offset: t.offset };
     }
 
-    /** Consume an optional semicolon (ASI). */
-    private optionalSemicolon(): void {
-        if (this.peek().kind === TokenKind.Semicolon) {
-            this.advance();
-        }
+    /** Consume a required semicolon after a statement. */
+    private expectSemicolon(): void {
+        this.expect(TokenKind.Semicolon);
     }
 
     // ---- Workflow ----
@@ -285,7 +283,7 @@ export class Parser {
                 // Expression statement: bare task call or workflow call
                 // (side-effect only, no binding)
                 const expr = this.parseExpression();
-                this.optionalSemicolon();
+                this.expectSemicolon();
                 // Wrap as a const with no binding? The DSL allows bare calls
                 // as expression statements. The emitter handles them.
                 // Bare task calls are allowed for side effects
@@ -322,7 +320,7 @@ export class Parser {
         }
         this.expect(TokenKind.Equals);
         const value = this.parseExpression();
-        this.optionalSemicolon();
+        this.expectSemicolon();
         return { kind: "ConstStatement", name, typeAnnotation, value, loc: l };
     }
 
@@ -340,7 +338,7 @@ export class Parser {
         this.expect(TokenKind.RBracket);
         this.expect(TokenKind.Equals);
         const value = this.parseExpression();
-        this.optionalSemicolon();
+        this.expectSemicolon();
         return { kind: "DestructuringConst", names, value, loc: l };
     }
 
@@ -435,7 +433,7 @@ export class Parser {
         const l = this.loc();
         this.expect(TokenKind.Return);
         const value = this.parseExpression();
-        this.optionalSemicolon();
+        this.expectSemicolon();
         return { kind: "ReturnStatement", value, loc: l };
     }
 
@@ -445,7 +443,7 @@ export class Parser {
         if (this.inSwitchDepth === 0) {
             this.error("'break' is only allowed inside switch arms");
         }
-        this.optionalSemicolon();
+        this.expectSemicolon();
         return { kind: "BreakStatement", loc: l };
     }
 
@@ -453,7 +451,7 @@ export class Parser {
         const l = this.loc();
         this.expect(TokenKind.Throw);
         const value = this.parseExpression();
-        this.optionalSemicolon();
+        this.expectSemicolon();
         return { kind: "ThrowStatement", value, loc: l };
     }
 

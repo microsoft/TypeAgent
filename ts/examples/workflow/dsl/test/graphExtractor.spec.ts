@@ -35,7 +35,7 @@ describe("Graph extractor", () => {
 
     test("extracts workflow name and params", () => {
         const g = extract(
-            `workflow greet(name: string): string { return name }`,
+            `workflow greet(name: string): string { return name; }`,
         );
         expect(g.workflowName).toBe("greet");
         expect(g.params).toHaveLength(1);
@@ -44,7 +44,7 @@ describe("Graph extractor", () => {
     });
 
     test("return node with edge from param", () => {
-        const g = extract(`workflow test(x: string): string { return x }`);
+        const g = extract(`workflow test(x: string): string { return x; }`);
         expect(g.nodes).toHaveLength(1);
         expect(g.nodes[0].kind).toBe("return");
         expect(g.edges).toHaveLength(1);
@@ -57,8 +57,8 @@ describe("Graph extractor", () => {
     test("task call creates task node with edges", () => {
         const g = extract(`
             workflow test(url: string): unknown {
-                const result = web.fetch(url)
-                return result
+                const result = web.fetch(url);
+                return result;
             }
         `);
         const taskNode = g.nodes.find((n) => n.kind === "task");
@@ -75,8 +75,8 @@ describe("Graph extractor", () => {
     test("literal const creates constant node", () => {
         const g = extract(`
             workflow test(): string {
-                const greeting = "hello"
-                return greeting
+                const greeting = "hello";
+                return greeting;
             }
         `);
         const constNode = g.nodes.find((n) => n.kind === "constant");
@@ -89,8 +89,8 @@ describe("Graph extractor", () => {
     test("template literal creates template node", () => {
         const g = extract(`
             workflow test(name: string): unknown {
-                const msg = \`Hello \${name}!\`
-                return msg
+                const msg = \`Hello \${name}!\`;
+                return msg;
             }
         `);
         const tmplNode = g.nodes.find((n) => n.kind === "template");
@@ -104,11 +104,11 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(x: boolean): unknown {
                 if (x) {
-                    const a = web.fetch("https://a.com")
+                    const a = web.fetch("https://a.com");
                 } else {
-                    const b = web.fetch("https://b.com")
+                    const b = web.fetch("https://b.com");
                 }
-                return "done"
+                return "done";
             }
         `);
         const thenGroup = g.groups.find((gr) => gr.kind === "if-then");
@@ -125,13 +125,13 @@ describe("Graph extractor", () => {
             workflow test(x: string): unknown {
                 switch (x) {
                     case "a":
-                        const r1 = web.fetch("https://a.com")
+                        const r1 = web.fetch("https://a.com");
                     case "b":
-                        const r2 = web.fetch("https://b.com")
+                        const r2 = web.fetch("https://b.com");
                     default:
-                        const r3 = web.fetch("https://fallback.com")
+                        const r3 = web.fetch("https://fallback.com");
                 }
-                return "done"
+                return "done";
             }
         `);
         const switchGroup = g.groups.find((gr) => gr.kind === "switch");
@@ -149,8 +149,8 @@ describe("Graph extractor", () => {
     test("throw creates error node", () => {
         const g = extract(`
             workflow test(): unknown {
-                throw "something went wrong"
-                return "never"
+                throw "something went wrong";
+                return "never";
             }
         `);
         const errorNode = g.nodes.find((n) => n.kind === "error");
@@ -163,8 +163,8 @@ describe("Graph extractor", () => {
     test("binary operator creates operator node", () => {
         const g = extract(`
             workflow test(a: integer, b: integer): unknown {
-                const sum = a + b
-                return sum
+                const sum = a + b;
+                return sum;
             }
         `);
         const opNode = g.nodes.find((n) => n.kind === "operator");
@@ -181,9 +181,9 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const attemptsGroup = g.groups.find((gr) => gr.kind === "attempts");
@@ -199,9 +199,9 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const mapGroup = g.groups.find((gr) => gr.kind === "map");
@@ -218,8 +218,8 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(items: string[]): unknown {
                 return filter(items, (item) => {
-                    return item === "keep"
-                })
+                    return item === "keep";
+                });
             }
         `);
         const filterGroup = g.groups.find((gr) => gr.kind === "filter");
@@ -232,9 +232,9 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(): unknown {
                 return parallel(
-                    () => { return "a" },
-                    () => { return "b" }
-                )
+                    () => { return "a"; },
+                    () => { return "b"; }
+                );
             }
         `);
         const parallelGroup = g.groups.find((gr) => gr.kind === "parallel");
@@ -248,9 +248,9 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(urls: string[]): unknown {
                 return parallelMap(urls, (url) => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const pmGroup = g.groups.find((gr) => gr.kind === "parallelMap");
@@ -264,11 +264,11 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(): unknown {
                 const results = parallel(
-                    () => { return "a" },
-                    () => { return "b" }
-                )
-                const [a, b] = results
-                return a
+                    () => { return "a"; },
+                    () => { return "b"; }
+                );
+                const [a, b] = results;
+                return a;
             }
         `);
         // The outer return node (not inside the parallel group)
@@ -286,8 +286,8 @@ describe("Graph extractor", () => {
     test("workflow call creates workflowCall node", () => {
         const g = extract(`
             workflow test(url: string): unknown {
-                const result = helper(url)
-                return result
+                const result = helper(url);
+                return result;
             }
         `);
         const callNode = g.nodes.find((n) => n.kind === "workflowCall");
@@ -302,10 +302,10 @@ describe("Graph extractor", () => {
             workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
                     return attempts(3, () => {
-                        const result = web.fetch(url)
-                        return result
-                    })
-                })
+                        const result = web.fetch(url);
+                        return result;
+                    });
+                });
             }
         `);
         const mapGroup = g.groups.find((gr) => gr.kind === "map");

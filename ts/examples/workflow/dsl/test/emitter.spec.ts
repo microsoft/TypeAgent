@@ -230,7 +230,7 @@ describe("Emitter", () => {
     // ---- Basic workflow structure ----
 
     test("minimal workflow with literal return", () => {
-        const ir = compileOk(`workflow hello(): string { return "hi" }`);
+        const ir = compileOk(`workflow hello(): string { return "hi"; }`);
         expect(ir.name).toBe("hello");
         // Pure literal returns are wrapped in identity nodes for engine entry
         expect(ir.output).toEqual({
@@ -250,7 +250,7 @@ describe("Emitter", () => {
 
     test("workflow with params", () => {
         const ir = compileOk(
-            `workflow greet(name: string): string { return name }`,
+            `workflow greet(name: string): string { return name; }`,
         );
         expect(ir.inputSchema).toEqual({
             type: "object",
@@ -273,8 +273,8 @@ describe("Emitter", () => {
     test("task call with positional args", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                const result = web.fetch(url)
-                return result
+                const result = web.fetch(url);
+                return result;
             }
         `);
         expect(ir.entry).toBe("result");
@@ -287,8 +287,8 @@ describe("Emitter", () => {
     test("task call with named args", () => {
         const ir = compileOk(`
             workflow test(): unknown {
-                const result = web.fetch(url: "https://example.com")
-                return result
+                const result = web.fetch(url: "https://example.com");
+                return result;
             }
         `);
         const node = getNode(ir, "result") as TaskNode;
@@ -298,9 +298,9 @@ describe("Emitter", () => {
     test("task call chain with next threading", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                const fetched = web.fetch(url)
-                const summary = text.summarize(fetched)
-                return summary
+                const fetched = web.fetch(url);
+                const summary = text.summarize(fetched);
+                return summary;
             }
         `);
         const fetchNode = getNode(ir, "fetched") as TaskNode;
@@ -312,8 +312,8 @@ describe("Emitter", () => {
     test("const with literal value goes to constants", () => {
         const ir = compileOk(`
             workflow test(): string {
-                const greeting = "hello"
-                return greeting
+                const greeting = "hello";
+                return greeting;
             }
         `);
         expect(ir.constants).toBeDefined();
@@ -336,8 +336,8 @@ describe("Emitter", () => {
     test("template literal emits text.template task", () => {
         const ir = compileOk(`
             workflow test(name: string): unknown {
-                const msg = \`Hello \${name}!\`
-                return msg
+                const msg = \`Hello \${name}!\`;
+                return msg;
             }
         `);
         // Should find a text.template node
@@ -350,7 +350,7 @@ describe("Emitter", () => {
     test("binary === lowers to compare.equals", () => {
         const ir = compileOk(`
             workflow test(x: integer, y: integer): unknown {
-                return x === y
+                return x === y;
             }
         `);
         const [, node] = findNodeByTask(ir, "compare.equals");
@@ -361,7 +361,7 @@ describe("Emitter", () => {
     test("binary + lowers to math.add", () => {
         const ir = compileOk(`
             workflow test(x: integer): unknown {
-                return x + 1
+                return x + 1;
             }
         `);
         const [, node] = findNodeByTask(ir, "math.add");
@@ -374,7 +374,7 @@ describe("Emitter", () => {
     test("unary ! lowers to bool.not", () => {
         const ir = compileOk(`
             workflow test(x: boolean): unknown {
-                return !x
+                return !x;
             }
         `);
         const [, node] = findNodeByTask(ir, "bool.not");
@@ -384,7 +384,7 @@ describe("Emitter", () => {
     test("unary - lowers to math.negate", () => {
         const ir = compileOk(`
             workflow test(x: integer): unknown {
-                return -x
+                return -x;
             }
         `);
         const [, node] = findNodeByTask(ir, "math.negate");
@@ -397,11 +397,11 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(x: boolean): unknown {
                 if (x) {
-                    const a = web.fetch("https://a.com")
+                    const a = web.fetch("https://a.com");
                 } else {
-                    const b = web.fetch("https://b.com")
+                    const b = web.fetch("https://b.com");
                 }
-                return "done"
+                return "done";
             }
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
@@ -416,11 +416,11 @@ describe("Emitter", () => {
             workflow test(x: string): unknown {
                 switch (x) {
                     case "a":
-                        const r1 = web.fetch("https://a.com")
+                        const r1 = web.fetch("https://a.com");
                     case "b":
-                        const r2 = web.fetch("https://b.com")
+                        const r2 = web.fetch("https://b.com");
                 }
-                return "done"
+                return "done";
             }
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
@@ -433,8 +433,8 @@ describe("Emitter", () => {
     test("throw lowers to error.fail task", () => {
         const ir = compileOk(`
             workflow test(): unknown {
-                throw "something went wrong"
-                return "never"
+                throw "something went wrong";
+                return "never";
             }
         `);
         const [, node] = findNodeByTask(ir, "error.fail");
@@ -447,7 +447,7 @@ describe("Emitter", () => {
     test("never return type produces { not: {} } outputSchema", () => {
         const ir = compileOk(`
             workflow test(): never {
-                throw "always fails"
+                throw "always fails";
             }
         `);
         expect(ir.outputSchema).toEqual({ not: {} });
@@ -456,7 +456,7 @@ describe("Emitter", () => {
     test("unknown return type produces {} outputSchema", () => {
         const ir = compileOk(`
             workflow test(): unknown {
-                return "anything"
+                return "anything";
             }
         `);
         expect(ir.outputSchema).toEqual({});
@@ -467,7 +467,7 @@ describe("Emitter", () => {
     test("ternary lowers to branch node", () => {
         const ir = compileOk(`
             workflow test(x: boolean): unknown {
-                return x ? "yes" : "no"
+                return x ? "yes" : "no";
             }
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
@@ -480,9 +480,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -495,9 +495,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -532,8 +532,8 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(items: string[]): unknown {
                 return filter(items, (item) => {
-                    return item === "keep"
-                })
+                    return item === "keep";
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -549,8 +549,8 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(items: string[]): unknown {
                 return filter(items, (item) => {
-                    return item === "keep"
-                })
+                    return item === "keep";
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -592,14 +592,14 @@ describe("Emitter", () => {
             workflow test(): unknown {
                 return parallel(
                     () => {
-                        const a = web.fetch("https://a.com")
-                        return a
+                        const a = web.fetch("https://a.com");
+                        return a;
                     },
                     () => {
-                        const b = web.fetch("https://b.com")
-                        return b
+                        const b = web.fetch("https://b.com");
+                        return b;
                     }
-                )
+                );
             }
         `);
         const [, forkNode] = findNodeByKind<ForkNode>(ir, "fork");
@@ -612,9 +612,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(urls: string[]): unknown {
                 return parallelMap(urls, (url) => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, forkMapNode] = findNodeByKind<ForkMapNode>(ir, "forkMap");
@@ -631,9 +631,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -645,9 +645,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -663,9 +663,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -682,9 +682,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -712,9 +712,9 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
-                    const result = web.fetch(url)
-                    return result
-                })
+                    const result = web.fetch(url);
+                    return result;
+                });
             }
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
@@ -751,8 +751,8 @@ describe("Emitter", () => {
     test("object literal return", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                const result = web.fetch(url)
-                return { data: result, source: url }
+                const result = web.fetch(url);
+                return { data: result, source: url };
             }
         `);
         expect(ir.output).toEqual({
@@ -767,8 +767,8 @@ describe("Emitter", () => {
         // compile only the main workflow that calls helper
         const ir = compileOk(`
             workflow main(url: string): unknown {
-                const result = helper(url)
-                return result
+                const result = helper(url);
+                return result;
             }
         `);
         // Should have a workflow.helper task node
@@ -781,8 +781,8 @@ describe("Emitter", () => {
     test("unknown task produces error", () => {
         const result = compile(`
             workflow test(): unknown {
-                const x = unknown.task("hello")
-                return x
+                const x = unknown.task("hello");
+                return x;
             }
         `);
         expect(result.errors.length).toBeGreaterThan(0);
@@ -794,8 +794,8 @@ describe("Emitter", () => {
     test("destructuring literal array", () => {
         const ir = compileOk(`
             workflow test(): unknown {
-                const [a, b] = ["hello", "world"]
-                return a
+                const [a, b] = ["hello", "world"];
+                return a;
             }
         `);
         // a is a literal binding resolved to "hello", wrapped in identity
@@ -811,8 +811,8 @@ describe("Emitter", () => {
     test("unreferenced task binds are stripped", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                const unused = web.fetch(url)
-                return "done"
+                const unused = web.fetch(url);
+                return "done";
             }
         `);
         // The web.fetch node should exist but bind should be stripped
@@ -830,10 +830,10 @@ describe("Emitter", () => {
         const ir = compileOk(`
             workflow test(x: boolean, url: string): unknown {
                 if (x) {
-                    const a = web.fetch("https://a.com")
+                    const a = web.fetch("https://a.com");
                 }
-                const b = text.summarize(url)
-                return b
+                const b = text.summarize(url);
+                return b;
             }
         `);
         // The summarize node should be reachable via a merge node
@@ -855,11 +855,11 @@ describe("Emitter", () => {
             workflow test(x: string): unknown {
                 switch (x) {
                     case "a":
-                        const r1 = web.fetch("https://a.com")
+                        const r1 = web.fetch("https://a.com");
                     default:
-                        const r2 = web.fetch("https://fallback.com")
+                        const r2 = web.fetch("https://fallback.com");
                 }
-                return "done"
+                return "done";
             }
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
@@ -873,8 +873,8 @@ describe("Emitter", () => {
     test("dotted-name access produces path in reference", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                const result = web.fetch(url)
-                return result.body
+                const result = web.fetch(url);
+                return result.body;
             }
         `);
         const output = ir.output as Record<string, unknown>;
@@ -888,7 +888,7 @@ describe("Emitter", () => {
     test("chained binary operators produce multiple nodes", () => {
         const ir = compileOk(`
             workflow test(a: integer, b: integer, c: integer): unknown {
-                return a + b * c
+                return a + b * c;
             }
         `);
         // Should have at least 2 math nodes (add and multiply)

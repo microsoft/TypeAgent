@@ -122,8 +122,8 @@ const D8_SCHEMAS: TaskSchemaInfo[] = [
 describe("DSL lexer", () => {
     it("tokenizes a workflow declaration", () => {
         const source = `workflow hello(name: string): string {
-            const greeting = text.template("Hello {{name}}", { name: name })
-            return greeting.text
+            const greeting = text.template("Hello {{name}}", { name: name });
+            return greeting.text;
         }`;
         const { tokens, errors } = lex(source);
         expect(errors).toHaveLength(0);
@@ -142,8 +142,8 @@ describe("DSL lexer", () => {
 describe("DSL parser", () => {
     it("parses a minimal workflow", () => {
         const source = `workflow hello(name: string): string {
-            const greeting = text.template("Hello", { name: name })
-            return greeting.text
+            const greeting = text.template("Hello", { name: name });
+            return greeting.text;
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -159,10 +159,10 @@ describe("DSL parser", () => {
     it("parses map built-in", () => {
         const source = `workflow test(items: string[]): { text: string }[] {
             const results = map(items, (item) => {
-                const x = text.template("{{i}}", { i: item })
-                return x
-            })
-            return results
+                const x = text.template("{{i}}", { i: item });
+                return x;
+            });
+            return results;
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -173,7 +173,7 @@ describe("DSL parser", () => {
 
     it("parses object type annotations", () => {
         const source = `workflow test(data: { name: string, age: integer }): string {
-            return data
+            return data;
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -187,8 +187,8 @@ describe("DSL parser", () => {
 describe("DSL compiler", () => {
     it("compiles a minimal workflow to IR", () => {
         const source = `workflow hello(name: string): string {
-            const greeting = text.template("Hello {{name}}", { name: name })
-            return greeting
+            const greeting = text.template("Hello {{name}}", { name: name });
+            return greeting;
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -207,8 +207,8 @@ describe("DSL compiler", () => {
 
     it("generates correct inputSchema from params", () => {
         const source = `workflow test(repos: string[], author: string): string {
-            const x = text.template("hi", { name: author })
-            return x
+            const x = text.template("hi", { name: author });
+            return x;
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -226,11 +226,11 @@ describe("DSL compiler", () => {
     it("lowers map to a loop node with index machinery", () => {
         const source = `workflow test(items: string[]): string {
             const results = map(items, (item) => {
-                const result = text.template("{{x}}", { x: item })
-                return result
-            })
-            const joined = string.join(results, ",")
-            return joined
+                const result = text.template("{{x}}", { x: item });
+                return result;
+            });
+            const joined = string.join(results, ",");
+            return joined;
         }`;
         const result = compile(source, TASK_SCHEMAS);
         expect(result.errors).toHaveLength(0);
@@ -256,9 +256,9 @@ describe("DSL compiler", () => {
 
     it("resolves dotted name references", () => {
         const source = `workflow test(url: string): string {
-            const a = web.fetch(url)
-            const b = text.template("{{x}}", { x: a.body })
-            return b
+            const a = web.fetch(url);
+            const b = text.template("{{x}}", { x: a.body });
+            return b;
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -275,8 +275,8 @@ describe("DSL compiler", () => {
 
     it("reports errors for unknown tasks", () => {
         const source = `workflow test(x: string): string {
-            const a = unknown.task("hi")
-            return a
+            const a = unknown.task("hi");
+            return a;
         }`;
         const result = compile(source, TASK_SCHEMAS);
         expect(result.errors.length).toBeGreaterThan(0);
@@ -285,10 +285,10 @@ describe("DSL compiler", () => {
 
     it("threads next edges between sequential nodes", () => {
         const source = `workflow test(x: string): string {
-            const a = text.template("1", { x: x })
-            const b = text.template("2", { x: a })
-            const c = text.template("3", { x: b })
-            return c
+            const a = text.template("1", { x: x });
+            const b = text.template("2", { x: a });
+            const c = text.template("3", { x: b });
+            return c;
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -302,10 +302,10 @@ describe("DSL compiler", () => {
     it("compiles attempts to a loop node", () => {
         const source = `workflow test(url: string): { body: string } {
             const result = attempts(3, () => {
-                const r = web.fetch(url)
-                return r
-            })
-            return result
+                const r = web.fetch(url);
+                return r;
+            });
+            return result;
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -320,11 +320,11 @@ describe("DSL compiler", () => {
     it("compiles if/else to branch nodes", () => {
         const source = `workflow test(x: boolean): string {
             if (x) {
-                const a = web.fetch("https://a.com")
+                const a = web.fetch("https://a.com");
             } else {
-                const b = web.fetch("https://b.com")
+                const b = web.fetch("https://b.com");
             }
-            return "done"
+            return "done";
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
@@ -340,15 +340,15 @@ describe("DSL compiler", () => {
         const source = `workflow test(): unknown {
             const results = parallel(
                 () => {
-                    const a = web.fetch("https://a.com")
-                    return a
+                    const a = web.fetch("https://a.com");
+                    return a;
                 },
                 () => {
-                    const b = web.fetch("https://b.com")
-                    return b
+                    const b = web.fetch("https://b.com");
+                    return b;
                 }
-            )
-            return results
+            );
+            return results;
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);

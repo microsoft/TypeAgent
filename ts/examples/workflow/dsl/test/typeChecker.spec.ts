@@ -105,14 +105,14 @@ describe("type checker", () => {
     // ---- Valid programs ----
 
     test("empty workflow passes", () => {
-        expectNoErrors('workflow test(): string { return "hello" }');
+        expectNoErrors('workflow test(): string { return "hello"; }');
     });
 
     test("const with matching type annotation", () => {
         expectNoErrors(`
             workflow test(): string {
-                const x: number = 42
-                return "ok"
+                const x: number = 42;
+                return "ok";
             }
         `);
     });
@@ -120,8 +120,8 @@ describe("type checker", () => {
     test("dotted name resolution", () => {
         expectNoErrors(`
             workflow test(data: { name: string, count: number }): string {
-                const n = data.name
-                return n
+                const n = data.name;
+                return n;
             }
         `);
     });
@@ -129,8 +129,8 @@ describe("type checker", () => {
     test("task call returns typed result", () => {
         expectNoErrors(`
             workflow test(): string {
-                const r = test.template(template: "hi", vars: {})
-                return r.text
+                const r = test.template(template: "hi", vars: {});
+                return r.text;
             }
         `);
     });
@@ -138,7 +138,7 @@ describe("type checker", () => {
     test("numeric comparison", () => {
         expectNoErrors(`
             workflow test(x: number, y: number): boolean {
-                return x > y
+                return x > y;
             }
         `);
     });
@@ -146,7 +146,7 @@ describe("type checker", () => {
     test("boolean logic", () => {
         expectNoErrors(`
             workflow test(a: boolean, b: boolean): boolean {
-                return a && b || !a
+                return a && b || !a;
             }
         `);
     });
@@ -154,7 +154,7 @@ describe("type checker", () => {
     test("arithmetic", () => {
         expectNoErrors(`
             workflow test(x: number, y: number): number {
-                return x + y * 2 - 1
+                return x + y * 2 - 1;
             }
         `);
     });
@@ -162,7 +162,7 @@ describe("type checker", () => {
     test("equality with same types", () => {
         expectNoErrors(`
             workflow test(a: string, b: string): boolean {
-                return a === b
+                return a === b;
             }
         `);
     });
@@ -170,7 +170,7 @@ describe("type checker", () => {
     test("ternary with matching arms", () => {
         expectNoErrors(`
             workflow test(x: boolean): string {
-                return x ? "yes" : "no"
+                return x ? "yes" : "no";
             }
         `);
     });
@@ -179,9 +179,9 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(x: boolean): string {
                 if (x) {
-                    return "yes"
+                    return "yes";
                 }
-                return "no"
+                return "no";
             }
         `);
     });
@@ -189,14 +189,14 @@ describe("type checker", () => {
     test("template literal always string", () => {
         expectNoErrors(`
             workflow test(name: string): string {
-                return \`hello \${name}\`
+                return \`hello \${name}\`;
             }
         `);
     });
 
     test("any is not a valid type keyword", () => {
         expectError(
-            `workflow test(x: any): string { return "ok" }`,
+            `workflow test(x: any): string { return "ok"; }`,
             "Unknown type",
         );
     });
@@ -205,8 +205,8 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(items: string[]): string[] {
                 return map(items, (item) => {
-                    return item
-                })
+                    return item;
+                });
             }
         `);
     });
@@ -215,8 +215,8 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(items: number[]): number[] {
                 return filter(items, (item) => {
-                    return item > 0
-                })
+                    return item > 0;
+                });
             }
         `);
     });
@@ -225,10 +225,10 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(): string {
                 const [a, b] = parallel(
-                    () => { return "a" },
-                    () => { return 42 }
-                )
-                return a
+                    () => { return "a"; },
+                    () => { return 42; }
+                );
+                return a;
             }
         `);
     });
@@ -237,8 +237,8 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(): { stdout: string, exitCode: integer } {
                 return attempts(3, () => {
-                    return test.exec(command: "echo hi")
-                })
+                    return test.exec(command: "echo hi");
+                });
             }
         `);
     });
@@ -248,9 +248,9 @@ describe("type checker", () => {
             workflow test(x: string): string {
                 switch (x) {
                     case "a":
-                        return "alpha"
+                        return "alpha";
                     default:
-                        return "other"
+                        return "other";
                 }
             }
         `);
@@ -259,7 +259,7 @@ describe("type checker", () => {
     test("throw statement", () => {
         expectNoErrors(`
             workflow test(): string {
-                throw "error"
+                throw "error";
             }
         `);
     });
@@ -268,10 +268,10 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(): string {
                 const [a, b] = parallel(
-                    () => { return "x" },
-                    () => { return 42 }
-                )
-                return a
+                    () => { return "x"; },
+                    () => { return 42; }
+                );
+                return a;
             }
         `);
     });
@@ -280,56 +280,56 @@ describe("type checker", () => {
 
     test("arithmetic on string", () => {
         expectError(
-            `workflow test(x: string): number { return x + 1 }`,
+            `workflow test(x: string): number { return x + 1; }`,
             "must be numeric",
         );
     });
 
     test("arithmetic on boolean", () => {
         expectError(
-            `workflow test(x: boolean): number { return x * 2 }`,
+            `workflow test(x: boolean): number { return x * 2; }`,
             "must be numeric",
         );
     });
 
     test("comparison on string vs number", () => {
         expectError(
-            `workflow test(x: string): boolean { return x > 0 }`,
+            `workflow test(x: string): boolean { return x > 0; }`,
             "must be numeric",
         );
     });
 
     test("=== with mixed types", () => {
         expectError(
-            `workflow test(x: number): boolean { return x === "5" }`,
+            `workflow test(x: number): boolean { return x === "5"; }`,
             "same types",
         );
     });
 
     test("&& with non-boolean", () => {
         expectError(
-            `workflow test(x: number, y: boolean): boolean { return x && y }`,
+            `workflow test(x: number, y: boolean): boolean { return x && y; }`,
             "must be boolean",
         );
     });
 
     test("|| with non-boolean", () => {
         expectError(
-            `workflow test(x: string, y: boolean): boolean { return x || y }`,
+            `workflow test(x: string, y: boolean): boolean { return x || y; }`,
             "must be boolean",
         );
     });
 
     test("! on non-boolean", () => {
         expectError(
-            `workflow test(x: number): boolean { return !x }`,
+            `workflow test(x: number): boolean { return !x; }`,
             "must be boolean",
         );
     });
 
     test("unary minus on string", () => {
         expectError(
-            `workflow test(x: string): number { return -x }`,
+            `workflow test(x: string): number { return -x; }`,
             "must be numeric",
         );
     });
@@ -338,35 +338,35 @@ describe("type checker", () => {
 
     test("unknown variable", () => {
         expectError(
-            `workflow test(): string { return unknown }`,
+            `workflow test(): string { return unknown; }`,
             "Unknown reference",
         );
     });
 
     test("unknown task", () => {
         expectError(
-            `workflow test(): string { return fake.task() }`,
+            `workflow test(): string { return fake.task(); }`,
             "Unknown task",
         );
     });
 
     test("field access on non-object", () => {
         expectError(
-            `workflow test(x: number): string { return x.name }`,
+            `workflow test(x: number): string { return x.name; }`,
             "Cannot access property",
         );
     });
 
     test("unknown field on object", () => {
         expectError(
-            `workflow test(x: { name: string }): string { return x.age }`,
+            `workflow test(x: { name: string }): string { return x.age; }`,
             "does not exist",
         );
     });
 
     test("unknown type annotation", () => {
         expectError(
-            `workflow test(x: mystery): string { return "ok" }`,
+            `workflow test(x: mystery): string { return "ok"; }`,
             "Unknown type",
         );
     });
@@ -376,8 +376,8 @@ describe("type checker", () => {
     test("if with non-boolean condition", () => {
         expectError(
             `workflow test(x: number): string {
-                if (x) { return "yes" }
-                return "no"
+                if (x) { return "yes"; }
+                return "no";
             }`,
             "must be boolean",
         );
@@ -385,14 +385,14 @@ describe("type checker", () => {
 
     test("ternary with non-boolean condition", () => {
         expectError(
-            `workflow test(x: string): string { return x ? "a" : "b" }`,
+            `workflow test(x: string): string { return x ? "a" : "b"; }`,
             "must be boolean",
         );
     });
 
     test("ternary arms with different types", () => {
         expectError(
-            `workflow test(x: boolean): string { return x ? "text" : 42 }`,
+            `workflow test(x: boolean): string { return x ? "text" : 42; }`,
             "same type",
         );
     });
@@ -402,7 +402,7 @@ describe("type checker", () => {
     test("map on non-array", () => {
         expectError(
             `workflow test(x: string): string {
-                return map(x, (item) => { return item })
+                return map(x, (item) => { return item; });
             }`,
             "must be an array",
         );
@@ -411,7 +411,7 @@ describe("type checker", () => {
     test("filter on non-array", () => {
         expectError(
             `workflow test(x: number): number {
-                return filter(x, (item) => { return true })
+                return filter(x, (item) => { return true; });
             }`,
             "must be an array",
         );
@@ -420,7 +420,7 @@ describe("type checker", () => {
     test("parallelMap on non-array", () => {
         expectError(
             `workflow test(x: string): string {
-                return parallelMap(x, (item) => { return item })
+                return parallelMap(x, (item) => { return item; });
             }`,
             "must be an array",
         );
@@ -431,8 +431,8 @@ describe("type checker", () => {
     test("const type annotation mismatch", () => {
         expectError(
             `workflow test(): string {
-                const x: number = "hello"
-                return x
+                const x: number = "hello";
+                return x;
             }`,
             "not assignable",
         );
@@ -443,8 +443,8 @@ describe("type checker", () => {
     test("destructuring non-array/tuple", () => {
         expectError(
             `workflow test(x: string): string {
-                const [a, b] = x
-                return a
+                const [a, b] = x;
+                return a;
             }`,
             "Cannot destructure",
         );
@@ -454,13 +454,13 @@ describe("type checker", () => {
 
     test("workflow return type mismatch", () => {
         expectError(
-            `workflow test(): number { return "hello" }`,
+            `workflow test(): number { return "hello"; }`,
             "not assignable to declared type",
         );
     });
 
     test("workflow return type matches", () => {
-        expectNoErrors(`workflow test(): string { return "hello" }`);
+        expectNoErrors(`workflow test(): string { return "hello"; }`);
     });
 
     // ---- Type errors: built-in argument validation ----
@@ -468,7 +468,7 @@ describe("type checker", () => {
     test("attempts count must be numeric", () => {
         expectError(
             `workflow test(): number {
-                return attempts("hello", () => { return 1 })
+                return attempts("hello", () => { return 1; });
             }`,
             "count must be numeric",
         );
@@ -478,10 +478,10 @@ describe("type checker", () => {
         expectError(
             `workflow test(): string {
                 const [a] = parallel(
-                    () => { return 1 },
+                    () => { return 1; },
                     { maxConcurrency: "fast" }
-                )
-                return "ok"
+                );
+                return "ok";
             }`,
             "maxConcurrency must be numeric",
         );
@@ -490,52 +490,52 @@ describe("type checker", () => {
     // ---- never type ----
 
     test("never is accepted as a return type", () => {
-        expectNoErrors(`workflow test(): never { throw "boom" }`);
+        expectNoErrors(`workflow test(): never { throw "boom"; }`);
     });
 
     test("never is compatible with any declared return type", () => {
-        expectNoErrors(`workflow test(): string { throw "boom" }`);
+        expectNoErrors(`workflow test(): string { throw "boom"; }`);
     });
 
     test("concrete type is not assignable to never", () => {
         expectError(
-            `workflow test(): never { return "hello" }`,
+            `workflow test(): never { return "hello"; }`,
             "not assignable to declared type",
         );
     });
 
     test("ternary with never arm matches the other arm's type", () => {
         expectNoErrors(`
-            workflow fail(): never { throw "boom" }
+            workflow fail(): never { throw "boom"; }
             workflow test(x: boolean): string {
-                return x ? "ok" : fail()
+                return x ? "ok" : fail();
             }
         `);
     });
 
     test("ternary with never consequent matches alternate type", () => {
         expectNoErrors(`
-            workflow fail(): never { throw "boom" }
+            workflow fail(): never { throw "boom"; }
             workflow test(x: boolean): string {
-                return x ? fail() : "ok"
+                return x ? fail() : "ok";
             }
         `);
     });
 
     test("ternary with both arms never is valid", () => {
         expectNoErrors(`
-            workflow fail(): never { throw "boom" }
+            workflow fail(): never { throw "boom"; }
             workflow test(x: boolean): never {
-                return x ? fail() : fail()
+                return x ? fail() : fail();
             }
         `);
     });
 
     test("=== with never operand does not error", () => {
         expectNoErrors(`
-            workflow fail(): never { throw "boom" }
+            workflow fail(): never { throw "boom"; }
             workflow test(x: string): boolean {
-                return x === fail()
+                return x === fail();
             }
         `);
     });
@@ -543,14 +543,14 @@ describe("type checker", () => {
     // ---- unknown type ----
 
     test("unknown is accepted as a return type", () => {
-        expectNoErrors(`workflow test(): unknown { return "hello" }`);
+        expectNoErrors(`workflow test(): unknown { return "hello"; }`);
     });
 
     test("any concrete type is assignable to declared unknown", () => {
         expectNoErrors(`
             workflow test(): unknown {
-                const x = 42
-                return x
+                const x = 42;
+                return x;
             }
         `);
     });
@@ -558,8 +558,8 @@ describe("type checker", () => {
     test("unknown source is not assignable to concrete target", () => {
         expectError(
             `workflow test(): string {
-                const r = test.generateJson(prompt: "give me json")
-                return r.value
+                const r = test.generateJson(prompt: "give me json");
+                return r.value;
             }`,
             "not assignable to declared type",
         );
@@ -568,8 +568,8 @@ describe("type checker", () => {
     test("field access on unknown type errors", () => {
         expectError(
             `workflow test(): unknown {
-                const r = test.generateJson(prompt: "give me json")
-                return r.value.foo
+                const r = test.generateJson(prompt: "give me json");
+                return r.value.foo;
             }`,
             "Cannot access property 'foo' on unknown type",
         );
@@ -578,8 +578,8 @@ describe("type checker", () => {
     test("=== with unknown operand does not error", () => {
         expectNoErrors(`
             workflow test(x: string): boolean {
-                const r = test.generateJson(prompt: "check")
-                return x === r.value
+                const r = test.generateJson(prompt: "check");
+                return x === r.value;
             }
         `);
     });
@@ -587,8 +587,8 @@ describe("type checker", () => {
     test("ternary with unknown and concrete arms reports type mismatch", () => {
         expectError(
             `workflow test(flag: boolean): unknown {
-                const r = test.generateJson(prompt: "maybe")
-                return flag ? "ok" : r.value
+                const r = test.generateJson(prompt: "maybe");
+                return flag ? "ok" : r.value;
             }`,
             "Ternary arms must have the same type",
         );
@@ -596,14 +596,14 @@ describe("type checker", () => {
 
     test("unknown param is not assignable to concrete return", () => {
         expectError(
-            `workflow test(x: unknown): string { return x }`,
+            `workflow test(x: unknown): string { return x; }`,
             "not assignable to declared type",
         );
     });
 
     test("never is assignable to unknown", () => {
         expectNoErrors(`
-            workflow test(): unknown { throw "boom" }
+            workflow test(): unknown { throw "boom"; }
         `);
     });
 });

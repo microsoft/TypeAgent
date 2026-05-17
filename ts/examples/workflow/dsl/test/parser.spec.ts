@@ -89,8 +89,8 @@ describe("parser", () => {
     test("const with type annotation", () => {
         const wf = parseWf(`
             workflow test(): string {
-                const x: number = 42
-                return x
+                const x: number = 42;
+                return x;
             }
         `);
         const s = wf.body[0] as ConstStatement;
@@ -103,8 +103,8 @@ describe("parser", () => {
     test("const without type annotation", () => {
         const wf = parseWf(`
             workflow test(): string {
-                const x = "hello"
-                return x
+                const x = "hello";
+                return x;
             }
         `);
         const s = wf.body[0] as ConstStatement;
@@ -116,8 +116,8 @@ describe("parser", () => {
         const wf = parseWf(`
             workflow test(): string {
                 const a = 1;
-                const b = 2
-                return b
+                const b = 2;
+                return b;
             }
         `);
         expect(wf.body).toHaveLength(3);
@@ -128,8 +128,8 @@ describe("parser", () => {
     test("destructuring const", () => {
         const wf = parseWf(`
             workflow test(): string {
-                const [a, b, c] = someCall()
-                return a
+                const [a, b, c] = someCall();
+                return a;
             }
         `);
         const s = wf.body[0] as DestructuringConst;
@@ -143,9 +143,9 @@ describe("parser", () => {
         const wf = parseWf(`
             workflow test(x: boolean): string {
                 if (x) {
-                    return "yes"
+                    return "yes";
                 } else {
-                    return "no"
+                    return "no";
                 }
             }
         `);
@@ -159,9 +159,9 @@ describe("parser", () => {
         const wf = parseWf(`
             workflow test(x: boolean): string {
                 if (x) {
-                    return "yes"
+                    return "yes";
                 }
-                return "no"
+                return "no";
             }
         `);
         const s = wf.body[0] as IfStatement;
@@ -173,11 +173,11 @@ describe("parser", () => {
         const wf = parseWf(`
             workflow test(x: number): string {
                 if (x === 1) {
-                    return "one"
+                    return "one";
                 } else if (x === 2) {
-                    return "two"
+                    return "two";
                 } else {
-                    return "other"
+                    return "other";
                 }
             }
         `);
@@ -194,11 +194,11 @@ describe("parser", () => {
             workflow test(x: string): string {
                 switch (x) {
                     case "a":
-                        return "alpha"
+                        return "alpha";
                     case "b":
-                        return "beta"
+                        return "beta";
                     default:
-                        return "other"
+                        return "other";
                 }
             }
         `);
@@ -213,11 +213,11 @@ describe("parser", () => {
             workflow test(x: number): string {
                 switch (x) {
                     case 1:
-                        return "one"
+                        return "one";
                     case 2:
-                        return "two"
+                        return "two";
                 }
-                return "unknown"
+                return "unknown";
             }
         `);
         const s = wf.body[0] as SwitchStatement;
@@ -231,12 +231,12 @@ describe("parser", () => {
             workflow test(x: string): string {
                 switch (x) {
                     case "a":
-                        const r = task.do()
-                        break
+                        const r = task.do();
+                        break;
                     default:
-                        break
+                        break;
                 }
-                return "done"
+                return "done";
             }
         `);
         const s = wf.body[0] as SwitchStatement;
@@ -249,7 +249,7 @@ describe("parser", () => {
     test("return statement", () => {
         const wf = parseWf(`
             workflow test(): string {
-                return "hello"
+                return "hello";
             }
         `);
         const s = wf.body[0] as ReturnStatement;
@@ -260,7 +260,7 @@ describe("parser", () => {
     test("throw statement", () => {
         const wf = parseWf(`
             workflow test(): string {
-                throw "error message"
+                throw "error message";
             }
         `);
         const s = wf.body[0] as ThrowStatement;
@@ -273,9 +273,9 @@ describe("parser", () => {
             workflow test(x: string): string {
                 switch (x) {
                     case "a":
-                        break
+                        break;
                 }
-                return "done"
+                return "done";
             }
         `);
         const s = wf.body[0] as SwitchStatement;
@@ -285,8 +285,8 @@ describe("parser", () => {
     test("break outside switch produces error", () => {
         const { errors } = parse(`
             workflow test(): string {
-                break
-                return "done"
+                break;
+                return "done";
             }
         `);
         expect(errors.length).toBeGreaterThan(0);
@@ -495,7 +495,7 @@ describe("parser", () => {
     // ---- Expression: built-in functions ----
 
     test("attempts builtin", () => {
-        const e = parseExpr('attempts(3, () => { return task.call("x") })');
+        const e = parseExpr('attempts(3, () => { return task.call("x"); })');
         expect(e.kind).toBe("AttemptsNode");
         if (e.kind === "AttemptsNode") {
             expect(e.count.kind).toBe("NumberLiteralExpr");
@@ -505,7 +505,7 @@ describe("parser", () => {
 
     test("attempts builtin with fallback", () => {
         const e = parseExpr(
-            'attempts(3, () => { return task.call("x") }, (err) => { return "fallback" })',
+            'attempts(3, () => { return task.call("x"); }, (err) => { return "fallback"; })',
         );
         expect(e.kind).toBe("AttemptsNode");
         if (e.kind === "AttemptsNode") {
@@ -516,7 +516,7 @@ describe("parser", () => {
 
     test("map builtin", () => {
         const e = parseExpr(
-            "map(items, (item) => { return task.process(data: item) })",
+            "map(items, (item) => { return task.process(data: item); })",
         );
         expect(e.kind).toBe("MapNode");
         if (e.kind === "MapNode") {
@@ -527,7 +527,7 @@ describe("parser", () => {
 
     test("filter builtin", () => {
         const e = parseExpr(
-            "filter(items, (item) => { return item.valid === true })",
+            "filter(items, (item) => { return item.valid === true; })",
         );
         expect(e.kind).toBe("FilterNode");
         if (e.kind === "FilterNode") {
@@ -537,7 +537,7 @@ describe("parser", () => {
 
     test("parallel builtin", () => {
         const e = parseExpr(
-            'parallel(() => { return task.a("x") }, () => { return task.b("y") })',
+            'parallel(() => { return task.a("x"); }, () => { return task.b("y"); })',
         );
         expect(e.kind).toBe("ParallelNode");
         if (e.kind === "ParallelNode") {
@@ -547,7 +547,7 @@ describe("parser", () => {
 
     test("parallelMap builtin", () => {
         const e = parseExpr(
-            "parallelMap(items, (item) => { return task.process(data: item) })",
+            "parallelMap(items, (item) => { return task.process(data: item); })",
         );
         expect(e.kind).toBe("ParallelMapNode");
         if (e.kind === "ParallelMapNode") {
@@ -557,7 +557,7 @@ describe("parser", () => {
 
     test("parallel with maxConcurrency", () => {
         const e = parseExpr(
-            'parallel(() => { return task.a("x") }, { maxConcurrency: 2 })',
+            'parallel(() => { return task.a("x"); }, { maxConcurrency: 2 })',
         );
         expect(e.kind).toBe("ParallelNode");
         if (e.kind === "ParallelNode") {
@@ -567,7 +567,7 @@ describe("parser", () => {
 
     test("parallelMap with maxConcurrency", () => {
         const e = parseExpr(
-            "parallelMap(items, (item) => { return task.process(data: item) }, { maxConcurrency: 5 })",
+            "parallelMap(items, (item) => { return task.process(data: item); }, { maxConcurrency: 5 })",
         );
         expect(e.kind).toBe("ParallelMapNode");
         if (e.kind === "ParallelMapNode") {
@@ -586,8 +586,8 @@ describe("parser", () => {
 
     test("parse() returns multiple workflows", () => {
         const source = `
-            workflow a(): string { return "a" }
-            workflow b(): string { return "b" }
+            workflow a(): string { return "a"; }
+            workflow b(): string { return "b"; }
         `;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
@@ -608,13 +608,27 @@ describe("parser", () => {
         expect(errors.length).toBeGreaterThan(0);
     });
 
+    test("error on missing semicolon", () => {
+        const source = `
+            workflow test(): string {
+                const x = 42
+                return "done"
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { errors } = parser.parseSingle();
+        expect(errors.length).toBeGreaterThan(0);
+        expect(errors[0].message).toContain("Expected ;");
+    });
+
     // ---- Expression statement (bare call) ----
 
     test("bare task call as expression statement", () => {
         const wf = parseWf(`
             workflow test(): string {
-                audit.log("something")
-                return "done"
+                audit.log("something");
+                return "done";
             }
         `);
         // Bare call wrapped as ConstStatement with synthetic name
@@ -628,19 +642,19 @@ describe("parser", () => {
         const source = `
             workflow processData(input: { items: string[], threshold: number }): { results: string[], count: number } {
                 const filtered = filter(input.items, (item) => {
-                    return item !== null
-                })
+                    return item !== null;
+                });
 
                 const results = parallelMap(filtered, (item) => {
-                    const processed = text.template(template: \`Processing: \${item}\`, vars: {})
-                    return processed
-                }, { maxConcurrency: 3 })
+                    const processed = text.template(template: \`Processing: \${item}\`, vars: {});
+                    return processed;
+                }, { maxConcurrency: 3 });
 
                 if (results === null) {
-                    throw "Processing failed"
+                    throw "Processing failed";
                 }
 
-                return { results, count: 42 }
+                return { results, count: 42 };
             }
         `;
         const { ast, errors } = parse(source);
