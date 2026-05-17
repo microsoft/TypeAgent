@@ -139,7 +139,7 @@ sub-scope (same contract as loop bodies in v1).
 | `kind`           | yes      | `"fork"`                                                                                                                                                      |
 | `branches`       | yes      | Map of branch name to sub-scope. Each sub-scope has the same contract as v1 loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`, `output`, `outputSchema`. |
 | `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                               |
-| `maxConcurrency` | no       | Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                                    |
+| `maxConcurrency` | no       | Positive integer. Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                  |
 | `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                           |
 | `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error` and empty `trigger`.                                                           |
 | `bind`           | no       | Bound output name for scope visibility.                                                                                                                       |
@@ -156,8 +156,8 @@ sub-scope (same contract as loop bodies in v1).
    from that branch sub-scope's explicit `output` template.
    Branch outputs are not inferred from terminal bind names or by scanning
    branch-local bindings.
-5. If any branch fails, the error propagates immediately. Other in-flight
-   branches are not yet explicitly cancelled (no branch-level abort signal).
+5. If any branch fails, remaining in-flight branches are cancelled and
+   the error propagates immediately.
 6. If `onError` is specified, the error handler runs. The handler receives
    a structured `error` object (code, message, source, task, node,
    scopePath) and an empty `trigger` (unlike task/loop error handlers,
@@ -237,7 +237,7 @@ is a closed sub-scope. Unlike `loop`, there is no `iterateState`
 | `body`             | yes      | Sub-scope with the same contract as v1 loop bodies.                                                                                                                         |
 | `outputSchema`     | yes      | Schema of the forkMap's output. Array whose items match the body's output schema.                                                                                           |
 | `maxIterations`    | no       | Safety cap (same semantics as v1 loop's `maxIterations`). Engine default: 10,000.                                                                                           |
-| `maxConcurrency`   | no       | Max concurrent iterations. Engine queues excess. Defaults to unbounded.                                                                                                     |
+| `maxConcurrency`   | no       | Positive integer. Max concurrent iterations. Engine queues excess. Defaults to unbounded.                                                                                   |
 | `next`             | no       | Next node ID, or `null` / sentinel.                                                                                                                                         |
 | `onError`          | no       | Error handler node ID. Handler receives `error` and empty `trigger` (same contract as fork).                                                                                |
 | `bind`             | no       | Bound output name for scope visibility.                                                                                                                                     |
@@ -248,10 +248,10 @@ is a closed sub-scope. Unlike `loop`, there is no `iterateState`
 2. N body instances start concurrently, each receiving one element.
 3. The forkMap completes when all N instances complete.
 4. The forkMap's output is an array of body outputs, preserving the order of the input collection.
-5. If any iteration fails, the error propagates immediately. Other
-   in-flight iterations are not yet explicitly cancelled. Error
-   handling follows the same contract as `fork`: the `onError` handler
-   receives a structured `error` object and an empty `trigger`.
+5. If any iteration fails, remaining in-flight iterations are cancelled
+   and the error propagates immediately. Error handling follows the same
+   contract as `fork`: the `onError` handler receives a structured
+   `error` object and an empty `trigger`.
 
 **Key difference from `loop`:** No `iterateState`. Loop carries state from
 iteration N to iteration N+1, which forces sequential execution. ForkMap
@@ -403,6 +403,21 @@ extensions. Their status relative to v0.2:
 | P3 Structure = computation  | Strong    | Strong    | IR explicitly declares parallelism. Closes the v1 gap noted in §1.1.3 tensions table.                  |
 | P4 Part without whole       | Pass      | Pass      | Each sub-scope validatable independently given boundary contract.                                      |
 | P5 Reader predicts behavior | Strong    | Strong    | Reader sees `kind: "fork"` / `"forkMap"` and knows concurrent execution. No engine conventions needed. |
+
+---
+
+## 5.1 Observability
+
+v0.2 extends the v0.1 event stream (§5.6) with fork/forkMap events:
+
+- `forkStarted(scopePath, nodeId, branchNames)` - emitted when a fork node begins execution
+- `forkCompleted(scopePath, nodeId, output)` - all branches finished successfully
+- `forkFailed(scopePath, nodeId, error)` - a branch failed (after cancellation of remaining branches)
+- `forkMapIterationStarted(scopePath, nodeId, index)` - one iteration begins
+- `forkMapIterationCompleted(scopePath, nodeId, index, output)` - one iteration finished
+
+ForkMap failure reuses `forkFailed`. All events include `runId` and `timestamp`
+(same envelope as v0.1 events).
 
 ---
 

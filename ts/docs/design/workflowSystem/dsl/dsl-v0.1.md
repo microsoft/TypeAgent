@@ -1144,7 +1144,11 @@ requiring the author to think about it.
 - ParallelMapNode: emit `forkMap` node ([ir-v0.2.md](../ir/ir-v0.2.md)) with
   collection, body sub-scope, and optional `maxConcurrency`
 - TernaryExpr: emit branch node with condition and two output edges
-- SwitchStatement: emit multi-way branch node
+- SwitchStatement: emit a chain of condition-check nodes (one per case arm).
+  Each check compares the discriminant to the arm's value using `compare.equals`.
+  A true result routes to that arm's body; a false result chains to the next
+  check. The default arm (if present) is the final false edge. All arm bodies
+  merge to a shared continuation node.
 - WorkflowCallExpr: emit sub-workflow invocation (inline or reference)
 - ThrowStatement: emits an `error.fail` built-in task node
   ([ir-v0.2.md](../ir/ir-v0.2.md) §3.5). The preceding node's `next` points
