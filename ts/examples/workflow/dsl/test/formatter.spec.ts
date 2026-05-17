@@ -4,6 +4,7 @@
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
 import { format } from "../src/formatter.js";
+import { compile } from "../src/compiler.js";
 import { WorkflowDecl } from "../src/ast.js";
 
 function parse(source: string): WorkflowDecl {
@@ -269,5 +270,141 @@ describe("formatter: options", () => {
             eol: "\r\n",
         });
         expect(out).toContain("\r\n");
+    });
+});
+
+describe("formatter: expression edge cases", () => {
+    test("nested ternary round-trips and re-parses to same shape", () => {
+        const src = `workflow w(a: boolean, b: boolean, c: boolean): string {
+            return a ? (b ? "x" : "y") : (c ? "z" : "w");
+        }`;
+        // Stability is sufficient evidence the second parse produces the
+        // same canonical form; the ternary is right-associative so the
+        // formatter is permitted to drop the redundant parens.
+        const out = assertStable(src);
+        expect(out).toContain('a ? ');
+        expect(out).toContain('"x"');
+        expect(out).toContain('"w"');
+    });
+
+    test("non-commutative '-' is left-associative without parens", () => {
+        const src = `workflow w(): number { return 10 - 3 - 2; }`;
+        const out = assertStable(src);
+        // No spurious parens around the left chain.
+        expect(out).toContain("return 10 - 3 - 2;");
+    });
+
+    test("non-commutative '-' preserves parens on the right operand", () => {
+        // 10 - (3 - 2) = 9 must NOT be flattened to 10 - 3 - 2 = 5.
+        const src = `workflow w(): number { return 10 - (3 - 2); }`;
+        const out = assertStable(src);
+        expect(out).toContain("10 - (3 - 2)");
+    });
+
+    test("non-commutative '/' preserves grouping", () => {
+        const left = assertStable(`workflow w(): number { return 10 / 2 / 5; }`);
+        expect(left).toContain("return 10 / 2 / 5;");
+        const right = assertStable(
+            `workflow w(): number { return 10 / (2 / 5); }`,
+        );
+        expect(right).toContain("10 / (2 / 5)");
+    });
+
+    test("'%' preserves grouping on the right operand", () => {
+        const out = assertStable(
+            `workflow w(): number { return 10 % (3 % 2); }`,
+        );
+        expect(out).toContain("10 % (3 % 2)");
+    });
+
+    test("unary minus on identifier", () => {
+        const out = assertStable(
+            `workflow w(a: number): number { return -a; }`,
+        );
+        expect(out).toContain("return -a;");
+    });
+
+    test("unary minus on parenthesized expression keeps parens", () => {
+        const out = assertStable(
+            `workflow w(a: number, b: number): number { return -(a + b); }`,
+        );
+        expect(out).toContain("-(a + b)");
+    });
+
+    test("builtin nested inside builtin round-trips", () => {
+        const src = `workflow w(items: number[]): number[] {
+            const r = map(filter(items, (x) => { return x; }), (y) => { return y; });
+            return r;
+        }`;
+        const out = assertStable(src);
+        // Outer map and inner filter both present and properly nested.
+        expect(out).toContain("map(filter(items, (x) =>");
+    });
+});
+
+describe("formatter: comment attachment edge cases (G8)", () => {
+    test("comment before 'else' is preserved (attached inside else block)", () => {
+        // Implementation detail: the parser attaches the trivia before
+        // `else` as a leading comment of the first statement of the
+        // else-branch. This test pins down current behaviour so any
+        // future move (e.g. attaching as trailing comment of the then
+        // branch) is a deliberate change rather than silent comment loss.
+        const src = `workflow w(a: boolean): string {
+            if (a) {
+                return "x";
+            }
+            /* before-else */
+            else {
+                return "y";
+            }
+        }`;
+        const out = roundTrip(src);
+        expect(out).toContain("/* before-else */");
+    });
+
+    test("comment before 'case' arm is preserved", () => {
+        const src = `workflow w(a: string): string {
+            switch (a) {
+                case "x":
+                    return "x";
+                /* note */
+                case "y":
+                    return "y";
+            }
+        }`;
+        const out = roundTrip(src);
+        expect(out).toContain("/* note */");
+    });
+
+    test("multi-line block comment is preserved verbatim", () => {
+        const src = `/*
+ * banner
+ * line2
+ */
+workflow w(): string { return "x"; }`;
+        const out = roundTrip(src);
+        expect(out).toContain("* banner");
+        expect(out).toContain("* line2");
+    });
+});
+
+describe("compiler: comments don't perturb IR", () => {
+    test("source with comments yields identical IR to comment-free source", () => {
+        const bare = `workflow w(a: string): string {
+            const x = a;
+            return x;
+        }`;
+        const commented = `// header
+workflow w(a: string): string {
+    /* before const */
+    const x = a; // trailing on const line
+    // before return
+    return x;
+}`;
+        const r1 = compile(bare, []);
+        const r2 = compile(commented, []);
+        expect(r1.errors).toEqual([]);
+        expect(r2.errors).toEqual([]);
+        expect(r2.ir).toEqual(r1.ir);
     });
 });

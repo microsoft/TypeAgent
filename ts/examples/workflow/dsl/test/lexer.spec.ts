@@ -334,4 +334,50 @@ describe("lexer", () => {
             TokenKind.NumberLiteral,
         ]);
     });
+
+    // ---- Comment collection (G8) ----
+    //
+    // These tests guard the LexComment collector: regressions here would
+    // either drop comments from format() output or corrupt position
+    // tracking for tokens following multi-line block comments.
+
+    test("line comment at EOF (no trailing newline) is captured", () => {
+        const { comments, errors } = lex("a // tail");
+        expect(errors).toEqual([]);
+        expect(comments).toHaveLength(1);
+        expect(comments[0]).toMatchObject({
+            text: "// tail",
+            block: false,
+        });
+    });
+
+    test("block comment containing // is captured verbatim", () => {
+        const { comments, errors } = lex("/* abc // not-a-line-comment */ x");
+        expect(errors).toEqual([]);
+        expect(comments).toHaveLength(1);
+        expect(comments[0].text).toBe("/* abc // not-a-line-comment */");
+        expect(comments[0].block).toBe(true);
+    });
+
+    test("multi-line block comment is captured verbatim (newlines preserved)", () => {
+        const src = "/*\n line1\n line2\n*/\nx";
+        const { comments, tokens, errors } = lex(src);
+        expect(errors).toEqual([]);
+        expect(comments).toHaveLength(1);
+        expect(comments[0].text).toBe("/*\n line1\n line2\n*/");
+        // Token after the multi-line block comment should be on line 5.
+        const x = tokens.find((t) => t.value === "x");
+        expect(x?.line).toBe(5);
+    });
+
+    test("unterminated block comment: error reported AND comment captured", () => {
+        const { errors, comments } = lex("/* unterminated");
+        expect(errors).toHaveLength(1);
+        expect(errors[0].message).toContain("Unterminated block comment");
+        // The collector still records the text seen so a formatter can
+        // round-trip best-effort and the gap doesn't silently swallow input.
+        expect(comments).toHaveLength(1);
+        expect(comments[0].text).toBe("/* unterminated");
+        expect(comments[0].block).toBe(true);
+    });
 });
