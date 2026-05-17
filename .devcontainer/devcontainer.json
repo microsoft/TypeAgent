@@ -1,6 +1,6 @@
 {
   "name": "TypeAgent Development",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "build": { "dockerfile": "Dockerfile" },
 
   // Multi-arch base image (linux/amd64 and linux/arm64) so this configuration
   // works on Apple Silicon as well as x86_64 hosts.

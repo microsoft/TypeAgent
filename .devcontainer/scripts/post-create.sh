@@ -148,15 +148,26 @@ APT_PACKAGES=(
     libsecret-1-0
     libsecret-1-dev
 )
-if command -v apt-get &> /dev/null; then
-    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get update -y; then
-        echo "  warn: apt-get update failed"
+# Skip if already baked into the image (via .devcontainer/Dockerfile)
+MISSING_PKGS=()
+for pkg in "${APT_PACKAGES[@]}"; do
+    if ! dpkg -s "$pkg" &>/dev/null; then
+        MISSING_PKGS+=("$pkg")
     fi
-    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"; then
-        echo "  warn: failed to install: ${APT_PACKAGES[*]}"
+done
+if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+    if command -v apt-get &> /dev/null; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get update -y; then
+            echo "  warn: apt-get update failed"
+        fi
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${MISSING_PKGS[@]}"; then
+            echo "  warn: failed to install: ${MISSING_PKGS[*]}"
+        fi
+    else
+        echo "  warn: apt-get not available, skipping system library install"
     fi
 else
-    echo "  warn: apt-get not available, skipping system library install"
+    echo "  all packages already installed"
 fi
 
 echo ""

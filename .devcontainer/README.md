@@ -113,8 +113,14 @@ Useful options:
 # Recreate container first
 .devcontainer/scripts/start-devcontainer.sh --recreate --ssh
 
-# Rebuild the devcontainer image
+# Rebuild the devcontainer image (implies --recreate)
 .devcontainer/scripts/start-devcontainer.sh --rebuild
+
+# Remove container and associated Docker volumes
+.devcontainer/scripts/start-devcontainer.sh --clean
+
+# Full reset: rebuild image + clean volumes
+.devcontainer/scripts/start-devcontainer.sh --reset
 
 # Use alternate devcontainer config
 .devcontainer/scripts/start-devcontainer.sh --config .devcontainer/vnc/devcontainer.json
@@ -298,10 +304,19 @@ git reset --hard
 To rebuild with fresh state:
 
 1. Command Palette: `Dev Containers: Rebuild Container`
+2. Or from the CLI: `.devcontainer/scripts/start-devcontainer.sh --rebuild`
 
-To rebuild without cache:
+To rebuild without cache and clean volumes:
 
 1. Command Palette: `Dev Containers: Rebuild Container Without Cache`
+2. Or from the CLI: `.devcontainer/scripts/start-devcontainer.sh --reset`
+
+## Container Image
+
+The devcontainer uses a custom Dockerfile (`.devcontainer/Dockerfile`) that
+extends the base Ubuntu 24.04 image with pre-installed system libraries
+(libsecret). This avoids running `apt-get install` on every container
+creation and leverages Docker's layer cache for fast rebuilds.
 
 ## Resources
 
