@@ -5,10 +5,7 @@
   "description": "Fetch a public URL, extract text, LLM summarize, write to file. Retries fetch once on failure.",
   "inputSchema": {
     "type": "object",
-    "required": [
-      "url",
-      "outputPath"
-    ],
+    "required": ["url", "outputPath"],
     "properties": {
       "url": {
         "type": "string",
@@ -22,10 +19,7 @@
   },
   "outputSchema": {
     "type": "object",
-    "required": [
-      "path",
-      "summary"
-    ],
+    "required": ["path", "summary"],
     "properties": {
       "path": {
         "type": "string"
@@ -82,10 +76,7 @@
       "body": {
         "inputSchema": {
           "type": "object",
-          "required": [
-            "url",
-            "maxRetries"
-          ],
+          "required": ["url", "maxRetries"],
           "properties": {
             "url": {
               "type": "string"
@@ -102,9 +93,7 @@
             "task": "http.get",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "url"
-              ],
+              "required": ["url"],
               "properties": {
                 "url": {
                   "type": "string"
@@ -113,10 +102,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "body",
-                "status"
-              ],
+              "required": ["body", "status"],
               "properties": {
                 "body": {
                   "type": "string"
@@ -141,10 +127,7 @@
             "task": "math.add",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "left",
-                "right"
-              ],
+              "required": ["left", "right"],
               "properties": {
                 "left": {
                   "type": "number"
@@ -172,10 +155,7 @@
             "task": "compare.lessThan",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "left",
-                "right"
-              ],
+              "required": ["left", "right"],
               "properties": {
                 "left": {
                   "type": "number"
@@ -220,9 +200,7 @@
         "output": {
           "$from": "scope",
           "name": "fetchResult",
-          "path": [
-            "body"
-          ],
+          "path": ["body"],
           "optional": true
         },
         "outputSchema": {
@@ -235,10 +213,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -272,9 +247,7 @@
       "task": "llm.generate",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "prompt"
-        ],
+        "required": ["prompt"],
         "properties": {
           "prompt": {
             "type": "string"
@@ -298,10 +271,7 @@
       "task": "file.write",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "path",
-          "content"
-        ],
+        "required": ["path", "content"],
         "properties": {
           "path": {
             "type": "string"

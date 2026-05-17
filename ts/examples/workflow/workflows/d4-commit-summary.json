@@ -5,9 +5,7 @@
   "description": "Generate a conventional commit message from staged changes.",
   "inputSchema": {
     "type": "object",
-    "required": [
-      "repoPath"
-    ],
+    "required": ["repoPath"],
     "properties": {
       "repoPath": {
         "type": "string",
@@ -17,9 +15,7 @@
   },
   "outputSchema": {
     "type": "object",
-    "required": [
-      "message"
-    ],
+    "required": ["message"],
     "properties": {
       "message": {
         "type": "string"
@@ -40,9 +36,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -60,11 +54,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -79,10 +69,7 @@
       },
       "inputs": {
         "command": "git",
-        "args": [
-          "diff",
-          "--staged"
-        ],
+        "args": ["diff", "--staged"],
         "cwd": {
           "$from": "input",
           "name": "repoPath"
@@ -96,10 +83,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -123,9 +107,7 @@
           "diff": {
             "$from": "scope",
             "name": "diffResult",
-            "path": [
-              "stdout"
-            ]
+            "path": ["stdout"]
           }
         }
       },
@@ -137,9 +119,7 @@
       "task": "llm.generate",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "prompt"
-        ],
+        "required": ["prompt"],
         "properties": {
           "prompt": {
             "type": "string"

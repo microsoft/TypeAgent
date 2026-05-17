@@ -659,13 +659,6 @@ export const fileWrite: TaskDefinition<
     },
 };
 
-/** The 5 standard-library tasks (pure, no IO). */
-export const standardLibraryTasks: TaskDefinition[] = [
-    listLength,
-    listElementAt,
-    listAppend,
-];
-
 // ---- compare tasks ----
 
 export const compareEquals: TaskDefinition<
@@ -983,8 +976,11 @@ export const errorFail: TaskDefinition<{ value: unknown }, never> = {
     },
 };
 
-/** DSL standard-library tasks (compare, bool, math, error, list). */
-export const dslStandardLibraryTasks: TaskDefinition[] = [
+/** Standard-library tasks (pure, no IO). */
+export const standardLibraryTasks: TaskDefinition[] = [
+    listLength,
+    listElementAt,
+    listAppend,
     compareEquals,
     compareNotEquals,
     compareGreaterThan,
@@ -1006,10 +1002,9 @@ export const dslStandardLibraryTasks: TaskDefinition[] = [
     identity,
 ];
 
-/** All builtin tasks: stdlib + DSL stdlib + IO + utility + legacy. */
+/** All builtin tasks: stdlib + IO + utility. */
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
-    ...dslStandardLibraryTasks,
     boolToLabel,
     shellExec,
     llmGenerate,

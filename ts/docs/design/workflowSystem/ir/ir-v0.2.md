@@ -382,11 +382,11 @@ conversion, use `math.floor`, `math.round`, or `math.ceil`.
 The [future/](future/) directory contains sketches for future IR
 extensions. Their status relative to v2:
 
-| Sketch                                             | v2 status                                                                                                                                           |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sketch                                            | v2 status                                                                                                                                           |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [foreach.md](future/foreach.md)                   | Superseded by `forkMap` for the parallel case. Sequential foreach remains a separate post-v2 concern (v2's `map` DSL built-in lowers to v1 `loop`). |
-| [block-scope.md](future/block-scope.md)           | Independent of v2. Still planned for future/v2.                                                                                                    |
-| [edge-scoped-bind.md](future/edge-scoped-bind.md) | Independent of v2. Still planned for future/v2.                                                                                                    |
+| [block-scope.md](future/block-scope.md)           | Independent of v2. Still planned for future/v2.                                                                                                     |
+| [edge-scoped-bind.md](future/edge-scoped-bind.md) | Independent of v2. Still planned for future/v2.                                                                                                     |
 
 ---
 
