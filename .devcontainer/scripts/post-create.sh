@@ -119,6 +119,7 @@ echo ""
 echo "Enabling corepack and pnpm..."
 if command -v corepack &> /dev/null; then
     corepack enable || echo "Warning: corepack enable failed"
+    # Use the pnpm version pinned in package.json (packageManager field)
     corepack install || echo "Warning: corepack install failed"
 else
     echo "Warning: corepack not found, checking for pnpm..."

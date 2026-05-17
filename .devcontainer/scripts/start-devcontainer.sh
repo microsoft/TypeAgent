@@ -156,11 +156,11 @@ if [[ $CLEAN_VOLUMES -eq 1 ]]; then
         "claude-code-config-"
     )
     for prefix in "${VOLUME_PREFIXES[@]}"; do
-        for vol in $(docker volume ls -q --filter "name=$prefix" 2>/dev/null); do
-            if docker volume rm "$vol" 2>/dev/null; then
+        for vol in $(docker volume ls -q --filter "name=^$prefix" 2>/dev/null); do
+            if err=$(docker volume rm "$vol" 2>&1); then
                 log "  removed $vol"
             else
-                log "  warn: could not remove $vol"
+                log "  warn: could not remove $vol: $err"
             fi
         done
     done
