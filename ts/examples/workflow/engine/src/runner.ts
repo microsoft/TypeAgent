@@ -41,6 +41,13 @@ interface ScopeContext {
 }
 
 // ---- Template resolution ----
+// Defense-in-depth: all error throws below (unknown namespace, unresolved
+// reference, path projection failures) are unreachable when static
+// validation has passed — the dominator analysis with onError-split
+// coverage (§4.1) proves binding availability on all paths, and
+// checkSchemaCompat verifies path projections against declared schemas.
+// These guards remain unconditional because template resolution must
+// execute to produce values; they cannot be skipped like schema checks.
 
 /**
  * Recursively evaluate a template against a scope context.
