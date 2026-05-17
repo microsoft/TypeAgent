@@ -415,3 +415,30 @@ referenced by another expression.
 3. If current behavior is fine: document it explicitly in the spec
    (dsl-v0.1.md section on compilation semantics) so users know that
    unused bindings are elided.
+
+## G12: `list.append` semantics and naming
+
+**Context:** The `list.append` builtin task returns a new array with the
+item appended (immutable, functional semantics). The name "append"
+suggests mutation in many languages (Python `list.append`, JS
+`Array.push`).
+
+**Current state:**
+
+- `list.append` takes `{ list, item }` and returns `[...list, item]`.
+  It does not mutate the input array.
+- The `list.*` namespace is inconsistent with JSON Schema (`"type":
+"array"`) and DSL syntax (`string[]`). `array.*` would align better.
+- The emitter generates `list.append` nodes inside `filter` lowering.
+  Renaming requires coordinated changes across emitter + engine + test
+  fixtures.
+
+**What needs to happen:**
+
+1. Decide whether to rename `list.*` to `array.*` for consistency with
+   JSON Schema and DSL syntax.
+2. If renaming: update builtinTasks.ts, emitter.ts (filter lowering,
+   loop machinery), and all IR snapshot tests.
+3. Regardless of naming: consider whether the immutable semantics should
+   be made explicit in the task name (e.g., `array.appended` or
+   `array.concat`) to avoid confusion with mutable append/push.
