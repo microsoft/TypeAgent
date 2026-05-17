@@ -64,6 +64,7 @@ VOLUME_PATHS=(
     "/home/codespace/.local/share/pnpm"
     "/home/codespace/.local/share/pnpm/store"
     "/home/codespace/.claude"
+    "/home/codespace/.copilot"
 )
 # Discover the workspace ts/node_modules path dynamically (works for worktrees too)
 WS_TS_DIR=""
@@ -216,27 +217,25 @@ fi
 # - Security hardening: restrict sudo to a minimal allowlist
 # During post-create we needed unrestricted root access to install
 # packages and fix volume ownership.  Now that setup is done, replace
-# the blanket NOPASSWD:ALL rule with the narrowest set of commands the
-# codespace user is likely to need at runtime.
+# the blanket NOPASSWD:ALL rule with only the ssh service commands.
+# apt-get, dpkg, chown, and mkdir are intentionally excluded — all
+# package installation and ownership fixes happen above during setup,
+# and allowing them at runtime exposes privilege-escalation vectors
+# (e.g. apt-get -o hook injection, chown on /etc/shadow).
 echo ""
 echo "Hardening sudo access..."
 SUDOERS_FILE="/etc/sudoers.d/codespace-restricted"
 sudo tee "$SUDOERS_FILE" > /dev/null << 'SUDOERS'
 # Restricted sudo for the codespace user (post-setup hardening).
-# Only allow package management, ownership fixes, and directory creation.
-codespace ALL=(root) NOPASSWD: /usr/bin/apt-get update*, \
-    /usr/bin/apt-get install*, \
-    /usr/bin/apt-get upgrade*, \
-    /usr/bin/apt-get autoremove*, \
-    /usr/bin/apt-get remove*, \
-    /usr/bin/dpkg -i *, \
-    /usr/bin/dpkg --configure *, \
-    /bin/chown *, \
-    /usr/bin/chown *, \
-    /bin/mkdir *, \
-    /usr/bin/mkdir *, \
-    /usr/sbin/service ssh *, \
-    /usr/sbin/service sshd *
+# Only allow managing the SSH service — nothing else.
+codespace ALL=(root) NOPASSWD: /usr/sbin/service ssh start, \
+    /usr/sbin/service ssh stop, \
+    /usr/sbin/service ssh restart, \
+    /usr/sbin/service ssh status, \
+    /usr/sbin/service sshd start, \
+    /usr/sbin/service sshd stop, \
+    /usr/sbin/service sshd restart, \
+    /usr/sbin/service sshd status
 SUDOERS
 sudo chmod 0440 "$SUDOERS_FILE"
 # Remove the blanket rule that grants unrestricted root.  The common-utils
@@ -246,7 +245,7 @@ if [[ -f /etc/sudoers.d/codespace ]]; then
     sudo rm /etc/sudoers.d/codespace
     echo "  Removed blanket NOPASSWD:ALL rule"
 fi
-echo "  Sudo restricted to: apt-get, dpkg, chown, mkdir, service ssh"
+echo "  Sudo restricted to: service ssh/sshd only"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
