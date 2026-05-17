@@ -471,3 +471,42 @@ compatibility. It skips structural comparison for object and array kinds.
    the structural contexts.
 4. Add tests for mismatched object types in return position and ternary
    arms.
+
+## G14: Switch lowering always takes first case
+
+**Spec:** dsl-v0.1.md section 7.4. Switch emits a chain of
+condition-check nodes, each comparing the discriminant to the arm's
+value.
+
+**Current state:** The emitted IR always evaluates to the first case's
+body regardless of the discriminant's runtime value. Likely the
+branch condition for the compare.equals node is not wired to the
+actual discriminant input, or the branch edges (true/false) are
+reversed.
+
+**Reproduction:** Compile a switch with string cases, run with a value
+matching the second case. Output is always from the first case.
+
+## G15: Branch/ternary inside loop body fails at runtime
+
+**Spec:** dsl-v0.1.md sections 2.7, 3.2. Branches and ternary
+expressions should work inside map/filter/retry bodies.
+
+**Current state:** A ternary expression inside a map body compiles
+without errors but fails at runtime. The branch condition evaluation
+inside a loop body scope does not resolve correctly, possibly due to
+scope nesting issues in $from reference resolution.
+
+**Reproduction:** `map(nums, (n) => { const r = n > 10 ? "big" : "small"; return r })`
+compiles but the engine fails to execute the workflow.
+
+## G16: `throw` produces empty error message
+
+**Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
+`error.fail` task node that produces a failure with the thrown value
+as the message.
+
+**Current state:** The error.fail task is emitted, but the error
+message that propagates to the RunResult is empty. The thrown string
+value is not correctly threaded into the error.fail task's input, or
+the error propagation loses the message field.

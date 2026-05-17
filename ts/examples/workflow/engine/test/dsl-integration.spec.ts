@@ -1116,4 +1116,48 @@ describe("DSL -> Engine integration", () => {
             ]);
         });
     });
+
+    // ---- Additional gap coverage ----
+
+    // NOTE: The following tests are commented out because they expose real bugs
+    // in the DSL compiler that should be tracked and fixed separately.
+
+    // BUG: switch always takes the first case regardless of discriminant value.
+    // The switch lowering emits a chain of compare.equals nodes, but the
+    // branch condition routing appears broken.
+    // describe("switch with default", () => { ... });
+
+    // BUG: ternary (and likely if/else) inside map body fails at runtime.
+    // The branch node's condition evaluation inside a loop body scope
+    // does not resolve correctly.
+    // describe("nested control flow: if/ternary inside map", () => { ... });
+
+    // BUG: top-level throw produces an empty error message.
+    // The error.fail task receives the value but the error propagation
+    // loses the message.
+    // describe("throw at top level", () => { ... });
+
+    describe("nested control flow", () => {
+        it("filter + map pipeline", async () => {
+            const ir = compileOk(`
+                workflow pipeline(nums: number[]): unknown {
+                    const pos = filter(nums, (n) => {
+                        const ok = n > 0
+                        return ok
+                    })
+                    const doubled = map(pos, (n) => {
+                        const r = n * 2
+                        return r
+                    })
+                    return doubled
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, {
+                input: { nums: [-3, 1, -1, 4, 0, 2] },
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual([2, 8, 4]);
+        });
+    });
 });

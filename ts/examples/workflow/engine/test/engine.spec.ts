@@ -21,6 +21,9 @@ import {
     WorkflowEvent,
     RunOptions,
     allBuiltinTasks,
+    listLength,
+    listElementAt,
+    listAppend,
     compareEquals,
     compareNotEquals,
     compareGreaterThan,
@@ -5811,6 +5814,36 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result).toEqual({ kind: "ok", output: false });
         });
 
+        it("compare.equals uses strict equality (no coercion)", async () => {
+            // string "5" vs number 5: strict equality returns false
+            expect(
+                await compareEquals.execute({ left: "5", right: 5 }, {} as any),
+            ).toEqual({ kind: "ok", output: false });
+            // null vs undefined
+            expect(
+                await compareEquals.execute(
+                    { left: null, right: undefined },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: false });
+            // object identity: different objects with same shape are not equal
+            expect(
+                await compareEquals.execute(
+                    { left: { a: 1 }, right: { a: 1 } },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: false });
+        });
+
+        it("compare.equals returns false for NaN vs NaN", async () => {
+            expect(
+                await compareEquals.execute(
+                    { left: NaN, right: NaN },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: false });
+        });
+
         it("compare.notEquals returns true for different values", async () => {
             const result = await compareNotEquals.execute(
                 { left: "a", right: "b" },
@@ -5869,6 +5902,37 @@ describe("WorkflowEngine (IR v1)", () => {
                 ),
             ).toEqual({ kind: "ok", output: false });
         });
+
+        it("ordering comparisons with NaN always return false", async () => {
+            for (const exec of [
+                compareGreaterThan,
+                compareLessThan,
+                compareGreaterOrEqual,
+                compareLessOrEqual,
+            ]) {
+                expect(
+                    await exec.execute({ left: NaN, right: 5 }, {} as any),
+                ).toEqual({ kind: "ok", output: false });
+                expect(
+                    await exec.execute({ left: 5, right: NaN }, {} as any),
+                ).toEqual({ kind: "ok", output: false });
+            }
+        });
+
+        it("ordering comparisons with Infinity", async () => {
+            expect(
+                await compareGreaterThan.execute(
+                    { left: Infinity, right: 5 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: true });
+            expect(
+                await compareLessOrEqual.execute(
+                    { left: 5, right: Infinity },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: true });
+        });
     });
 
     describe("bool tasks", () => {
@@ -5920,6 +5984,22 @@ describe("WorkflowEngine (IR v1)", () => {
             });
         });
 
+        it("math.divide returns -Infinity for negative / zero", async () => {
+            const result = await mathDivide.execute(
+                { left: -5, right: 0 },
+                {} as any,
+            );
+            expect(result).toEqual({ kind: "ok", output: -Infinity });
+        });
+
+        it("math.divide returns NaN for 0/0", async () => {
+            const result = await mathDivide.execute(
+                { left: 0, right: 0 },
+                {} as any,
+            );
+            expect(result).toEqual({ kind: "ok", output: NaN });
+        });
+
         it("math.modulo computes remainder", async () => {
             expect(
                 await mathModulo.execute({ left: 17, right: 5 }, {} as any),
@@ -5934,11 +6014,41 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result).toEqual({ kind: "ok", output: NaN });
         });
 
+        it("math.modulo preserves sign of dividend", async () => {
+            expect(
+                await mathModulo.execute({ left: -5, right: 3 }, {} as any),
+            ).toEqual({ kind: "ok", output: -2 });
+        });
+
         it("math.negate negates", async () => {
             expect(await mathNegate.execute({ value: 7 }, {} as any)).toEqual({
                 kind: "ok",
                 output: -7,
             });
+        });
+
+        it("NaN propagates through arithmetic", async () => {
+            expect(
+                await mathAdd.execute({ left: NaN, right: 5 }, {} as any),
+            ).toEqual({ kind: "ok", output: NaN });
+            expect(
+                await mathMultiply.execute(
+                    { left: Infinity, right: 0 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: NaN });
+        });
+
+        it("Infinity arithmetic", async () => {
+            expect(
+                await mathAdd.execute({ left: Infinity, right: 5 }, {} as any),
+            ).toEqual({ kind: "ok", output: Infinity });
+            expect(
+                await mathAdd.execute(
+                    { left: Infinity, right: -Infinity },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: NaN });
         });
 
         it("math.floor floors", async () => {
@@ -5959,6 +6069,16 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(await mathCeil.execute({ value: 3.1 }, {} as any)).toEqual({
                 kind: "ok",
                 output: 4,
+            });
+        });
+
+        it("math.floor/round/ceil with negative values", async () => {
+            expect(await mathFloor.execute({ value: -2.3 }, {} as any)).toEqual(
+                { kind: "ok", output: -3 },
+            );
+            expect(await mathCeil.execute({ value: -2.3 }, {} as any)).toEqual({
+                kind: "ok",
+                output: -2,
             });
         });
     });
@@ -5985,6 +6105,63 @@ describe("WorkflowEngine (IR v1)", () => {
                 expect(result.error?.message).toBe('{"code":42}');
                 expect(result.error?.data).toEqual({ code: 42 });
             }
+        });
+    });
+
+    describe("list tasks", () => {
+        it("list.length returns array length", async () => {
+            expect(
+                await listLength.execute({ list: [1, 2, 3] }, {} as any),
+            ).toEqual({ kind: "ok", output: 3 });
+        });
+
+        it("list.length returns 0 for empty array", async () => {
+            expect(await listLength.execute({ list: [] }, {} as any)).toEqual({
+                kind: "ok",
+                output: 0,
+            });
+        });
+
+        it("list.elementAt returns element at index", async () => {
+            expect(
+                await listElementAt.execute(
+                    { list: ["a", "b", "c"], index: 1 },
+                    {} as any,
+                ),
+            ).toEqual({ kind: "ok", output: "b" });
+        });
+
+        it("list.elementAt fails for out-of-bounds index", async () => {
+            const result = await listElementAt.execute(
+                { list: [1, 2], index: 5 },
+                {} as any,
+            );
+            expect(result.kind).toBe("fail");
+        });
+
+        it("list.elementAt fails for negative index", async () => {
+            const result = await listElementAt.execute(
+                { list: [1, 2, 3], index: -1 },
+                {} as any,
+            );
+            expect(result.kind).toBe("fail");
+        });
+
+        it("list.append returns new array without mutating original", async () => {
+            const original = [1, 2, 3];
+            const result = await listAppend.execute(
+                { list: original, item: 4 },
+                {} as any,
+            );
+            expect(result).toEqual({ kind: "ok", output: [1, 2, 3, 4] });
+            // original array not mutated
+            expect(original).toEqual([1, 2, 3]);
+        });
+
+        it("list.append to empty array", async () => {
+            expect(
+                await listAppend.execute({ list: [], item: "x" }, {} as any),
+            ).toEqual({ kind: "ok", output: ["x"] });
         });
     });
 
@@ -6494,6 +6671,98 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(true);
             expect((result.output as any).fallback).toBe("recovered");
         });
+
+        it("fork fails when branch fails and no onError is set", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.failTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "branch blew up" },
+                    };
+                },
+            });
+            reg.register({
+                name: "mock.okTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: { v: 1 } };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-no-onerror",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            good: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "ok",
+                                    nodes: {
+                                        ok: {
+                                            kind: "task",
+                                            task: "mock.okTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkOut",
+                    },
+                },
+                output: { $from: "scope", name: "forkOut" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("branch blew up");
+        });
     });
 
     // ---- ForkMap execution ----
@@ -6819,6 +7088,97 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(true);
             expect(result.output).toEqual([]);
         });
+
+        it("forkMap fails when an iteration fails", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            reg.register({
+                name: "mock.mayFail",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["n"],
+                    properties: { n: { type: "number" } },
+                },
+                outputSchema: { type: "number" },
+                async execute(input: any) {
+                    if (input.n === 3) {
+                        return {
+                            kind: "fail" as const,
+                            error: { message: "iteration failed on 3" },
+                        };
+                    }
+                    return { kind: "ok" as const, output: input.n * 2 };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "forkmap-fail",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["nums"],
+                    properties: {
+                        nums: { type: "array", items: { type: "number" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "nums" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.mayFail",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["n"],
+                                        properties: {
+                                            n: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "number" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        maxConcurrency: 1,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            const result = await eng.run(ir, {
+                input: { nums: [1, 2, 3, 4, 5] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("iteration failed on 3");
+        });
     });
 
     // ---- Fork events ----
@@ -6916,6 +7276,290 @@ describe("WorkflowEngine (IR v1)", () => {
                 (e) => e.type === "forkCompleted",
             );
             expect(forkCompleted).toHaveLength(1);
+        });
+
+        it("emits forkFailed when a branch fails (with onError)", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.failTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "boom" },
+                    };
+                },
+            });
+            reg.register({
+                name: "mock.recovery",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: { ok: true } };
+                },
+            });
+
+            const events: WorkflowEvent[] = [];
+            const eng = new WorkflowEngine(reg);
+            eng.on((e: WorkflowEvent) => events.push(e));
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-fail-events",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_s",
+                                    nodes: {
+                                        a_s: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_s",
+                                    nodes: {
+                                        b_s: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "y",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "y" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        onError: "recover",
+                        bind: "out",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "mock.recovery",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "recovered",
+                    },
+                },
+                output: { $from: "scope", name: "recovered" },
+            };
+
+            await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+
+            const forkFailed = events.filter((e) => e.type === "forkFailed");
+            expect(forkFailed).toHaveLength(1);
+            if (forkFailed[0].type === "forkFailed") {
+                expect(forkFailed[0].error.message).toContain("boom");
+            }
+        });
+
+        it("emits forkMapIterationStarted/Completed events", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.identity",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return { kind: "ok" as const, output: input };
+                },
+            });
+
+            const events: WorkflowEvent[] = [];
+            const eng = new WorkflowEngine(reg);
+            eng.on((e: WorkflowEvent) => events.push(e));
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "forkmap-events",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "number" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.identity",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            await eng.run(ir, {
+                input: { items: [10, 20, 30] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+
+            const iterStarted = events.filter(
+                (e) => e.type === "forkMapIterationStarted",
+            );
+            const iterCompleted = events.filter(
+                (e) => e.type === "forkMapIterationCompleted",
+            );
+            expect(iterStarted).toHaveLength(3);
+            expect(iterCompleted).toHaveLength(3);
+            // Indices should be 0, 1, 2
+            const startIndices = iterStarted.map((e) =>
+                e.type === "forkMapIterationStarted" ? e.index : -1,
+            );
+            expect(startIndices.sort()).toEqual([0, 1, 2]);
+        });
+
+        it("forkStarted precedes forkCompleted", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.noop",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: {} };
+                },
+            });
+
+            const events: WorkflowEvent[] = [];
+            const eng = new WorkflowEngine(reg);
+            eng.on((e: WorkflowEvent) => events.push(e));
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-order",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_s",
+                                    nodes: {
+                                        a_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_s",
+                                    nodes: {
+                                        b_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "y",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "y" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            };
+
+            await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+
+            const forkIdx = events.findIndex((e) => e.type === "forkStarted");
+            const completeIdx = events.findIndex(
+                (e) => e.type === "forkCompleted",
+            );
+            expect(forkIdx).toBeGreaterThanOrEqual(0);
+            expect(completeIdx).toBeGreaterThan(forkIdx);
         });
     });
 
