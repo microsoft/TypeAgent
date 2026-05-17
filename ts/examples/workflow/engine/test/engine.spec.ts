@@ -6352,6 +6352,72 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(out.b).toBeDefined();
         });
 
+        it("rejects fork with fewer than 2 branches at runtime", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.only",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok", output: {} };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-min2-test",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            only: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "only_step",
+                                    nodes: {
+                                        only_step: {
+                                            kind: "task",
+                                            task: "mock.only",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "onlyOut",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "onlyOut",
+                                    },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
+                    },
+                },
+                output: { $from: "scope", name: "forkResult" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(
+                /must have at least 2 branches/,
+            );
+        });
+
         it("respects maxConcurrency", async () => {
             const reg = new TaskRegistry();
             for (const t of allBuiltinTasks) reg.register(t);
