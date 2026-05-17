@@ -255,7 +255,8 @@ on first launch. If you hit this manually, run:
 sudo chown -R codespace:codespace \
     /workspaces/TypeAgent/ts/node_modules \
     /home/codespace/.local/share/pnpm \
-    /home/codespace/.claude
+   /home/codespace/.claude \
+   /home/codespace/.copilot
 cd /workspaces/TypeAgent/ts && pnpm install
 ```
 

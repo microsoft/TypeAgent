@@ -64,6 +64,7 @@ VOLUME_PATHS=(
     "/home/codespace/.local/share/pnpm"
     "/home/codespace/.local/share/pnpm/store"
     "/home/codespace/.claude"
+    "/home/codespace/.copilot"
 )
 # Discover the workspace ts/node_modules path dynamically (works for worktrees too)
 WS_TS_DIR=""
