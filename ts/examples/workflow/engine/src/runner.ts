@@ -501,9 +501,9 @@ export class WorkflowEngine {
             }
 
             const node = nodes[currentId];
-            // Defense-in-depth: static validator's name-resolution pass
+            // Unreachable after static validation: name-resolution pass
             // verifies all node references exist.
-            if (this.defenseInDepth && !node) {
+            if (!node) {
                 throw new EngineError(`Node "${currentId}" not found`);
             }
 
@@ -681,15 +681,14 @@ export class WorkflowEngine {
 
         try {
             const task = this.registry.get(node.task);
-            // Defense-in-depth: static validator checks all task names
-            // against the registry.
-            if (this.defenseInDepth && !task) {
+            // Unreachable after static validation: IR/task drift pass
+            // checks all task names against the registry.
+            if (!task) {
                 throw new EngineError(
                     `Task "${node.task}" not found in registry`,
                 );
             }
-            // Static validation guarantees the task exists.
-            const validTask = task!;
+            const validTask = task;
 
             // Policy check: secure-by-default.
             // ALL tasks are gated unless explicitly marked sideEffects: false.
@@ -1103,8 +1102,9 @@ export class WorkflowEngine {
     ): Promise<string | undefined> {
         const branchNames = Object.keys(node.branches);
 
-        // Defense-in-depth: static validator already checks fork min-2 branches.
-        if (this.defenseInDepth && branchNames.length < 2) {
+        // Unreachable after static validation: structural check
+        // verifies fork has at least 2 branches.
+        if (branchNames.length < 2) {
             throw new EngineError(
                 `Fork "${nodeId}" must have at least 2 branches, got ${branchNames.length}`,
             );
@@ -1262,10 +1262,10 @@ export class WorkflowEngine {
                 node.collection,
                 outerScope,
             ) as unknown[];
-            // Defense-in-depth: static validator checks collection template
-            // resolves to array type; runtime task-output checks (#9)
+            // Unreachable after static validation: type-compatibility pass
+            // proves collection resolves to array type; task-output checks
             // ensure upstream values match declared types.
-            if (this.defenseInDepth && !Array.isArray(collection)) {
+            if (!Array.isArray(collection)) {
                 throw new EngineError(
                     `forkMap at "${nodeId}": collection did not resolve to an array`,
                 );

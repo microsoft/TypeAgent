@@ -1617,15 +1617,7 @@ re-verifies an invariant that the static validator already proves
 | Check | Static guarantee | Reasoning |
 |---|---|---|
 | **Constant value schema** | `jsonValueToSchema` + `isStructuralSubtype` (§4.1 type compat) | Constant values are in the IR; static validator derives their type and checks compatibility |
-| **Fork min-2 branches** | §4.1 structural check | Branch count is a static IR property |
 | **forkMap `$from: "state"` rejection** | §4.1 scope-closure check on forkMap bodies | State refs in forkMap are a static IR property |
-
-**Integrity (graph and registry)**
-
-| Check | Static guarantee | Reasoning |
-|---|---|---|
-| **Node not found** | §4.1 name-resolution pass | All node references are verified statically |
-| **Unregistered task** | §4.1 IR/task drift pass | All task names are checked against the registry at validation time |
 
 **Propagation (static type compat + essential task output check)**
 
@@ -1643,9 +1635,24 @@ statically and values are proven conformant at each task boundary.
 | **Loop state initial schema** | §4.1 type-compatibility pass + essential task output check | Static proves initial-value template types match state schemas; task output check validates upstream values |
 | **Loop output schema** | §4.1 type-compatibility pass + essential task output check | Static proves output template types match `outputSchema`; task output check validates body bindings |
 | **Loop iterateState schema** | §4.1 type-compatibility pass + essential task output check | Static proves iterateState template types match state schemas; task output check validates body bindings |
-| **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | Static proves collection template resolves to array type; task output check validates upstream values |
 
-#### 5.8.3 Template resolution checks (unconditional)
+#### 5.8.3 Statically proven but unconditional checks
+
+The checks in this section are all proven unreachable after static
+validation, but are kept **unconditional** (not gated by
+`defenseInDepth`) because they are cheap and provide clear diagnostics
+if an IR somehow bypasses static validation.
+
+**Structural / integrity**
+
+| Check | Static guarantee | Reasoning |
+|---|---|---|
+| **Node not found** | §4.1 name-resolution pass | Null check; all node references are verified statically |
+| **Unregistered task** | §4.1 IR/task drift pass | Null check; all task names are checked against the registry at validation time |
+| **Fork min-2 branches** | §4.1 structural check | Comparison; branch count is a static IR property |
+| **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | `Array.isArray` check; static proves collection resolves to array type |
+
+**Template resolution (dominator analysis + type checking)**
 
 The static validator's dominator analysis with onError-split awareness
 (§4.1 scope-closure and dominator passes) proves that every non-optional
@@ -1655,10 +1662,6 @@ error-recovery paths.  Path projections are verified by
 properties.  Combined with the essential task output check (§5.8.1),
 which ensures actual values match declared schemas, path projection
 type errors at runtime are unreachable.
-
-These checks are statically proven but kept **unconditional** (not
-gated by `defenseInDepth`) because they are cheap and provide clear
-diagnostics if an IR somehow bypasses static validation.
 
 | Check | Static guarantee | Reasoning |
 |---|---|---|
