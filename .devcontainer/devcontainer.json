@@ -67,7 +67,9 @@
     // Per-container writable sibling worktree root for agent windows
     "source=typeagent-agent-worktrees-${devcontainerId},target=/workspaces/${localWorkspaceFolderBasename}.worktrees,type=volume",
     // Claude Code config persistence
-    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume"
+    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume",
+    // Copilot CLI chat log persistence
+    "source=copilot-cli-config-${devcontainerId},target=/home/codespace/.copilot,type=volume"
   ],
 
   "containerEnv": {
