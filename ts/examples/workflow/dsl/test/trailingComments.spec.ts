@@ -307,3 +307,54 @@ describe("compiler/IR: trailing/inner comments don't leak", () => {
         expect(json).not.toContain("// tail");
     });
 });
+
+describe("documented gap: comments inside empty nested blocks are dropped", () => {
+    // These tests pin the intentional behavior documented in
+    // implementation-decision.md §D7 and g8-test-gaps-unaddressed.md
+    // "Round 2 — Comments inside empty nested blocks".
+    //
+    // innerComments only exist on WorkflowDecl. Empty if/else/switch
+    // arm bodies have no innerComments slot and their contents become
+    // unattached after parse; round-trip loses the comment.
+
+    test("comment inside empty 'then' block is lost on round-trip", () => {
+        const src = `workflow w(x: number): string {
+    if (x === 1) {
+        // TODO: handle case 1
+    }
+    return "x";
+}`;
+        const out = roundTrip(src);
+        // Pin the (lossy) behavior so we notice if it ever changes:
+        expect(out).not.toContain("TODO: handle case 1");
+    });
+
+    test("comment inside empty 'else' block is lost on round-trip", () => {
+        const src = `workflow w(x: number): string {
+    if (x === 1) {
+        return "y";
+    } else {
+        // TODO: not yet
+    }
+    return "x";
+}`;
+        const out = roundTrip(src);
+        expect(out).not.toContain("TODO: not yet");
+    });
+
+    test("comment inside empty switch case arm is lost on round-trip", () => {
+        const src = `workflow w(x: number): string {
+    switch (x) {
+        case 1:
+            // TODO: arm 1
+        default:
+            return "d";
+    }
+    return "x";
+}`;
+        // Note: 'case 1' with no statements then 'default' — the parser
+        // accepts this; the comment is unattached.
+        const out = roundTrip(src);
+        expect(out).not.toContain("TODO: arm 1");
+    });
+});

@@ -45,3 +45,35 @@ this document records gaps that were deliberately *not* covered.
   not already covered by the single-workflow tests.
 
 No gap from either pass revealed a real bug.
+
+## Round 2 (trailing comments) — gaps not filled
+
+- **Comments inside empty nested blocks** (`if (x) { /* TODO */ }`,
+  `else { /* TODO */ }`, empty `case` arm body, empty
+  `attempts`/`map`/`filter`/`parallel` lambda body). Round 2 surfaces
+  `innerComments` only on `WorkflowDecl` (see implementation-decision
+  §D7). These nested empty blocks silently drop their inner comments.
+  Round 2 adds an explicit test
+  (`trailingComments.spec.ts: "documented gap: comment inside empty
+  if/else/switch body is dropped"`) demonstrating and pinning this
+  behavior. Adding `innerComments` to every block-holding AST node was
+  judged too invasive for a rarely-needed case; users with a TODO
+  body should write a placeholder statement (`return null;` etc.) or
+  put the TODO above the block.
+
+- **Comment between `}` and `else` keyword**
+  (`if (x) { ... } /* note */ else { ... }`). Currently this comment
+  is captured by `finalizeBlock` of the `then` block (it's
+  unconsumed before the `else` keyword, but `else` is not a stop
+  token for the inner block parser — the inner block stops at `}`
+  and the comment lives after `}`). Specifically, since `then`'s
+  closing `}` has already been consumed when we look for `else`,
+  the comment becomes a leading comment of the first statement of
+  `else`. This is a reasonable but non-ideal attachment;
+  systematically modeling "between-brace comments" was out of scope.
+
+## Round 2 (trailing comments) — review feedback acted upon
+
+- Pass 1: no significant bugs.
+- Pass 2: documentation gap for empty-block comment loss — addressed
+  by adding a pinning test and this section.
