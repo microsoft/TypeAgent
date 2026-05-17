@@ -666,7 +666,7 @@ export const standardLibraryTasks: TaskDefinition[] = [
     listAppend,
 ];
 
-// ---- v2 compare tasks ----
+// ---- compare tasks ----
 
 export const compareEquals: TaskDefinition<
     { left: unknown; right: unknown },
@@ -770,7 +770,7 @@ export const compareLessOrEqual: TaskDefinition<
     },
 };
 
-// ---- v2 bool tasks ----
+// ---- bool tasks ----
 
 export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
     name: "bool.not",
@@ -786,7 +786,7 @@ export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
     },
 };
 
-// ---- v2 math tasks ----
+// ---- math tasks ----
 
 export const mathAdd: TaskDefinition<{ left: number; right: number }, number> =
     {
@@ -958,7 +958,7 @@ export const identity: TaskDefinition<{ value: unknown }, unknown> = {
     },
 };
 
-// ---- v2 error tasks ----
+// ---- error tasks ----
 
 export const errorFail: TaskDefinition<{ value: unknown }, never> = {
     name: "error.fail",
@@ -983,8 +983,8 @@ export const errorFail: TaskDefinition<{ value: unknown }, never> = {
     },
 };
 
-/** v2 standard-library tasks (compare, bool, math, error, list). */
-export const v2StandardLibraryTasks: TaskDefinition[] = [
+/** DSL standard-library tasks (compare, bool, math, error, list). */
+export const dslStandardLibraryTasks: TaskDefinition[] = [
     compareEquals,
     compareNotEquals,
     compareGreaterThan,
@@ -1006,10 +1006,10 @@ export const v2StandardLibraryTasks: TaskDefinition[] = [
     identity,
 ];
 
-/** All builtin tasks: stdlib + v2 stdlib + IO + utility + legacy. */
+/** All builtin tasks: stdlib + DSL stdlib + IO + utility + legacy. */
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
-    ...v2StandardLibraryTasks,
+    ...dslStandardLibraryTasks,
     boolToLabel,
     shellExec,
     llmGenerate,

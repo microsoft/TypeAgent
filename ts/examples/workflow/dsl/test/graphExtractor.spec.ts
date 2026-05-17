@@ -9,12 +9,16 @@ import { WorkflowDecl } from "../src/ast.js";
 function parseWf(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors } = lex(source);
     if (lexErrors.length > 0) {
-        throw new Error(`Lex errors: ${lexErrors.map((e: { message: string }) => e.message).join(", ")}`);
+        throw new Error(
+            `Lex errors: ${lexErrors.map((e: { message: string }) => e.message).join(", ")}`,
+        );
     }
     const parser = new Parser(tokens);
     const ast = parser.parse();
     if (ast.errors.length > 0) {
-        throw new Error(`Parse errors: ${ast.errors.map((e: { message: string }) => e.message).join(", ")}`);
+        throw new Error(
+            `Parse errors: ${ast.errors.map((e: { message: string }) => e.message).join(", ")}`,
+        );
     }
     if (ast.workflows.length === 0) {
         throw new Error("No workflow found");
@@ -26,11 +30,13 @@ function extract(source: string): GraphModel {
     return extractGraph(parseWf(source));
 }
 
-describe("Graph extractor v2", () => {
+describe("Graph extractor", () => {
     // ---- Basic structure ----
 
     test("extracts workflow name and params", () => {
-        const g = extract(`workflow greet(name: string): string { return name }`);
+        const g = extract(
+            `workflow greet(name: string): string { return name }`,
+        );
         expect(g.workflowName).toBe("greet");
         expect(g.params).toHaveLength(1);
         expect(g.params[0].name).toBe("name");
@@ -132,7 +138,9 @@ describe("Graph extractor v2", () => {
         expect(switchGroup).toBeDefined();
         const caseGroups = g.groups.filter((gr) => gr.kind === "switch-case");
         expect(caseGroups).toHaveLength(2);
-        const defaultGroup = g.groups.find((gr) => gr.kind === "switch-default");
+        const defaultGroup = g.groups.find(
+            (gr) => gr.kind === "switch-default",
+        );
         expect(defaultGroup).toBeDefined();
     });
 
@@ -264,7 +272,9 @@ describe("Graph extractor v2", () => {
             }
         `);
         // The outer return node (not inside the parallel group)
-        const returnNode = g.nodes.find((n) => n.kind === "return" && !n.groupId);
+        const returnNode = g.nodes.find(
+            (n) => n.kind === "return" && !n.groupId,
+        );
         expect(returnNode).toBeDefined();
         // Should have edge from the parallel group to outer return
         const edgeToReturn = g.edges.find((e) => e.to === returnNode!.id);

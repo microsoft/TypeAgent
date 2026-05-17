@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL v2 type checker.
+ * Workflow DSL type checker.
  *
  * Runs between parse and emit. Walks the AST, infers types for
  * expressions, validates operator usage, and reports type errors.

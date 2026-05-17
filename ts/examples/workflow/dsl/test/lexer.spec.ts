@@ -10,16 +10,15 @@ function kinds(source: string): TokenKind[] {
 
 function values(source: string): string[] {
     const { tokens } = lex(source);
-    return tokens
-        .filter((t) => t.kind !== TokenKind.EOF)
-        .map((t) => t.value);
+    return tokens.filter((t) => t.kind !== TokenKind.EOF).map((t) => t.value);
 }
 
 describe("lexer", () => {
     // ---- Keywords ----
 
-    test("v2 keywords", () => {
-        const src = "workflow const if else switch case default return break throw";
+    test("keywords", () => {
+        const src =
+            "workflow const if else switch case default return break throw";
         expect(kinds(src)).toEqual([
             TokenKind.Workflow,
             TokenKind.Const,

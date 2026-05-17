@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Extracts a visual graph model from a workflow DSL v2 AST.
+ * Extracts a visual graph model from a workflow DSL AST.
  *
  * The graph model is a simplified representation suitable for layout
  * and rendering by a visual editor. It captures:

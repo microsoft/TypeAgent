@@ -35,6 +35,6 @@ export {
     mathCeil,
     errorFail,
     standardLibraryTasks,
-    v2StandardLibraryTasks,
+    dslStandardLibraryTasks,
     allBuiltinTasks,
 } from "./builtinTasks.js";

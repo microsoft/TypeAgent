@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL v2 parser: tokens -> AST.
+ * Workflow DSL parser: tokens -> AST.
  *
  * Grammar (informal):
  *
@@ -286,10 +286,9 @@ export class Parser {
                 // (side-effect only, no binding)
                 const expr = this.parseExpression();
                 this.optionalSemicolon();
-                // Wrap as a const with no binding? No: v2 allows bare calls
+                // Wrap as a const with no binding? The DSL allows bare calls
                 // as expression statements. The emitter handles them.
-                // For now, error: bare expressions are not statements
-                // Actually, v2 allows bare task calls for side effects
+                // Bare task calls are allowed for side effects
                 // (e.g., audit.log(data) in an if body). Wrap in a const
                 // with a synthetic name.
                 return {

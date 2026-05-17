@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL v2 abstract syntax tree types.
+ * Workflow DSL abstract syntax tree types.
  *
  * The AST mirrors the DSL's surface syntax. The emitter (emitter.ts)
  * lowers AST nodes to IR nodes.

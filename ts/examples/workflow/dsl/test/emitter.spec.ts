@@ -226,7 +226,7 @@ function findNodeByKind<T extends WorkflowNode>(
     throw new Error(`No node with kind '${kind}' found`);
 }
 
-describe("Emitter v2", () => {
+describe("Emitter", () => {
     // ---- Basic workflow structure ----
 
     test("minimal workflow with literal return", () => {

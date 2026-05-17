@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL v2 token types and lexer.
+ * Workflow DSL token types and lexer.
  *
  * The DSL is a TypeScript-like language that compiles to workflow IR JSON.
  * Tokens are position-tracked for source-map generation.
@@ -413,19 +413,37 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             case "(":
                 advance();
                 tokens.push(
-                    token(TokenKind.LParen, "(", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.LParen,
+                        "(",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case ")":
                 advance();
                 tokens.push(
-                    token(TokenKind.RParen, ")", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.RParen,
+                        ")",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "{":
                 advance();
                 tokens.push(
-                    token(TokenKind.LBrace, "{", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.LBrace,
+                        "{",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "}":
@@ -437,31 +455,61 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 }
                 advance();
                 tokens.push(
-                    token(TokenKind.RBrace, "}", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.RBrace,
+                        "}",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "[":
                 advance();
                 tokens.push(
-                    token(TokenKind.LBracket, "[", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.LBracket,
+                        "[",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "]":
                 advance();
                 tokens.push(
-                    token(TokenKind.RBracket, "]", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.RBracket,
+                        "]",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case ":":
                 advance();
                 tokens.push(
-                    token(TokenKind.Colon, ":", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Colon,
+                        ":",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case ",":
                 advance();
                 tokens.push(
-                    token(TokenKind.Comma, ",", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Comma,
+                        ",",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case ".":
@@ -473,13 +521,25 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             case ";":
                 advance();
                 tokens.push(
-                    token(TokenKind.Semicolon, ";", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Semicolon,
+                        ";",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "?":
                 advance();
                 tokens.push(
-                    token(TokenKind.QuestionMark, "?", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.QuestionMark,
+                        "?",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "=":
@@ -489,11 +549,18 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                     if (peek() === "=") {
                         advance();
                         tokens.push(
-                            token(TokenKind.TripleEquals, "===", startLine, startCol, startOffset),
+                            token(
+                                TokenKind.TripleEquals,
+                                "===",
+                                startLine,
+                                startCol,
+                                startOffset,
+                            ),
                         );
                     } else {
                         errors.push({
-                            message: 'Use === instead of == (no implicit coercion)',
+                            message:
+                                "Use === instead of == (no implicit coercion)",
                             line: startLine,
                             col: startCol,
                             offset: startOffset,
@@ -502,11 +569,23 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 } else if (peek() === ">") {
                     advance();
                     tokens.push(
-                        token(TokenKind.Arrow, "=>", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.Arrow,
+                            "=>",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 } else {
                     tokens.push(
-                        token(TokenKind.Equals, "=", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.Equals,
+                            "=",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 }
                 continue;
@@ -517,11 +596,18 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                     if (peek() === "=") {
                         advance();
                         tokens.push(
-                            token(TokenKind.NotTripleEquals, "!==", startLine, startCol, startOffset),
+                            token(
+                                TokenKind.NotTripleEquals,
+                                "!==",
+                                startLine,
+                                startCol,
+                                startOffset,
+                            ),
                         );
                     } else {
                         errors.push({
-                            message: 'Use !== instead of != (no implicit coercion)',
+                            message:
+                                "Use !== instead of != (no implicit coercion)",
                             line: startLine,
                             col: startCol,
                             offset: startOffset,
@@ -529,7 +615,13 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                     }
                 } else {
                     tokens.push(
-                        token(TokenKind.Not, "!", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.Not,
+                            "!",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 }
                 continue;
@@ -538,11 +630,23 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 if (peek() === "=") {
                     advance();
                     tokens.push(
-                        token(TokenKind.GreaterOrEqual, ">=", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.GreaterOrEqual,
+                            ">=",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 } else {
                     tokens.push(
-                        token(TokenKind.GreaterThan, ">", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.GreaterThan,
+                            ">",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 }
                 continue;
@@ -551,11 +655,23 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 if (peek() === "=") {
                     advance();
                     tokens.push(
-                        token(TokenKind.LessOrEqual, "<=", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.LessOrEqual,
+                            "<=",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 } else {
                     tokens.push(
-                        token(TokenKind.LessThan, "<", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.LessThan,
+                            "<",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 }
                 continue;
@@ -564,7 +680,13 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 if (peek() === "&") {
                     advance();
                     tokens.push(
-                        token(TokenKind.And, "&&", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.And,
+                            "&&",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 } else {
                     errors.push({
@@ -580,7 +702,13 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 if (peek() === "|") {
                     advance();
                     tokens.push(
-                        token(TokenKind.Or, "||", startLine, startCol, startOffset),
+                        token(
+                            TokenKind.Or,
+                            "||",
+                            startLine,
+                            startCol,
+                            startOffset,
+                        ),
                     );
                 } else {
                     errors.push({
@@ -594,14 +722,22 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             case "+":
                 advance();
                 tokens.push(
-                    token(TokenKind.Plus, "+", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Plus,
+                        "+",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "-":
                 // Negative number: only when preceded by = , [ ( : or an operator
                 if (peekAt(1) >= "0" && peekAt(1) <= "9") {
                     const prevToken =
-                        tokens.length > 0 ? tokens[tokens.length - 1] : undefined;
+                        tokens.length > 0
+                            ? tokens[tokens.length - 1]
+                            : undefined;
                     if (
                         !prevToken ||
                         prevToken.kind === TokenKind.Equals ||
@@ -621,33 +757,63 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                             num += advance();
                         }
                         tokens.push(
-                            token(TokenKind.NumberLiteral, num, startLine, startCol, startOffset),
+                            token(
+                                TokenKind.NumberLiteral,
+                                num,
+                                startLine,
+                                startCol,
+                                startOffset,
+                            ),
                         );
                         continue;
                     }
                 }
                 advance();
                 tokens.push(
-                    token(TokenKind.Minus, "-", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Minus,
+                        "-",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "*":
                 advance();
                 tokens.push(
-                    token(TokenKind.Star, "*", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Star,
+                        "*",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "/":
                 // Comments already handled above, this is division
                 advance();
                 tokens.push(
-                    token(TokenKind.Slash, "/", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Slash,
+                        "/",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
             case "%":
                 advance();
                 tokens.push(
-                    token(TokenKind.Percent, "%", startLine, startCol, startOffset),
+                    token(
+                        TokenKind.Percent,
+                        "%",
+                        startLine,
+                        startCol,
+                        startOffset,
+                    ),
                 );
                 continue;
         }

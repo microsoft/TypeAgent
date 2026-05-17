@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Workflow DSL v2 emitter: AST -> WorkflowIR.
+ * Workflow DSL emitter: AST -> WorkflowIR.
  *
- * Walks the v2 AST and produces the flat IR JSON consumed by the engine.
+ * Walks the AST and produces the flat IR JSON consumed by the engine.
  * Key responsibilities:
  *
  * - Scope-based name resolution (params, const bindings, node outputs)

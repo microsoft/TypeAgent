@@ -5792,9 +5792,9 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    // ---- v2 built-in tasks ----
+    // ---- DSL built-in tasks ----
 
-    describe("v2 compare tasks", () => {
+    describe("compare tasks", () => {
         it("compare.equals returns true for equal values", async () => {
             const result = await compareEquals.execute(
                 { left: 42, right: 42 },
@@ -5871,7 +5871,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    describe("v2 bool tasks", () => {
+    describe("bool tasks", () => {
         it("bool.not negates", async () => {
             expect(await boolNot.execute({ value: true }, {} as any)).toEqual({
                 kind: "ok",
@@ -5884,7 +5884,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    describe("v2 math tasks", () => {
+    describe("math tasks", () => {
         it("math.add adds", async () => {
             expect(
                 await mathAdd.execute({ left: 3, right: 4 }, {} as any),
@@ -5963,7 +5963,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    describe("v2 error tasks", () => {
+    describe("error tasks", () => {
         it("error.fail always fails with string message", async () => {
             const result = await errorFail.execute(
                 { value: "boom" },
