@@ -1555,6 +1555,68 @@ conforming engine runs on all of them. The SHOULD list is the quality
 bar - engines that skip these will produce correct results but with
 poor memory or latency profiles on realistic workflows.
 
+### 5.8 Runtime checks and defense-in-depth
+
+The engine performs two categories of runtime checks during execution.
+**Essential checks** catch errors that cannot be detected statically
+because they depend on runtime values. **Defense-in-depth checks**
+re-verify invariants already proven by the static validator (§4.1) and
+are redundant when static validation has run against the same IR and
+registry.
+
+A conforming engine MUST support a `defenseInDepth` flag (or
+equivalent) that controls whether the second category runs. The flag
+defaults to **on** when static validation is skipped, and **off** when
+static validation has run; callers MAY override explicitly.
+
+#### 5.8.1 Essential runtime checks
+
+These checks MUST always run because they validate runtime values that
+the static validator has no visibility into.
+
+| Check | Trigger | Rationale |
+|---|---|---|
+| **Workflow input schema** | Caller provides `input` | Input is external to the IR; no static knowledge of actual values |
+| **Task output schema** | Task implementation returns | Catches buggy or drifted task implementations returning wrong types (§5.2) |
+| **Never-output contract** | Task with `{ "not": {} }` output returns ok | Task declared it always fails; returning success means a broken implementation |
+| **Side-effect policy deny** | Policy map says `"deny"` | Runtime configuration, not in the IR |
+| **Side-effect prompt / no callback** | Policy says `"prompt"` but no approval callback | Runtime configuration |
+| **Approval rejected** | Approval callback returns non-approved | User decision at runtime |
+| **Task failure** | Task throws or returns `{ kind: "fail" }` | External services fail; legitimate runtime error |
+| **Unrecoverable failure** | Task fails with no `onError` | Failure propagation; the task threw and no handler is declared |
+| **Task timeout** | Execution exceeds `timeoutMs` | Runtime duration is unpredictable |
+| **Run cancelled** | `AbortSignal` fires | External cancellation at runtime |
+| **Loop maxIterations exceeded** | Iteration count ≥ `maxIterations` | Runtime convergence; static analysis cannot predict iteration count |
+| **Template resolution errors** | `$from` reference unresolved, path projection fails | Mostly prevented by static dominator/scope analysis, but error-recovery paths (`onError`) can produce scopes where expected bindings were not set |
+
+#### 5.8.2 Defense-in-depth runtime checks
+
+These checks MAY be skipped when static validation has passed.  Each
+re-verifies an invariant that the static validator already proves
+(column "Static guarantee").
+
+| Check | Static guarantee | Reasoning |
+|---|---|---|
+| **Constant value schema** | `jsonValueToSchema` + `isStructuralSubtype` (§4.1 type compat) | Constant values are in the IR; static validator derives their type and checks compatibility |
+| **Fork min-2 branches** | §4.1 structural check | Branch count is a static IR property |
+| **forkMap `$from: "state"` rejection** | §4.1 scope-closure check on forkMap bodies | State refs in forkMap are a static IR property |
+| **Node not found** | §4.1 name-resolution pass | All node references are verified statically |
+| **Unregistered task** | §4.1 IR/task drift pass | All task names are checked against the registry at validation time |
+| **Workflow output schema** | §4.1 type-compatibility pass + essential task output check | Static proves template type fits schema; task output check ensures upstream values match declared types |
+| **Loop input schema** | §4.1 type-compatibility pass + essential task output check | Static proves input template types match `inputSchema`; task output check validates actual upstream values |
+| **Loop state initial schema** | §4.1 type-compatibility pass + essential task output check | Static proves initial-value template types match state schemas; task output check validates upstream values |
+| **Loop output schema** | §4.1 type-compatibility pass + essential task output check | Static proves output template types match `outputSchema`; task output check validates body bindings |
+| **Loop iterateState schema** | §4.1 type-compatibility pass + essential task output check | Static proves iterateState template types match state schemas; task output check validates body bindings |
+| **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | Static proves collection template resolves to array type; task output check validates upstream values |
+
+The split follows a composability argument: the essential **task output
+schema** check (§5.2) ensures every task implementation's actual return
+value conforms to its declared `outputSchema`.  Combined with the static
+validator's proof that every template's resolved type is structurally
+compatible with its target schema (§4.2), all downstream schema checks
+become redundant — the types are proven compatible statically and the
+values are proven conformant at each task boundary.
+
 ---
 
 ## 6. Worked examples
