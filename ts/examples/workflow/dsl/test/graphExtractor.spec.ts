@@ -175,22 +175,22 @@ describe("Graph extractor", () => {
         expect(edgesToOp).toHaveLength(2);
     });
 
-    // ---- Retry ----
+    // ---- Attempts ----
 
-    test("retry creates group", () => {
+    test("attempts creates group", () => {
         const g = extract(`
             workflow test(url: string): unknown {
-                return retry(3, () => {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result
                 })
             }
         `);
-        const retryGroup = g.groups.find((gr) => gr.kind === "retry");
-        expect(retryGroup).toBeDefined();
-        expect(retryGroup!.label).toContain("retry");
+        const attemptsGroup = g.groups.find((gr) => gr.kind === "attempts");
+        expect(attemptsGroup).toBeDefined();
+        expect(attemptsGroup!.label).toContain("attempts");
         // Body should contain a task node
-        expect(retryGroup!.children.length).toBeGreaterThan(0);
+        expect(attemptsGroup!.children.length).toBeGreaterThan(0);
     });
 
     // ---- Map ----
@@ -301,7 +301,7 @@ describe("Graph extractor", () => {
         const g = extract(`
             workflow test(urls: string[]): unknown {
                 return map(urls, (url) => {
-                    return retry(3, () => {
+                    return attempts(3, () => {
                         const result = web.fetch(url)
                         return result
                     })
@@ -309,9 +309,9 @@ describe("Graph extractor", () => {
             }
         `);
         const mapGroup = g.groups.find((gr) => gr.kind === "map");
-        const retryGroup = g.groups.find((gr) => gr.kind === "retry");
+        const attemptsGroup = g.groups.find((gr) => gr.kind === "attempts");
         expect(mapGroup).toBeDefined();
-        expect(retryGroup).toBeDefined();
-        expect(retryGroup!.parentId).toBe(mapGroup!.id);
+        expect(attemptsGroup).toBeDefined();
+        expect(attemptsGroup!.parentId).toBe(mapGroup!.id);
     });
 });

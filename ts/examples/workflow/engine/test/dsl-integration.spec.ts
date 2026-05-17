@@ -902,23 +902,23 @@ describe("DSL -> Engine integration", () => {
         });
     });
 
-    // ---- Retry ----
+    // ---- Attempts ----
 
-    describe("retry", () => {
-        const RETRY_SOURCE = `
-            workflow fetchWithRetry(url: string): unknown {
-                return retry(3, () => {
+    describe("attempts", () => {
+        const ATTEMPTS_SOURCE = `
+            workflow fetchWithAttempts(url: string): unknown {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result.body
                 })
             }
         `;
 
-        function compileRetry(): WorkflowIR {
-            return compileOk(RETRY_SOURCE, [webFetch]);
+        function compileAttempts(): WorkflowIR {
+            return compileOk(ATTEMPTS_SOURCE, [webFetch]);
         }
 
-        function retryEngine(execute: TaskDefinition["execute"]) {
+        function attemptsEngine(execute: TaskDefinition["execute"]) {
             const task: TaskDefinition = { ...webFetch, execute };
             const builtins = allBuiltinTasks.filter(
                 (t) => t.name !== "web.fetch",
@@ -931,12 +931,12 @@ describe("DSL -> Engine integration", () => {
 
         it("succeeds on first attempt without retrying", async () => {
             let callCount = 0;
-            const { eng, events } = retryEngine(async (input: any) => {
+            const { eng, events } = attemptsEngine(async (input: any) => {
                 callCount++;
                 return { kind: "ok", output: { body: `page: ${input.url}` } };
             });
 
-            const ir = compileRetry();
+            const ir = compileAttempts();
             const result = await eng.run(ir, {
                 input: { url: "https://example.com" },
             });
@@ -953,7 +953,7 @@ describe("DSL -> Engine integration", () => {
 
         it("retries on failure then succeeds", async () => {
             let callCount = 0;
-            const { eng, events } = retryEngine(async (input: any) => {
+            const { eng, events } = attemptsEngine(async (input: any) => {
                 callCount++;
                 if (callCount <= 2) {
                     return {
@@ -967,7 +967,7 @@ describe("DSL -> Engine integration", () => {
                 };
             });
 
-            const ir = compileRetry();
+            const ir = compileAttempts();
             const result = await eng.run(ir, {
                 input: { url: "https://flaky.example.com" },
             });
@@ -982,9 +982,9 @@ describe("DSL -> Engine integration", () => {
             expect(iterEvents.length).toBe(3);
         });
 
-        it("exhausts retries and fails", async () => {
+        it("exhausts attempts and fails", async () => {
             let callCount = 0;
-            const { eng } = retryEngine(async () => {
+            const { eng } = attemptsEngine(async () => {
                 callCount++;
                 return {
                     kind: "fail",
@@ -992,7 +992,7 @@ describe("DSL -> Engine integration", () => {
                 };
             });
 
-            const ir = compileRetry();
+            const ir = compileAttempts();
             const result = await eng.run(ir, {
                 input: { url: "https://down.example.com" },
             });

@@ -299,9 +299,9 @@ describe("DSL compiler", () => {
         expect(nodeB.next).toBe("c");
     });
 
-    it("compiles retry to a loop node", () => {
+    it("compiles attempts to a loop node", () => {
         const source = `workflow test(url: string): { body: string } {
-            const result = retry(3, () => {
+            const result = attempts(3, () => {
                 const r = web.fetch(url)
                 return r
             })
@@ -428,7 +428,7 @@ describe("DSL d8-summarize-url", () => {
         const schema = ir.inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["url", "outputPath"]);
 
-        // Should have a loop node (from retry)
+        // Should have a loop node (from attempts)
         const loopNodes = Object.entries(ir.nodes).filter(
             ([_, n]) => n.kind === "loop",
         );

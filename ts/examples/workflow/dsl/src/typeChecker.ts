@@ -555,7 +555,7 @@ export class TypeChecker {
                 }
                 return consType;
             }
-            case "RetryNode": {
+            case "AttemptsNode": {
                 const countType = this.inferExpr(e.count, scope);
                 if (
                     !isNumeric(countType) &&
@@ -563,12 +563,12 @@ export class TypeChecker {
                     countType.kind !== "unknown"
                 ) {
                     this.addError(
-                        `retry() count must be numeric, got '${typeName(countType)}'`,
+                        `attempts() count must be numeric, got '${typeName(countType)}'`,
                         e.count.loc.line,
                         e.count.loc.col,
                     );
                 }
-                const retryReturnType = this.checkStatements(
+                const bodyReturnType = this.checkStatements(
                     e.body,
                     scope.child(),
                 );
@@ -577,7 +577,7 @@ export class TypeChecker {
                     fbScope.set(e.fallback.param, UNKNOWN);
                     this.checkStatements(e.fallback.body, fbScope);
                 }
-                return retryReturnType;
+                return bodyReturnType;
             }
             case "MapNode": {
                 const colType = this.inferExpr(e.collection, scope);

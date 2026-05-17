@@ -1035,14 +1035,14 @@ This reframes the comparison: the question is not "how easy is the text manipula
 | B      | ~8                 | Step, Modifier, Branch, Switch, Template, Literal, Return, Const. Flat: steps have modifier lists.                    |
 | C      | ~12                | Let, Const, If, Match, Return, TaskCall, Template, Literals, RetryBlock, MapBlock, ParallelBlock, FilterBlock         |
 | D      | ~6                 | Node, Group, Output, Const, Template, Literal. Minimal.                                                               |
-| E      | ~12                | Let, Const, If, Match, Return, TaskCall, Template, Literals, RetryNode, MapNode, ParallelNode, FilterNode             |
+| E      | ~12                | Let, Const, If, Match, Return, TaskCall, Template, Literals, AttemptsNode, MapNode, ParallelNode, FilterNode          |
 
-Key insight for E: the parser recognizes built-in names (`retry`, `map`, `parallel`, `filter`)
+Key insight for E: the parser recognizes built-in names (`attempts`, `map`, `parallel`, `filter`)
 and produces **dedicated AST node types**, not generic CallExpr nodes. The syntax looks like
-`retry(2, () => { ... })` but the AST is:
+`attempts(2, () => { ... })` but the AST is:
 
 ```
-RetryNode {
+AttemptsNode {
     count: 2,
     body: [TaskCallStatement { task: "http.get", args: { url: url } }]
 }
@@ -1062,12 +1062,12 @@ difference is the surface syntax the pretty-printer emits.
 
 ### AST shape predictability: can the visual editor assume structure?
 
-| Operation                     | B                          | C                    | D                             | E              |
-| ----------------------------- | -------------------------- | -------------------- | ----------------------------- | -------------- |
-| Find "retry" in AST           | Step with `retry` modifier | RetryBlock node type | Node with `on_error` property | RetryNode type |
-| Find "map" in AST             | Step with `for` modifier   | MapBlock node type   | Group with `for` property     | MapNode type   |
-| Find group body               | Indented children          | `.body` array        | `.children` array             | `.body` array  |
-| Distinguish groups from tasks | Modifier presence          | Node type            | Node vs Group                 | Node type      |
+| Operation                     | B                          | C                    | D                             | E                 |
+| ----------------------------- | -------------------------- | -------------------- | ----------------------------- | ----------------- |
+| Find "retry" in AST           | Step with `retry` modifier | RetryBlock node type | Node with `on_error` property | AttemptsNode type |
+| Find "map" in AST             | Step with `for` modifier   | MapBlock node type   | Group with `for` property     | MapNode type      |
+| Find group body               | Indented children          | `.body` array        | `.children` array             | `.body` array     |
+| Distinguish groups from tasks | Modifier presence          | Node type            | Node vs Group                 | Node type         |
 
 All four options now encode structure in the AST, not just in names. E's dedicated AST nodes
 make it equivalent to C for programmatic manipulation.
@@ -1076,12 +1076,12 @@ make it equivalent to C for programmatic manipulation.
 
 "Wrap node X in retry(2)":
 
-| Option | AST transform                                                  |
-| ------ | -------------------------------------------------------------- |
-| B      | Add `{ type: "retry", count: 2 }` to X's modifier list         |
-| C      | Create `RetryBlock { count: 2, body: [X] }`, replace X with it |
-| D      | Add `{ onError: { type: "retry", max: 2 } }` to X's properties |
-| E      | Create `RetryNode { count: 2, body: [X] }`, replace X with it  |
+| Option | AST transform                                                    |
+| ------ | ---------------------------------------------------------------- |
+| B      | Add `{ type: "retry", count: 2 }` to X's modifier list           |
+| C      | Create `RetryBlock { count: 2, body: [X] }`, replace X with it   |
+| D      | Add `{ onError: { type: "retry", max: 2 } }` to X's properties   |
+| E      | Create `AttemptsNode { count: 2, body: [X] }`, replace X with it |
 
 With AST manipulation, these are all trivial tree operations. B/D add a property. C/E wrap
 in a parent node. The difference is negligible.
@@ -1100,12 +1100,12 @@ lambda) but the patterns are regular and predictable.
 
 ### Round-trip fidelity: reprint scope after an edit
 
-| Option | Reprint scope for "add retry around node X"                          |
-| ------ | -------------------------------------------------------------------- |
-| B      | Reprint X's line only (append modifier). Rest of file untouched.     |
-| C      | Reprint the new RetryBlock + its body. Lines before/after untouched. |
-| D      | Reprint X's declaration only (append property). Rest untouched.      |
-| E      | Reprint the new RetryNode expression. Lines before/after untouched.  |
+| Option | Reprint scope for "add retry around node X"                            |
+| ------ | ---------------------------------------------------------------------- |
+| B      | Reprint X's line only (append modifier). Rest of file untouched.       |
+| C      | Reprint the new RetryBlock + its body. Lines before/after untouched.   |
+| D      | Reprint X's declaration only (append property). Rest untouched.        |
+| E      | Reprint the new AttemptsNode expression. Lines before/after untouched. |
 
 B and D are the most local (line-level). C and E reprint a block (the new wrapper + body).
 With CST-preserving transforms, all options can preserve formatting outside the edit region.

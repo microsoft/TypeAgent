@@ -56,9 +56,9 @@ and shaped specific technical decisions.
    name IS the edge label, and there is exactly one source.
 
 4. **Domain constructs, not general-purpose escapes.** Workflow patterns
-   (retry, map, filter, parallel) should be first-class, not emergent from
+   (attempts, map, filter, parallel) should be first-class, not emergent from
    combining lower-level primitives. The DSL vocabulary should match the visual
-   vocabulary: a "retry group" in the graph corresponds to a `retry()` in the
+   vocabulary: an "attempts group" in the graph corresponds to an `attempts()` in the
    source, not a 14-line while/try/break pattern.
 
 5. **Complexity goes into sub-workflows, not deeper nesting.** When a branch,
@@ -89,7 +89,7 @@ These rules implement the guiding principles above.
    `break` exists only as structural syntax in switch arms (not rendered
    visually). _(from principles 1, 4)_
 
-3. **No try/catch.** Error handling is expressed via the `retry` built-in.
+3. **No try/catch.** Error handling is expressed via the `attempts` built-in.
    _(from principle 4)_
 
 4. **Statements vs expressions.** `if/else` and `switch` are statements
@@ -97,7 +97,7 @@ These rules implement the guiding principles above.
    simple value selection. Sub-workflow calls handle complex value-producing
    branches. _(from principles 2, 5)_
 
-5. **Built-ins are compiler directives.** `retry`, `map`, `filter`, `parallel`
+5. **Built-ins are compiler directives.** `attempts`, `map`, `filter`, `parallel`
    look like function calls but the parser produces dedicated AST node types.
    They are not runtime functions. _(from principle 6)_
 
@@ -341,10 +341,10 @@ throw "deployment failed"
 
 Explicit error signaling. `throw` terminates the current workflow (or
 fallback body) with an error. Primary use case: cleanup then rethrow
-in a retry fallback.
+in an attempts fallback.
 
 ```
-const result = retry(2, () => {
+const result = attempts(2, () => {
     const uploaded = storage.upload(data)
     cluster.deploy(uploaded)
 }, (err) => {
@@ -442,7 +442,7 @@ Every expression has a type, inferred bottom-up:
 - **Template literals:** always `string`.
 - **Array literals:** `[a, b, c]` infers the element type from the first element.
 - **Built-ins:** `map` and `filter` return arrays of the body's return type.
-  `retry` returns the body's return type. `parallel` returns a tuple of each
+  `attempts` returns the body's return type. `parallel` returns a tuple of each
   arm's return type. `parallelMap` returns an array of the body's return type.
 
 #### `unknown` (top type)
@@ -527,13 +527,14 @@ segment (e.g., `obj.map(...)`) is unaffected. However, you cannot define a
 task or workflow with a reserved name and call it: `map(...)` will always be
 parsed as the builtin, not a task call.
 
-### 3.1 `retry(count, body, fallback?)`
+### 3.1 `attempts(count, body, fallback?)`
 
-Execute the body, retrying on error, for a total of `count` attempts.
-Optional fallback runs after all attempts are exhausted.
+Execute the body up to `count` times total. On error, re-execute the body
+until the attempt limit is reached. Optional fallback runs after all
+attempts are exhausted.
 
 ```
-const result = retry(2, () => {
+const result = attempts(2, () => {
     http.get({ url: url })
 })
 ```
@@ -541,7 +542,7 @@ const result = retry(2, () => {
 With fallback (cleanup then rethrow):
 
 ```
-const result = retry(2, () => {
+const result = attempts(2, () => {
     const uploaded = storage.upload(data)
     cluster.deploy(uploaded)
 }, (err) => {
@@ -553,14 +554,16 @@ const result = retry(2, () => {
 With fallback (substitute value):
 
 ```
-const result = retry(2, () => {
+const result = attempts(2, () => {
     http.get({ url: url })
 }, (err) => {
     cache.lookup({ url: url })
 })
 ```
 
-- `count`: number literal or const reference
+- `count`: total number of attempts (number literal or const reference).
+  `attempts(1, ...)` means try once with no retries.
+  `attempts(3, ...)` means try up to 3 times total.
 - `body`: arrow function containing one or more task calls
 - `fallback`: optional arrow function with one parameter (the error;
   defaults to `err` if the parameter name is omitted).
@@ -568,7 +571,7 @@ const result = retry(2, () => {
 - Returns the successful result of the body, or the fallback's return value
 - On exhaustion without fallback: runtime error
 
-**AST:** `RetryNode { count: Expr, body: Statement[], fallback?: { param: string, body: Statement[] } }`
+**AST:** `AttemptsNode { count: Expr, body: Statement[], fallback?: { param: string, body: Statement[] } }`
 **IR lowering:** Loop node with onError edges and attempt counter.
 
 ### 3.2 `map(collection, body)`
@@ -755,7 +758,7 @@ workflow summarizeUrl(url: string, outputPath: string): { path: string, summary:
     const summaryPrompt = "Summarize the following web page content in 3-5 paragraphs. Focus on the main points and key information. Be clear and concise.\n\nContent:\n"
     const maxRetries = 2
 
-    const fetchResult = retry(maxRetries, () => {
+    const fetchResult = attempts(maxRetries, () => {
         http.get({ url: url })
     })
 
@@ -784,12 +787,12 @@ workflow analyzeDocument(document: string, notifyEmail: string): { text: string,
 }
 ```
 
-### 5.4 Map with retry and filter
+### 5.4 Map with attempts and filter
 
 ```
 workflow processReliable(urls: string[]): string[] {
     const fetched = map(urls, (url) => {
-        retry(3, () => {
+        attempts(3, () => {
             http.get({ url: url })
         })
     })
@@ -853,34 +856,34 @@ workflow logUnknown(channel: string, message: string): Result {
 
 ## 6. AST node types
 
-| Node type           | Fields                                   | Visual element               |
-| ------------------- | ---------------------------------------- | ---------------------------- |
-| WorkflowDecl        | name, params, returnType, body           | Top-level container          |
-| ConstStatement      | name, typeAnnotation?, value             | Node with output edge        |
-| DestructuringConst  | names, value                             | Node with multiple edges     |
-| TaskCallExpr        | task, args                               | Node (orange)                |
-| WorkflowCallExpr    | name, args                               | Collapsed node (drill-in)    |
-| TemplateLiteralExpr | parts, expressions                       | Node (purple)                |
-| StringLiteralExpr   | value                                    | Inline label                 |
-| NumberLiteralExpr   | value                                    | Inline label                 |
-| BooleanLiteralExpr  | value                                    | Inline label                 |
-| NullLiteralExpr     |                                          | Inline label                 |
-| ArrayLiteralExpr    | elements                                 | Inline label                 |
-| ObjectLiteralExpr   | entries                                  | Inline label                 |
-| DottedNameExpr      | segments                                 | Edge label                   |
-| BinaryExpr          | op, left, right                          | Inline in condition/value    |
-| UnaryExpr           | op, operand                              | Inline in condition/value    |
-| TernaryExpr         | condition, consequent, alternate         | Diamond + two edges          |
-| IfStatement         | condition, then, else\_?                 | Branch group                 |
-| SwitchStatement     | discriminant, arms, default\_?           | Multi-branch group           |
-| BreakStatement      |                                          | _(structural, not rendered)_ |
-| ThrowStatement      | value                                    | Terminal node (red, error)   |
-| ReturnStatement     | value                                    | Terminal node (red)          |
-| RetryNode           | count, body, fallback?                   | "retry" group (green border) |
-| MapNode             | collection, param, body                  | "map" group (blue border)    |
-| FilterNode          | collection, param, body                  | "filter" group (teal border) |
-| ParallelNode        | bodies, maxConcurrency?                  | Side-by-side group           |
-| ParallelMapNode     | collection, param, body, maxConcurrency? | "parallel map" group         |
+| Node type           | Fields                                   | Visual element                  |
+| ------------------- | ---------------------------------------- | ------------------------------- |
+| WorkflowDecl        | name, params, returnType, body           | Top-level container             |
+| ConstStatement      | name, typeAnnotation?, value             | Node with output edge           |
+| DestructuringConst  | names, value                             | Node with multiple edges        |
+| TaskCallExpr        | task, args                               | Node (orange)                   |
+| WorkflowCallExpr    | name, args                               | Collapsed node (drill-in)       |
+| TemplateLiteralExpr | parts, expressions                       | Node (purple)                   |
+| StringLiteralExpr   | value                                    | Inline label                    |
+| NumberLiteralExpr   | value                                    | Inline label                    |
+| BooleanLiteralExpr  | value                                    | Inline label                    |
+| NullLiteralExpr     |                                          | Inline label                    |
+| ArrayLiteralExpr    | elements                                 | Inline label                    |
+| ObjectLiteralExpr   | entries                                  | Inline label                    |
+| DottedNameExpr      | segments                                 | Edge label                      |
+| BinaryExpr          | op, left, right                          | Inline in condition/value       |
+| UnaryExpr           | op, operand                              | Inline in condition/value       |
+| TernaryExpr         | condition, consequent, alternate         | Diamond + two edges             |
+| IfStatement         | condition, then, else\_?                 | Branch group                    |
+| SwitchStatement     | discriminant, arms, default\_?           | Multi-branch group              |
+| BreakStatement      |                                          | _(structural, not rendered)_    |
+| ThrowStatement      | value                                    | Terminal node (red, error)      |
+| ReturnStatement     | value                                    | Terminal node (red)             |
+| AttemptsNode        | count, body, fallback?                   | "attempts" group (green border) |
+| MapNode             | collection, param, body                  | "map" group (blue border)       |
+| FilterNode          | collection, param, body                  | "filter" group (teal border)    |
+| ParallelNode        | bodies, maxConcurrency?                  | Side-by-side group              |
+| ParallelMapNode     | collection, param, body, maxConcurrency? | "parallel map" group            |
 
 Every AST node carries a `loc` field with source location (`{ line, col,
 offset }`). This enables:
@@ -933,7 +936,7 @@ The parser is recursive-descent, producing a typed AST. It handles:
 - `const` bindings with optional type annotations
 - Arrow function expressions: `(param, ...) => { body }` and `() => expr`
 - Built-in call recognition: after parsing a call expression, check if callee
-  is in `{ retry, map, filter, parallel, parallelMap }`. If so, restructure
+  is in `{ attempts, map, filter, parallel, parallelMap }`. If so, restructure
   into dedicated AST node.
 - Ternary expressions: `expr ? expr : expr`
 - Binary expressions with precedence (lowest to highest):
@@ -978,7 +981,7 @@ Type sources:
 - **Ternary:** both arms must have the same type; that is the result type.
 - **Template literals:** always `string`.
 - **Built-ins:** `map` and `filter` return arrays of the body's type.
-  `retry` returns the body's type (or `body | fallback` if fallback returns
+  `attempts` returns the body's type (or `body | fallback` if fallback returns
   a different type). `parallel` returns a tuple.
 
 Type annotations on `const` are optional. The compiler infers the type from
@@ -1014,7 +1017,7 @@ for lexical scoping. Each scope tracks:
 - `parent`: enclosing scope (walked for name lookup)
 
 Child scopes are created for if/else branches, switch arms, loop bodies,
-retry bodies, and parallel branches.
+attempts bodies, and parallel branches.
 
 #### Binding kinds
 
@@ -1045,7 +1048,7 @@ const results = map(items, (item) => {
 
 #### Scope capture for loop and fork bodies
 
-Loop bodies (`map`, `filter`, `retry`, `parallelMap`) and fork branches
+Loop bodies (`map`, `filter`, `attempts`, `parallelMap`) and fork branches
 execute in isolated sub-scopes in the IR. When the DSL body references a
 variable defined outside (a workflow parameter or an earlier task result),
 the emitter must explicitly pass that value into the sub-scope.
@@ -1136,7 +1139,7 @@ requiring the author to think about it.
   dotted names (e.g., `user.name` becomes `{{name}}`), or positional
   names (`v0`, `v1`) for complex expressions.
 
-- RetryNode: emit loop node with onError edges and attempt counter
+- AttemptsNode: emit loop node with onError edges and attempt counter
 - MapNode: emit loop node with index/length/compare/check_done
 - FilterNode: emit loop with branch + `list.append` (see section 3.3 IR lowering)
 - ParallelNode: emit `fork` node ([ir-v0.2.md](../ir/ir-v0.2.md)) with branches
@@ -1154,8 +1157,8 @@ requiring the author to think about it.
   ([ir-v0.2.md](../ir/ir-v0.2.md) §3.5). The preceding node's `next` points
   to `error.fail`; `error.fail` has `next: null` (terminal). The engine
   executes `error.fail` and produces a failure result with the thrown
-  value, which triggers the enclosing scope's error propagation. In a
-  retry fallback body, this causes the fallback handler to fail per
+  value, which triggers the enclosing scope's error propagation. In an
+  attempts fallback body, this causes the fallback handler to fail per
   ir-v0.1.md section 3.8 recovery-failure semantics. At workflow top level, it fails the
   workflow. No new IR node kind is needed: `error.fail` is a regular
   task node with `kind: "task"`.
@@ -1164,7 +1167,7 @@ requiring the author to think about it.
 
 Already walks the AST. New node types need handlers:
 
-- RetryNode -> GraphGroup { kind: "retry" }
+- AttemptsNode -> GraphGroup { kind: "attempts" }
 - MapNode -> GraphGroup { kind: "map" }
 - FilterNode -> GraphGroup { kind: "filter" }
 - ParallelNode -> GraphGroup { kind: "parallel" }

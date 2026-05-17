@@ -9,7 +9,7 @@
  *   - Nodes: task calls, workflow calls, parameters, constants, return,
  *     operators, throw
  *   - Edges: data flow (variable references between nodes)
- *   - Groups: control flow blocks (retry, map, filter, parallel,
+ *   - Groups: control flow blocks (attempts, map, filter, parallel,
  *     parallelMap, if/else, switch, ternary)
  */
 
@@ -26,7 +26,7 @@ import {
     SwitchStatement,
     ReturnStatement,
     ThrowStatement,
-    RetryNode,
+    AttemptsNode,
     MapNode,
     FilterNode,
     ParallelNode,
@@ -79,7 +79,7 @@ export interface GraphEdge {
 }
 
 export type GroupKind =
-    | "retry"
+    | "attempts"
     | "map"
     | "filter"
     | "parallel"
@@ -472,8 +472,8 @@ class GraphExtractor {
                 if (groupId) this.addToGroup(groupId, nodeId);
                 return nodeId;
             }
-            case "RetryNode":
-                return this.extractRetry(expr, groupId);
+            case "AttemptsNode":
+                return this.extractAttempts(expr, groupId);
             case "MapNode":
                 return this.extractMap(expr, groupId);
             case "FilterNode":
@@ -489,15 +489,15 @@ class GraphExtractor {
 
     // ---- Built-in node extraction ----
 
-    private extractRetry(
-        expr: RetryNode,
+    private extractAttempts(
+        expr: AttemptsNode,
         parentGroupId: string | undefined,
     ): string {
-        const gid = this.freshGroupId("retry");
+        const gid = this.freshGroupId("attempts");
         this.groups.push({
             id: gid,
-            kind: "retry",
-            label: `retry(${this.exprSummary(expr.count)})`,
+            kind: "attempts",
+            label: `attempts(${this.exprSummary(expr.count)})`,
             parentId: parentGroupId,
             children: [],
         });
@@ -735,8 +735,8 @@ class GraphExtractor {
                 return `${expr.op}${this.exprSummary(expr.operand)}`;
             case "TernaryExpr":
                 return `${this.exprSummary(expr.condition)} ? ...`;
-            case "RetryNode":
-                return `retry(${this.exprSummary(expr.count)}, ...)`;
+            case "AttemptsNode":
+                return `attempts(${this.exprSummary(expr.count)}, ...)`;
             case "MapNode":
                 return `map(...)`;
             case "FilterNode":

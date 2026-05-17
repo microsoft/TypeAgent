@@ -56,14 +56,14 @@ import {
     ObjectEntry,
     SourceLocation,
     BinaryOp,
-    RetryNode,
+    AttemptsNode,
     ParallelNode,
     ParallelMapNode,
 } from "./ast.js";
 
 /** Names recognized as compiler built-in functions. */
 const BUILTIN_NAMES = new Set([
-    "retry",
+    "attempts",
     "map",
     "filter",
     "parallel",
@@ -813,8 +813,8 @@ export class Parser {
         this.expect(TokenKind.LParen);
 
         switch (name) {
-            case "retry":
-                return this.parseRetryBuiltin(l);
+            case "attempts":
+                return this.parseAttemptsBuiltin(l);
             case "map":
                 return this.parseMapBuiltin(l);
             case "filter":
@@ -830,8 +830,8 @@ export class Parser {
         }
     }
 
-    /** retry(count, () => { body }, (err) => { fallback })  */
-    private parseRetryBuiltin(l: SourceLocation): Expr {
+    /** attempts(count, () => { body }, (err) => { fallback })  */
+    private parseAttemptsBuiltin(l: SourceLocation): Expr {
         const count = this.parseExpression();
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
@@ -851,7 +851,12 @@ export class Parser {
         }
 
         this.expect(TokenKind.RParen);
-        const result: RetryNode = { kind: "RetryNode", count, body, loc: l };
+        const result: AttemptsNode = {
+            kind: "AttemptsNode",
+            count,
+            body,
+            loc: l,
+        };
         if (fallback) result.fallback = fallback;
         return result;
     }

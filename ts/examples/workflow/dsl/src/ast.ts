@@ -155,7 +155,7 @@ export type Expr =
     | BinaryExpr
     | UnaryExpr
     | TernaryExpr
-    | RetryNode
+    | AttemptsNode
     | MapNode
     | FilterNode
     | ParallelNode
@@ -288,8 +288,8 @@ export interface TernaryExpr {
 
 // ---- Built-in nodes ----
 
-export interface RetryNode {
-    kind: "RetryNode";
+export interface AttemptsNode {
+    kind: "AttemptsNode";
     count: Expr;
     body: Statement[];
     fallback?: { param: string; body: Statement[] };

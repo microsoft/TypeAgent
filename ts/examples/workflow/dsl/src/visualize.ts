@@ -327,7 +327,7 @@ function nodeBorder(kind: string): string {
 
 function groupColor(kind: string): { fill: string; stroke: string } {
     switch (kind) {
-        case "retry":
+        case "attempts":
             return { fill: "#fff3e0", stroke: "#ef6c00" };
         case "map":
             return { fill: "#e8eaf6", stroke: "#3f51b5" };
@@ -370,7 +370,7 @@ function generateHtml(
     // Draw groups (back to front)
     for (const g of layout.groups) {
         const colors = groupColor(g.kind);
-        svg += `  <rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="8" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.5" stroke-dasharray="${g.kind === "retry" ? "6,3" : "none"}" opacity="0.6" />\n`;
+        svg += `  <rect x="${g.x}" y="${g.y}" width="${g.width}" height="${g.height}" rx="8" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.5" stroke-dasharray="${g.kind === "attempts" ? "6,3" : "none"}" opacity="0.6" />\n`;
         svg += `  <text x="${g.x + 10}" y="${g.y + 18}" font-size="12" font-weight="600" fill="${colors.stroke}" font-family="system-ui, sans-serif">${escapeHtml(g.label)}</text>\n`;
     }
 

@@ -233,10 +233,10 @@ describe("type checker", () => {
         `);
     });
 
-    test("retry valid", () => {
+    test("attempts valid", () => {
         expectNoErrors(`
             workflow test(): { stdout: string, exitCode: integer } {
-                return retry(3, () => {
+                return attempts(3, () => {
                     return test.exec(command: "echo hi")
                 })
             }
@@ -465,10 +465,10 @@ describe("type checker", () => {
 
     // ---- Type errors: built-in argument validation ----
 
-    test("retry count must be numeric", () => {
+    test("attempts count must be numeric", () => {
         expectError(
             `workflow test(): number {
-                return retry("hello", () => { return 1 })
+                return attempts("hello", () => { return 1 })
             }`,
             "count must be numeric",
         );

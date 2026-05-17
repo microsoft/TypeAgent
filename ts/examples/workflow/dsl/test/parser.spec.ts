@@ -494,21 +494,21 @@ describe("parser", () => {
 
     // ---- Expression: built-in functions ----
 
-    test("retry builtin", () => {
-        const e = parseExpr('retry(3, () => { return task.call("x") })');
-        expect(e.kind).toBe("RetryNode");
-        if (e.kind === "RetryNode") {
+    test("attempts builtin", () => {
+        const e = parseExpr('attempts(3, () => { return task.call("x") })');
+        expect(e.kind).toBe("AttemptsNode");
+        if (e.kind === "AttemptsNode") {
             expect(e.count.kind).toBe("NumberLiteralExpr");
             expect(e.body).toHaveLength(1);
         }
     });
 
-    test("retry builtin with fallback", () => {
+    test("attempts builtin with fallback", () => {
         const e = parseExpr(
-            'retry(3, () => { return task.call("x") }, (err) => { return "fallback" })',
+            'attempts(3, () => { return task.call("x") }, (err) => { return "fallback" })',
         );
-        expect(e.kind).toBe("RetryNode");
-        if (e.kind === "RetryNode") {
+        expect(e.kind).toBe("AttemptsNode");
+        if (e.kind === "AttemptsNode") {
             expect(e.fallback).toBeDefined();
             expect(e.fallback!.param).toBe("err");
         }

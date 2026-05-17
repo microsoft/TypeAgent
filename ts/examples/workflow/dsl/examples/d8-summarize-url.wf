@@ -3,7 +3,7 @@
 workflow summarizeUrl(url: string, outputPath: string): { path: string, summary: string } {
     const summaryPrompt = "Summarize the following web page content in 3-5 paragraphs. Focus on the main points and key information. Be clear and concise.\n\nContent:\n"
 
-    const pageContent = retry(2, () => {
+    const pageContent = attempts(2, () => {
         const fetchResult = http.get({ url: url })
         return fetchResult.body
     })

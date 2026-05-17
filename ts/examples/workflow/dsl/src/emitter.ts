@@ -10,7 +10,7 @@
  * - Scope-based name resolution (params, const bindings, node outputs)
  * - Conditional `bind`: only emit when a binding is referenced downstream
  * - Thread `next` edges from statement order
- * - Lower built-in expressions (retry, map, filter, parallel, parallelMap)
+ * - Lower built-in expressions (attempts, map, filter, parallel, parallelMap)
  *   to LoopNode / ForkNode / ForkMapNode IR
  * - Lower operators to task node calls
  * - Lower if/switch to BranchNode IR
@@ -41,7 +41,7 @@ import {
     BinaryExpr,
     UnaryExpr,
     TernaryExpr,
-    RetryNode,
+    AttemptsNode,
     MapNode,
     FilterNode,
     ParallelNode,
@@ -655,8 +655,8 @@ export class Emitter {
                 return this.emitUnaryExpr(expr, scope);
             case "TernaryExpr":
                 return this.emitTernaryExpr(expr, scope);
-            case "RetryNode":
-                return this.emitRetry(expr, scope);
+            case "AttemptsNode":
+                return this.emitAttempts(expr, scope);
             case "MapNode":
                 return this.emitMap(expr, scope);
             case "FilterNode":
@@ -685,7 +685,7 @@ export class Emitter {
             case "BinaryExpr":
             case "UnaryExpr":
             case "TernaryExpr":
-            case "RetryNode":
+            case "AttemptsNode":
             case "MapNode":
             case "FilterNode":
             case "ParallelNode":
@@ -1121,9 +1121,9 @@ export class Emitter {
 
     // ---- Built-in nodes ----
 
-    private emitRetry(expr: RetryNode, scope: ScopeContext): Template {
+    private emitAttempts(expr: AttemptsNode, scope: ScopeContext): Template {
         const countTemplate = this.emitExpr(expr.count, scope);
-        const loopId = this.freshId("retry");
+        const loopId = this.freshId("attempts");
 
         // Build body scope
         const bodyScope = this.childScope(scope);
@@ -1141,10 +1141,10 @@ export class Emitter {
             attempt: { schema: { type: "number" }, initial: 0 },
         };
 
-        // --- Retry infrastructure (error path only) ---
+        // --- Attempts infrastructure (error path only) ---
         // On failure, control flows: step_attempt -> check_done -> branch
         //   can retry  -> @iterate
-        //   exhausted  -> retry_exhaust (error.fail, triggers loop onError)
+        //   exhausted  -> attempts_exhaust (error.fail, triggers loop onError)
         // On success, the last body node goes directly to @exit.
 
         const stepId = this.freshId("step_attempt");
@@ -1191,7 +1191,7 @@ export class Emitter {
             bind: compareId,
         };
 
-        const exhaustId = this.freshId("retry_exhaust");
+        const exhaustId = this.freshId("attempts_exhaust");
         bodyScope.nodes[exhaustId] = {
             kind: "task",
             task: "error.fail",
@@ -1202,13 +1202,13 @@ export class Emitter {
             },
             outputSchema: { type: "object" },
             inputs: {
-                value: "Retry exhausted",
+                value: "Attempts exhausted",
             },
             bind: exhaustId,
             next: "@exit",
         };
 
-        const checkBranchId = this.freshId("retry_check");
+        const checkBranchId = this.freshId("attempts_check");
         bodyScope.nodes[checkBranchId] = {
             kind: "branch",
             selector: {
@@ -1220,12 +1220,12 @@ export class Emitter {
             default: "@iterate",
         };
 
-        // Chain the retry infrastructure nodes
+        // Chain the attempts infrastructure nodes
         (bodyScope.nodes[stepId] as TaskNode).next = compareId;
         (bodyScope.nodes[compareId] as TaskNode).next = checkBranchId;
 
         // Wire body nodes: last body node -> @exit on success,
-        // all body task nodes -> stepId on error (enters retry path)
+        // all body task nodes -> stepId on error (enters attempts path)
         const lastBodyId = bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
         if (lastBodyId) {
             const lastNode = bodyScope.nodes[lastBodyId];
@@ -1266,10 +1266,10 @@ export class Emitter {
             }
         }
 
-        // Capture outer-scope references used in retry body
+        // Capture outer-scope references used in attempts body
         const outer = this.captureOuterRefs(bodyScope, new Set<string>());
 
-        // The body output is optional because the retry_exhaust path
+        // The body output is optional because the attempts_exhaust path
         // (error.fail) always throws before reaching @exit, so the output
         // binding is never actually unresolved. Mark optional to satisfy
         // the dominator coverage check.
@@ -2168,7 +2168,7 @@ export class Emitter {
 
     /**
      * Deep-clone a template, adding `optional: true` to every `$from` ref.
-     * Used for retry body output where the exhaustion path always throws
+     * Used for attempts body output where the exhaustion path always throws
      * before reaching @exit, so the output binding is guaranteed to be set
      * on any path that actually resolves the template.
      */
@@ -2273,7 +2273,7 @@ export class Emitter {
             case "BinaryExpr":
             case "UnaryExpr":
             case "TernaryExpr":
-            case "RetryNode":
+            case "AttemptsNode":
             case "MapNode":
             case "FilterNode":
             case "ParallelNode":

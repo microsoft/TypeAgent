@@ -625,12 +625,12 @@ describe("Emitter", () => {
         });
     });
 
-    // ---- Retry built-in ----
+    // ---- Attempts built-in ----
 
-    test("retry lowers to loop node with attempt state", () => {
+    test("attempts lowers to loop node with attempt state", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                return retry(3, () => {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result
                 })
@@ -641,10 +641,10 @@ describe("Emitter", () => {
         expect(loopNode.state!.attempt.initial).toBe(0);
     });
 
-    test("retry body: last task has next @exit", () => {
+    test("attempts body: last task has next @exit", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                return retry(3, () => {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result
                 })
@@ -659,10 +659,10 @@ describe("Emitter", () => {
         expect(entryNode.next).toBe("@exit");
     });
 
-    test("retry body: task nodes have onError pointing to step_attempt", () => {
+    test("attempts body: task nodes have onError pointing to step_attempt", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                return retry(3, () => {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result
                 })
@@ -678,10 +678,10 @@ describe("Emitter", () => {
         expect(stepNode.task).toBe("math.add");
     });
 
-    test("retry body: error path chains step -> check -> branch -> exhaust", () => {
+    test("attempts body: error path chains step -> check -> branch -> exhaust", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                return retry(3, () => {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result
                 })
@@ -691,7 +691,7 @@ describe("Emitter", () => {
         const body = loopNode.body;
         const entryNode = body.nodes[body.entry] as TaskNode;
 
-        // Follow the error path: step_attempt -> check_done -> retry_check
+        // Follow the error path: step_attempt -> check_done -> attempts_check
         const stepNode = body.nodes[entryNode.onError!] as TaskNode;
         expect(stepNode.task).toBe("math.add");
 
@@ -708,10 +708,10 @@ describe("Emitter", () => {
         expect(exhaustNode.task).toBe("error.fail");
     });
 
-    test("retry infrastructure nodes are not in the main body chain", () => {
+    test("attempts infrastructure nodes are not in the main body chain", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
-                return retry(3, () => {
+                return attempts(3, () => {
                     const result = web.fetch(url)
                     return result
                 })
@@ -732,7 +732,7 @@ describe("Emitter", () => {
                     : undefined;
         }
 
-        // None of the retry infrastructure nodes (math.add, compare.greaterOrEqual,
+        // None of the attempts infrastructure nodes (math.add, compare.greaterOrEqual,
         // error.fail, branch) should be in the main chain
         for (const [id, node] of Object.entries(body.nodes)) {
             if (!mainChain.has(id) && node.kind === "task") {

@@ -490,7 +490,7 @@ matching the second case. Output is always from the first case.
 ## G15: Branch/ternary inside loop body fails at runtime
 
 **Spec:** dsl-v0.1.md sections 2.7, 3.2. Branches and ternary
-expressions should work inside map/filter/retry bodies.
+expressions should work inside map/filter/attempts bodies.
 
 **Current state:** A ternary expression inside a map body compiles
 without errors but fails at runtime. The branch condition evaluation
