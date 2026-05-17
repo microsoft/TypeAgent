@@ -104,17 +104,32 @@ class Printer {
         }
     }
 
+    /**
+     * Emit a multi-line comment whose text contains embedded newlines.
+     * The first line is written through `write()` so the current indent
+     * is applied; subsequent lines are pushed verbatim (preserving the
+     * comment's own internal alignment) without prepending another
+     * indent. Failing to do this would accumulate `depth * indent`
+     * spaces on every reformat (see G8-round-2 bug).
+     */
+    private writeMultilineCommentText(text: string): void {
+        const lines = text.split("\n");
+        this.write(lines[0]);
+        for (let i = 1; i < lines.length; i++) {
+            this.parts.push(this.opts.eol);
+            this.atLineStart = false;
+            this.parts.push(lines[i]);
+        }
+    }
+
     private printLeadingComments(comments: Comment[] | undefined): void {
         if (!comments) return;
         for (const c of comments) {
             // Comment text already includes its delimiters. Block comments
-            // may contain newlines; emit them verbatim then start a new line.
+            // may contain newlines; emit them so the original internal
+            // alignment is preserved.
             if (c.text.includes("\n")) {
-                const lines = c.text.split("\n");
-                for (let i = 0; i < lines.length; i++) {
-                    this.write(lines[i]);
-                    if (i < lines.length - 1) this.newline();
-                }
+                this.writeMultilineCommentText(c.text);
                 this.newline();
             } else {
                 this.line(c.text);
@@ -152,11 +167,7 @@ class Printer {
         this.newline();
         for (const c of after) {
             if (c.text.includes("\n")) {
-                const lines = c.text.split("\n");
-                for (let i = 0; i < lines.length; i++) {
-                    this.write(lines[i]);
-                    if (i < lines.length - 1) this.newline();
-                }
+                this.writeMultilineCommentText(c.text);
                 this.newline();
             } else {
                 this.line(c.text);
@@ -169,11 +180,7 @@ class Printer {
         if (!comments) return;
         for (const c of comments) {
             if (c.text.includes("\n")) {
-                const lines = c.text.split("\n");
-                for (let i = 0; i < lines.length; i++) {
-                    this.write(lines[i]);
-                    if (i < lines.length - 1) this.newline();
-                }
+                this.writeMultilineCommentText(c.text);
                 this.newline();
             } else {
                 this.line(c.text);

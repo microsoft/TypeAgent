@@ -15,7 +15,14 @@ import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
 import { format } from "../src/formatter.js";
 import { compile } from "../src/compiler.js";
-import { WorkflowDecl, IfStatement, SwitchStatement } from "../src/ast.js";
+import { extractGraph } from "../src/graphExtractor.js";
+import {
+    WorkflowDecl,
+    IfStatement,
+    SwitchStatement,
+    DestructuringConst,
+    ConstStatement,
+} from "../src/ast.js";
 
 function parse(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
@@ -356,5 +363,350 @@ describe("documented gap: comments inside empty nested blocks are dropped", () =
         // accepts this; the comment is unattached.
         const out = roundTrip(src);
         expect(out).not.toContain("TODO: arm 1");
+    });
+});
+
+describe("parser: trailing comments on additional statement kinds", () => {
+    test("inline trailing on DestructuringConst", () => {
+        const wf = parse(`workflow w(): string {
+    const [a, b] = text.split(s: "x", sep: ","); // unpack
+    return a;
+}`);
+        const s0 = wf.body[0] as DestructuringConst;
+        expect(s0.kind).toBe("DestructuringConst");
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toBe("// unpack");
+        // Round-trip preserves
+        const out = format(wf);
+        expect(out).toContain(`const [a, b] = text.split(s: "x", sep: ","); // unpack`);
+        assertStable(`workflow w(): string {
+    const [a, b] = text.split(s: "x", sep: ","); // unpack
+    return a;
+}`);
+    });
+
+    test("inline trailing on if-else closing brace", () => {
+        const wf = parse(`workflow w(x: number): string {
+    if (x === 1) {
+        return "y";
+    } else {
+        return "n";
+    } // end of branch
+    return "x";
+}`);
+        const ifs = wf.body[0] as IfStatement;
+        expect(ifs.kind).toBe("IfStatement");
+        expect(ifs.trailingComments).toHaveLength(1);
+        expect(ifs.trailingComments![0].text).toBe("// end of branch");
+        const out = format(wf);
+        expect(out).toMatch(/\} \/\/ end of branch/);
+    });
+
+    test("inline trailing on switch closing brace", () => {
+        const wf = parse(`workflow w(x: number): string {
+    switch (x) {
+        case 1:
+            return "a";
+        default:
+            return "d";
+    } // dispatch done
+    return "x";
+}`);
+        const sw = wf.body[0] as SwitchStatement;
+        expect(sw.kind).toBe("SwitchStatement");
+        expect(sw.trailingComments).toHaveLength(1);
+        expect(sw.trailingComments![0].text).toBe("// dispatch done");
+    });
+
+    test("trailing on nested if (if inside if)", () => {
+        const wf = parse(`workflow w(x: number): string {
+    if (x > 0) {
+        if (x > 10) {
+            return "big";
+        } // inner done
+        return "small";
+    }
+    return "neg";
+}`);
+        const outer = wf.body[0] as IfStatement;
+        const inner = outer.then[0] as IfStatement;
+        expect(inner.kind).toBe("IfStatement");
+        expect(inner.trailingComments).toHaveLength(1);
+        expect(inner.trailingComments![0].text).toBe("// inner done");
+        // Round-trip and stable
+        assertStable(`workflow w(x: number): string {
+    if (x > 0) {
+        if (x > 10) {
+            return "big";
+        } // inner done
+        return "small";
+    }
+    return "neg";
+}`);
+    });
+
+    test("trailing on bare expression statement (synthetic const)", () => {
+        const wf = parse(`workflow w(x: string): string {
+    audit.log(msg: x); // logged
+    return x;
+}`);
+        const s0 = wf.body[0] as ConstStatement;
+        expect(s0.kind).toBe("ConstStatement");
+        expect(s0.isSynthetic).toBe(true);
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toBe("// logged");
+        // Formatter should render it as a bare expression with inline trailing.
+        const out = format(wf);
+        expect(out).toContain(`audit.log(msg: x); // logged`);
+        assertStable(`workflow w(x: string): string {
+    audit.log(msg: x); // logged
+    return x;
+}`);
+    });
+});
+
+describe("parser: multi-line statements", () => {
+    test("multi-line const value attaches inline trailing to the LAST line", () => {
+        // Object literal spread across multiple physical lines; the `;`
+        // terminator sits on the last line. The comment must attach as an
+        // inline trailing comment because it shares the last token's line.
+        const wf = parse(`workflow w(): string {
+    const x = {
+        a: 1,
+        b: 2
+    }; // tail
+    return "x";
+}`);
+        const s0 = wf.body[0];
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toBe("// tail");
+        // endLine should point at the line of the closing `;`, not the
+        // line of `const`.
+        expect(s0.endLine).toBe(s0.loc.line + 3);
+    });
+
+    test("comment between `=` and value on same line moves to trailing (lossy)", () => {
+        // The parser has no AST slot for "expression-internal" comments,
+        // so a comment that lives between `=` and the value but on the
+        // same physical line as the terminator ends up captured as an
+        // inline trailing comment. Pin this behavior so it doesn't
+        // silently change.
+        const wf = parse(`workflow w(): string {
+    const x = /* note */ "y";
+    return x;
+}`);
+        const s0 = wf.body[0];
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toBe("/* note */");
+        // Formatter rewrites it at the end of the line (lossy reposition).
+        const out = format(wf);
+        expect(out).toContain(`const x = "y"; /* note */`);
+    });
+});
+
+describe("parser: mixed inline-trailing comment forms", () => {
+    test("mixed // and /* */ on same statement, in source order", () => {
+        const wf = parse(`workflow w(): string {
+    const x = "y"; /* a */ // b
+    return x;
+}`);
+        const s0 = wf.body[0];
+        expect(s0.trailingComments).toHaveLength(2);
+        expect(s0.trailingComments![0].text).toBe("/* a */");
+        expect(s0.trailingComments![1].text).toBe("// b");
+        const out = format(wf);
+        expect(out).toContain(`const x = "y"; /* a */ // b`);
+    });
+
+    test("mixed inline trailing then block-end trailing", () => {
+        const wf = parse(`workflow w(): string {
+    const x = "y"; // inline
+    // block-end-1
+    /* block-end-2 */
+    return x;
+}`);
+        // The two block-end comments belong as leading comments of the
+        // next statement, not as trailing of the const. Pin that.
+        const s0 = wf.body[0];
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toBe("// inline");
+        const s1 = wf.body[1];
+        expect(s1.leadingComments).toHaveLength(2);
+    });
+});
+
+describe("formatter: trailing-comment edge cases", () => {
+    test("block comment spanning multiple lines: parses and round-trips once", () => {
+        const src = `workflow w(): string {
+    return "x";
+    /* line a
+       line b */
+}`;
+        const wf = parse(src);
+        const s0 = wf.body[0];
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toContain("line a");
+        expect(s0.trailingComments![0].text).toContain("line b");
+        const out = format(wf);
+        expect(out).toContain("line a");
+        expect(out).toContain("line b");
+    });
+
+    test("multi-line block comment as block-end trailing is round-trip stable", () => {
+        const src = `workflow w(): string {
+    return "x";
+    /* line a
+       line b */
+}`;
+        assertStable(src);
+    });
+
+    test("trailing comment containing special chars (backticks, $, braces)", () => {
+        const src = `workflow w(): string {
+    const x = "y"; // tricky: \`backtick\` and \${dollar} and { brace }
+    return x;
+}`;
+        const wf = parse(src);
+        const s0 = wf.body[0];
+        expect(s0.trailingComments).toHaveLength(1);
+        const text = s0.trailingComments![0].text;
+        expect(text).toContain("`backtick`");
+        expect(text).toContain("${dollar}");
+        expect(text).toContain("{ brace }");
+        const out = format(wf);
+        expect(out).toContain("`backtick`");
+        expect(out).toContain("${dollar}");
+        assertStable(src);
+    });
+});
+
+describe("formatter: FormatOptions interaction with trailing comments", () => {
+    test("indent: 2 honored for own-line block-end trailing", () => {
+        const wf = parse(`workflow w(): string {
+    return "x";
+    // tail
+}`);
+        const out = format(wf, { indent: 2 });
+        // 2-space indent on the body line: "  return", and on the trailing
+        // comment line: "  // tail".
+        expect(out).toMatch(/^  return "x";$/m);
+        expect(out).toMatch(/^  \/\/ tail$/m);
+    });
+
+    test("custom eol (CRLF) used for trailing-comment newlines", () => {
+        const wf = parse(`workflow w(): string {
+    return "x";
+    // tail
+}`);
+        const out = format(wf, { eol: "\r\n" });
+        // No bare \n anywhere — every newline must be \r\n.
+        expect(out.split("\n").every((seg, i, arr) =>
+            i === arr.length - 1 ? true : seg.endsWith("\r"),
+        )).toBe(true);
+        // The trailing comment line is present.
+        expect(out).toContain("// tail");
+    });
+
+    test("indent: 2 stable across two formats", () => {
+        const src = `workflow w(): string {
+    const x = "y"; // inline
+    // mid
+    return x;
+}`;
+        const once = format(parse(src), { indent: 2 });
+        const twice = format(parse(once), { indent: 2 });
+        expect(twice).toBe(once);
+    });
+});
+
+describe("parser: trailing comments inside built-in node bodies", () => {
+    test("inline trailing on last stmt of attempts body", () => {
+        const src = `workflow w(): string {
+    const r = attempts(3, () => {
+        return "ok"; // try
+    });
+    return r;
+}`;
+        const wf = parse(src);
+        const s0 = wf.body[0] as ConstStatement;
+        expect(s0.kind).toBe("ConstStatement");
+        const attempts = s0.value;
+        expect(attempts.kind).toBe("AttemptsNode");
+        const inner = (attempts as { body: any[] }).body[0];
+        expect(inner.kind).toBe("ReturnStatement");
+        expect(inner.trailingComments).toHaveLength(1);
+        expect(inner.trailingComments![0].text).toBe("// try");
+        const out = format(wf);
+        expect(out).toContain(`return "ok"; // try`);
+        assertStable(src);
+    });
+
+    test("inline trailing on last stmt of map body", () => {
+        const src = `workflow w(items: string[]): string[] {
+    const r = map(items, (item) => {
+        return item; // each
+    });
+    return r;
+}`;
+        const wf = parse(src);
+        const out = format(wf);
+        expect(out).toContain(`return item; // each`);
+        assertStable(src);
+    });
+});
+
+describe("graphExtractor / visualize: trailing comments are transparent", () => {
+    test("extractGraph yields same graph with and without trailing comments", () => {
+        const bareSrc = `workflow w(a: string): string {
+    const x = a;
+    return x;
+}`;
+        const commentedSrc = `workflow w(a: string): string {
+    const x = a; // inline
+    // tail
+    return x;
+    // after
+}`;
+        const bare = extractGraph(parse(bareSrc));
+        const commented = extractGraph(parse(commentedSrc));
+        // Comments live on AST, not on the graph model; identical nodes/edges.
+        expect(commented.nodes.length).toBe(bare.nodes.length);
+        expect(commented.edges.length).toBe(bare.edges.length);
+        const json = JSON.stringify(commented);
+        expect(json).not.toContain("trailingComments");
+        expect(json).not.toContain("// inline");
+        expect(json).not.toContain("// tail");
+    });
+});
+
+describe("end-to-end: parse + format succeeds on every new trailing-comment shape", () => {
+    test("parse + format + assertStable for each shape", () => {
+        const srcs = [
+            // if-else trailing
+            `workflow w(x: number): string {
+    if (x === 1) {
+        return "y";
+    } else {
+        return "n";
+    } // end
+    return "x";
+}`,
+            // multi-line const with trailing
+            `workflow w(): string {
+    const x = {
+        a: 1,
+        b: 2
+    }; // tail
+    return "x";
+}`,
+            // mixed inline trailings
+            `workflow w(): string {
+    const x = "y"; /* a */ // b
+    return x;
+}`,
+        ];
+        for (const src of srcs) {
+            assertStable(src);
+        }
     });
 });
