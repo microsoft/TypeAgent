@@ -122,6 +122,65 @@ class Printer {
         }
     }
 
+    /**
+     * End a statement: write the terminator (e.g. `;` or `}`), then any
+     * inline trailing comments on the same physical source line as the
+     * statement, then a newline, then any trailing comments that landed
+     * on subsequent lines (each on its own indented line).
+     */
+    private endStmt(s: Statement, terminator: string): void {
+        this.write(terminator);
+        const trailing = s.trailingComments;
+        if (!trailing || trailing.length === 0) {
+            this.newline();
+            return;
+        }
+        const endLine = s.endLine;
+        const inline: Comment[] = [];
+        const after: Comment[] = [];
+        for (const c of trailing) {
+            if (endLine !== undefined && c.pos.line === endLine) {
+                inline.push(c);
+            } else {
+                after.push(c);
+            }
+        }
+        for (const c of inline) {
+            this.write(" ");
+            this.write(c.text);
+        }
+        this.newline();
+        for (const c of after) {
+            if (c.text.includes("\n")) {
+                const lines = c.text.split("\n");
+                for (let i = 0; i < lines.length; i++) {
+                    this.write(lines[i]);
+                    if (i < lines.length - 1) this.newline();
+                }
+                this.newline();
+            } else {
+                this.line(c.text);
+            }
+        }
+    }
+
+    /** Emit a list of comments each on its own line at the current indent. */
+    private printOwnLineComments(comments: Comment[] | undefined): void {
+        if (!comments) return;
+        for (const c of comments) {
+            if (c.text.includes("\n")) {
+                const lines = c.text.split("\n");
+                for (let i = 0; i < lines.length; i++) {
+                    this.write(lines[i]);
+                    if (i < lines.length - 1) this.newline();
+                }
+                this.newline();
+            } else {
+                this.line(c.text);
+            }
+        }
+    }
+
     // ---- Workflow ----
 
     printWorkflow(decl: WorkflowDecl): void {
@@ -137,6 +196,7 @@ class Printer {
         this.newline();
         this.indent(() => {
             for (const s of decl.body) this.printStatement(s);
+            this.printOwnLineComments(decl.innerComments);
         });
         this.line("}");
     }
@@ -186,7 +246,7 @@ class Printer {
                 // pattern are not silently rewritten.
                 if (s.isSynthetic) {
                     this.printExpr(s.value);
-                    this.line(";");
+                    this.endStmt(s, ";");
                     return;
                 }
                 this.write(`const ${s.name}`);
@@ -196,13 +256,13 @@ class Printer {
                 }
                 this.write(" = ");
                 this.printExpr(s.value);
-                this.line(";");
+                this.endStmt(s, ";");
                 return;
             }
             case "DestructuringConst": {
                 this.write(`const [${s.names.join(", ")}] = `);
                 this.printExpr(s.value);
-                this.line(";");
+                this.endStmt(s, ";");
                 return;
             }
             case "IfStatement": {
@@ -230,9 +290,9 @@ class Printer {
                     this.indent(() => {
                         for (const t of s.else_!) this.printStatement(t);
                     });
-                    this.line("}");
+                    this.endStmt(s, "}");
                 } else {
-                    this.newline();
+                    this.endStmt(s, "");
                 }
                 return;
             }
@@ -269,23 +329,24 @@ class Printer {
                         }
                     }
                 });
-                this.line("}");
+                this.endStmt(s, "}");
                 return;
             }
             case "ReturnStatement": {
                 this.write("return ");
                 this.printExpr(s.value);
-                this.line(";");
+                this.endStmt(s, ";");
                 return;
             }
             case "BreakStatement": {
-                this.line("break;");
+                this.write("break;");
+                this.endStmt(s, "");
                 return;
             }
             case "ThrowStatement": {
                 this.write("throw ");
                 this.printExpr(s.value);
-                this.line(";");
+                this.endStmt(s, ";");
                 return;
             }
         }

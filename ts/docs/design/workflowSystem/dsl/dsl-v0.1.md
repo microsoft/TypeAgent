@@ -894,16 +894,39 @@ offset }`). This enables:
 
 ### Comments
 
-The AST preserves comments. Each node has an optional `leadingComments` array
-of `Comment { text, pos }` attached to the following AST node. Comments are:
+The AST preserves comments. Comments come in three flavors based on
+where they are anchored:
+
+- `leadingComments` (on any AST node): comments that appear immediately
+  before the node, attached to the following node.
+- `trailingComments` (on each `Statement`): comments that appear after a
+  statement. A comment is considered _inline trailing_ if its source line
+  equals the statement's `endLine` (e.g. `return x; // why`); otherwise it
+  is a _block-end trailing_ comment (a comment that appears between the
+  last statement of a block and the block's closing `}`, `case`, or
+  `default`). Inline and block-end trailing comments share the same
+  `trailingComments` array — the renderer distinguishes them by
+  comparing each comment's line against the statement's `endLine`.
+- `innerComments` (on `WorkflowDecl`): comments inside an otherwise
+  empty workflow body that have no statement to attach to.
+
+Each comment is a `Comment { text, pos }` where `text` includes the
+delimiters (`//…` or `/* … */`). Statements carry an additional
+`endLine` field — the source line of the statement's last token — used
+solely to drive inline-vs-own-line rendering of trailing comments.
+
+Supported comment forms:
 
 - `//` line comments
 - `/* */` block comments
 
-The text serializer (AST to source) emits comments in their original positions.
-The visual editor can display comments as annotations or tooltips on the
-associated visual element. This ensures round-tripping (source to AST to source)
-preserves comments. _(from principle 6: AST is canonical)_
+The text serializer (AST → source) emits comments in their attached
+positions. Inline trailing comments are rendered on the same line as
+the statement (after the terminator), block-end trailing comments are
+rendered on their own indented line, and `innerComments` are emitted on
+their own indented lines inside the empty block. This ensures
+round-tripping (source → AST → source → AST) preserves comment
+attachment. _(from principle 6: AST is canonical)_
 
 No ArrowFunction in the AST: the parser dissolves arrow function syntax into
 the parent built-in node's `body` field directly.

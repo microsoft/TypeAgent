@@ -94,6 +94,9 @@ export class Parser {
     private inSwitchDepth = 0;
     private comments: LexComment[];
     private commentIdx = 0;
+    /** Last token consumed by `advance()`. Used to compute statement end
+     *  position for trailing-comment same-line detection. */
+    private lastToken: Token | undefined;
 
     constructor(
         private tokens: Token[],
@@ -124,6 +127,49 @@ export class Parser {
         return out.length > 0 ? out : undefined;
     }
 
+    /**
+     * Take any unconsumed comments that appear on `line` (the line of the
+     * just-parsed statement's last token). These are inline trailing
+     * comments. Returns undefined when there are none.
+     */
+    private takeInlineTrailingComments(line: number): Comment[] | undefined {
+        if (this.commentIdx >= this.comments.length) return undefined;
+        const tokOffset = this.peek().offset;
+        const out: Comment[] = [];
+        while (this.commentIdx < this.comments.length) {
+            const c = this.comments[this.commentIdx];
+            if (c.offset >= tokOffset) break;
+            if (c.line !== line) break;
+            out.push({
+                text: c.text,
+                pos: { line: c.line, col: c.col, offset: c.offset },
+            });
+            this.commentIdx++;
+        }
+        return out.length > 0 ? out : undefined;
+    }
+
+    /**
+     * Called at the end of a block (just before the closing `}`, `case`,
+     * `default`, or EOF). Drains any remaining comments before the next
+     * token and either appends them to the last statement's
+     * `trailingComments` or returns them so the caller can surface them
+     * as `innerComments` on its container node.
+     */
+    private finalizeBlock(stmts: Statement[]): Comment[] | undefined {
+        const remaining = this.takeLeadingComments();
+        if (!remaining) return undefined;
+        if (stmts.length === 0) {
+            return remaining;
+        }
+        const last = stmts[stmts.length - 1];
+        last.trailingComments = [
+            ...(last.trailingComments ?? []),
+            ...remaining,
+        ];
+        return undefined;
+    }
+
     parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
         const workflows: WorkflowDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
@@ -150,6 +196,7 @@ export class Parser {
 
     private advance(): Token {
         const t = this.tokens[this.pos];
+        this.lastToken = t;
         if (this.pos < this.tokens.length - 1) {
             this.pos++;
         }
@@ -204,7 +251,8 @@ export class Parser {
         this.expect(TokenKind.Colon);
         const returnType = this.parseTypeExpr();
         this.expect(TokenKind.LBrace);
-        const body = this.parseStatements();
+        const { stmts: body, innerComments } =
+            this.parseStatementsCapturingInner();
         this.expect(TokenKind.RBrace);
         const decl: WorkflowDecl = {
             kind: "WorkflowDecl",
@@ -215,6 +263,7 @@ export class Parser {
             loc: l,
         };
         if (leadingComments) decl.leadingComments = leadingComments;
+        if (innerComments) decl.innerComments = innerComments;
         return decl;
     }
 
@@ -302,14 +351,42 @@ export class Parser {
             const s = this.parseStatement();
             if (s) stmts.push(s);
         }
+        this.finalizeBlock(stmts);
         return stmts;
+    }
+
+    /**
+     * Like `parseStatements()` but returns any trailing comments that
+     * could not be attached to a statement (because the block is empty)
+     * so the caller can surface them on its container node.
+     */
+    private parseStatementsCapturingInner(): {
+        stmts: Statement[];
+        innerComments: Comment[] | undefined;
+    } {
+        const stmts: Statement[] = [];
+        while (
+            this.peek().kind !== TokenKind.RBrace &&
+            this.peek().kind !== TokenKind.EOF
+        ) {
+            const s = this.parseStatement();
+            if (s) stmts.push(s);
+        }
+        const innerComments = this.finalizeBlock(stmts);
+        return { stmts, innerComments };
     }
 
     private parseStatement(): Statement | undefined {
         const leadingComments = this.takeLeadingComments();
         const stmt = this.parseStatementInner();
-        if (stmt && leadingComments) {
-            stmt.leadingComments = leadingComments;
+        if (stmt) {
+            if (leadingComments) stmt.leadingComments = leadingComments;
+            const endLine = this.lastToken?.line;
+            if (endLine !== undefined) {
+                stmt.endLine = endLine;
+                const trailing = this.takeInlineTrailingComments(endLine);
+                if (trailing) stmt.trailingComments = trailing;
+            }
         }
         return stmt;
     }
@@ -485,6 +562,9 @@ export class Parser {
             const s = this.parseStatement();
             if (s) stmts.push(s);
         }
+        // Drain comments before the next case/default/} so they get attached
+        // to the last statement of this arm rather than the next arm.
+        this.finalizeBlock(stmts);
         this.inSwitchDepth--;
         return stmts;
     }

@@ -30,6 +30,14 @@ export interface WorkflowDecl {
     body: Statement[];
     loc: SourceLocation;
     leadingComments?: Comment[];
+    /**
+     * Comments that appear inside the workflow body before the closing `}`
+     * but cannot be attached as a `leadingComments` of any statement (e.g.,
+     * the body is empty, or the comments appear after the last statement
+     * and finalizeBlock chose to surface them at the workflow level). The
+     * formatter emits these on their own lines at body indent.
+     */
+    innerComments?: Comment[];
 }
 
 export interface ParamDecl {
@@ -85,6 +93,10 @@ export interface ConstStatement {
     value: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    /** Line of the last token of this statement (used by the formatter
+     * to decide whether a trailing comment is inline or block-style). */
+    endLine?: number;
     /**
      * True when the parser wrapped a bare statement-position task/workflow
      * call (e.g. `audit.log(x);`) in a ConstStatement with a synthetic
@@ -100,6 +112,8 @@ export interface DestructuringConst {
     value: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    endLine?: number;
 }
 
 export interface IfStatement {
@@ -109,6 +123,8 @@ export interface IfStatement {
     else_?: Statement[] | undefined;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    endLine?: number;
 }
 
 export interface SwitchStatement {
@@ -126,6 +142,8 @@ export interface SwitchStatement {
     defaultIndex?: number;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    endLine?: number;
 }
 
 export interface SwitchArm {
@@ -139,6 +157,8 @@ export interface ThrowStatement {
     value: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    endLine?: number;
 }
 
 export interface ReturnStatement {
@@ -146,12 +166,16 @@ export interface ReturnStatement {
     value: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    endLine?: number;
 }
 
 export interface BreakStatement {
     kind: "BreakStatement";
     loc: SourceLocation;
     leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    endLine?: number;
 }
 
 // ---- Expressions ----
