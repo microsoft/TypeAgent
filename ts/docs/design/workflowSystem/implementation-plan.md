@@ -36,23 +36,23 @@ This phase has no v1 breakage: existing IR and workflows keep working.
 
 Add tasks from ir-v2 sections 3.1-3.5:
 
-| Task                     | Implementation                           |
-| ------------------------ | ---------------------------------------- |
-| `compare.equals`         | `left === right`                         |
-| `compare.notEquals`      | `left !== right`                         |
-| `compare.greaterThan`    | `left > right`                           |
-| `compare.lessThan`       | `left < right`                           |
-| `compare.greaterOrEqual` | `left >= right`                          |
-| `compare.lessOrEqual`    | `left <= right`                          |
-| `bool.and`               | `left && right`                          |
-| `bool.or`                | `left \|\| right`                        |
-| `bool.not`               | `!value`                                 |
-| `math.add`               | `left + right`                           |
-| `math.subtract`          | `left - right`                           |
-| `math.multiply`          | `left * right`                           |
-| `math.divide`            | `left / right` (error on zero)           |
-| `math.modulo`            | `left % right`                           |
-| `error.fail`             | Always returns `{ kind: "fail", value }` |
+| Task                     | Implementation                                      |
+| ------------------------ | --------------------------------------------------- |
+| `compare.equals`         | `left === right`                                    |
+| `compare.notEquals`      | `left !== right`                                    |
+| `compare.greaterThan`    | `left > right`                                      |
+| `compare.lessThan`       | `left < right`                                      |
+| `compare.greaterOrEqual` | `left >= right`                                     |
+| `compare.lessOrEqual`    | `left <= right`                                     |
+| `bool.and`               | `left && right`                                     |
+| `bool.or`                | `left \|\| right`                                   |
+| `bool.not`               | `!value`                                            |
+| `math.add`               | `left + right`                                      |
+| `math.subtract`          | `left - right`                                      |
+| `math.multiply`          | `left * right`                                      |
+| `math.divide`            | `left / right` (JS semantics: Infinity/NaN on zero) |
+| `math.modulo`            | `left % right`                                      |
+| `error.fail`             | Always returns `{ kind: "fail", value }`            |
 
 Register all in `standardLibraryTasks`. Keep `int.add` and
 `int.lessThan` as aliases during transition (ir-v2 section 3.6).

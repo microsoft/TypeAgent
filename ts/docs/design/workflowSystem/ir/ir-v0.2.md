@@ -1,32 +1,32 @@
-# Workflow IR - v2
+# Workflow IR - v0.2
 
-Status: **Implemented.** ForkNode, ForkMapNode, and v2 built-in tasks are live.
+Status: **Implemented.** ForkNode, ForkMapNode, and built-in tasks are live.
 
-Extends [ir-v0.1.md](ir-v0.1.md). All v1 concepts, validation rules, and
-execution semantics remain unchanged. v2 adds new node kinds and built-in
-tasks required by the DSL v2 compile target.
+Extends [ir-v0.1.md](ir-v0.1.md). All v0.1 concepts, validation rules, and
+execution semantics remain unchanged. v0.2 adds new node kinds and built-in
+tasks required by the DSL compile target.
 
 ---
 
 ## 1. Scope of changes
 
-v1 has 3 node kinds: `task`, `branch`, `loop`.
-v2 adds 2 node kinds: `fork`, `forkMap`.
-v2 adds built-in task namespaces: `compare`, `bool`, `math`, `error`, `list`.
+v0.1 has 3 node kinds: `task`, `branch`, `loop`.
+v0.2 adds 2 node kinds: `fork`, `forkMap`.
+v0.2 adds built-in task namespaces: `compare`, `bool`, `math`, `error`, `list`.
 No new `$from` namespaces (forkMap element is injected via `$from: "input"`).
 
-No v1 schema, validation rule, or execution semantic is modified.
+No v0.1 schema, validation rule, or execution semantic is modified.
 
 ### 1.2 Version field
 
-The top-level `version` field remains `"1"`. The v2 node kinds (`fork`,
-`forkMap`) are additive: a v1-only engine that encounters them can reject
+The top-level `version` field remains `"1"`. The v0.2 node kinds (`fork`,
+`forkMap`) are additive: a v0.1-only engine that encounters them can reject
 the IR at validation time (unrecognized `kind` value), which is the
-correct failure mode. Bumping `version` to `"2"` would force v1 engines
-to reject the entire IR even when it contains no v2 constructs. Since
-the DSL emitter may produce v1-only IR for workflows that don't use
+correct failure mode. Bumping `version` to `"2"` would force v0.1 engines
+to reject the entire IR even when it contains no v0.2 constructs. Since
+the DSL emitter may produce v0.1-only IR for workflows that don't use
 `parallel`/`parallelMap`, keeping `version: "1"` preserves compatibility.
-If a future change modifies v1 semantics (rather than adding to them),
+If a future change modifies v0.1 semantics (rather than adding to them),
 that change bumps the version.
 
 ### 1.1 Why two node kinds, not one
@@ -272,7 +272,7 @@ length at runtime), not static (fixed branch names known at compile time).
 
 ## 3. New built-in tasks
 
-DSL v2 operators lower to task nodes. These task namespaces are
+DSL operators lower to task nodes. These task namespaces are
 standard-library tasks available to the engine.
 
 ### 3.1 `compare` namespace
@@ -377,16 +377,16 @@ conversion, use `math.floor`, `math.round`, or `math.ceil`.
 
 ---
 
-## 4. Relationship to post-v1 sketches
+## 4. Relationship to post-v0.1 sketches
 
 The [future/](future/) directory contains sketches for future IR
-extensions. Their status relative to v2:
+extensions. Their status relative to v0.2:
 
-| Sketch                                            | v2 status                                                                                                                                           |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [foreach.md](future/foreach.md)                   | Superseded by `forkMap` for the parallel case. Sequential foreach remains a separate post-v2 concern (v2's `map` DSL built-in lowers to v1 `loop`). |
-| [block-scope.md](future/block-scope.md)           | Independent of v2. Still planned for future/v2.                                                                                                     |
-| [edge-scoped-bind.md](future/edge-scoped-bind.md) | Independent of v2. Still planned for future/v2.                                                                                                     |
+| Sketch                                            | v0.2 status                                                                                                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [foreach.md](future/foreach.md)                   | Superseded by `forkMap` for the parallel case. Sequential foreach remains a separate post-v0.2 concern (the `map` DSL built-in lowers to v0.1 `loop`). |
+| [block-scope.md](future/block-scope.md)           | Independent of v0.2. Still planned for the future.                                                                                                     |
+| [edge-scoped-bind.md](future/edge-scoped-bind.md) | Independent of v0.2. Still planned for the future.                                                                                                     |
 
 ---
 

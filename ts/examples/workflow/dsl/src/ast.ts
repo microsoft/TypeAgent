@@ -44,7 +44,7 @@ export type TypeExpr = NamedType | ArrayType | ObjectType;
 
 export interface NamedType {
     kind: "NamedType";
-    name: string; // "string", "number", "integer", "boolean", "any"
+    name: string; // "string", "number", "integer", "boolean", "unknown", "never"
     loc: SourceLocation;
 }
 

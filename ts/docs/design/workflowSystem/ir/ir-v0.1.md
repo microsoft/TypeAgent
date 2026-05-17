@@ -1,6 +1,6 @@
-# Workflow IR - v1
+# Workflow IR - v0.1
 
-Status: Adopted (v1). Authoritative.
+Status: Adopted (v0.1). Authoritative.
 
 **Terminology.** Throughout this document, the **workflow IR** (or just
 "the IR") is the JSON workflow artifact that the engine consumes. Earlier

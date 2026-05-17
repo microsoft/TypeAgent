@@ -411,7 +411,7 @@ referenced by another expression.
    optimization) or whether user-written names should always be
    preserved even when unreferenced.
 2. If preserving: only strip synthetic names (those matching the
-   `_<line>_<col>` pattern from G10), keep user-written ones.
+   `_<line>_<col>` pattern from G9), keep user-written ones.
 3. If current behavior is fine: document it explicitly in the spec
    (dsl-v0.1.md section on compilation semantics) so users know that
    unused bindings are elided.
@@ -442,3 +442,32 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
+
+## G13: `typeEq` skips structural comparison for objects and arrays
+
+**Context:** The type checker's `typeEq(target, source)` function is used
+for return type validation, const annotation checking, and ternary arm
+compatibility. It skips structural comparison for object and array kinds.
+
+**Current state:**
+
+- `typeEq` checks primitive kinds by name, handles `unknown`/`never`
+  correctly, and handles `integer`/`number` compatibility.
+- For objects and arrays it falls through to `return true` without
+  comparing fields or element types.
+- This means `{ a: string }` is considered compatible with
+  `{ x: number, y: number }` in all contexts where `typeEq` is called.
+- Affected call sites: return type vs declared type (line ~263), const
+  annotation vs inferred type (line ~308), ternary arm compatibility
+  (line ~549).
+
+**What needs to happen:**
+
+1. Add structural comparison for object types: check that all required
+   fields in the target exist in the source with compatible types.
+2. Add element-type comparison for array types.
+3. Consider splitting into two functions: `typeEq` for operator checks
+   (where the current loose behavior is fine) and `isAssignableTo` for
+   the structural contexts.
+4. Add tests for mismatched object types in return position and ternary
+   arms.

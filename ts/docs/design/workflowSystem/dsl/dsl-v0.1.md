@@ -599,7 +599,7 @@ iteration begins. Empty collections therefore skip the body entirely.
 
 ### 3.3 `filter(collection, body)`
 
-Keep items where body returns truthy.
+Keep items where body returns `true`.
 
 ```
 const valid = filter(items, (item) => {
@@ -737,13 +737,13 @@ still shows them as collapsed nodes (drill-in) based on the AST.
 ### 5.1 d1-standup-prep
 
 ```
-workflow standupPrep(author: string, repos: string[]): string {
+workflow standupPrep(repos: string[], author: string): string {
     const authorArg = `--author=${author}`
     const sections = map(repos, (repo) => {
-    const gitResult = shell.exec({ command: "git log", args: [authorArg, repo] })
-    text.template(`## ${repo}\n${gitResult.stdout}`)
+        const gitResult = shell.exec({ command: "git", args: ["log", "--since=yesterday", authorArg, "--oneline"], cwd: repo })
+        return `## ${repo}\n${gitResult.stdout}`
     })
-    const joined = string.join({ items: sections, separator: "\n\n" })
+    const joined = string.join(sections, "\n\n")
     return joined
 }
 ```
