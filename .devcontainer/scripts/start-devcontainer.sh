@@ -19,6 +19,8 @@ Options:
   --config PATH                  Devcontainer config file (optional)
   --recreate                     Recreate container before startup
   --rebuild                      Rebuild image and recreate container before startup
+  --clean                        Remove container and associated Docker volumes
+  --reset                        Rebuild image and clean volumes (--rebuild + --clean)
   --ssh                          After startup, run setup-ssh-access.sh
   --insecure-local               Pass through to setup-ssh-access.sh (implies --ssh)
   -h, --help                     Show this help text
@@ -50,6 +52,7 @@ WORKSPACE_FOLDER="$DEFAULT_WORKSPACE_FOLDER"
 CONFIG_PATH=""
 REMOVE_EXISTING=0
 REBUILD=0
+CLEAN_VOLUMES=0
 SETUP_SSH=0
 INSECURE_LOCAL=0
 
@@ -72,6 +75,17 @@ while [[ $# -gt 0 ]]; do
         --rebuild)
             REMOVE_EXISTING=1
             REBUILD=1
+            shift
+            ;;
+        --clean)
+            REMOVE_EXISTING=1
+            CLEAN_VOLUMES=1
+            shift
+            ;;
+        --reset)
+            REMOVE_EXISTING=1
+            REBUILD=1
+            CLEAN_VOLUMES=1
             shift
             ;;
         --ssh)
@@ -124,6 +138,32 @@ if [[ $REMOVE_EXISTING -eq 1 ]]; then
 fi
 if [[ $REBUILD -eq 1 ]]; then
     UP_CMD+=(--build-no-cache)
+fi
+
+if [[ $CLEAN_VOLUMES -eq 1 ]]; then
+    # Stop and remove the container first so volumes are no longer in use
+    CONTAINER_ID=$(docker ps -aq --filter "label=devcontainer.local_folder=$WORKSPACE_FOLDER" | head -1)
+    if [[ -n "$CONTAINER_ID" ]]; then
+        log "Stopping container $CONTAINER_ID..."
+        docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+    fi
+
+    log "Removing Docker volumes..."
+    VOLUME_PREFIXES=(
+        "pnpm-global-store"
+        "typeagent-node_modules-"
+        "typeagent-agent-worktrees-"
+        "claude-code-config-"
+    )
+    for prefix in "${VOLUME_PREFIXES[@]}"; do
+        for vol in $(docker volume ls -q --filter "name=$prefix" 2>/dev/null); do
+            if docker volume rm "$vol" 2>/dev/null; then
+                log "  removed $vol"
+            else
+                log "  warn: could not remove $vol"
+            fi
+        done
+    done
 fi
 
 log "Starting devcontainer..."
