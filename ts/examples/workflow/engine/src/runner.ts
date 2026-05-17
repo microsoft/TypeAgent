@@ -225,10 +225,9 @@ export interface RunOptions {
     skipValidation?: boolean;
     /**
      * Enable defense-in-depth runtime checks that duplicate static validation.
-     * When true (the default), the engine re-checks invariants already proven
-     * by the static validator (e.g. constant schema conformance, fork min-2
-     * branches, forkMap state-ref rejection). Disable for performance if you
-     * trust the static validator has run.
+     * Defaults to the value of `skipValidation` — when static validation is
+     * skipped these checks act as the safety net; when static validation runs
+     * they are redundant.  Set explicitly to override.
      */
     defenseInDepth?: boolean;
 }
@@ -289,7 +288,8 @@ export class WorkflowEngine {
         const approve = options?.approve;
         const abortSignalArg = options?.signal;
         const constraints = options?.constraints;
-        const defenseInDepth = options?.defenseInDepth ?? true;
+        const defenseInDepth =
+            options?.defenseInDepth ?? (options?.skipValidation ? true : false);
         this.defenseInDepth = defenseInDepth;
 
         // Default timeout: 60 seconds. 0 or Infinity disables.
