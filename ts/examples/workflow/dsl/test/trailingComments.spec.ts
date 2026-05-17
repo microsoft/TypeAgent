@@ -710,3 +710,319 @@ describe("end-to-end: parse + format succeeds on every new trailing-comment shap
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// Second-pass (post-round-2) gap coverage.
+// ---------------------------------------------------------------------------
+
+describe("parser: degenerate comment lexemes", () => {
+    test("empty block comment /**/ as inline trailing parses and round-trips", () => {
+        const src = `workflow w(): string {
+    const x = "y"; /**/
+    return x;
+}`;
+        const wf = parse(src);
+        expect(wf.body[0].trailingComments).toHaveLength(1);
+        expect(wf.body[0].trailingComments![0].text).toBe("/**/");
+        const out = format(wf);
+        expect(out).toContain(`const x = "y"; /**/`);
+        assertStable(src);
+    });
+
+    test("empty line comment // (no content) as inline trailing round-trips", () => {
+        const src = `workflow w(): string {
+    const x = "y"; //
+    return x;
+}`;
+        const wf = parse(src);
+        expect(wf.body[0].trailingComments).toHaveLength(1);
+        expect(wf.body[0].trailingComments![0].text).toBe("//");
+        assertStable(src);
+    });
+
+    test("line comment containing block-comment opener (// /*) is one line comment", () => {
+        const src = `workflow w(): string {
+    const x = "y"; // /* not a block
+    return x;
+}`;
+        const wf = parse(src);
+        const t = wf.body[0].trailingComments;
+        expect(t).toHaveLength(1);
+        expect(t![0].text).toBe("// /* not a block");
+        assertStable(src);
+    });
+
+    test("block comment containing line-comment delimiter (/* // */) is one block comment", () => {
+        const src = `workflow w(): string {
+    const x = "y"; /* // not a line */
+    return x;
+}`;
+        const wf = parse(src);
+        const t = wf.body[0].trailingComments;
+        expect(t).toHaveLength(1);
+        expect(t![0].text).toBe("/* // not a line */");
+        assertStable(src);
+    });
+
+    test("block comment containing stars (/* * */) preserves text", () => {
+        const src = `workflow w(): string {
+    const x = "y"; /* * star */
+    return x;
+}`;
+        const wf = parse(src);
+        expect(wf.body[0].trailingComments![0].text).toBe("/* * star */");
+        assertStable(src);
+    });
+});
+
+describe("parser: column information for comments", () => {
+    test("comment at column 1 preserves pos.col === 1", () => {
+        const wf = parse(`workflow w(): string {
+// col1-leading
+    return "x";
+}`);
+        const c = wf.body[0].leadingComments;
+        expect(c).toHaveLength(1);
+        expect(c![0].pos.col).toBe(1);
+        expect(c![0].pos.line).toBe(2);
+    });
+
+    test("deeply indented comment preserves pos.col matching source indent", () => {
+        // The // sits at column 13 (12 spaces + 1, 1-based).
+        const src = `workflow w(x: number): string {
+    if (x > 0) {
+            // deeply indented
+        return "y";
+    }
+    return "n";
+}`;
+        const wf = parse(src);
+        const inner = (wf.body[0] as IfStatement).then[0];
+        expect(inner.leadingComments).toHaveLength(1);
+        expect(inner.leadingComments![0].pos.col).toBe(13);
+    });
+
+    test("inline trailing comment retains its source column (not just line)", () => {
+        const wf = parse(`workflow w(): string {
+    const x = "y"; // tail
+    return x;
+}`);
+        const c = wf.body[0].trailingComments![0];
+        // "    const x = "y"; " is 19 chars; comment starts at col 20.
+        expect(c.pos.col).toBe(20);
+        expect(c.pos.line).toBe(2);
+    });
+});
+
+describe("parser: adjacent inline-trailing + leading independence", () => {
+    test("prev statement's inline trailing and next statement's leading don't merge", () => {
+        const wf = parse(`workflow w(): string {
+    const a = "1"; // a-inline
+    // b-leading
+    const b = a;
+    return b;
+}`);
+        const s0 = wf.body[0];
+        const s1 = wf.body[1];
+        expect(s0.trailingComments).toHaveLength(1);
+        expect(s0.trailingComments![0].text).toBe("// a-inline");
+        expect(s1.leadingComments).toHaveLength(1);
+        expect(s1.leadingComments![0].text).toBe("// b-leading");
+    });
+
+    test("format order: inline-trail line, then leading line, then statement", () => {
+        const src = `workflow w(): string {
+    const a = "1"; // a-inline
+    // b-leading
+    const b = a;
+    return b;
+}`;
+        const out = roundTrip(src);
+        const iA = out.indexOf("// a-inline");
+        const iB = out.indexOf("// b-leading");
+        const iConstB = out.indexOf("const b = a");
+        expect(iA).toBeGreaterThan(-1);
+        expect(iA).toBeLessThan(iB);
+        expect(iB).toBeLessThan(iConstB);
+        assertStable(src);
+    });
+});
+
+describe("parser: workflow-with-statements never produces innerComments", () => {
+    test("trailing comment after final return attaches as trailing, not inner", () => {
+        const wf = parse(`workflow w(): string {
+    return "x";
+    // closing
+}`);
+        // The body is non-empty, so innerComments must not be populated;
+        // the comment must live on the last statement's trailingComments.
+        expect(wf.innerComments).toBeUndefined();
+        expect(wf.body[0].trailingComments).toHaveLength(1);
+        expect(wf.body[0].trailingComments![0].text).toBe("// closing");
+    });
+});
+
+describe("parser: multi-workflow (Parser.parse) preserves per-workflow trailing", () => {
+    test("two workflows each get their own inline trailing comments", () => {
+        const src = `workflow a(): string {
+    return "a"; // tail-a
+}
+workflow b(): string {
+    return "b"; // tail-b
+}`;
+        const { tokens, errors: lexErrors, comments } = lex(src);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens, comments);
+        const { workflows, errors } = parser.parse();
+        expect(errors).toEqual([]);
+        expect(workflows).toHaveLength(2);
+        expect(workflows[0].body[0].trailingComments).toHaveLength(1);
+        expect(workflows[0].body[0].trailingComments![0].text).toBe("// tail-a");
+        expect(workflows[1].body[0].trailingComments).toHaveLength(1);
+        expect(workflows[1].body[0].trailingComments![0].text).toBe("// tail-b");
+    });
+
+    test("formatting both workflows and re-parsing preserves their trailing comments", () => {
+        const src = `workflow a(): string {
+    return "a"; // tail-a
+}
+workflow b(): string {
+    return "b"; // tail-b
+}`;
+        const { tokens, comments } = lex(src);
+        const m = new Parser(tokens, comments).parse();
+        const combined = m.workflows.map((w) => format(w)).join("");
+        const { tokens: t2, comments: c2 } = lex(combined);
+        const m2 = new Parser(t2, c2).parse();
+        expect(m2.workflows).toHaveLength(2);
+        expect(m2.workflows[0].body[0].trailingComments![0].text).toBe(
+            "// tail-a",
+        );
+        expect(m2.workflows[1].body[0].trailingComments![0].text).toBe(
+            "// tail-b",
+        );
+    });
+});
+
+describe("formatter: FormatOptions edge cases with comments", () => {
+    test("indent: 1 (smallest non-zero) keeps comments correctly indented", () => {
+        const src = `workflow w(): string {
+    const x = "y"; // inline
+    // tail
+    return x;
+}`;
+        const out = format(parse(src), { indent: 1 });
+        // body line uses 1 space indent
+        expect(out).toMatch(/^ const x = "y"; \/\/ inline$/m);
+        expect(out).toMatch(/^ \/\/ tail$/m);
+        // Stability with explicit indent option
+        const twice = format(parse(out), { indent: 1 });
+        expect(twice).toBe(out);
+    });
+
+    test("eol: \\r alone (old MacOS) is used uniformly with comments", () => {
+        const src = `workflow w(): string {
+    const x = "y"; // inline
+    // tail
+    return x;
+}`;
+        const out = format(parse(src), { eol: "\r" });
+        expect(out).not.toContain("\n");
+        expect(out.includes("\r")).toBe(true);
+        // Comment text preserved
+        expect(out).toContain("// inline");
+        expect(out).toContain("// tail");
+    });
+
+    test("deeply nested if/else with comments parses and round-trips quickly", () => {
+        // Smoke test: nesting depth 20 should be trivial.
+        let src = `workflow w(x: number): string {`;
+        for (let i = 0; i < 20; i++) {
+            src += `\n${"    ".repeat(i + 1)}if (x === ${i}) { // depth ${i}`;
+        }
+        src += `\n${"    ".repeat(21)}return "deep";`;
+        for (let i = 19; i >= 0; i--) {
+            src += `\n${"    ".repeat(i + 1)}}`;
+        }
+        src += `\n}`;
+        const t0 = Date.now();
+        const wf = parse(src);
+        const out = format(wf);
+        const elapsed = Date.now() - t0;
+        // Generous bound — should be milliseconds, not seconds.
+        expect(elapsed).toBeLessThan(2000);
+        // Every "// depth N" comment must survive round-trip.
+        for (let i = 0; i < 20; i++) {
+            expect(out).toContain(`// depth ${i}`);
+        }
+        // Stability
+        const twice = format(parse(out));
+        expect(twice).toBe(out);
+    });
+});
+
+describe("formatter: pathological volumes", () => {
+    test("1000 inline trailing comments on one statement parses and round-trips", () => {
+        let inlines = "";
+        for (let i = 0; i < 1000; i++) inlines += `/* ${i} */ `;
+        const src = `workflow w(): string {\n    const x = "y"; ${inlines}\n    return x;\n}`;
+        const t0 = Date.now();
+        const wf = parse(src);
+        const out = format(wf);
+        const elapsed = Date.now() - t0;
+        expect(wf.body[0].trailingComments).toHaveLength(1000);
+        // Sample preservation
+        expect(out).toContain("/* 0 */");
+        expect(out).toContain("/* 999 */");
+        // Should be fast (parser/formatter are linear in token count).
+        expect(elapsed).toBeLessThan(2000);
+        // Stable on re-format.
+        const twice = format(parse(out));
+        expect(twice).toBe(out);
+    });
+});
+
+describe("formatter: property test — union of leading + trailing + inner", () => {
+    test("source with all three comment kinds is round-trip stable across 3 passes", () => {
+        const src = `// header
+workflow w(a: string): string {
+    // leading-a2
+    const a2 = a; // inline-a2
+    /* between block */
+    const b = a2; // inline-b
+    // before return
+    return b;
+    // tail-1
+    /* tail-2 */
+}`;
+        const out1 = roundTrip(src);
+        const out2 = roundTrip(out1);
+        const out3 = roundTrip(out2);
+        expect(out2).toBe(out1);
+        expect(out3).toBe(out1);
+        // Every comment text appears in output
+        for (const c of [
+            "// header",
+            "// leading-a2",
+            "// inline-a2",
+            "/* between block */",
+            "// inline-b",
+            "// before return",
+            "// tail-1",
+            "/* tail-2 */",
+        ]) {
+            expect(out1).toContain(c);
+        }
+    });
+
+    test("inner-comment-only workflow combined via multi-parse remains stable", () => {
+        const src = `workflow w(): string {
+    // only inner
+}`;
+        assertStable(src);
+        const wf = parse(src);
+        expect(wf.body).toHaveLength(0);
+        expect(wf.innerComments).toHaveLength(1);
+        expect(wf.innerComments![0].text).toBe("// only inner");
+    });
+});
