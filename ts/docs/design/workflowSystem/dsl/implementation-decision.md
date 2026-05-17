@@ -95,3 +95,77 @@ is canonical": anything not in the AST is not promised to round-trip.
 Blank lines between statements are a known information loss; if needed,
 they could be added later by capturing blank-line counts on the lexer
 side and storing them on `Statement` as `blankLinesBefore: number`.
+
+---
+
+## Round 2 (trailing comments) — non-obvious decisions
+
+### D6. Single `trailingComments` array + `endLine` field, not two arrays
+
+The "inline trailing" (same line as the statement) and "block-end
+trailing" (between last statement of a block and the closing brace)
+buckets are semantically distinct for rendering but identical for the
+AST consumer. We store them in a single `trailingComments` array on
+each statement and add `endLine?: number` so the formatter can decide
+rendering at print time:
+
+```
+c.pos.line === stmt.endLine  →  render inline (after terminator, before newline)
+otherwise                    →  render on own indented line
+```
+
+Alternatives considered: (a) two arrays
+(`inlineTrailingComments` + `blockEndComments`) — rejected because it
+forces every AST consumer that walks comments to know the distinction
+and increases AST surface area; (b) annotating each `Comment` with an
+`inline: boolean` flag — rejected because the line comparison is
+trivially derivable from data we already store, and storing the flag
+opens the door to inconsistencies when the AST is mutated.
+
+### D7. `innerComments` belongs only on `WorkflowDecl` (not on every block)
+
+When a block is empty (no statements) any comments inside it have
+nowhere to attach. We surface those only on `WorkflowDecl`. Inner
+blocks (then/else, switch arms, attempts/map/filter/parallel bodies)
+that happen to be empty still drop their orphan comments — documented
+as a known gap. Rationale:
+
+- An empty `then`/`else` is a clear smell — users add a placeholder
+  statement when they want such structure, and an empty switch arm body
+  is unusual.
+- An empty top-level workflow body, by contrast, is a common scaffold
+  ("I'm describing this workflow but the body is a TODO") and losing
+  the TODO comment would surprise users.
+- Adding `innerComments` to every block-holding node would touch the
+  AST surface of every built-in node (`AttemptsNode`, `MapNode`,
+  `ParallelNode`, etc.) for a feature that rarely matters in practice.
+
+### D8. `finalizeBlock` is called from every block parser, not just at EOF
+
+The natural place to attach end-of-block trailing comments is when the
+parser sees the block's closing delimiter — which differs by context:
+`}` for workflow/if/built-in bodies, but `case`/`default`/`}` for
+switch arm bodies. We added a single `finalizeBlock(stmts)` helper and
+invoke it from each of `parseStatements()` and `parseSwitchArmBody()`.
+If we relied only on the wrapper-level `takeLeadingComments` in the
+next iteration, a trailing comment on the last statement of a switch
+arm would migrate onto the next `case`'s leading comments — a subtle
+semantic shift the round-1 reviewers flagged.
+
+### D9. Inline trailing comments only consume same-line comments
+
+`takeInlineTrailingComments(line)` stops at the first comment whose
+line differs from the just-parsed statement's `endLine`. Comments on
+subsequent lines (before the next statement begins) fall through to the
+next iteration's `takeLeadingComments` and become _leading_ comments of
+the next statement — which is the correct attachment for cases like:
+
+```
+const x = 1;
+// This belongs to the return statement below
+return x;
+```
+
+Without the same-line guard, that comment would be attached as a
+"trailing" of `const x = 1;` and the leading-vs-trailing semantics
+would collapse.

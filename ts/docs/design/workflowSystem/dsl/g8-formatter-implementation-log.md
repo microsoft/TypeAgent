@@ -103,3 +103,83 @@ comments preserved.
   not acted upon, with rationale.
 - `g8-test-gaps-unaddressed.md` — test gaps deliberately not filled,
   with rationale.
+
+---
+
+## Round 2: trailing comments (spec extension)
+
+### Motivation
+
+Round 1's spec only described `leadingComments`. Reviewers noted that
+inline comments like `return x; // why` and block-tail comments like
+
+```
+return x;
+// note about return
+}
+```
+
+would be lost on round-trip because they had no place to attach. The
+DSL spec was incomplete; this round extends both the spec and the
+implementation.
+
+### Changes
+
+1. **AST** (`src/ast.ts`)
+   - Added `trailingComments?: Comment[]` and `endLine?: number` to every
+     `Statement` subtype (Const/DestructuringConst/If/Switch/Throw/
+     Return/Break).
+   - Added `innerComments?: Comment[]` to `WorkflowDecl` for the
+     empty-body case.
+
+2. **Parser** (`src/parser.ts`)
+   - Added `lastToken` tracking in `advance()` so `parseStatement` can
+     record the statement's `endLine`.
+   - Added `takeInlineTrailingComments(line)` (variant of
+     `takeLeadingComments`) that only consumes comments on the given
+     source line.
+   - Added `finalizeBlock(stmts)` which is invoked just before each
+     block-closing token (`}`, `case`, `default`, EOF): it drains the
+     remaining unconsumed comments and either appends them to the last
+     statement's `trailingComments` or returns them when the block is
+     empty.
+   - Added `parseStatementsCapturingInner()` used only by `parseWorkflow`
+     so the leftover from an empty workflow body becomes
+     `decl.innerComments`.
+   - Invoked `finalizeBlock` from `parseStatements` and
+     `parseSwitchArmBody` (so case-arm trailing comments don't migrate
+     onto the next case).
+
+3. **Formatter** (`src/formatter.ts`)
+   - Added `endStmt(stmt, terminator)` helper. It writes the terminator,
+     then for each trailing comment splits into inline (same line as
+     `stmt.endLine`, rendered with a leading space before the newline)
+     vs. own-line (rendered on its own indented line after the newline).
+   - All statement printers now use `endStmt` instead of `this.line(…)`.
+   - `printWorkflow` emits `decl.innerComments` on their own indented
+     lines after the body loop.
+
+4. **Spec** (`docs/.../dsl-v0.1.md` §6 Comments)
+   - Rewrote the Comments section to describe the three buckets
+     (`leadingComments`, `trailingComments` with inline-vs-block
+     semantics, `innerComments`) and the `endLine` field.
+
+5. **Tests** (`test/trailingComments.spec.ts`, new — 24 tests)
+   - Parser tests: inline trailing on const/return/throw/break, if's
+     trailing-after-brace, block-end trailing on workflow body, multiple
+     trailing comments at block end, switch arm trailing doesn't migrate
+     to next case, inner comments on empty body, leading-vs-trailing
+     boundary.
+   - Formatter tests: each parser scenario above renders correctly.
+   - Stability tests: assertStable on inline / block-end / inner /
+     switch-arm / if-trailing / mixed-leading-and-trailing.
+   - Compiler tests: trailing/inner comments don't change IR; IR JSON
+     contains none of the comment fields or text.
+   - Updated `test/pass2-coverage.spec.ts:stripTrivia` to also strip
+     `trailingComments`, `innerComments`, and `endLine` (so the
+     structural-equality property test still passes).
+
+### Test count
+
+- Baseline (after round 1): 286 passing.
+- After this work: 310 passing (286 + 24 new).
