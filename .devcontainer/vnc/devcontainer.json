@@ -8,7 +8,7 @@
   // desktop-lite feature historically supports amd64 only, so on Apple
   // Silicon this config may still require Rosetta/QEMU emulation just for
   // the VNC desktop. The standard (non-VNC) config runs natively on arm64.
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "build": { "dockerfile": "../Dockerfile" },
 
   "features": {
     // VNC desktop for Electron shell support
@@ -70,7 +70,6 @@
   ],
 
   "containerEnv": {
-    "PNPM_HOME": "/home/codespace/.local/share/pnpm",
     "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
     "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
   },

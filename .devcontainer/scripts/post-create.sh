@@ -119,7 +119,8 @@ echo ""
 echo "Enabling corepack and pnpm..."
 if command -v corepack &> /dev/null; then
     corepack enable || echo "Warning: corepack enable failed"
-    corepack prepare pnpm@latest --activate || echo "Warning: corepack prepare failed"
+    # Use the pnpm version pinned in package.json (packageManager field)
+    corepack install || echo "Warning: corepack install failed"
 else
     echo "Warning: corepack not found, checking for pnpm..."
     if ! command -v pnpm &> /dev/null; then
@@ -136,6 +137,10 @@ fi
 
 echo "pnpm version: $(pnpm --version)"
 
+# Point pnpm store at the Docker named volume so it persists across rebuilds
+pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
+echo "pnpm store-dir: $(pnpm store path)"
+
 echo ""
 echo "Installing system libraries required by TypeAgent..."
 # libsecret is required by keytar / native credential storage used by some
@@ -144,15 +149,26 @@ APT_PACKAGES=(
     libsecret-1-0
     libsecret-1-dev
 )
-if command -v apt-get &> /dev/null; then
-    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get update -y; then
-        echo "  warn: apt-get update failed"
+# Skip if already baked into the image (via .devcontainer/Dockerfile)
+MISSING_PKGS=()
+for pkg in "${APT_PACKAGES[@]}"; do
+    if ! dpkg -s "$pkg" &>/dev/null; then
+        MISSING_PKGS+=("$pkg")
     fi
-    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"; then
-        echo "  warn: failed to install: ${APT_PACKAGES[*]}"
+done
+if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+    if command -v apt-get &> /dev/null; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get update -y; then
+            echo "  warn: apt-get update failed"
+        fi
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${MISSING_PKGS[@]}"; then
+            echo "  warn: failed to install: ${MISSING_PKGS[*]}"
+        fi
+    else
+        echo "  warn: apt-get not available, skipping system library install"
     fi
 else
-    echo "  warn: apt-get not available, skipping system library install"
+    echo "  all packages already installed"
 fi
 
 echo ""

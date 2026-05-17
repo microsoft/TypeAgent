@@ -17,7 +17,10 @@ Start the TypeAgent devcontainer. Optionally configure host SSH access.
 Options:
   --workspace-folder PATH        Workspace folder to open (default: repo root)
   --config PATH                  Devcontainer config file (optional)
-  --remove-existing-container    Recreate container before startup
+  --recreate                     Recreate container before startup
+  --rebuild                      Rebuild image and recreate container before startup
+  --clean                        Remove container and associated Docker volumes
+  --reset                        Rebuild image and clean volumes (--rebuild + --clean)
   --ssh                          After startup, run setup-ssh-access.sh
   --insecure-local               Pass through to setup-ssh-access.sh (implies --ssh)
   -h, --help                     Show this help text
@@ -25,7 +28,8 @@ Options:
 Examples:
   $(basename "$0")
   $(basename "$0") --ssh
-  $(basename "$0") --remove-existing-container --ssh
+  $(basename "$0") --recreate --ssh
+  $(basename "$0") --rebuild
   $(basename "$0") --config .devcontainer/vnc/devcontainer.json
 EOF
 }
@@ -47,6 +51,8 @@ read_git_identity() {
 WORKSPACE_FOLDER="$DEFAULT_WORKSPACE_FOLDER"
 CONFIG_PATH=""
 REMOVE_EXISTING=0
+REBUILD=0
+CLEAN_VOLUMES=0
 SETUP_SSH=0
 INSECURE_LOCAL=0
 
@@ -62,8 +68,24 @@ while [[ $# -gt 0 ]]; do
             CONFIG_PATH=$(cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
             shift 2
             ;;
-        --remove-existing-container)
+        --recreate|--remove-existing-container)
             REMOVE_EXISTING=1
+            shift
+            ;;
+        --rebuild)
+            REMOVE_EXISTING=1
+            REBUILD=1
+            shift
+            ;;
+        --clean)
+            REMOVE_EXISTING=1
+            CLEAN_VOLUMES=1
+            shift
+            ;;
+        --reset)
+            REMOVE_EXISTING=1
+            REBUILD=1
+            CLEAN_VOLUMES=1
             shift
             ;;
         --ssh)
@@ -113,6 +135,35 @@ if [[ -n "$CONFIG_PATH" ]]; then
 fi
 if [[ $REMOVE_EXISTING -eq 1 ]]; then
     UP_CMD+=(--remove-existing-container)
+fi
+if [[ $REBUILD -eq 1 ]]; then
+    UP_CMD+=(--build-no-cache)
+fi
+
+if [[ $CLEAN_VOLUMES -eq 1 ]]; then
+    # Stop and remove the container first so volumes are no longer in use
+    CONTAINER_ID=$(docker ps -aq --filter "label=devcontainer.local_folder=$WORKSPACE_FOLDER" | head -1)
+    if [[ -n "$CONTAINER_ID" ]]; then
+        log "Stopping container $CONTAINER_ID..."
+        docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+    fi
+
+    log "Removing Docker volumes..."
+    VOLUME_PREFIXES=(
+        "pnpm-global-store"
+        "typeagent-node_modules-"
+        "typeagent-agent-worktrees-"
+        "claude-code-config-"
+    )
+    for prefix in "${VOLUME_PREFIXES[@]}"; do
+        for vol in $(docker volume ls -q --filter "name=^$prefix" 2>/dev/null); do
+            if err=$(docker volume rm "$vol" 2>&1); then
+                log "  removed $vol"
+            else
+                log "  warn: could not remove $vol: $err"
+            fi
+        done
+    done
 fi
 
 log "Starting devcontainer..."

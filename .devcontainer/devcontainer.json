@@ -1,6 +1,6 @@
 {
   "name": "TypeAgent Development",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "build": { "dockerfile": "Dockerfile" },
 
   // Multi-arch base image (linux/amd64 and linux/arm64) so this configuration
   // works on Apple Silicon as well as x86_64 hosts.
@@ -71,7 +71,6 @@
   ],
 
   "containerEnv": {
-    "PNPM_HOME": "/home/codespace/.local/share/pnpm",
     "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
     "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
     // For Codespaces, set these as repository secrets:
