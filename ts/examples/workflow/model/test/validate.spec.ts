@@ -6,8 +6,11 @@ import {
     TaskNode,
     LoopNode,
     BranchNode,
+    ForkNode,
+    ForkMapNode,
     TaskDefinition,
     validateWorkflowIR,
+    isNeverSchema,
 } from "../src/index.js";
 
 function makeMinimalIR(overrides?: Partial<WorkflowIR>): WorkflowIR {
@@ -48,7 +51,7 @@ function makeTaskNode(overrides?: Partial<TaskNode>): TaskNode {
 /**
  * Build a loop node with a single-counter state and a branch body that
  * exits/iterates. Override any field via `overrides`; override the body
- * entry or nodes via `bodyOverrides`.
+ * scope fields via `bodyOverrides`.
  */
 function makeLoopNode(
     overrides?: Partial<LoopNode>,
@@ -57,11 +60,8 @@ function makeLoopNode(
     return {
         kind: "loop",
         inputs: {},
-        inputSchema: { type: "object" },
-        state: {
-            i: { schema: { type: "integer" }, initial: 0 },
-        },
         body: {
+            inputSchema: { type: "object" },
             entry: "decide",
             nodes: {
                 decide: {
@@ -72,11 +72,14 @@ function makeLoopNode(
                     default: "@iterate",
                 } as BranchNode,
             },
+            output: { $from: "state", name: "i" },
+            outputSchema: { type: "integer" },
             ...bodyOverrides,
         },
+        state: {
+            i: { schema: { type: "integer" }, initial: 0 },
+        },
         iterateState: { i: { $from: "state", name: "i" } },
-        output: { $from: "state", name: "i" },
-        outputSchema: { type: "integer" },
         maxIterations: 10,
         ...overrides,
     };
@@ -356,12 +359,12 @@ describe("validateWorkflowIR", () => {
             nodes: {
                 start: makeLoopNode(
                     {
-                        output: null,
-                        outputSchema: { type: "null" },
                         onError: "recover",
                         bind: "out",
                     },
                     {
+                        output: null,
+                        outputSchema: { type: "null" },
                         entry: "step",
                         nodes: {
                             step: makeTaskNode(),
@@ -1412,7 +1415,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1420,6 +1422,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1430,12 +1433,12 @@ describe("validateWorkflowIR", () => {
                                     inputs: {},
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         onError: "handler",
                     } as any,
@@ -1489,7 +1492,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1497,6 +1499,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1524,12 +1527,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1552,7 +1555,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1560,6 +1562,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1571,12 +1574,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1644,7 +1647,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1652,6 +1654,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1668,12 +1671,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                     } as any,
                 },
@@ -1696,7 +1699,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1704,6 +1706,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -1720,12 +1723,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1752,7 +1755,6 @@ describe("validateWorkflowIR", () => {
                     outerLoop: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -1760,12 +1762,12 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "innerLoop",
                             nodes: {
                                 innerLoop: {
                                     kind: "loop",
                                     inputs: {},
-                                    inputSchema: { type: "object" },
                                     state: {
                                         j: {
                                             schema: { type: "integer" },
@@ -1773,6 +1775,7 @@ describe("validateWorkflowIR", () => {
                                         },
                                     },
                                     body: {
+                                        inputSchema: { type: "object" },
                                         entry: "innerStep",
                                         nodes: {
                                             innerStep: {
@@ -1793,6 +1796,8 @@ describe("validateWorkflowIR", () => {
                                                 next: "@iterate",
                                             },
                                         },
+                                        output: null,
+                                        outputSchema: { type: "null" },
                                     },
                                     iterateState: {
                                         j: {
@@ -1800,18 +1805,16 @@ describe("validateWorkflowIR", () => {
                                             name: "j",
                                         },
                                     },
-                                    output: null,
-                                    outputSchema: { type: "null" },
                                     maxIterations: 5,
                                     next: "@iterate",
                                 } as any,
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                     } as any,
                 },
@@ -2020,7 +2023,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2032,6 +2034,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2043,13 +2046,13 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                             // missing "j"
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2076,7 +2079,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2084,6 +2086,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2100,12 +2103,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2130,7 +2133,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2138,6 +2140,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2149,13 +2152,13 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                             phantom: { $from: "state", name: "phantom" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2180,7 +2183,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             count: {
                                 schema: { type: "integer" },
@@ -2188,6 +2190,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2209,12 +2212,12 @@ describe("validateWorkflowIR", () => {
                                     next: "@iterate",
                                 },
                             },
+                            output: null,
+                            outputSchema: { type: "null" },
                         },
                         iterateState: {
                             count: { $from: "state", name: "count" },
                         },
-                        output: null,
-                        outputSchema: { type: "null" },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -2347,6 +2350,63 @@ describe("validateWorkflowIR", () => {
                     ),
                 ),
             ).toBe(true);
+        });
+
+        it("accepts output ref covered by binders on all branch arms", () => {
+            const ir = makeMinimalIR({
+                entry: "branch",
+                nodes: {
+                    branch: {
+                        kind: "branch",
+                        selectorSchema: { type: "boolean" },
+                        selector: true,
+                        cases: { true: "trueArm" },
+                        default: "falseArm",
+                    },
+                    trueArm: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        bind: "data",
+                        next: "merge",
+                    },
+                    falseArm: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        bind: "data",
+                        next: "merge",
+                    },
+                    merge: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                    },
+                },
+                output: {
+                    result: {
+                        $from: "scope",
+                        name: "data",
+                        path: ["result"],
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
         });
     });
 
@@ -2880,7 +2940,6 @@ describe("validateWorkflowIR", () => {
                     start: {
                         kind: "loop",
                         inputs: {},
-                        inputSchema: { type: "object" },
                         state: {
                             i: {
                                 schema: { type: "integer" },
@@ -2888,6 +2947,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         body: {
+                            inputSchema: { type: "object" },
                             entry: "step",
                             nodes: {
                                 step: {
@@ -2906,16 +2966,16 @@ describe("validateWorkflowIR", () => {
                                     bind: "stepOut",
                                 },
                             },
+                            output: {
+                                $from: "scope",
+                                name: "stepOut",
+                                path: ["val"],
+                            },
+                            outputSchema: { type: "integer" },
                         },
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
-                        output: {
-                            $from: "scope",
-                            name: "stepOut",
-                            path: ["val"],
-                        },
-                        outputSchema: { type: "integer" },
                         maxIterations: 5,
                         bind: "out",
                     } as any,
@@ -2931,6 +2991,565 @@ describe("validateWorkflowIR", () => {
                         e.message.includes("not compatible"),
                 ),
             ).toBe(true);
+        });
+
+        // ---- Top schema ({}) lenient behavior ----
+
+        it("accepts top-schema producer feeding constrained consumer (lenient)", () => {
+            // A task with outputSchema {} (unknown/unconstrained) produces a
+            // value consumed by a task expecting { type: "string" }. The
+            // validator is lenient: can't prove incompatibility from {}.
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "opaque",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
+                        },
+                        inputs: {},
+                        bind: "p",
+                        next: "consumer",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            text: {
+                                $from: "scope",
+                                name: "p",
+                                path: ["value"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts top-schema consumer receiving constrained producer", () => {
+            // A task with concrete output feeds into a task expecting {} (top
+            // schema) on an input property. Always valid: anything is a subtype
+            // of the unconstrained top schema.
+            const ir = makeMinimalIR({
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "typed",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "p",
+                        next: "consumer",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["data"],
+                            properties: { data: {} },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            data: {
+                                $from: "scope",
+                                name: "p",
+                                path: ["text"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts workflow outputSchema {} with any concrete output", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                outputSchema: {},
+                output: {
+                    $from: "scope",
+                    name: "out",
+                    path: ["text"],
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- Fork validation ----
+
+    describe("fork node validation", () => {
+        function makeForkIR(
+            forkOverrides?: Partial<ForkNode>,
+            extraNodes?: Record<string, any>,
+        ): WorkflowIR {
+            return makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "object" },
+                                b: { type: "object" },
+                            },
+                        },
+                        bind: "out",
+                        ...forkOverrides,
+                    } as ForkNode,
+                    ...extraNodes,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+        }
+
+        it("accepts a valid fork with two branches", () => {
+            const result = validateWorkflowIR(makeForkIR(), taskMap("noop"));
+            expect(result.valid).toBe(true);
+            expect(result.errors).toHaveLength(0);
+        });
+
+        it("rejects fork with fewer than 2 branches", () => {
+            const ir = makeForkIR({
+                branches: {
+                    only: {
+                        inputs: {},
+                        scope: {
+                            inputSchema: {},
+                            entry: "s",
+                            nodes: { s: makeTaskNode({ bind: "x" }) },
+                            output: { $from: "scope", name: "x" },
+                            outputSchema: {},
+                        },
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("at least 2 branches"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork with invalid maxConcurrency (zero)", () => {
+            const ir = makeForkIR({ maxConcurrency: 0 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("maxConcurrency")),
+            ).toBe(true);
+        });
+
+        it("rejects fork with non-integer maxConcurrency", () => {
+            const ir = makeForkIR({ maxConcurrency: 1.5 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("maxConcurrency")),
+            ).toBe(true);
+        });
+
+        it("accepts fork with valid maxConcurrency", () => {
+            const ir = makeForkIR({ maxConcurrency: 2 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects fork with missing branch entry", () => {
+            const ir = makeForkIR({
+                branches: {
+                    a: {
+                        inputs: {},
+                        scope: {
+                            inputSchema: {},
+                            entry: "missing",
+                            nodes: { a_step: makeTaskNode({ bind: "x" }) },
+                            output: null,
+                            outputSchema: {},
+                        },
+                    },
+                    b: {
+                        inputs: {},
+                        scope: {
+                            inputSchema: {},
+                            entry: "b_step",
+                            nodes: { b_step: makeTaskNode({ bind: "y" }) },
+                            output: { $from: "scope", name: "y" },
+                            outputSchema: {},
+                        },
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("does not exist")),
+            ).toBe(true);
+        });
+
+        it("rejects fork with nonexistent next target", () => {
+            const ir = makeForkIR({ next: "nowhere" });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("next") &&
+                        e.message.includes("nowhere"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork with nonexistent onError target", () => {
+            const ir = makeForkIR({ onError: "nowhere" });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("onError") &&
+                        e.message.includes("nowhere"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts fork with valid next pointing to another node", () => {
+            const ir = makeForkIR(
+                { next: "after" },
+                { after: makeTaskNode({ bind: "afterOut" }) },
+            );
+            ir.output = { $from: "scope", name: "afterOut" };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- ForkMap validation ----
+
+    describe("forkMap node validation", () => {
+        function makeForkMapIR(
+            forkMapOverrides?: Partial<ForkMapNode>,
+            extraNodes?: Record<string, any>,
+        ): WorkflowIR {
+            return makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                        ...forkMapOverrides,
+                    } as ForkMapNode,
+                    ...extraNodes,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                outputSchema: {
+                    type: "array",
+                    items: { type: "object" },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+        }
+
+        it("accepts a valid forkMap", () => {
+            const result = validateWorkflowIR(makeForkMapIR(), taskMap("noop"));
+            expect(result.valid).toBe(true);
+            expect(result.errors).toHaveLength(0);
+        });
+
+        it("rejects forkMap with non-array collectionSchema", () => {
+            const ir = makeForkMapIR({
+                collectionSchema: { type: "object" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('type "array"')),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap with missing body entry", () => {
+            const ir = makeForkMapIR({
+                body: {
+                    inputSchema: {},
+                    entry: "missing",
+                    nodes: { body_step: makeTaskNode() },
+                    output: null,
+                    outputSchema: {},
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("does not exist")),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap body that uses $from: state", () => {
+            const ir = makeForkMapIR({
+                body: {
+                    inputSchema: {},
+                    entry: "body_step",
+                    nodes: {
+                        body_step: makeTaskNode({
+                            inputs: {
+                                val: { $from: "state", name: "counter" },
+                            },
+                            bind: "stepOut",
+                        }),
+                    },
+                    output: { $from: "scope", name: "stepOut" },
+                    outputSchema: {},
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('$from: "state"')),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap with invalid maxConcurrency", () => {
+            const ir = makeForkMapIR({ maxConcurrency: 0 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("maxConcurrency")),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap with invalid maxIterations", () => {
+            const ir = makeForkMapIR({ maxIterations: -1 });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("maxIterations")),
+            ).toBe(true);
+        });
+
+        it("accepts forkMap with valid maxConcurrency and maxIterations", () => {
+            const ir = makeForkMapIR({
+                maxConcurrency: 3,
+                maxIterations: 10,
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects forkMap with nonexistent next target", () => {
+            const ir = makeForkMapIR({ next: "nowhere" });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("next") &&
+                        e.message.includes("nowhere"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts forkMap with valid next target", () => {
+            const ir = makeForkMapIR(
+                { next: "after" },
+                { after: makeTaskNode({ bind: "afterOut" }) },
+            );
+            ir.output = { $from: "scope", name: "afterOut" };
+            ir.outputSchema = { type: "object" };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    describe("never-output schema", () => {
+        it("accepts a never-output task with no next, bind, or onError", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                    }),
+                },
+                output: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("error.fail"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects a never-output task with next", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                        next: "after",
+                    }),
+                    after: makeTaskNode({ bind: "out" }),
+                },
+            });
+            const result = validateWorkflowIR(
+                ir,
+                taskMap("error.fail", "noop"),
+            );
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('must not have "next"'),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects a never-output task with bind", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                        bind: "x",
+                    }),
+                },
+                output: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("error.fail"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('must not have "bind"'),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects a never-output task with onError", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        task: "error.fail",
+                        outputSchema: { not: {} },
+                        onError: "handler",
+                    }),
+                    handler: makeTaskNode({ bind: "out" }),
+                },
+            });
+            const result = validateWorkflowIR(
+                ir,
+                taskMap("error.fail", "noop"),
+            );
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('must not have "onError"'),
+                ),
+            ).toBe(true);
+        });
+    });
+
+    describe("isNeverSchema", () => {
+        it("returns true for { not: {} }", () => {
+            expect(isNeverSchema({ not: {} })).toBe(true);
+        });
+
+        it("returns false for empty schema", () => {
+            expect(isNeverSchema({})).toBe(false);
+        });
+
+        it("returns false for normal object schema", () => {
+            expect(isNeverSchema({ type: "object" })).toBe(false);
+        });
+
+        it("returns false for non-empty not", () => {
+            expect(isNeverSchema({ not: { type: "string" } })).toBe(false);
+        });
+
+        it("returns false for undefined", () => {
+            expect(isNeverSchema(undefined)).toBe(false);
         });
     });
 

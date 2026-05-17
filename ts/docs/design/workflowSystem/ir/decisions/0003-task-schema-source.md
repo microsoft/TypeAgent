@@ -378,13 +378,13 @@ of it.
 
 ## Cross-references
 
-- ir-v1.md §3.5 (task node), §3.8 (handler node) - where
+- ir-v0.1.md §3.5 (task node), §3.8 (handler node) - where
   `inputSchema`/`outputSchema` are declared.
-- ir-v1.md §4.2 (compatibility) - the subtype relation that option 3
+- ir-v0.1.md §4.2 (compatibility) - the subtype relation that option 3
   would reuse for the IR-narrows-registry check.
-- ir-v1.md §5.2 (task execution) - the runtime validation point that
+- ir-v0.1.md §5.2 (task execution) - the runtime validation point that
   enforces the IR's `outputSchema` against the implementation.
-- ir-v1.md §8.13 (shared schemas) - the `types` block that already
+- ir-v0.1.md §8.13 (shared schemas) - the `types` block that already
   reduces duplication within a single IR; orthogonal to this decision.
-- ir-v1.md §8.1 notes (post-v1) - the DSL layer that would handle the
+- ir-v0.1.md §8.1 notes (post-v1) - the DSL layer that would handle the
   authoring-friction side of this trade-off.

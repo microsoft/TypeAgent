@@ -1,7 +1,7 @@
 # Value construction in references (decision 0007): template-with-`$from`
 
 Status: **Accepted.** Alternative G with G-K1.a disambiguation adopted.
-Folded into [../ir-v1.md](../ir-v1.md) §3.4, §4.1 passes 4/6/7.
+Folded into [../ir-v0.1.md](../ir-v0.1.md) §3.4, §4.1 passes 4/6/7.
 Revisit trigger in [../revisit-triggers.md](../revisit-triggers.md) row 10.
 
 Related:
@@ -9,7 +9,7 @@ Related:
 - Morning-brief scenario friction S1 (no inline literals: 6 constants for single-use values)
 - Summarize-url scenario friction S3 (no object construction: required an `assemble` task)
 - [0001-bound-outputs.md](0001-bound-outputs.md) (this decision is about the _consumer_ side; 0001 was about the _producer_ side)
-- [../ir-v1.md](../ir-v1.md) §1.2 (no sugar), §1.3.1 (minimization), §1.3.2 (uniformity / variance), §3.4 (reference objects)
+- [../ir-v0.1.md](../ir-v0.1.md) §1.2 (no sugar), §1.3.1 (minimization), §1.3.2 (uniformity / variance), §3.4 (reference objects)
 
 ## 1. The proposal
 
@@ -527,7 +527,7 @@ none introduces sugar in the §1.2 sense.
   hypothetical at v1.
 - (a) loses on this sub-lens. It adds `$literal` and reserves an
   open prefix as future-proofing for `$X` keys that have not been
-  designed. §1.3.1's speculative-extension test (ir-v1.md §1.3.1)
+  designed. §1.3.1's speculative-extension test (ir-v0.1.md §1.3.1)
   is explicit: "a concept proposed for 'future uniformity' with no
   current scenario that needs it fails §1.3.1."
 - (c) and (e) also lose: each adds a permanent surface cost
@@ -589,7 +589,7 @@ v1 commitment, no escape) and **(a) "Reserve `$`-prefix; `$literal`
 escape"** (uniform reservation, escape always available).
 
 This is a genuine trade-off, not a clean win. The two §1.3
-sub-lenses (see ir-v1.md §1.3) point in opposite directions:
+sub-lenses (see ir-v0.1.md §1.3) point in opposite directions:
 
 - **§1.3.1 (minimization) favors (b).** No current scenario in the
   validation corpus or in the wider-scope inventory requires
@@ -649,7 +649,7 @@ revisit whether `$literal` and the `$`-prefix reservation are
 earning their keep. The §1.3.1 case for retreating to (b) gets
 stronger with each empty interval. Add this row to
 [`../revisit-triggers.md`](../revisit-triggers.md) when 0007 is
-folded into ir-v1.md.
+folded into ir-v0.1.md.
 
 **G-K2. Walking cost.** The validator and engine must walk every
 template at every reference position to find `$from`s. Cost is
@@ -790,7 +790,7 @@ minimization sub-lens explicitly warns against, and (b) was right.
 A revisit-trigger is added (see §4 G-K1 Recommendation) to test the
 prediction over time.
 
-Adoption changes [../ir-v1.md](../ir-v1.md):
+Adoption changes [../ir-v0.1.md](../ir-v0.1.md):
 
 - **§3.4 (reference grammar):** replace "every reference is the object
   above" with "every reference position holds a JSON template; an

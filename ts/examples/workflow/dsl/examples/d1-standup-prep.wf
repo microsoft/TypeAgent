@@ -1,0 +1,14 @@
+// Standup prep: git log --since=yesterday across N repos, rendered as markdown.
+workflow standupPrep(repos: string[], author: string): string {
+    const authorArg = `--author=${author}`;
+
+    const sections = map(repos, (repo) => {
+        const gitResult = shell.exec({ command: "git", args: ["log", "--since=yesterday", authorArg, "--oneline"], cwd: repo });
+        return `## ${repo}\n${gitResult.stdout}`;
+    });
+
+    const joined = string.join(sections, "\n\n");
+    return joined;
+}
+
+}

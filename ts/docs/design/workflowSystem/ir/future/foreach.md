@@ -1,6 +1,6 @@
 # Post-v1: `foreach` loop
 
-Status: **Post-v1 sketch.** Listed in [../ir-v1.md](../ir-v1.md) §2.2.
+Status: **Post-v1 sketch.** Listed in [../ir-v0.1.md](../ir-v0.1.md) §2.2.
 Motivated by the morning-brief validation scenario (A4 G2: verbose
 index/step/bounds pattern for list iteration).
 

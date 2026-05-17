@@ -56,18 +56,6 @@
           "name": "maxRetries"
         }
       },
-      "inputSchema": {
-        "type": "object",
-        "required": ["url", "maxRetries"],
-        "properties": {
-          "url": {
-            "type": "string"
-          },
-          "maxRetries": {
-            "type": "integer"
-          }
-        }
-      },
       "state": {
         "attempt": {
           "schema": {
@@ -76,7 +64,28 @@
           "initial": 0
         }
       },
+      "iterateState": {
+        "attempt": {
+          "$from": "scope",
+          "name": "nextAttempt"
+        }
+      },
+      "maxIterations": 3,
+      "next": "buildPrompt",
+      "bind": "pageContent",
       "body": {
+        "inputSchema": {
+          "type": "object",
+          "required": ["url", "maxRetries"],
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "maxRetries": {
+              "type": "integer"
+            }
+          }
+        },
         "entry": "fetchUrl",
         "nodes": {
           "fetchUrl": {
@@ -115,16 +124,16 @@
           },
           "incrementAttempt": {
             "kind": "task",
-            "task": "int.add",
+            "task": "math.add",
             "inputSchema": {
               "type": "object",
-              "required": ["a", "b", "error", "trigger"],
+              "required": ["left", "right", "error", "trigger"],
               "properties": {
-                "a": {
-                  "type": "integer"
+                "left": {
+                  "type": "number"
                 },
-                "b": {
-                  "type": "integer"
+                "right": {
+                  "type": "number"
                 },
                 "error": {
                   "type": "object"
@@ -135,55 +144,42 @@
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["result"],
-              "properties": {
-                "result": {
-                  "type": "integer"
-                }
-              }
+              "type": "number"
             },
             "inputs": {
-              "a": {
+              "left": {
                 "$from": "state",
                 "name": "attempt"
               },
-              "b": 1
+              "right": 1
             },
             "next": "checkRetry",
             "bind": "nextAttempt"
           },
           "checkRetry": {
             "kind": "task",
-            "task": "int.lessThan",
+            "task": "compare.lessThan",
             "inputSchema": {
               "type": "object",
-              "required": ["a", "b"],
+              "required": ["left", "right"],
               "properties": {
-                "a": {
-                  "type": "integer"
+                "left": {
+                  "type": "number"
                 },
-                "b": {
-                  "type": "integer"
+                "right": {
+                  "type": "number"
                 }
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["result"],
-              "properties": {
-                "result": {
-                  "type": "boolean"
-                }
-              }
+              "type": "boolean"
             },
             "inputs": {
-              "a": {
+              "left": {
                 "$from": "scope",
-                "name": "nextAttempt",
-                "path": ["result"]
+                "name": "nextAttempt"
               },
-              "b": {
+              "right": {
                 "$from": "input",
                 "name": "maxRetries"
               }
@@ -195,8 +191,7 @@
             "kind": "branch",
             "selector": {
               "$from": "scope",
-              "name": "shouldRetry",
-              "path": ["result"]
+              "name": "shouldRetry"
             },
             "selectorSchema": {
               "type": "boolean"
@@ -207,27 +202,17 @@
             },
             "default": "@exit"
           }
-        }
-      },
-      "iterateState": {
-        "attempt": {
+        },
+        "output": {
           "$from": "scope",
-          "name": "nextAttempt",
-          "path": ["result"]
+          "name": "fetchResult",
+          "path": ["body"],
+          "optional": true
+        },
+        "outputSchema": {
+          "type": "string"
         }
-      },
-      "output": {
-        "$from": "scope",
-        "name": "fetchResult",
-        "path": ["body"],
-        "optional": true
-      },
-      "outputSchema": {
-        "type": "string"
-      },
-      "maxIterations": 3,
-      "next": "buildPrompt",
-      "bind": "pageContent"
+      }
     },
     "buildPrompt": {
       "kind": "task",
@@ -245,13 +230,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "template": "{{prefix}}{{content}}",
@@ -282,19 +261,12 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": {
-          "text": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "prompt": {
           "$from": "scope",
-          "name": "prompt",
-          "path": ["text"]
+          "name": "prompt"
         }
       },
       "next": "writeFile",
@@ -316,13 +288,7 @@
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["path"],
-        "properties": {
-          "path": {
-            "type": "string"
-          }
-        }
+        "type": "string"
       },
       "inputs": {
         "path": {
@@ -331,8 +297,7 @@
         },
         "content": {
           "$from": "scope",
-          "name": "summaryResult",
-          "path": ["text"]
+          "name": "summaryResult"
         }
       },
       "bind": "writeResult"
@@ -342,13 +307,11 @@
   "output": {
     "path": {
       "$from": "scope",
-      "name": "writeResult",
-      "path": ["path"]
+      "name": "writeResult"
     },
     "summary": {
       "$from": "scope",
-      "name": "summaryResult",
-      "path": ["text"]
+      "name": "summaryResult"
     }
   }
 }

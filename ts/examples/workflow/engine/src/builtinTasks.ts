@@ -54,52 +54,7 @@ function sealObjects(schema: JSONSchema): JSONSchema {
     return copy;
 }
 
-export const intAdd: TaskDefinition<
-    { a: number; b: number },
-    { result: number }
-> = {
-    name: "int.add",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["a", "b"],
-        properties: { a: { type: "integer" }, b: { type: "integer" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "integer" } },
-    },
-    async execute(input) {
-        return { kind: "ok", output: { result: input.a + input.b } };
-    },
-};
-
-export const intLessThan: TaskDefinition<
-    { a: number; b: number },
-    { result: boolean }
-> = {
-    name: "int.lessThan",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["a", "b"],
-        properties: { a: { type: "integer" }, b: { type: "integer" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "boolean" } },
-    },
-    async execute(input) {
-        return { kind: "ok", output: { result: input.a < input.b } };
-    },
-};
-
-export const listLength: TaskDefinition<
-    { list: unknown[] },
-    { length: number }
-> = {
+export const listLength: TaskDefinition<{ list: unknown[] }, number> = {
     name: "list.length",
     sideEffects: false,
     inputSchema: {
@@ -107,19 +62,15 @@ export const listLength: TaskDefinition<
         required: ["list"],
         properties: { list: { type: "array" } },
     },
-    outputSchema: {
-        type: "object",
-        required: ["length"],
-        properties: { length: { type: "integer" } },
-    },
+    outputSchema: { type: "integer" },
     async execute(input) {
-        return { kind: "ok", output: { length: input.list.length } };
+        return { kind: "ok", output: input.list.length };
     },
 };
 
 export const listElementAt: TaskDefinition<
     { list: unknown[]; index: number },
-    { element: unknown }
+    unknown
 > = {
     name: "list.elementAt",
     sideEffects: false,
@@ -131,11 +82,7 @@ export const listElementAt: TaskDefinition<
             index: { type: "integer" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["element"],
-        properties: { element: {} },
-    },
+    outputSchema: {},
     async execute(input) {
         if (input.index < 0 || input.index >= input.list.length) {
             return {
@@ -145,13 +92,13 @@ export const listElementAt: TaskDefinition<
                 },
             };
         }
-        return { kind: "ok", output: { element: input.list[input.index] } };
+        return { kind: "ok", output: input.list[input.index] };
     },
 };
 
 export const listAppend: TaskDefinition<
     { list: unknown[]; item: unknown },
-    { list: unknown[] }
+    unknown[]
 > = {
     name: "list.append",
     sideEffects: false,
@@ -160,19 +107,15 @@ export const listAppend: TaskDefinition<
         required: ["list", "item"],
         properties: { list: { type: "array" }, item: {} },
     },
-    outputSchema: {
-        type: "object",
-        required: ["list"],
-        properties: { list: { type: "array" } },
-    },
+    outputSchema: { type: "array" },
     async execute(input) {
-        return { kind: "ok", output: { list: [...input.list, input.item] } };
+        return { kind: "ok", output: [...input.list, input.item] };
     },
 };
 
 export const boolToLabel: TaskDefinition<
     { value: boolean; ifTrue: string; ifFalse: string },
-    { label: string }
+    string
 > = {
     name: "bool.toLabel",
     sideEffects: false,
@@ -185,15 +128,11 @@ export const boolToLabel: TaskDefinition<
             ifFalse: { type: "string" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["label"],
-        properties: { label: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input) {
         return {
             kind: "ok",
-            output: { label: input.value ? input.ifTrue : input.ifFalse },
+            output: input.value ? input.ifTrue : input.ifFalse,
         };
     },
 };
@@ -299,7 +238,7 @@ export const shellExec: TaskDefinition<
 
 export const llmGenerate: TaskDefinition<
     { prompt: string; endpoint?: string },
-    { text: string }
+    string
 > = {
     name: "llm.generate",
     sideEffects: true,
@@ -311,11 +250,7 @@ export const llmGenerate: TaskDefinition<
             endpoint: { type: "string" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["text"],
-        properties: { text: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
         let model;
@@ -336,13 +271,13 @@ export const llmGenerate: TaskDefinition<
                 error: { message: result.message },
             };
         }
-        return { kind: "ok", output: { text: result.data } };
+        return { kind: "ok", output: result.data };
     },
 };
 
 export const llmGenerateJson: TaskDefinition<
     { prompt: string; endpoint?: string },
-    { value: unknown }
+    unknown
 > = {
     name: "llm.generateJson",
     sideEffects: true,
@@ -354,11 +289,7 @@ export const llmGenerateJson: TaskDefinition<
             endpoint: { type: "string" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: {} },
-    },
+    outputSchema: {},
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
         let model;
@@ -373,19 +304,16 @@ export const llmGenerateJson: TaskDefinition<
             };
         }
         // Derive structured output schema from the node's outputSchema if
-        // it declares a "value" property with a non-opaque schema.
-        const valueSchema = ctx.outputSchema?.properties?.value;
+        // it declares a non-opaque schema.
+        const outSchema = ctx.outputSchema;
         const jsonSchema =
-            valueSchema &&
-            typeof valueSchema !== "boolean" &&
-            Object.keys(valueSchema).length > 0
+            outSchema &&
+            typeof outSchema !== "boolean" &&
+            Object.keys(outSchema).length > 0
                 ? {
                       name: "response",
                       strict: true as const,
-                      schema: sealObjects(valueSchema) as Record<
-                          string,
-                          unknown
-                      >,
+                      schema: sealObjects(outSchema) as Record<string, unknown>,
                   }
                 : undefined;
         const result = await model.complete(
@@ -401,7 +329,7 @@ export const llmGenerateJson: TaskDefinition<
         }
         try {
             const value = JSON.parse(result.data);
-            return { kind: "ok", output: { value } };
+            return { kind: "ok", output: value };
         } catch (parseErr) {
             return {
                 kind: "fail",
@@ -417,7 +345,7 @@ export const llmGenerateJson: TaskDefinition<
 
 export const textTemplate: TaskDefinition<
     { template: string; vars: Record<string, unknown> },
-    { text: string }
+    string
 > = {
     name: "text.template",
     sideEffects: false,
@@ -429,23 +357,19 @@ export const textTemplate: TaskDefinition<
             vars: { type: "object" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["text"],
-        properties: { text: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input) {
         let text = input.template;
         for (const [key, value] of Object.entries(input.vars)) {
             text = text.replaceAll(`{{${key}}}`, String(value));
         }
-        return { kind: "ok", output: { text } };
+        return { kind: "ok", output: text };
     },
 };
 
 export const stringJoin: TaskDefinition<
     { list: string[]; delimiter: string },
-    { text: string }
+    string
 > = {
     name: "string.join",
     sideEffects: false,
@@ -457,22 +381,15 @@ export const stringJoin: TaskDefinition<
             delimiter: { type: "string" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["text"],
-        properties: { text: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input) {
-        return {
-            kind: "ok",
-            output: { text: input.list.join(input.delimiter) },
-        };
+        return { kind: "ok", output: input.list.join(input.delimiter) };
     },
 };
 
 export const stringSplit: TaskDefinition<
     { text: string; delimiter: string; keepEmpty?: boolean },
-    { list: string[] }
+    string[]
 > = {
     name: "string.split",
     sideEffects: false,
@@ -489,18 +406,12 @@ export const stringSplit: TaskDefinition<
             },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["list"],
-        properties: { list: { type: "array", items: { type: "string" } } },
-    },
+    outputSchema: { type: "array", items: { type: "string" } },
     async execute(input) {
         const list = input.text.split(input.delimiter);
         return {
             kind: "ok",
-            output: {
-                list: input.keepEmpty ? list : list.filter((s) => s.length > 0),
-            },
+            output: input.keepEmpty ? list : list.filter((s) => s.length > 0),
         };
     },
 };
@@ -675,7 +586,7 @@ const DEFAULT_MAX_FILE_READ_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const fileRead: TaskDefinition<
     { path: string; maxBytes?: number },
-    { content: string }
+    string
 > = {
     name: "file.read",
     sideEffects: true,
@@ -690,11 +601,7 @@ export const fileRead: TaskDefinition<
             },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["content"],
-        properties: { content: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input) {
         const maxBytes = input.maxBytes ?? DEFAULT_MAX_FILE_READ_BYTES;
         try {
@@ -708,7 +615,7 @@ export const fileRead: TaskDefinition<
                     },
                 };
             }
-            return { kind: "ok", output: { content } };
+            return { kind: "ok", output: content };
         } catch (err) {
             return {
                 kind: "fail",
@@ -722,7 +629,7 @@ export const fileRead: TaskDefinition<
 
 export const fileWrite: TaskDefinition<
     { path: string; content: string },
-    { path: string }
+    string
 > = {
     name: "file.write",
     sideEffects: true,
@@ -734,17 +641,13 @@ export const fileWrite: TaskDefinition<
             content: { type: "string" },
         },
     },
-    outputSchema: {
-        type: "object",
-        required: ["path"],
-        properties: { path: { type: "string" } },
-    },
+    outputSchema: { type: "string" },
     async execute(input) {
         try {
             const safePath = validateFilePath(input.path);
             await mkdir(dirname(safePath), { recursive: true });
             await writeFile(safePath, input.content, "utf8");
-            return { kind: "ok", output: { path: safePath } };
+            return { kind: "ok", output: safePath };
         } catch (err) {
             return {
                 kind: "fail",
@@ -756,16 +659,350 @@ export const fileWrite: TaskDefinition<
     },
 };
 
-/** The 5 standard-library tasks (pure, no IO). */
+// ---- compare tasks ----
+
+export const compareEquals: TaskDefinition<
+    { left: unknown; right: unknown },
+    boolean
+> = {
+    name: "compare.equals",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: {}, right: {} },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: input.left === input.right };
+    },
+};
+
+export const compareNotEquals: TaskDefinition<
+    { left: unknown; right: unknown },
+    boolean
+> = {
+    name: "compare.notEquals",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: {}, right: {} },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: input.left !== input.right };
+    },
+};
+
+export const compareGreaterThan: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    name: "compare.greaterThan",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: input.left > input.right };
+    },
+};
+
+export const compareLessThan: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    name: "compare.lessThan",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: input.left < input.right };
+    },
+};
+
+export const compareGreaterOrEqual: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    name: "compare.greaterOrEqual",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: input.left >= input.right };
+    },
+};
+
+export const compareLessOrEqual: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    name: "compare.lessOrEqual",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: input.left <= input.right };
+    },
+};
+
+// ---- bool tasks ----
+
+export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
+    name: "bool.not",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: { type: "boolean" } },
+    },
+    outputSchema: { type: "boolean" },
+    async execute(input) {
+        return { kind: "ok", output: !input.value };
+    },
+};
+
+// ---- math tasks ----
+
+export const mathAdd: TaskDefinition<{ left: number; right: number }, number> =
+    {
+        name: "math.add",
+        sideEffects: false,
+        inputSchema: {
+            type: "object",
+            required: ["left", "right"],
+            properties: { left: { type: "number" }, right: { type: "number" } },
+        },
+        outputSchema: { type: "number" },
+        async execute(input) {
+            return { kind: "ok", output: input.left + input.right };
+        },
+    };
+
+export const mathSubtract: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    name: "math.subtract",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "number" },
+    async execute(input) {
+        return { kind: "ok", output: input.left - input.right };
+    },
+};
+
+export const mathMultiply: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    name: "math.multiply",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "number" },
+    async execute(input) {
+        return { kind: "ok", output: input.left * input.right };
+    },
+};
+
+export const mathDivide: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    name: "math.divide",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "number" },
+    async execute(input) {
+        return { kind: "ok", output: input.left / input.right };
+    },
+};
+
+export const mathModulo: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    name: "math.modulo",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["left", "right"],
+        properties: { left: { type: "number" }, right: { type: "number" } },
+    },
+    outputSchema: { type: "number" },
+    async execute(input) {
+        return { kind: "ok", output: input.left % input.right };
+    },
+};
+
+export const mathNegate: TaskDefinition<{ value: number }, number> = {
+    name: "math.negate",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: { type: "number" } },
+    },
+    outputSchema: { type: "number" },
+    async execute(input) {
+        return { kind: "ok", output: -input.value };
+    },
+};
+
+export const mathFloor: TaskDefinition<{ value: number }, number> = {
+    name: "math.floor",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: { type: "number" } },
+    },
+    outputSchema: { type: "integer" },
+    async execute(input) {
+        return { kind: "ok", output: Math.floor(input.value) };
+    },
+};
+
+export const mathRound: TaskDefinition<{ value: number }, number> = {
+    name: "math.round",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: { type: "number" } },
+    },
+    outputSchema: { type: "integer" },
+    async execute(input) {
+        return { kind: "ok", output: Math.round(input.value) };
+    },
+};
+
+export const mathCeil: TaskDefinition<{ value: number }, number> = {
+    name: "math.ceil",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: { type: "number" } },
+    },
+    outputSchema: { type: "integer" },
+    async execute(input) {
+        return { kind: "ok", output: Math.ceil(input.value) };
+    },
+};
+
+// ---- noop (merge/join point for branches) ----
+
+export const noop: TaskDefinition<
+    Record<string, never>,
+    Record<string, never>
+> = {
+    name: "noop",
+    sideEffects: false,
+    inputSchema: { type: "object", properties: {} },
+    outputSchema: { type: "object", properties: {} },
+    async execute() {
+        return { kind: "ok", output: {} };
+    },
+};
+
+// ---- identity (pass-through for literal values in branches) ----
+
+export const identity: TaskDefinition<{ value: unknown }, unknown> = {
+    name: "identity",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: {} },
+    },
+    outputSchema: {},
+    async execute(input) {
+        return { kind: "ok", output: input.value };
+    },
+};
+
+// ---- error tasks ----
+
+export const errorFail: TaskDefinition<{ value: unknown }, never> = {
+    name: "error.fail",
+    sideEffects: false,
+    inputSchema: {
+        type: "object",
+        required: ["value"],
+        properties: { value: {} },
+    },
+    outputSchema: { not: {} },
+    async execute(input) {
+        return {
+            kind: "fail",
+            error: {
+                message:
+                    typeof input.value === "string"
+                        ? input.value
+                        : JSON.stringify(input.value),
+                data: input.value,
+            },
+        };
+    },
+};
+
+/** Standard-library tasks (pure, no IO). */
 export const standardLibraryTasks: TaskDefinition[] = [
-    intAdd,
-    intLessThan,
     listLength,
     listElementAt,
     listAppend,
+    compareEquals,
+    compareNotEquals,
+    compareGreaterThan,
+    compareLessThan,
+    compareGreaterOrEqual,
+    compareLessOrEqual,
+    boolNot,
+    mathAdd,
+    mathSubtract,
+    mathMultiply,
+    mathDivide,
+    mathModulo,
+    mathNegate,
+    mathFloor,
+    mathRound,
+    mathCeil,
+    errorFail,
+    noop,
+    identity,
 ];
 
-/** All builtin tasks: stdlib + IO + utility + legacy. */
+/** All builtin tasks: stdlib + IO + utility. */
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
     boolToLabel,

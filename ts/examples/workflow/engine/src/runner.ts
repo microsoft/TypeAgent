@@ -9,6 +9,8 @@ import {
     Template,
     TaskNode,
     LoopNode,
+    ForkNode,
+    ForkMapNode,
     JSONSchema,
     TaskContext,
     TaskConstraints,
@@ -17,6 +19,7 @@ import {
     TaskPolicyMode,
     ApprovalFn,
     validateWorkflowIR,
+    isNeverSchema,
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
@@ -550,6 +553,54 @@ export class WorkflowEngine {
                         constraints,
                     );
                     break;
+
+                case "fork":
+                    currentId = await this.executeFork(
+                        node,
+                        currentId,
+                        scope,
+                        scopePath,
+                        runId,
+                        signal,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
+                        },
+                        policy,
+                        approve,
+                        taskTimeoutMs,
+                        constraints,
+                    );
+                    break;
+
+                case "forkMap":
+                    currentId = await this.executeForkMap(
+                        node,
+                        currentId,
+                        scope,
+                        scopePath,
+                        runId,
+                        signal,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
+                        },
+                        policy,
+                        approve,
+                        taskTimeoutMs,
+                        constraints,
+                    );
+                    break;
             }
         }
 
@@ -694,6 +745,14 @@ export class WorkflowEngine {
                 );
             }
 
+            // Never-output contract: a task with outputSchema { "not": {} }
+            // must always fail. If it returned ok, the implementation is broken.
+            if (isNeverSchema(node.outputSchema)) {
+                throw new EngineError(
+                    `Task "${node.task}" at "${nodeId}" has never-output schema but returned ok.`,
+                );
+            }
+
             // Runtime output schema validation.
             if (node.outputSchema) {
                 const validate = this.getValidator(node.outputSchema);
@@ -813,9 +872,10 @@ export class WorkflowEngine {
         }
 
         const bodyScopePath = [...scopePath, `${nodeId}.body`];
+        const maxIter = node.maxIterations ?? 10000;
 
         try {
-            for (let i = 0; i < node.maxIterations; i++) {
+            for (let i = 0; i < maxIter; i++) {
                 if (signal.aborted) {
                     throw new EngineError("Run cancelled");
                 }
@@ -860,7 +920,7 @@ export class WorkflowEngine {
 
                 if (exit.sentinel === "@exit") {
                     // Resolve output in body scope (state + body bindings)
-                    const output = resolveTemplate(node.output, bodyScope);
+                    const output = resolveTemplate(node.body.output, bodyScope);
 
                     if (node.bind) {
                         outerScope.bindings.set(node.bind, output);
@@ -900,7 +960,7 @@ export class WorkflowEngine {
             }
 
             throw new EngineError(
-                `LoopMaxIterationsExceeded at "${nodeId}" (limit: ${node.maxIterations})`,
+                `LoopMaxIterationsExceeded at "${nodeId}" (limit: ${maxIter})`,
             );
         } catch (err) {
             if (node.onError) {
@@ -921,6 +981,286 @@ export class WorkflowEngine {
                 });
 
                 onErrorDispatch(errorObj, loopInput);
+                return node.onError;
+            }
+            throw err;
+        }
+    }
+    private async executeFork(
+        node: ForkNode,
+        nodeId: string,
+        outerScope: ScopeContext,
+        scopePath: string[],
+        runId: string,
+        signal: AbortSignal,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
+        taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
+    ): Promise<string | undefined> {
+        const branchNames = Object.keys(node.branches);
+
+        this.emit({
+            type: "nodeStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            timestamp: Date.now(),
+        });
+
+        this.emit({
+            type: "forkStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            branchNames,
+            timestamp: Date.now(),
+        });
+
+        try {
+            const concurrency = node.maxConcurrency ?? branchNames.length;
+            const results: Record<string, unknown> = {};
+
+            // Execute branches with concurrency limiting
+            const executing = new Set<Promise<void>>();
+            const branchQueue = [...branchNames];
+
+            const runBranch = async (bName: string) => {
+                const branch = node.branches[bName];
+                const branchInput = resolveTemplate(
+                    branch.inputs,
+                    outerScope,
+                ) as Record<string, unknown>;
+                const branchScope: ScopeContext = {
+                    input: branchInput,
+                    constants: outerScope.constants,
+                    bindings: new Map(),
+                };
+                const branchScopePath = [...scopePath, `${nodeId}.${bName}`];
+                await this.executeScope(
+                    branch.scope.nodes,
+                    branch.scope.entry,
+                    branchScope,
+                    branchScopePath,
+                    runId,
+                    signal,
+                    policy,
+                    approve,
+                    taskTimeoutMs,
+                    constraints,
+                );
+                results[bName] = resolveTemplate(
+                    branch.scope.output,
+                    branchScope,
+                );
+            };
+
+            while (branchQueue.length > 0 || executing.size > 0) {
+                while (branchQueue.length > 0 && executing.size < concurrency) {
+                    const bName = branchQueue.shift()!;
+                    const p = runBranch(bName).then(() => {
+                        executing.delete(p);
+                    });
+                    executing.add(p);
+                }
+                if (executing.size > 0) {
+                    await Promise.race(executing);
+                }
+            }
+
+            if (node.bind) {
+                outerScope.bindings.set(node.bind, results);
+            }
+
+            this.emit({
+                type: "forkCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                output: results,
+                timestamp: Date.now(),
+            });
+
+            this.emit({
+                type: "nodeCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                output: results,
+                timestamp: Date.now(),
+            });
+
+            return node.next;
+        } catch (err) {
+            if (node.onError) {
+                const errorObj = buildErrorObject(
+                    err,
+                    "fork",
+                    nodeId,
+                    scopePath,
+                );
+
+                this.emit({
+                    type: "forkFailed",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    error: { message: errorObj["message"] as string },
+                    timestamp: Date.now(),
+                });
+
+                onErrorDispatch(errorObj, {});
+                return node.onError;
+            }
+            throw err;
+        }
+    }
+
+    private async executeForkMap(
+        node: ForkMapNode,
+        nodeId: string,
+        outerScope: ScopeContext,
+        scopePath: string[],
+        runId: string,
+        signal: AbortSignal,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
+        taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
+    ): Promise<string | undefined> {
+        this.emit({
+            type: "nodeStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            timestamp: Date.now(),
+        });
+
+        try {
+            const collection = resolveTemplate(
+                node.collection,
+                outerScope,
+            ) as unknown[];
+            if (!Array.isArray(collection)) {
+                throw new EngineError(
+                    `forkMap at "${nodeId}": collection did not resolve to an array`,
+                );
+            }
+
+            const maxIter = node.maxIterations ?? collection.length;
+            const items = collection.slice(0, maxIter);
+            const concurrency = node.maxConcurrency ?? items.length;
+            const results: unknown[] = new Array(items.length).fill(null);
+
+            const executing = new Set<Promise<void>>();
+            const indexQueue = items.map((_, i) => i);
+
+            const runItem = async (index: number) => {
+                this.emit({
+                    type: "forkMapIterationStarted",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    index,
+                    timestamp: Date.now(),
+                });
+
+                const itemInput: Record<string, unknown> = {
+                    [node.elementParam]: items[index],
+                };
+                if (node.inputs) {
+                    const resolvedInputs = resolveTemplate(
+                        node.inputs,
+                        outerScope,
+                    ) as Record<string, unknown>;
+                    Object.assign(itemInput, resolvedInputs);
+                }
+                const itemScope: ScopeContext = {
+                    input: itemInput,
+                    constants: outerScope.constants,
+                    bindings: new Map(),
+                };
+                const itemScopePath = [...scopePath, `${nodeId}[${index}]`];
+                await this.executeScope(
+                    node.body.nodes,
+                    node.body.entry,
+                    itemScope,
+                    itemScopePath,
+                    runId,
+                    signal,
+                    policy,
+                    approve,
+                    taskTimeoutMs,
+                    constraints,
+                );
+
+                results[index] = resolveTemplate(node.body.output, itemScope);
+
+                this.emit({
+                    type: "forkMapIterationCompleted",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    index,
+                    output: results[index],
+                    timestamp: Date.now(),
+                });
+            };
+
+            while (indexQueue.length > 0 || executing.size > 0) {
+                while (indexQueue.length > 0 && executing.size < concurrency) {
+                    const idx = indexQueue.shift()!;
+                    const p = runItem(idx).then(() => {
+                        executing.delete(p);
+                    });
+                    executing.add(p);
+                }
+                if (executing.size > 0) {
+                    await Promise.race(executing);
+                }
+            }
+
+            if (node.bind) {
+                outerScope.bindings.set(node.bind, results);
+            }
+
+            this.emit({
+                type: "nodeCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                output: results,
+                timestamp: Date.now(),
+            });
+
+            return node.next;
+        } catch (err) {
+            if (node.onError) {
+                const errorObj = buildErrorObject(
+                    err,
+                    "forkMap",
+                    nodeId,
+                    scopePath,
+                );
+
+                this.emit({
+                    type: "nodeFailed",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    error: { message: errorObj["message"] as string },
+                    timestamp: Date.now(),
+                });
+
+                onErrorDispatch(errorObj, {});
                 return node.onError;
             }
             throw err;

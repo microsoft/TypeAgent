@@ -7,7 +7,11 @@ export {
     TaskNode,
     BranchNode,
     LoopStateVar,
+    WorkflowScope,
     LoopNode,
+    ForkBranch,
+    ForkNode,
+    ForkMapNode,
     WorkflowNode,
     ConstantDef,
     WorkflowIR,
@@ -28,4 +32,5 @@ export {
     ValidationError,
     ValidationResult,
     validateWorkflowIR,
+    isNeverSchema,
 } from "./validate.js";
