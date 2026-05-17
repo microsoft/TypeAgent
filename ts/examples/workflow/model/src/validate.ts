@@ -76,6 +76,24 @@ export function validateWorkflowIR(
         });
     }
 
+    // Validate constant values against their declared schemas.
+    if (ir.constants) {
+        for (const [name, def] of Object.entries(ir.constants)) {
+            if (def.schema) {
+                const valueSchema = jsonValueToSchema(def.value);
+                if (!isStructuralSubtype(valueSchema, def.schema)) {
+                    errors.push({
+                        path: `constants.${name}`,
+                        message:
+                            `Constant value type ${formatSchemaType(valueSchema)} ` +
+                            `is not compatible with declared schema ` +
+                            `${formatSchemaType(def.schema)}.`,
+                    });
+                }
+            }
+        }
+    }
+
     validateScope(ir.nodes, "nodes", tasks, errors, false);
 
     // Static schema compatibility for the top-level scope.

@@ -3354,7 +3354,7 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("Constant");
             expect(result.error?.message).toContain("limit");
-            expect(result.error?.message).toContain("schema violation");
+            expect(result.error?.message).toContain("schema");
         });
 
         it("passes when constant matches its declared schema", async () => {
