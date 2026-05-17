@@ -41,7 +41,7 @@ sub-workflows are called by name and inlined at compile time.
   recursion is structurally impossible (infinite inlining). A static
   cycle check would give a better error but is low priority.
 - Sub-workflow emit strategy: the current `workflow.<name>` task-node
-  approach is a placeholder. The intended v2 behavior is compile-time
+  approach is a placeholder. The intended behavior is compile-time
   inlining per dsl-v0.1.md section 4.
 - Call classification: the parser uses a syntactic rule to distinguish
   task calls from workflow calls: dotted names (`ns.task()`) are task
@@ -201,7 +201,7 @@ These are related in the emitter, but they are not the same design problem.
 - Keeping `identity` is acceptable under the current principles because it
   preserves the existing task-centered computation boundary and avoids new
   IR concepts.
-- In v2 terms, the current lowering should be treated as intentional
+- The current lowering should be treated as intentional
   compiler/runtime contract, not as an accidental workaround:
   - literal branch arms lower through `identity`
   - literal-only workflows lower through an `identity` entry node
@@ -216,10 +216,10 @@ These are related in the emitter, but they are not the same design problem.
 
 **What needs to happen:**
 
-1. Decide whether v2 should explicitly document `identity` as an accepted
-   compiler/runtime lowering primitive for these cases. The explicit
-   lowering rules above should be carried into the main spec docs or
-   kept here as the durable reference.
+1. Decide whether the spec should explicitly document `identity` as an
+   accepted compiler/runtime lowering primitive for these cases. The
+   explicit lowering rules above should be carried into the main spec
+   docs or kept here as the durable reference.
 2. If a later cleanup is desired, evaluate `ConstNode` and merge / phi
    support separately rather than treating all `identity` uses as one
    problem.
@@ -264,7 +264,7 @@ the prefix-based convergence pattern.
 3. The hand-built engine tests that use `skipValidation` for
    error-handling paths are a separate concern and can stay as-is.
 
-## G7: Composition patterns outside current v2 scope
+## G7: Composition patterns outside current scope
 
 **Context:** The DSL parser and type checker intentionally do not support
 certain expression-composition patterns that would be natural in a
@@ -293,10 +293,10 @@ nested calls would obscure the step-by-step execution model.
 3. Nested task calls would need the emitter to linearize them into
    sequential nodes with implicit bindings.
 4. Mixed-arm typing would need union types in the type system. The
-   current v2 design requires ternary/if-else arms to have matching
-   types (error if not). There are no union types. This was an
-   intentional simplification: returns the consequent type, rejects
-   mismatches at compile time.
+   current design requires ternary/if-else arms to have matching types
+   (error if not). There are no union types. This was an intentional
+   simplification: returns the consequent type, rejects mismatches at
+   compile time.
 
 ## G8: Comments not preserved in AST
 

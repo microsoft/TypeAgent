@@ -1139,10 +1139,10 @@ requiring the author to think about it.
 - RetryNode: emit loop node with onError edges and attempt counter
 - MapNode: emit loop node with index/length/compare/check_done
 - FilterNode: emit loop with branch + `list.append` (see section 3.3 IR lowering)
-- ParallelNode: emit `fork` node (ir-v2) with named branches per arrow function
-  and optional `maxConcurrency`
-- ParallelMapNode: emit `forkMap` node (ir-v2) with collection, body sub-scope,
-  and optional `maxConcurrency`
+- ParallelNode: emit `fork` node ([ir-v0.2.md](../ir/ir-v0.2.md)) with branches
+  per arrow function and optional `maxConcurrency`
+- ParallelMapNode: emit `forkMap` node ([ir-v0.2.md](../ir/ir-v0.2.md)) with
+  collection, body sub-scope, and optional `maxConcurrency`
 - TernaryExpr: emit branch node with condition and two output edges
 - SwitchStatement: emit multi-way branch node
 - WorkflowCallExpr: emit sub-workflow invocation (inline or reference)
