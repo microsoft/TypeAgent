@@ -132,10 +132,12 @@ describe("DSL lexer", () => {
         expect(tokens[1].value).toBe("hello");
     });
 
-    it("handles string escapes", () => {
+    it("preserves string escape sequences as raw text", () => {
+        // Under raw-only AST design the lexer does NOT decode escapes;
+        // the captured value is the verbatim source between delimiters.
         const { tokens, errors } = lex(`"hello\\nworld"`);
         expect(errors).toHaveLength(0);
-        expect(tokens[0].value).toBe("hello\nworld");
+        expect(tokens[0].value).toBe("hello\\nworld");
     });
 });
 

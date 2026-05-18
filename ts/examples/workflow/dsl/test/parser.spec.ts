@@ -298,7 +298,10 @@ describe("parser", () => {
     test("string literal", () => {
         const e = parseExpr('"hello"');
         expect(e.kind).toBe("StringLiteralExpr");
-        if (e.kind === "StringLiteralExpr") expect(e.value).toBe("hello");
+        if (e.kind === "StringLiteralExpr") {
+            expect(e.raw).toBe("hello");
+            expect(e.quote).toBe('"');
+        }
     });
 
     test("number literal", () => {
@@ -347,7 +350,7 @@ describe("parser", () => {
         const e = parseExpr("`hello ${name}!`");
         expect(e.kind).toBe("TemplateLiteralExpr");
         if (e.kind === "TemplateLiteralExpr") {
-            expect(e.parts).toEqual(["hello ", "!"]);
+            expect(e.rawParts).toEqual(["hello ", "!"]);
             expect(e.expressions).toHaveLength(1);
         }
     });
@@ -665,9 +668,7 @@ describe("parser", () => {
 
     describe("trailing-tokens-after-workflow", () => {
         test("stray `}` after workflow is a parse error", () => {
-            const { errors } = parse(
-                `workflow w(): number { return 1; }\n}\n`,
-            );
+            const { errors } = parse(`workflow w(): number { return 1; }\n}\n`);
             expect(errors.length).toBeGreaterThan(0);
             expect(errors[0].message).toMatch(
                 /Unexpected token after workflow/,

@@ -128,6 +128,41 @@ describe("wff CLI", () => {
         expect(readFileSync(file, "utf8")).toBe(ugly);
     });
 
+    test("--stdout always emits, even when input is already formatted", async () => {
+        // Regression: previously --stdout returned empty when output === source.
+        const src = resolve(DSL_EXAMPLES, "d1-standup-prep.wf");
+        const file = join(tmp, "d1.wf");
+        writeFileSync(file, readFileSync(src, "utf8"), "utf8");
+        // Normalize the file first so it equals its formatted form.
+        await runWff([file]);
+        const normalized = readFileSync(file, "utf8");
+
+        const result = await runWff(["--stdout", file]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toBe(normalized);
+    });
+
+    test("preserves \\n escape inside template literals (round-trip)", async () => {
+        // Regression: previously the formatter decoded \n to a real newline
+        // because the lexer was eager-decoding template parts.
+        const src =
+            "workflow t(repo: string, out: string): string {\n    return `## ${repo}\\n${out}`;\n}\n";
+        const result = await runWff([], src);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("`## ${repo}\\n${out}`");
+        expect(result.stdout).not.toContain("`## ${repo}\n${out}`");
+    });
+
+    test("preserves real newlines inside template literals (round-trip)", async () => {
+        // Regression: the inverse direction - a literal newline must stay literal.
+        const src =
+            "workflow t(repo: string, out: string): string {\n    return `## ${repo}\n${out}`;\n}\n";
+        const result = await runWff([], src);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("`## ${repo}\n${out}`");
+        expect(result.stdout).not.toContain("\\n${out}");
+    });
+
     test("--diff prints a unified-ish diff and exits 1 when changes are needed", async () => {
         const ugly = "workflow id(  x: string  ): string { return x; }\n";
         const file = join(tmp, "id.wf");

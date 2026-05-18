@@ -445,7 +445,8 @@ describe("constructed AST without endLine", () => {
                     kind: "ReturnStatement",
                     value: {
                         kind: "StringLiteralExpr",
-                        value: "x",
+                        raw: "x",
+                        quote: '"',
                         loc: loc(),
                     },
                     loc: loc(),
@@ -473,7 +474,8 @@ describe("constructed AST without endLine", () => {
                     name: "x",
                     value: {
                         kind: "StringLiteralExpr",
-                        value: "y",
+                        raw: "y",
+                        quote: '"',
                         loc: loc(),
                     },
                     loc: loc(),

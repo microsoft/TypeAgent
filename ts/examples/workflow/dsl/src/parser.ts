@@ -266,8 +266,7 @@ export class Parser {
         const paramListMultiLine =
             (params.length > 0 && params[0].loc.line !== lparen.line) ||
             params.some(
-                (p, i) =>
-                    i > 0 && p.loc.line !== params[i - 1].loc.line,
+                (p, i) => i > 0 && p.loc.line !== params[i - 1].loc.line,
             ) ||
             (params.length === 0 && rparen.line !== lparen.line);
         this.expect(TokenKind.Colon);
@@ -457,8 +456,7 @@ export class Parser {
         const multiLine =
             (fields.length > 0 && fields[0].loc.line !== lbrace.line) ||
             fields.some(
-                (f, i) =>
-                    i > 0 && f.loc.line !== fields[i - 1].loc.line,
+                (f, i) => i > 0 && f.loc.line !== fields[i - 1].loc.line,
             ) ||
             (fields.length === 0 && rbrace.line !== lbrace.line);
         const t: import("./ast.js").ObjectType = {
@@ -1001,13 +999,23 @@ export class Parser {
         // String
         if (t.kind === TokenKind.StringLiteral) {
             const v = this.advance();
-            return { kind: "StringLiteralExpr", value: v.value, loc: l };
+            return {
+                kind: "StringLiteralExpr",
+                raw: v.value,
+                quote: (v.quote ?? '"') as '"' | "'",
+                loc: l,
+            };
         }
 
         // Template literal (no interpolation): `text`
         if (t.kind === TokenKind.TemplateNoSub) {
             const v = this.advance();
-            return { kind: "StringLiteralExpr", value: v.value, loc: l };
+            return {
+                kind: "StringLiteralExpr",
+                raw: v.value,
+                quote: "`",
+                loc: l,
+            };
         }
 
         // Template literal (with interpolation): `text${expr}...`
@@ -1409,22 +1417,22 @@ export class Parser {
 
     private parseTemplateLiteral(): Expr {
         const l = this.loc();
-        const parts: string[] = [];
+        const rawParts: string[] = [];
         const expressions: Expr[] = [];
 
         const head = this.expect(TokenKind.TemplateHead);
-        parts.push(head.value);
+        rawParts.push(head.value);
 
         while (true) {
             expressions.push(this.parseExpression());
 
             if (this.peek().kind === TokenKind.TemplateTail) {
                 const tail = this.advance();
-                parts.push(tail.value);
+                rawParts.push(tail.value);
                 break;
             } else if (this.peek().kind === TokenKind.TemplateMiddle) {
                 const mid = this.advance();
-                parts.push(mid.value);
+                rawParts.push(mid.value);
             } else {
                 this.error(
                     "Expected template continuation or closing backtick",
@@ -1435,7 +1443,7 @@ export class Parser {
 
         return {
             kind: "TemplateLiteralExpr",
-            parts,
+            rawParts,
             expressions,
             loc: l,
         };

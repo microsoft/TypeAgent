@@ -121,7 +121,10 @@ function validateFormatOptions(opts: ResolvedOptions): void {
             `FormatOptions.printWidth must be >= 0, got ${opts.printWidth}`,
         );
     }
-    if (Number.isFinite(opts.printWidth) && !Number.isInteger(opts.printWidth)) {
+    if (
+        Number.isFinite(opts.printWidth) &&
+        !Number.isInteger(opts.printWidth)
+    ) {
         throw new RangeError(
             `FormatOptions.printWidth must be an integer (or Infinity), got ${opts.printWidth}`,
         );
@@ -133,7 +136,7 @@ class Printer {
     private depth = 0;
     private atLineStart = true;
 
-    constructor(private opts: ResolvedOptions) { }
+    constructor(private opts: ResolvedOptions) {}
 
     toString(): string {
         // Ensure trailing newline.
@@ -647,8 +650,8 @@ class Printer {
                     // even when the flag is set, IF the projected width
                     // fits — keeps idiomatic `} /* x */ else` for short
                     // comments.
-                    const hasLineComment = !!s.elseLeadingComments?.some(
-                        (c) => c.text.startsWith("//"),
+                    const hasLineComment = !!s.elseLeadingComments?.some((c) =>
+                        c.text.startsWith("//"),
                     );
                     let forceNewLine =
                         hasLineComment || s.elseOnNewLine === true;
@@ -657,10 +660,7 @@ class Printer {
                     // break.
                     if (!forceNewLine) {
                         const projected = this.measure(() => {
-                            this.writeElseLeading(
-                                s.elseLeadingComments,
-                                false,
-                            );
+                            this.writeElseLeading(s.elseLeadingComments, false);
                             this.write("else {");
                         });
                         if (projected > this.opts.printWidth) {
@@ -701,8 +701,8 @@ class Printer {
                     s.default_ === undefined
                         ? -1
                         : s.defaultIndex !== undefined
-                            ? s.defaultIndex
-                            : s.arms.length;
+                          ? s.defaultIndex
+                          : s.arms.length;
                 this.indent(() => {
                     // Comments that appeared before the first arm (or
                     // before `default` when default is first).
@@ -772,7 +772,7 @@ class Printer {
     private printExprPrec(e: Expr, parentPrec: number): void {
         switch (e.kind) {
             case "StringLiteralExpr":
-                this.write(quoteString(e.value));
+                this.write(e.quote + e.raw + e.quote);
                 return;
             case "NumberLiteralExpr":
                 this.write(String(e.value));
@@ -788,8 +788,8 @@ class Printer {
                 return;
             case "TemplateLiteralExpr": {
                 this.write("`");
-                for (let i = 0; i < e.parts.length; i++) {
-                    this.write(escapeTemplateText(e.parts[i]));
+                for (let i = 0; i < e.rawParts.length; i++) {
+                    this.write(e.rawParts[i]);
                     if (i < e.expressions.length) {
                         this.write("${");
                         this.printExpr(e.expressions[i]);
@@ -1005,12 +1005,4 @@ function quoteString(s: string): string {
         .replace(/\r/g, "\\r")
         .replace(/\t/g, "\\t");
     return `"${escaped}"`;
-}
-
-function escapeTemplateText(s: string): string {
-    // Inside backticks, escape backticks, backslashes, and `${` sequences.
-    return s
-        .replace(/\\/g, "\\\\")
-        .replace(/`/g, "\\`")
-        .replace(/\$\{/g, "\\${");
 }

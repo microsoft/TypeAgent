@@ -74,16 +74,20 @@ describe("lexer", () => {
         expect(tokens[1].kind).toBe(TokenKind.Minus);
     });
 
-    test("string literals with escapes", () => {
+    test("string literals with escapes (raw-only: escapes not decoded)", () => {
         const { tokens } = lex('"hello\\nworld"');
         expect(tokens[0].kind).toBe(TokenKind.StringLiteral);
-        expect(tokens[0].value).toBe("hello\nworld");
+        // The lexer captures the raw source between the delimiters; escape
+        // processing is the consumer's job (via decodeStringLiteral).
+        expect(tokens[0].value).toBe("hello\\nworld");
+        expect(tokens[0].quote).toBe('"');
     });
 
     test("single-quoted strings", () => {
         const { tokens } = lex("'abc'");
         expect(tokens[0].kind).toBe(TokenKind.StringLiteral);
         expect(tokens[0].value).toBe("abc");
+        expect(tokens[0].quote).toBe("'");
     });
 
     // ---- Template literals ----

@@ -309,6 +309,13 @@ function processFile(
         return;
     }
 
+    // --stdout always emits, even when input is already formatted, so users
+    // can use `wff --stdout` as a normalizer in pipelines.
+    if (mode === "stdout") {
+        process.stdout.write(output);
+        return;
+    }
+
     if (output === source) return;
 
     out.anyChanged = true;
@@ -331,9 +338,6 @@ function processFile(
             break;
         case "diff":
             process.stdout.write(unifiedDiff(source, output, file));
-            break;
-        case "stdout":
-            process.stdout.write(output);
             break;
     }
 }

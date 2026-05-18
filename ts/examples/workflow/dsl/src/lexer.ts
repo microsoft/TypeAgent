@@ -81,6 +81,12 @@ export interface Token {
     line: number;
     col: number;
     offset: number;
+    /**
+     * For `StringLiteral` tokens only: the original delimiter character
+     * (`"` or `'`). Template tokens always use backticks and do not set
+     * this field. Other token kinds leave it `undefined`.
+     */
+    quote?: '"' | "'";
 }
 
 export interface LexError {
@@ -189,7 +195,7 @@ export function lex(source: string): {
         const spanLine = line;
         const spanCol = col;
         const spanOffset = pos;
-        let str = "";
+        const startOffset = pos;
 
         while (pos < source.length) {
             if (
@@ -197,6 +203,7 @@ export function lex(source: string): {
                 pos + 1 < source.length &&
                 source[pos + 1] === "{"
             ) {
+                const raw = source.slice(startOffset, pos);
                 // Interpolation start: emit Head or Middle
                 advance(); // $
                 advance(); // {
@@ -205,7 +212,7 @@ export function lex(source: string): {
                         isHead
                             ? TokenKind.TemplateHead
                             : TokenKind.TemplateMiddle,
-                        str,
+                        raw,
                         spanLine,
                         spanCol,
                         spanOffset,
@@ -215,14 +222,14 @@ export function lex(source: string): {
                 return;
             }
             if (source[pos] === "`") {
-                // End of template: emit Tail or NoSub
+                const raw = source.slice(startOffset, pos);
                 advance(); // closing backtick
                 tokens.push(
                     token(
                         isHead
                             ? TokenKind.TemplateNoSub
                             : TokenKind.TemplateTail,
-                        str,
+                        raw,
                         spanLine,
                         spanCol,
                         spanOffset,
@@ -232,32 +239,11 @@ export function lex(source: string): {
             }
             if (source[pos] === "\\") {
                 advance(); // backslash
-                const esc = advance();
-                switch (esc) {
-                    case "n":
-                        str += "\n";
-                        break;
-                    case "t":
-                        str += "\t";
-                        break;
-                    case "r":
-                        str += "\r";
-                        break;
-                    case "\\":
-                        str += "\\";
-                        break;
-                    case "`":
-                        str += "`";
-                        break;
-                    case "$":
-                        str += "$";
-                        break;
-                    default:
-                        str += esc;
-                        break;
+                if (pos < source.length) {
+                    advance(); // the escaped character (any char)
                 }
             } else {
-                str += advance();
+                advance();
             }
         }
 
@@ -334,38 +320,18 @@ export function lex(source: string): {
         if (ch === '"' || ch === "'") {
             const quote = ch;
             advance();
-            let str = "";
+            const innerStart = pos;
             while (pos < source.length && source[pos] !== quote) {
                 if (source[pos] === "\\") {
-                    advance();
-                    const esc = advance();
-                    switch (esc) {
-                        case "n":
-                            str += "\n";
-                            break;
-                        case "t":
-                            str += "\t";
-                            break;
-                        case "r":
-                            str += "\r";
-                            break;
-                        case "\\":
-                            str += "\\";
-                            break;
-                        case "'":
-                            str += "'";
-                            break;
-                        case '"':
-                            str += '"';
-                            break;
-                        default:
-                            str += esc;
-                            break;
+                    advance(); // backslash
+                    if (pos < source.length) {
+                        advance(); // the escaped character (any char)
                     }
                 } else {
-                    str += advance();
+                    advance();
                 }
             }
+            const raw = source.slice(innerStart, pos);
             if (pos < source.length) {
                 advance(); // closing quote
             } else {
@@ -376,15 +342,15 @@ export function lex(source: string): {
                     offset: startOffset,
                 });
             }
-            tokens.push(
-                token(
-                    TokenKind.StringLiteral,
-                    str,
-                    startLine,
-                    startCol,
-                    startOffset,
-                ),
+            const tok = token(
+                TokenKind.StringLiteral,
+                raw,
+                startLine,
+                startCol,
+                startOffset,
             );
+            tok.quote = quote as '"' | "'";
+            tokens.push(tok);
             continue;
         }
 

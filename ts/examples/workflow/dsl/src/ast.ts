@@ -302,14 +302,31 @@ export interface DottedNameExpr {
 
 export interface StringLiteralExpr {
     kind: "StringLiteralExpr";
-    value: string;
+    /**
+     * Raw source text between the delimiters, exclusive. Escape
+     * sequences are NOT processed. Consumers that need the cooked
+     * (semantic) value call `decodeStringLiteral(raw, quote)` from
+     * `./literal.js`.
+     */
+    raw: string;
+    /**
+     * Original delimiter character. Backticks are produced for
+     * NoSubstitution templates so that the formatter can preserve them.
+     */
+    quote: '"' | "'" | "`";
     loc: SourceLocation;
 }
 
 export interface TemplateLiteralExpr {
     kind: "TemplateLiteralExpr";
-    /** Static text parts: parts.length === expressions.length + 1 */
-    parts: string[];
+    /**
+     * Raw source text for each static span (between the opening backtick
+     * and `${`, between `}` and `${`, between `}` and the closing
+     * backtick). `rawParts.length === expressions.length + 1`. Escape
+     * sequences are NOT processed; consumers that need cooked values
+     * call `decodeTemplatePart(rawParts[i])` from `./literal.js`.
+     */
+    rawParts: string[];
     /** Interpolated expressions */
     expressions: Expr[];
     loc: SourceLocation;
