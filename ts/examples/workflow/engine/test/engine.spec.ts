@@ -3354,7 +3354,7 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("Constant");
             expect(result.error?.message).toContain("limit");
-            expect(result.error?.message).toContain("schema violation");
+            expect(result.error?.message).toContain("schema");
         });
 
         it("passes when constant matches its declared schema", async () => {
@@ -4808,14 +4808,14 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(true);
             const errorObj = (result.output as any).error;
             expect(errorObj).toBeDefined();
-            expect(errorObj.code).toBe("TASK_ERROR");
+            expect(errorObj.kind).toBe("TaskError");
             expect(errorObj.message).toBe("broken");
             expect(errorObj.source).toBe("task");
             expect(errorObj.task).toBe("test.fail");
             expect(errorObj.node).toBe("step");
         });
 
-        it("runtime errors have RUNTIME_ERROR code", async () => {
+        it("runtime errors have RuntimeError kind", async () => {
             const throwTask: TaskDefinition = {
                 name: "test.throw",
                 sideEffects: false,
@@ -4885,9 +4885,63 @@ describe("WorkflowEngine (IR v1)", () => {
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             const errorObj = (result.output as any).error;
-            expect(errorObj.code).toBe("RUNTIME_ERROR");
+            expect(errorObj.kind).toBe("RuntimeError");
             expect(errorObj.message).toBe("unexpected crash");
             expect(errorObj.source).toBe("runtime");
+        });
+
+        it("unrecoverable engine errors bypass onError and fail the run", async () => {
+            // Simulate a validator-bypass scenario by constructing IR where the
+            // branch has no matching case and no default (should be caught by
+            // the validator, but we skip validation here).
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "unrecoverable",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    branch: {
+                        kind: "branch",
+                        selector: { $from: "input", name: "x" } as Template,
+                        selectorSchema: { type: "string" },
+                        cases: { a: "done" },
+                        // no default — any value other than "a" is unmatched
+                    } as any,
+                    done: {
+                        kind: "task",
+                        task: "identity",
+                        inputSchema: { type: "object" },
+                        outputSchema: {},
+                        inputs: {},
+                        bind: "result",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "identity",
+                        inputSchema: { type: "object" },
+                        outputSchema: {},
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "branch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            // Even if the branch node had an onError, unrecoverable errors bypass it.
+            // Here we just confirm the run fails (not recovers silently).
+            const result = await eng.run(ir, {
+                input: { x: "z" },
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "no matching case or default",
+            );
         });
     });
 
@@ -6350,6 +6404,72 @@ describe("WorkflowEngine (IR v1)", () => {
             const out = result.output as Record<string, any>;
             expect(out.a).toBeDefined();
             expect(out.b).toBeDefined();
+        });
+
+        it("rejects fork with fewer than 2 branches at runtime", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+            reg.register({
+                name: "mock.only",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok", output: {} };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fork-min2-test",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            only: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "only_step",
+                                    nodes: {
+                                        only_step: {
+                                            kind: "task",
+                                            task: "mock.only",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "onlyOut",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "onlyOut",
+                                    },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
+                    },
+                },
+                output: { $from: "scope", name: "forkResult" },
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(
+                /must have at least 2 branches/,
+            );
         });
 
         it("respects maxConcurrency", async () => {

@@ -510,3 +510,95 @@ as the message.
 message that propagates to the RunResult is empty. The thrown string
 value is not correctly threaded into the error.fail task's input, or
 the error propagation loses the message field.
+
+## G17: Fork/forkMap does not cancel in-flight branches on failure
+
+**Spec:** ir-v0.2.md §2.1 rule 5 and §2.2 rule 5. "If any branch fails,
+remaining in-flight branches are cancelled and the error propagates
+immediately."
+
+**Current state:** The engine's `executeFork` and `executeForkMap` use
+`Promise.race` for concurrency limiting but do not cancel in-flight
+branches/iterations when one fails. Errors from `Promise.race` propagate,
+but other running branches continue executing in the background. This
+wastes resources and may cause side effects from branches that should have
+been cancelled.
+
+**What needs to happen:**
+
+1. When any branch/iteration rejects, signal cancellation to all other
+   in-flight branches via `AbortController`.
+2. `await` all in-flight promises before propagating the error (to avoid
+   unhandled rejection warnings and ensure cleanup).
+3. Add tests verifying that in-flight branches are cancelled on first
+   failure.
+
+## G18: No union types in the DSL type system
+
+**Spec/intent:** The DSL currently has no union types. This was an
+intentional v0.1 simplification (see G7 note 4: ternary/if-else
+mismatched arms are rejected at compile time rather than widened to a
+union). The underlying IR/JSON Schema layer fully supports unions via
+`anyOf` / `oneOf` / `enum`, so the gap is purely in the DSL surface.
+
+**Why it now matters:** Two concrete v0.1 features are weaker than they
+should be without union types:
+
+1. **Mixed-arm ternary/if-else expressions.** Authors must contort
+   expressions or duplicate code when natural arms have different types
+   (e.g. `cond ? "x" : 0`).
+
+2. **Statically exhaustive `switch` over a narrowed discriminant.**
+   The IR validator's exhaustiveness contract (ir-v0.1.md §3.6) lets a
+   `switch` omit `default` when the discriminant's resolved schema is
+   provably narrowed to a subset of the case keys (e.g. `enum` or
+   `const`). The DSL emitter already emits the exhaustive form when
+   source omits `default` (selectorSchema carries `enum: [...case keys]`
+   and inferred type), but the only DSL types that satisfy the
+   narrowing rule today are `boolean` (implicit `{true,false}` enum).
+   For a `switch(x: string)`, there is no way in the DSL surface to
+   declare `x` as `"a" | "b"`, so non-boolean exhaustive switches
+   always fail IR validation unless authors:
+
+   - add a `default:` arm, or
+   - narrow `x` upstream via a task whose `outputSchema` carries an
+     `enum` declared at the IR level.
+
+   With string/number literal union types in the DSL, an author could
+   write `switch(label: "news" | "code") { case "news": ... case "code":
+... }` and have it compile + statically validate as exhaustive.
+
+**Sub-issue: case-literal vs discriminant type mismatch is not caught.**
+`typeChecker.ts` `case "SwitchStatement"` infers the discriminant and
+each arm value but never checks assignability. Mixed types like
+`switch(x: string) { case 1: ... }` slip through typecheck and only
+fail later at IR-validation time (or worse, only at runtime if
+`compile({validate:false})`). When union types are introduced, the
+case-literal check should land at the same time:
+
+- Each `case <literal>:` literal must be assignable to the discriminant
+  type.
+- For a union discriminant, the union of all case literals must equal
+  the discriminant type (otherwise require `default:`).
+
+**What needs to happen:**
+
+1. Add string-literal and number-literal types to the DSL surface, plus
+   union types over them (and possibly `boolean` literals).
+2. Update `typeChecker.ts` to:
+   a. Assign literal types to literal expressions where contextually
+   useful (e.g. arm values in a `switch`).
+   b. Reject `case` literals not assignable to the discriminant type.
+   c. Widen mixed-arm ternary/if-else results to a union (replacing the
+   "must match" rule).
+3. Map DSL unions to JSON Schema `enum` (for literal-only unions) or
+   `anyOf` (general case) in the emitter.
+4. Verify the exhaustive switch emission (Phase 5 work in `emitSwitch`)
+   composes correctly: a `switch(x: "a" | "b")` source with both arms
+   and no `default:` should emit a branch whose `selectorSchema`
+   declares `enum: ["a", "b"]` and whose discriminant resolves to a
+   producer type with matching `enum` — passing the IR validator's
+   exhaustiveness check.
+5. Add tests for: union type parsing, case-literal type mismatch error,
+   mixed-arm ternary returning a union, exhaustive non-boolean switch
+   compiling without `default:`.
