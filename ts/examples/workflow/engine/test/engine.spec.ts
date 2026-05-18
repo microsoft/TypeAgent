@@ -4815,7 +4815,7 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(errorObj.node).toBe("step");
         });
 
-        it("runtime errors have RUNTIME_ERROR code", async () => {
+        it("runtime errors have RuntimeError kind", async () => {
             const throwTask: TaskDefinition = {
                 name: "test.throw",
                 sideEffects: false,
