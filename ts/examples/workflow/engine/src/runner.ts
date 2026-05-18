@@ -179,8 +179,9 @@ function resolveFromRef(
  * Well-known engine-level error codes.
  * - "TASK_ERROR": a registered task returned {kind:"fail"} or threw.
  * - "RUNTIME_ERROR": the engine raised a recoverable runtime condition
- *   (LoopMaxIterationsExceeded, OutputSchemaViolation, policy/approval,
- *   timeout, cancellation).
+ *   (policy/approval, timeout, cancellation).
+ * - "LoopMaxIterationsExceeded": loop hit its maxIterations cap (recoverable).
+ * - "OutputSchemaViolation": task returned a value that failed outputSchema (recoverable).
  * - "UNRECOVERABLE_ERROR": the engine raised a condition that is
  *   statically unreachable after validation (ReferenceUnresolved,
  *   BranchSelectorUnmatched, unknown namespace, invalid IR structure).
@@ -189,6 +190,8 @@ function resolveFromRef(
 type EngineErrorCode =
     | "TASK_ERROR"
     | "RUNTIME_ERROR"
+    | "LoopMaxIterationsExceeded"
+    | "OutputSchemaViolation"
     | "UNRECOVERABLE_ERROR";
 
 class EngineError extends Error {
@@ -847,7 +850,7 @@ export class WorkflowEngine {
                     const msg = this.ajv.errorsText(validate.errors);
                     throw new EngineError(
                         `Output schema violation at "${nodeId}" (task "${node.task}"): ${msg}`,
-                        "RUNTIME_ERROR",
+                        "OutputSchemaViolation",
                     );
                 }
             }
@@ -1112,6 +1115,7 @@ export class WorkflowEngine {
 
             throw new EngineError(
                 `LoopMaxIterationsExceeded at "${nodeId}" (limit: ${maxIter})`,
+                "LoopMaxIterationsExceeded",
             );
         } catch (err) {
             if (
