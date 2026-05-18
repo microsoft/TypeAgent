@@ -138,15 +138,15 @@ sub-scope (same contract as loop bodies in v1).
 
 **Fields:**
 
-| Field            | Required | Description                                                                                                                                                   |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`           | yes      | `"fork"`                                                                                                                                                      |
+| Field            | Required | Description                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`           | yes      | `"fork"`                                                                                                                                                                                                                                                                                                                                                                            |
 | `branches`       | yes      | Map of branch name to branch object. Each branch object has `inputs` (templates resolved in the outer scope) and `scope` (a `WorkflowScope` with `inputSchema`, `entry`, `nodes`, `output`, `outputSchema` — the same contract as v1 loop bodies). The `scope` nesting is intentional: `WorkflowScope` is shared with loop bodies and the top-level workflow for type-system reuse. |
-| `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                               |
-| `maxConcurrency` | no       | Positive integer. Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                  |
-| `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                           |
-| `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error` and empty `trigger`.                                                           |
-| `bind`           | no       | Bound output name for scope visibility.                                                                                                                       |
+| `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                                                                                                                                                                                                                                                     |
+| `maxConcurrency` | no       | Positive integer. Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                                                                                                                                                                                                                                        |
+| `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                                                                                                                                                                                                                                                 |
+| `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error` and empty `trigger`.                                                                                                                                                                                                                                                                                 |
+| `bind`           | no       | Bound output name for scope visibility.                                                                                                                                                                                                                                                                                                                                             |
 
 **Execution semantics:**
 
@@ -359,11 +359,11 @@ output. The IR toolchain enforces this in two places:
 
 ### 3.5 `list` namespace
 
-| Task             | Input schema              | Output schema | Notes                                      |
-| ---------------- | ------------------------- | ------------- | ------------------------------------------ |
-| `list.length`    | `{ list: T[] }`           | `integer`     | Returns the length of the list.            |
-| `list.elementAt` | `{ list: T[], index: integer }` | `T`     | Returns the element at the given index. Fails if out of bounds. |
-| `list.append`    | `{ list: T[], item: T }`  | `T[]`         | Returns a new array with item appended.    |
+| Task             | Input schema                    | Output schema | Notes                                                           |
+| ---------------- | ------------------------------- | ------------- | --------------------------------------------------------------- |
+| `list.length`    | `{ list: T[] }`                 | `integer`     | Returns the length of the list.                                 |
+| `list.elementAt` | `{ list: T[], index: integer }` | `T`           | Returns the element at the given index. Fails if out of bounds. |
+| `list.append`    | `{ list: T[], item: T }`        | `T[]`         | Returns a new array with item appended.                         |
 
 `list.append` is used by the `filter` built-in's IR lowering. Inside
 the loop body, a branch node checks the predicate result: the true

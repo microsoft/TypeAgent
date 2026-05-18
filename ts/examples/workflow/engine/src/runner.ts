@@ -545,7 +545,11 @@ export class WorkflowEngine {
             // Unreachable after static validation: name-resolution pass
             // verifies all node references exist.
             if (!node) {
-                throw new EngineError(`Node "${currentId}" not found`, "UnrecoverableError", true);
+                throw new EngineError(
+                    `Node "${currentId}" not found`,
+                    "UnrecoverableError",
+                    true,
+                );
             }
 
             // If we have a pending error (dispatching to onError target),

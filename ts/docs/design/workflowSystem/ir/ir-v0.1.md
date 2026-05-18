@@ -882,9 +882,9 @@ validator, and analyzers in agreement on a single observable behavior
   3. The discriminant's resolved producer type is provably narrowed to a
      subset of the declared enum (the producer carries a matching `const`,
      `enum`, or `boolean` type — see [§3.6.1](#361-discriminant-narrowing)).
-  When all three hold, omitting `default` is legal and
-  `BranchSelectorUnmatched` is statically unreachable. Otherwise `default`
-  is required (P5: no implicit fall-through).
+     When all three hold, omitting `default` is legal and
+     `BranchSelectorUnmatched` is statically unreachable. Otherwise `default`
+     is required (P5: no implicit fall-through).
 - A branch has no `inputs` other than `selector`, no `outputs`, and no
   `bind` (it produces no value). It is pure control flow. Data needed
   downstream of the branch must already be available via dominator
@@ -1168,7 +1168,7 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
   - `"OutputSchemaViolation"` — the task returned a value that failed
     its declared `outputSchema`. This indicates a buggy or drifted task
     implementation; authors may want to log or fall back.
-  All `"runtime"` errors are routed to `onError` handlers.
+    All `"runtime"` errors are routed to `onError` handlers.
 - `"runtime"` with `kind: "UnrecoverableError"` — the engine raised a
   condition that is **statically unreachable** after validation
   (e.g., `ReferenceUnresolved`, `BranchSelectorUnmatched`, unknown `$from`
@@ -1606,46 +1606,46 @@ the static validator has no visibility into.
 
 **Schema validation (runtime values)**
 
-| Check | Trigger | Rationale |
-|---|---|---|
-| **Workflow input schema** | Caller provides `input` | Input is external to the IR; no static knowledge of actual values |
-| **Task output schema** | Task implementation returns | Catches buggy or drifted task implementations returning wrong types (§5.2) |
+| Check                     | Trigger                                     | Rationale                                                                      |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Workflow input schema** | Caller provides `input`                     | Input is external to the IR; no static knowledge of actual values              |
+| **Task output schema**    | Task implementation returns                 | Catches buggy or drifted task implementations returning wrong types (§5.2)     |
 | **Never-output contract** | Task with `{ "not": {} }` output returns ok | Task declared it always fails; returning success means a broken implementation |
 
 **Security / policy**
 
-| Check | Trigger | Rationale |
-|---|---|---|
-| **Side-effect policy deny** | Policy map says `"deny"` | Runtime configuration, not in the IR |
-| **Side-effect prompt / no callback** | Policy says `"prompt"` but no approval callback | Runtime configuration |
-| **Approval rejected** | Approval callback returns non-approved | User decision at runtime |
+| Check                                | Trigger                                         | Rationale                            |
+| ------------------------------------ | ----------------------------------------------- | ------------------------------------ |
+| **Side-effect policy deny**          | Policy map says `"deny"`                        | Runtime configuration, not in the IR |
+| **Side-effect prompt / no callback** | Policy says `"prompt"` but no approval callback | Runtime configuration                |
+| **Approval rejected**                | Approval callback returns non-approved          | User decision at runtime             |
 
 **Execution control**
 
-| Check | Trigger | Rationale |
-|---|---|---|
-| **Run cancelled** | `AbortSignal` fires | External cancellation at runtime |
-| **Task timeout** | Execution exceeds `timeoutMs` | Runtime duration is unpredictable |
+| Check                           | Trigger                           | Rationale                                                           |
+| ------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| **Run cancelled**               | `AbortSignal` fires               | External cancellation at runtime                                    |
+| **Task timeout**                | Execution exceeds `timeoutMs`     | Runtime duration is unpredictable                                   |
 | **Loop maxIterations exceeded** | Iteration count ≥ `maxIterations` | Runtime convergence; static analysis cannot predict iteration count |
 
 **Task contract**
 
-| Check | Trigger | Rationale |
-|---|---|---|
-| **Task failure** | Task throws or returns `{ kind: "fail" }` | External services fail; legitimate runtime error |
-| **Unrecoverable failure** | Task fails with no `onError` | Failure propagation; the task threw and no handler is declared |
+| Check                     | Trigger                                   | Rationale                                                      |
+| ------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| **Task failure**          | Task throws or returns `{ kind: "fail" }` | External services fail; legitimate runtime error               |
+| **Unrecoverable failure** | Task fails with no `onError`              | Failure propagation; the task threw and no handler is declared |
 
 #### 5.8.2 Defense-in-depth runtime checks (gated)
 
-These checks MAY be skipped when static validation has passed.  Each
+These checks MAY be skipped when static validation has passed. Each
 re-verifies an invariant that the static validator already proves
-(column "Static guarantee").  They are controlled by the
+(column "Static guarantee"). They are controlled by the
 `defenseInDepth` flag described above.
 
 **Structural (static IR properties)**
 
-| Check | Static guarantee | Reasoning |
-|---|---|---|
+| Check                     | Static guarantee                                               | Reasoning                                                                                   |
+| ------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **Constant value schema** | `jsonValueToSchema` + `isStructuralSubtype` (§4.1 type compat) | Constant values are in the IR; static validator derives their type and checks compatibility |
 
 **Propagation (static type compat + essential task output check)**
@@ -1654,16 +1654,16 @@ These are redundant because the essential **task output schema** check
 (§5.8.1) ensures every task implementation's actual return value
 conforms to its declared `outputSchema`, and the static validator
 proves every template's resolved type is structurally compatible with
-its target schema (§4.2).  Together, types are proven compatible
+its target schema (§4.2). Together, types are proven compatible
 statically and values are proven conformant at each task boundary.
 
-| Check | Static guarantee | Reasoning |
-|---|---|---|
-| **Workflow output schema** | §4.1 type-compatibility pass + essential task output check | Static proves template type fits schema; task output check ensures upstream values match declared types |
-| **Loop input schema** | §4.1 type-compatibility pass + essential task output check | Static proves input template types match `inputSchema`; task output check validates actual upstream values |
+| Check                         | Static guarantee                                           | Reasoning                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Workflow output schema**    | §4.1 type-compatibility pass + essential task output check | Static proves template type fits schema; task output check ensures upstream values match declared types     |
+| **Loop input schema**         | §4.1 type-compatibility pass + essential task output check | Static proves input template types match `inputSchema`; task output check validates actual upstream values  |
 | **Loop state initial schema** | §4.1 type-compatibility pass + essential task output check | Static proves initial-value template types match state schemas; task output check validates upstream values |
-| **Loop output schema** | §4.1 type-compatibility pass + essential task output check | Static proves output template types match `outputSchema`; task output check validates body bindings |
-| **Loop iterateState schema** | §4.1 type-compatibility pass + essential task output check | Static proves iterateState template types match state schemas; task output check validates body bindings |
+| **Loop output schema**        | §4.1 type-compatibility pass + essential task output check | Static proves output template types match `outputSchema`; task output check validates body bindings         |
+| **Loop iterateState schema**  | §4.1 type-compatibility pass + essential task output check | Static proves iterateState template types match state schemas; task output check validates body bindings    |
 
 #### 5.8.3 Statically proven but unconditional checks
 
@@ -1674,30 +1674,30 @@ if an IR somehow bypasses static validation.
 
 **Structural / integrity**
 
-| Check | Static guarantee | Reasoning |
-|---|---|---|
-| **Node not found** | §4.1 name-resolution pass | Null check; all node references are verified statically |
-| **Unregistered task** | §4.1 IR/task drift pass | Null check; all task names are checked against the registry at validation time |
-| **Fork min-2 branches** | §4.1 structural check | Comparison; branch count is a static IR property |
-| **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | `Array.isArray` check; static proves collection resolves to array type |
-| **Branch selector unmatched** | §3.6 exhaustiveness contract + §4.1 type-compatibility | When `default` is absent the validator proves the branch is exhaustive (selectorSchema has enum, all enum values appear as cases, and selector producer is provably narrowed). When `default` is present, unmatched values route to it. Either way, raising `BranchSelectorUnmatched` is unreachable. |
+| Check                            | Static guarantee                                           | Reasoning                                                                                                                                                                                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node not found**               | §4.1 name-resolution pass                                  | Null check; all node references are verified statically                                                                                                                                                                                                                                               |
+| **Unregistered task**            | §4.1 IR/task drift pass                                    | Null check; all task names are checked against the registry at validation time                                                                                                                                                                                                                        |
+| **Fork min-2 branches**          | §4.1 structural check                                      | Comparison; branch count is a static IR property                                                                                                                                                                                                                                                      |
+| **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | `Array.isArray` check; static proves collection resolves to array type                                                                                                                                                                                                                                |
+| **Branch selector unmatched**    | §3.6 exhaustiveness contract + §4.1 type-compatibility     | When `default` is absent the validator proves the branch is exhaustive (selectorSchema has enum, all enum values appear as cases, and selector producer is provably narrowed). When `default` is present, unmatched values route to it. Either way, raising `BranchSelectorUnmatched` is unreachable. |
 
 **Template resolution (dominator analysis + type checking)**
 
 The static validator's dominator analysis with onError-split awareness
 (§4.1 scope-closure and dominator passes) proves that every non-optional
 `$from: "scope"` reference is bound on all execution paths, including
-error-recovery paths.  Path projections are verified by
+error-recovery paths. Path projections are verified by
 `checkSchemaCompat` which rejects paths into undeclared schema
-properties.  Combined with the essential task output check (§5.8.1),
+properties. Combined with the essential task output check (§5.8.1),
 which ensures actual values match declared schemas, path projection
 type errors at runtime are unreachable.
 
-| Check | Static guarantee | Reasoning |
-|---|---|---|
-| **Unknown `$from` namespace** | §4.1 schema-syntax pass | Only valid namespaces (`input`, `constant`, `scope`, `state`) are accepted |
-| **Unresolved reference** | §4.1 dominator pass with onError-split coverage | Binding coverage is proven on all paths including error-recovery paths; uncovered non-optional refs are rejected |
-| **Path projection on null/wrong type** | §4.1 type-compatibility + `resolveSchemaPath` | Path segments are checked against declared schema structure; task output check ensures actual values match |
+| Check                                  | Static guarantee                                | Reasoning                                                                                                        |
+| -------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Unknown `$from` namespace**          | §4.1 schema-syntax pass                         | Only valid namespaces (`input`, `constant`, `scope`, `state`) are accepted                                       |
+| **Unresolved reference**               | §4.1 dominator pass with onError-split coverage | Binding coverage is proven on all paths including error-recovery paths; uncovered non-optional refs are rejected |
+| **Path projection on null/wrong type** | §4.1 type-compatibility + `resolveSchemaPath`   | Path segments are checked against declared schema structure; task output check ensures actual values match       |
 
 ---
 

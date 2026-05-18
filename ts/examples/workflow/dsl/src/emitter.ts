@@ -83,26 +83,11 @@ interface ScopeContext {
 
 function inferCommonType(
     values: ReadonlyArray<unknown>,
-):
-    | "string"
-    | "number"
-    | "integer"
-    | "boolean"
-    | undefined {
+): "string" | "number" | "integer" | "boolean" | undefined {
     if (values.length === 0) return undefined;
-    let inferred:
-        | "string"
-        | "number"
-        | "integer"
-        | "boolean"
-        | undefined;
+    let inferred: "string" | "number" | "integer" | "boolean" | undefined;
     for (const v of values) {
-        let t:
-            | "string"
-            | "number"
-            | "integer"
-            | "boolean"
-            | undefined;
+        let t: "string" | "number" | "integer" | "boolean" | undefined;
         if (typeof v === "string") t = "string";
         else if (typeof v === "boolean") t = "boolean";
         else if (typeof v === "number")
@@ -563,9 +548,7 @@ export class Emitter {
                     : mergeId;
         }
 
-        const hasSourceDefault = !!(
-            stmt.default_ && stmt.default_.length > 0
-        );
+        const hasSourceDefault = !!(stmt.default_ && stmt.default_.length > 0);
 
         if (hasSourceDefault) {
             const defScope = this.childScope(scope);

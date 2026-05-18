@@ -559,13 +559,14 @@ should be without union types:
    For a `switch(x: string)`, there is no way in the DSL surface to
    declare `x` as `"a" | "b"`, so non-boolean exhaustive switches
    always fail IR validation unless authors:
+
    - add a `default:` arm, or
    - narrow `x` upstream via a task whose `outputSchema` carries an
      `enum` declared at the IR level.
 
    With string/number literal union types in the DSL, an author could
    write `switch(label: "news" | "code") { case "news": ... case "code":
-   ... }` and have it compile + statically validate as exhaustive.
+... }` and have it compile + statically validate as exhaustive.
 
 **Sub-issue: case-literal vs discriminant type mismatch is not caught.**
 `typeChecker.ts` `case "SwitchStatement"` infers the discriminant and
@@ -586,10 +587,10 @@ case-literal check should land at the same time:
    union types over them (and possibly `boolean` literals).
 2. Update `typeChecker.ts` to:
    a. Assign literal types to literal expressions where contextually
-      useful (e.g. arm values in a `switch`).
+   useful (e.g. arm values in a `switch`).
    b. Reject `case` literals not assignable to the discriminant type.
    c. Widen mixed-arm ternary/if-else results to a union (replacing the
-      "must match" rule).
+   "must match" rule).
 3. Map DSL unions to JSON Schema `enum` (for literal-only unions) or
    `anyOf` (general case) in the emitter.
 4. Verify the exhaustive switch emission (Phase 5 work in `emitSwitch`)

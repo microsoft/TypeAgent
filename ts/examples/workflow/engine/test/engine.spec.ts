@@ -4939,7 +4939,9 @@ describe("WorkflowEngine (IR v1)", () => {
                 skipValidation: true,
             });
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("no matching case or default");
+            expect(result.error?.message).toContain(
+                "no matching case or default",
+            );
         });
     });
 
