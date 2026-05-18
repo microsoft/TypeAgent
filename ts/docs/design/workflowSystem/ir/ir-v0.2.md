@@ -68,55 +68,59 @@ sub-scope (same contract as loop bodies in v1).
       "inputs": {
         "doc": { "$from": "scope", "name": "document" },
       },
-      "inputSchema": {
-        "type": "object",
-        "properties": { "doc": { "type": "string" } },
-        "required": ["doc"],
-      },
-      "entry": "analyze",
-      "nodes": {
-        "analyze": {
-          "kind": "task",
-          "task": "text.analyze",
-          "inputs": { "text": { "$from": "input", "name": "doc" } },
-          "inputSchema": {
-            "type": "object",
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"],
-          },
-          "outputSchema": { "$ref": "#/types/TextResult" },
-          "next": null,
+      "scope": {
+        "inputSchema": {
+          "type": "object",
+          "properties": { "doc": { "type": "string" } },
+          "required": ["doc"],
         },
+        "entry": "analyze",
+        "nodes": {
+          "analyze": {
+            "kind": "task",
+            "task": "text.analyze",
+            "inputs": { "text": { "$from": "input", "name": "doc" } },
+            "inputSchema": {
+              "type": "object",
+              "properties": { "text": { "type": "string" } },
+              "required": ["text"],
+            },
+            "outputSchema": { "$ref": "#/types/TextResult" },
+            "next": null,
+          },
+        },
+        "output": { "$from": "scope", "name": "analyze" },
+        "outputSchema": { "$ref": "#/types/TextResult" },
       },
-      "output": { "$from": "scope", "name": "analyze" },
-      "outputSchema": { "$ref": "#/types/TextResult" },
     },
     "imageAnalysis": {
       "inputs": {
         "doc": { "$from": "scope", "name": "document" },
       },
-      "inputSchema": {
-        "type": "object",
-        "properties": { "doc": { "type": "string" } },
-        "required": ["doc"],
-      },
-      "entry": "analyze",
-      "nodes": {
-        "analyze": {
-          "kind": "task",
-          "task": "image.analyze",
-          "inputs": { "text": { "$from": "input", "name": "doc" } },
-          "inputSchema": {
-            "type": "object",
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"],
-          },
-          "outputSchema": { "$ref": "#/types/ImageResult" },
-          "next": null,
+      "scope": {
+        "inputSchema": {
+          "type": "object",
+          "properties": { "doc": { "type": "string" } },
+          "required": ["doc"],
         },
+        "entry": "analyze",
+        "nodes": {
+          "analyze": {
+            "kind": "task",
+            "task": "image.analyze",
+            "inputs": { "text": { "$from": "input", "name": "doc" } },
+            "inputSchema": {
+              "type": "object",
+              "properties": { "text": { "type": "string" } },
+              "required": ["text"],
+            },
+            "outputSchema": { "$ref": "#/types/ImageResult" },
+            "next": null,
+          },
+        },
+        "output": { "$from": "scope", "name": "analyze" },
+        "outputSchema": { "$ref": "#/types/ImageResult" },
       },
-      "output": { "$from": "scope", "name": "analyze" },
-      "outputSchema": { "$ref": "#/types/ImageResult" },
     },
   },
   "outputSchema": {
@@ -134,15 +138,15 @@ sub-scope (same contract as loop bodies in v1).
 
 **Fields:**
 
-| Field            | Required | Description                                                                                                                                                   |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`           | yes      | `"fork"`                                                                                                                                                      |
-| `branches`       | yes      | Map of branch name to sub-scope. Each sub-scope has the same contract as v1 loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`, `output`, `outputSchema`. |
-| `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                               |
-| `maxConcurrency` | no       | Positive integer. Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                  |
-| `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                           |
-| `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error` and empty `trigger`.                                                           |
-| `bind`           | no       | Bound output name for scope visibility.                                                                                                                       |
+| Field            | Required | Description                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`           | yes      | `"fork"`                                                                                                                                                                                                                                                                                                                                                                            |
+| `branches`       | yes      | Map of branch name to branch object. Each branch object has `inputs` (templates resolved in the outer scope) and `scope` (a `WorkflowScope` with `inputSchema`, `entry`, `nodes`, `output`, `outputSchema` — the same contract as v1 loop bodies). The `scope` nesting is intentional: `WorkflowScope` is shared with loop bodies and the top-level workflow for type-system reuse. |
+| `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                                                                                                                                                                                                                                                     |
+| `maxConcurrency` | no       | Positive integer. Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                                                                                                                                                                                                                                        |
+| `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                                                                                                                                                                                                                                                 |
+| `onError`        | no       | Error handler node ID. Triggered if any branch fails. Handler receives `error` and empty `trigger`.                                                                                                                                                                                                                                                                                 |
+| `bind`           | no       | Bound output name for scope visibility.                                                                                                                                                                                                                                                                                                                                             |
 
 **Execution semantics:**
 
@@ -287,20 +291,20 @@ never applies. `NaN` comparisons follow IEEE 754: all ordering
 comparisons involving `NaN` return `false` (including `NaN < NaN`).
 `Infinity` comparisons work as expected (`Infinity > 5` is `true`).
 
-| Task                     | Input schema                      | Output schema         | Notes |
-| ------------------------ | --------------------------------- | --------------------- | ----- |
-| `compare.equals`         | `{ left: T, right: T }`           | `{ result: boolean }` | `===` |
-| `compare.notEquals`      | `{ left: T, right: T }`           | `{ result: boolean }` | `!==` |
-| `compare.greaterThan`    | `{ left: number, right: number }` | `{ result: boolean }` | `>`   |
-| `compare.lessThan`       | `{ left: number, right: number }` | `{ result: boolean }` | `<`   |
-| `compare.greaterOrEqual` | `{ left: number, right: number }` | `{ result: boolean }` | `>=`  |
-| `compare.lessOrEqual`    | `{ left: number, right: number }` | `{ result: boolean }` | `<=`  |
+| Task                     | Input schema                      | Output schema | Notes |
+| ------------------------ | --------------------------------- | ------------- | ----- |
+| `compare.equals`         | `{ left: T, right: T }`           | `boolean`     | `===` |
+| `compare.notEquals`      | `{ left: T, right: T }`           | `boolean`     | `!==` |
+| `compare.greaterThan`    | `{ left: number, right: number }` | `boolean`     | `>`   |
+| `compare.lessThan`       | `{ left: number, right: number }` | `boolean`     | `<`   |
+| `compare.greaterOrEqual` | `{ left: number, right: number }` | `boolean`     | `>=`  |
+| `compare.lessOrEqual`    | `{ left: number, right: number }` | `boolean`     | `<=`  |
 
 ### 3.2 `bool` namespace
 
-| Task       | Input schema         | Output schema         | Notes      |
-| ---------- | -------------------- | --------------------- | ---------- |
-| `bool.not` | `{ value: boolean }` | `{ result: boolean }` | `!` in DSL |
+| Task       | Input schema         | Output schema | Notes      |
+| ---------- | -------------------- | ------------- | ---------- |
+| `bool.not` | `{ value: boolean }` | `boolean`     | `!` in DSL |
 
 The DSL operators `&&` and `||` lower to **branch nodes** that implement
 short-circuit evaluation. There are no `bool.and` or `bool.or` builtin
@@ -313,17 +317,17 @@ All `math.*` tasks use JavaScript number semantics. `NaN` and `Infinity`
 are valid output values. Division and modulo by zero produce `Infinity` or
 `NaN` respectively, not task failures.
 
-| Task            | Input schema                      | Output schema         | Notes                                                   |
-| --------------- | --------------------------------- | --------------------- | ------------------------------------------------------- |
-| `math.add`      | `{ left: number, right: number }` | `{ result: number }`  | `+` in DSL                                              |
-| `math.subtract` | `{ left: number, right: number }` | `{ result: number }`  | `-` in DSL                                              |
-| `math.multiply` | `{ left: number, right: number }` | `{ result: number }`  | `*` in DSL                                              |
-| `math.divide`   | `{ left: number, right: number }` | `{ result: number }`  | `/` in DSL. Returns `Infinity` or `NaN` on zero divisor |
-| `math.modulo`   | `{ left: number, right: number }` | `{ result: number }`  | `%` in DSL. Returns `NaN` on zero divisor               |
-| `math.negate`   | `{ value: number }`               | `{ result: number }`  | Unary `-` in DSL                                        |
-| `math.floor`    | `{ value: number }`               | `{ result: integer }` | `Math.floor()`. Use for integer conversion              |
-| `math.round`    | `{ value: number }`               | `{ result: integer }` | `Math.round()`                                          |
-| `math.ceil`     | `{ value: number }`               | `{ result: integer }` | `Math.ceil()`                                           |
+| Task            | Input schema                      | Output schema | Notes                                                   |
+| --------------- | --------------------------------- | ------------- | ------------------------------------------------------- |
+| `math.add`      | `{ left: number, right: number }` | `number`      | `+` in DSL                                              |
+| `math.subtract` | `{ left: number, right: number }` | `number`      | `-` in DSL                                              |
+| `math.multiply` | `{ left: number, right: number }` | `number`      | `*` in DSL                                              |
+| `math.divide`   | `{ left: number, right: number }` | `number`      | `/` in DSL. Returns `Infinity` or `NaN` on zero divisor |
+| `math.modulo`   | `{ left: number, right: number }` | `number`      | `%` in DSL. Returns `NaN` on zero divisor               |
+| `math.negate`   | `{ value: number }`               | `number`      | Unary `-` in DSL                                        |
+| `math.floor`    | `{ value: number }`               | `integer`     | `Math.floor()`. Use for integer conversion              |
+| `math.round`    | `{ value: number }`               | `integer`     | `Math.round()`                                          |
+| `math.ceil`     | `{ value: number }`               | `integer`     | `Math.ceil()`                                           |
 
 ### 3.4 `error` namespace
 
@@ -355,13 +359,15 @@ output. The IR toolchain enforces this in two places:
 
 ### 3.5 `list` namespace
 
-| Task          | Input schema                 | Output schema     | Notes                                      |
-| ------------- | ---------------------------- | ----------------- | ------------------------------------------ |
-| `list.append` | `{ array: T[], element: T }` | `{ result: T[] }` | Returns a new array with element appended. |
+| Task             | Input schema                    | Output schema | Notes                                                           |
+| ---------------- | ------------------------------- | ------------- | --------------------------------------------------------------- |
+| `list.length`    | `{ list: T[] }`                 | `integer`     | Returns the length of the list.                                 |
+| `list.elementAt` | `{ list: T[], index: integer }` | `T`           | Returns the element at the given index. Fails if out of bounds. |
+| `list.append`    | `{ list: T[], item: T }`        | `T[]`         | Returns a new array with item appended.                         |
 
 `list.append` is used by the `filter` built-in's IR lowering. Inside
 the loop body, a branch node checks the predicate result: the true
-branch calls `list.append` to add the element to the output array;
+branch calls `list.append` to add the item to the output array;
 the false branch skips. The accumulator is carried via `iterateState`
 on the enclosing loop node.
 

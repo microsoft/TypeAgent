@@ -2642,6 +2642,83 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(true);
         });
 
+        it("accepts exhaustive branch with literal string selector (no default)", () => {
+            // Selector is a string literal "yes" — resolveTemplateType must
+            // return { type: "string", const: "yes" } so isProvablyNarrowedTo
+            // can confirm the single-element enum is covered.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string", enum: ["yes", "no"] },
+                        cases: { yes: "end", no: "end" },
+                        // no default — exhaustiveness must be inferred
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts exhaustive branch with literal number selector (no default)", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: 42,
+                        selectorSchema: {
+                            type: "integer",
+                            enum: [42, 99],
+                        },
+                        cases: { 42: "end", 99: "end" },
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts exhaustive branch with literal boolean selector (no default)", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: "end", false: "end" },
+                        // no default — boolean is implicitly [true, false]
+                    } as any,
+                    end: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(true);
+        });
+
         it("rejects workflow output type incompatible with outputSchema", () => {
             const ir = makeMinimalIR({
                 nodes: {
