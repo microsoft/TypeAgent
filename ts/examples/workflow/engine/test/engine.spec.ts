@@ -4808,7 +4808,7 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(true);
             const errorObj = (result.output as any).error;
             expect(errorObj).toBeDefined();
-            expect(errorObj.code).toBe("TaskError");
+            expect(errorObj.kind).toBe("TaskError");
             expect(errorObj.message).toBe("broken");
             expect(errorObj.source).toBe("task");
             expect(errorObj.task).toBe("test.fail");
@@ -4885,7 +4885,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             const errorObj = (result.output as any).error;
-            expect(errorObj.code).toBe("RuntimeError");
+            expect(errorObj.kind).toBe("RuntimeError");
             expect(errorObj.message).toBe("unexpected crash");
             expect(errorObj.source).toBe("runtime");
         });

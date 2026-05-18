@@ -187,7 +187,7 @@ function resolveFromRef(
  *   BranchSelectorUnmatched, unknown namespace, invalid IR structure).
  *   These bypass onError handlers.
  */
-type EngineErrorCode =
+type EngineErrorKind =
     | "TaskError"
     | "RuntimeError"
     | "LoopMaxIterationsExceeded"
@@ -195,18 +195,18 @@ type EngineErrorCode =
     | "UnrecoverableError";
 
 class EngineError extends Error {
-    readonly code: EngineErrorCode;
+    readonly kind: EngineErrorKind;
     /** When true, this error bypasses onError handlers. */
     readonly unrecoverable: boolean;
 
     constructor(
         message: string,
-        code: EngineErrorCode = "RuntimeError",
+        kind: EngineErrorKind = "RuntimeError",
         unrecoverable = false,
     ) {
         super(message);
         this.name = "EngineError";
-        this.code = code;
+        this.kind = kind;
         this.unrecoverable = unrecoverable;
     }
 }
@@ -1455,7 +1455,7 @@ function buildErrorObject(
 ): Record<string, unknown> {
     if (err instanceof TaskFailure) {
         return {
-            code: "TaskError",
+            kind: "TaskError",
             message: err.taskError.message,
             source: "task",
             task: err.taskName,
@@ -1465,7 +1465,7 @@ function buildErrorObject(
         };
     }
     return {
-        code: err instanceof EngineError ? err.code : "RuntimeError",
+        kind: err instanceof EngineError ? err.kind : "RuntimeError",
         message: err instanceof Error ? err.message : String(err),
         source: "runtime",
         task: taskName,

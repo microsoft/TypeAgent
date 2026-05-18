@@ -1132,7 +1132,7 @@ is a JSON object with this fixed schema, available as the built-in
 
 ```jsonc
 {
-  "code":      "<string>",        // machine-readable error code
+  "kind":      "<string>",        // machine-readable error kind
   "message":   "<string>",        // human-readable summary
   "source":    "task" | "runtime", // where the failure originated
   "task":      "<string>",        // task type id from the failing node, optional
@@ -1150,17 +1150,17 @@ declare it. (Codegen cannot reasonably synthesize this shape from a
 workflow's own type catalog; making it built-in lets every recovery
 node opt into the canonical envelope by reference.)
 
-Required fields: `code`, `message`, `source`. The remaining fields are
+Required fields: `kind`, `message`, `source`. The remaining fields are
 optional and may be absent. An engine MAY include additional fields
 beyond those listed; consumers MUST treat unknown fields as opaque.
 
-**`source` and `code` discriminate the failure origin.**
+**`source` and `kind` discriminate the failure origin.**
 
 - `"task"` — the registered task implementation returned `{ kind: "fail" }`
-  or threw. `code` is `"TaskError"`. `task` and `node` SHOULD be
+  or threw. `kind` is `"TaskError"`. `task` and `node` SHOULD be
   populated; `data` carries any additional payload the task returned.
 - `"runtime"` — the engine raised a **recoverable** runtime condition.
-  `code` further discriminates the case:
+  `kind` further discriminates the case:
   - `"RuntimeError"` — general engine failure (task timeout, policy
     denial, cancellation, etc.).
   - `"LoopMaxIterationsExceeded"` — the loop hit its `maxIterations`
@@ -1169,7 +1169,7 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
     its declared `outputSchema`. This indicates a buggy or drifted task
     implementation; authors may want to log or fall back.
   All `"runtime"` errors are routed to `onError` handlers.
-- `"runtime"` with `code: "UnrecoverableError"` — the engine raised a
+- `"runtime"` with `kind: "UnrecoverableError"` — the engine raised a
   condition that is **statically unreachable** after validation
   (e.g., `ReferenceUnresolved`, `BranchSelectorUnmatched`, unknown `$from`
   namespace, missing node). These indicate the IR bypassed the static
@@ -1178,8 +1178,8 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
   write workflows that depend on catching these; they should instead
   ensure the IR passes static validation.
 
-An engine MAY use additional `code` values for finer-grained
-discrimination; consumers MUST treat unknown `code` values as opaque
+An engine MAY use additional `kind` values for finer-grained
+discrimination; consumers MUST treat unknown `kind` values as opaque
 and fall back to inspecting `source`.
 
 A recovery task that wants to be type-strict about the error it
@@ -1188,7 +1188,7 @@ consumes can narrow the schema for its `error` input field below
 a known task failure). One that only needs the message can declare just
 `{ "message": { "type": "string" } }` and rely on structural subtyping
 (§4.2). Path projection (§3.4.1) on the `error` input works the same
-as on any other input field, so a recovery can read just `error.code`
+as on any other input field, so a recovery can read just `error.kind`
 or `error.data.foo` without binding the whole object.
 
 The `trigger` field's schema mirrors the trigger T's `inputs` map: an
@@ -1198,7 +1198,7 @@ recovery node restates it (or a narrowing of it) the same way it
 restates `Error`, for IR self-containment.
 
 The shape is fixed in v1 to keep recoveries writable without needing to
-look up the failing task. Per-task or per-error-code typed payloads
+look up the failing task. Per-task or per-error-kind typed payloads
 belong in `data` and are out-of-band of v1's contract: a recovery that
 cares unpacks `data` with a runtime check, exactly as it would for any
 open-world JSON. A future error-taxonomy mechanism could lift `data`
