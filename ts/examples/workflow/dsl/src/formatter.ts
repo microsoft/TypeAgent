@@ -368,9 +368,7 @@ class Printer {
         }
 
         const useMultiLine =
-            forcedMultiLine ||
-            (!!decl.paramListMultiLine && !inlineFits) ||
-            !inlineFits;
+            forcedMultiLine || decl.paramListMultiLine === true || !inlineFits;
 
         if (!useMultiLine) {
             params.forEach((p, i) => {
@@ -487,7 +485,7 @@ class Printer {
             inlineFits = projected <= this.opts.printWidth;
         }
         const useMultiLine =
-            forcedMultiLine || (!!t.multiLine && !inlineFits) || !inlineFits;
+            forcedMultiLine || t.multiLine === true || !inlineFits;
         if (!useMultiLine) {
             this.writeObjectTypeInline(t);
             return;

@@ -253,12 +253,12 @@ export class Parser {
             this.parseParamList();
         const rparen = this.expect(TokenKind.RParen);
         const paramListMultiLine =
-            rparen.line !== lparen.line ||
+            (params.length > 0 && params[0].loc.line !== lparen.line) ||
             params.some(
                 (p, i) =>
-                    p.loc.line !== lparen.line ||
-                    (i > 0 && p.loc.line !== params[i - 1].loc.line),
-            );
+                    i > 0 && p.loc.line !== params[i - 1].loc.line,
+            ) ||
+            (params.length === 0 && rparen.line !== lparen.line);
         this.expect(TokenKind.Colon);
         const returnType = this.parseTypeExpr();
         this.expect(TokenKind.LBrace);
@@ -439,12 +439,12 @@ export class Parser {
         }
         const rbrace = this.expect(TokenKind.RBrace);
         const multiLine =
-            rbrace.line !== lbrace.line ||
+            (fields.length > 0 && fields[0].loc.line !== lbrace.line) ||
             fields.some(
                 (f, i) =>
-                    f.loc.line !== lbrace.line ||
-                    (i > 0 && f.loc.line !== fields[i - 1].loc.line),
-            );
+                    i > 0 && f.loc.line !== fields[i - 1].loc.line,
+            ) ||
+            (fields.length === 0 && rbrace.line !== lbrace.line);
         const t: import("./ast.js").ObjectType = {
             kind: "ObjectType",
             fields,
