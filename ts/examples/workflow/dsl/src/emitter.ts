@@ -1246,7 +1246,7 @@ export class Emitter {
         let onError: string | undefined;
         if (expr.fallback) {
             const fbScope = this.childScope(scope);
-            fbScope.bindings.set(expr.fallback.param, {
+            fbScope.bindings.set(expr.fallback.param ?? "err", {
                 kind: "loopInput",
                 nodeId: "error",
             });

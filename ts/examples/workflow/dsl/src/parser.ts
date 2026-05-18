@@ -276,6 +276,10 @@ export class Parser {
         const { stmts: body, innerComments } =
             this.parseStatementsCapturingInner();
         this.expect(TokenKind.RBrace);
+        // Capture any comments that appear AFTER the closing `}` (and
+        // before EOF). They have no statement to attach to, so they go
+        // on the workflow's trailingComments.
+        const trailingComments = this.takeLeadingComments();
         const decl: WorkflowDecl = {
             kind: "WorkflowDecl",
             name,
@@ -288,6 +292,7 @@ export class Parser {
         if (innerComments) decl.innerComments = innerComments;
         if (paramInnerComments) decl.paramInnerComments = paramInnerComments;
         if (paramListMultiLine) decl.paramListMultiLine = true;
+        if (trailingComments) decl.trailingComments = trailingComments;
         return decl;
     }
 
@@ -1222,7 +1227,7 @@ export class Parser {
 
         let fallback:
             | {
-                  param: string;
+                  param: string | undefined;
                   body: Statement[];
                   bodyInnerComments?: Comment[];
               }
@@ -1233,7 +1238,7 @@ export class Parser {
                 const fbArrow = this.parseArrowArg();
                 const fbParams = this.extractArrowParams(fbArrow);
                 fallback = {
-                    param: fbParams[0] ?? "err",
+                    param: fbParams[0],
                     body: this.extractArrowBody(fbArrow),
                 };
                 const fbInner = this.extractArrowBodyInner(fbArrow);

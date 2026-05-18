@@ -472,3 +472,34 @@ Test count: 422 → 456 (+34).
 22. `???` — G8: add `contentFidelity.spec.ts` (data + strict-token +
     pinned-canonicalization layers); document two newly-discovered
     fidelity gaps as `test.failing` pins.
+23. `a04cba49` — G8: contentFidelity oracle (data multiset + strict
+    token stream + pinned canonicalizations) and gap pinning.
+24. `99127d35` — G8: `parseSingle` errors on tokens past the
+    workflow's closing `}` (stray-content fidelity); fix
+    `examples/d1-standup-prep.wf` stray `}`; tests cover the
+    error path plus tolerance for trailing whitespace/comments.
+
+## Round 4, pass 3 — closing the last two pinned fidelity gaps
+
+Both gaps that the contentFidelity oracle pinned are now closed:
+
+- **EOF comments**: `WorkflowDecl.trailingComments?: Comment[]`.
+  Drained in `parseWorkflow` right after the closing `}`, emitted
+  by `printWorkflow` on their own lines after the brace. Works for
+  both `//` and `/* … */` styles. (Decision §20.)
+- **`attempts` fallback param**: `AttemptsNode.fallback.param` is
+  now `string | undefined`. The parser records absence; the
+  formatter emits `() =>` when absent and `(name) =>` when
+  present. Emitter and typeChecker fall back to `"err"` only for
+  binding/scope purposes (not for syntax round-trip). (Decision
+  §21.)
+
+`contentFidelity.spec.ts` now has positive round-trip tests under
+"previously-pinned fidelity gaps (now closed)" — including a fourth
+test for the block-comment EOF variant.
+
+Test count: 459 → 461 (+2).
+
+25. `???` — G8: close the EOF-comment and attempts-fallback-param
+    fidelity gaps; positive round-trip tests; spec §6 +
+    implementation-decision §20/§21.

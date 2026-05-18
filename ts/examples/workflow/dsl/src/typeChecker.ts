@@ -574,7 +574,7 @@ export class TypeChecker {
                 );
                 if (e.fallback) {
                     const fbScope = scope.child();
-                    fbScope.set(e.fallback.param, UNKNOWN);
+                    fbScope.set(e.fallback.param ?? "err", UNKNOWN);
                     this.checkStatements(e.fallback.body, fbScope);
                 }
                 return bodyReturnType;

@@ -246,25 +246,21 @@ Two new fidelity gaps were discovered during the build-out of this
 oracle and are pinned in `contentFidelity.spec.ts` with
 `test.failing` so they fail loudly the moment they're fixed:
 
-### End-of-file comment after the workflow's closing `}` is dropped
+### ~~End-of-file comment after the workflow's closing `}` is dropped~~ (closed)
 
-`parseSingle()` stops at the workflow boundary, so a `// trailing`
-comment that sits AFTER the workflow's outer `}` is not attached to
-any AST node and is silently dropped on emit. Closing this gap
-would require either an explicit "trailing trivia" slot on
-`WorkflowDecl` (or on the parse result) plus an emitter pass that
-prints it after the closing `}`. Pinned: `contentFidelity.spec.ts
-> "end-of-file comment after the workflow's closing \`}\` survives"`.
+`WorkflowDecl.trailingComments?: Comment[]` was added. `parseWorkflow`
+drains pending comments immediately after `}` into that slot, and
+`printWorkflow` emits them on their own lines after the closing brace.
+The pinning test in `contentFidelity.spec.ts` is now a positive
+round-trip test under `"previously-pinned fidelity gaps (now
+closed)"`. See decision §20.
 
-### `attempts(...)` fallback parameter name `() => ...` is canonicalised to `(err) => ...`
+### ~~`attempts(...)` fallback parameter name `() => ...` is canonicalised to `(err) => ...`~~ (closed)
 
-The parser stores `fallback.param = fbParams[0] ?? "err"`, so a
-source that omits the fallback's parameter name (`() => { ... }`)
-becomes `(err) => { ... }` on emit. This adds an Identifier token
-that wasn't in the source. Closing this gap requires the parser to
-record absence (e.g. `fallback.param: string | undefined`) and the
-formatter to emit `() =>` when the param is undefined. Pinned:
-`contentFidelity.spec.ts > "attempts fallback parameter name elided in source is not re-introduced"`.
+`AttemptsNode.fallback.param` is now `string | undefined` and the
+parser records absence rather than substituting `"err"`. The formatter
+emits `(${param ?? ""}) =>`, preserving `() =>` when the source
+omitted the name. See decision §21.
 
 ### ~~Stray content beyond the parsed workflow (e.g. extra `}` at EOF) is dropped~~ (closed)
 

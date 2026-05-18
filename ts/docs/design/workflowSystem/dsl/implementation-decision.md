@@ -452,3 +452,42 @@ semantically-stable slot independent of the arm's body length.
 The empty-arm case still routes comments to that arm's
 `innerComments` (no other slot makes sense when the body is
 empty).
+
+## 20. `WorkflowDecl.trailingComments` for EOF comments
+
+Comments that appear AFTER the workflow's closing `}` (between the
+brace and EOF) have no statement or expression to attach to. The
+obvious "comments live on the nearest AST node" rule has no node to
+land on once parsing is done.
+
+We add an explicit `trailingComments?: Comment[]` slot on
+`WorkflowDecl`. `parseWorkflow` drains pending comments immediately
+after consuming the closing `}` (via the existing
+`takeLeadingComments()` helper — name kept for symmetry; the
+comments happen to be "leading" with respect to a non-existent next
+token). The formatter's `printWorkflow` emits them on their own
+lines after the closing brace, preserving the original ordering.
+
+Alternative considered: a top-level `ParseResult.trailingComments`
+array. Rejected because it would require formatter consumers to
+plumb an extra value through, whereas a slot on the declaration
+keeps `format(decl, options)` the single entry point.
+
+## 21. `attempts.fallback.param` is `string | undefined`, not defaulted to `"err"`
+
+The content-fidelity oracle exposed that source code like
+`attempts(2, () => svc.go(), () => svc.fb())` round-tripped to
+`attempts(2, () => { ... }, (err) => { ... })` — introducing an
+Identifier token (`err`) that was never in the source.
+
+We change `AttemptsNode.fallback.param` from `string` to
+`string | undefined`. The parser records absence by leaving `param`
+unset rather than substituting `"err"`. The formatter emits
+`(${param ?? ""}) =>`, which prints `() =>` for the absent case
+and `(name) =>` when the source provided one. Downstream consumers
+(emitter, typeChecker) treat the absent case as `"err"` for
+binding/scope purposes — that's an emit-time choice, not a syntax
+one, so it doesn't leak back through the round-trip.
+
+This is the model we'd extend to any other built-in whose
+callback's parameter list is optional.

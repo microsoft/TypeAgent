@@ -53,6 +53,12 @@ export interface WorkflowDecl {
      * single-line projection fits within `FormatOptions.printWidth`.
      */
     paramListMultiLine?: boolean;
+    /**
+     * Comments that appear AFTER the workflow's closing `}` (between
+     * the closing brace and EOF). The formatter emits these on their
+     * own lines after the closing brace.
+     */
+    trailingComments?: Comment[];
 }
 
 export interface ParamDecl {
@@ -393,7 +399,12 @@ export interface AttemptsNode {
     count: Expr;
     body: Statement[];
     fallback?: {
-        param: string;
+        /**
+         * Parameter name for the fallback callback, or `undefined` if
+         * the source omitted the parameter (`() => { ... }`). Preserving
+         * absence-vs-presence is necessary for content fidelity.
+         */
+        param: string | undefined;
         body: Statement[];
         /** Comments inside an empty fallback body. */
         bodyInnerComments?: Comment[];

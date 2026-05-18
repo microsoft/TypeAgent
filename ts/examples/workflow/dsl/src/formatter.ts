@@ -321,6 +321,17 @@ class Printer {
             this.printOwnLineComments(decl.innerComments);
         });
         this.line("}");
+        // Trailing comments after the closing `}` (between `}` and EOF).
+        if (decl.trailingComments && decl.trailingComments.length > 0) {
+            for (const c of decl.trailingComments) {
+                if (c.text.startsWith("//")) {
+                    this.line(c.text);
+                } else {
+                    // block comment may be multi-line; preserve its text.
+                    this.line(c.text);
+                }
+            }
+        }
     }
 
     /**
@@ -855,7 +866,8 @@ class Printer {
         this.write(", () => ");
         this.printBlockBody(e.body, e.bodyInnerComments);
         if (e.fallback) {
-            this.write(`, (${e.fallback.param}) => `);
+            const fbParam = e.fallback.param ?? "";
+            this.write(`, (${fbParam}) => `);
             this.printBlockBody(e.fallback.body, e.fallback.bodyInnerComments);
         }
         this.write(")");

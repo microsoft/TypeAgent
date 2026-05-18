@@ -505,31 +505,20 @@ describe("documented canonicalizations: expression-bodied arrow → block-bodied
 });
 
 // ---------------------------------------------------------------------------
-// 6. Known fidelity gaps — pinned with `.failing` so they fail loudly if
-//    they ever start passing (which is good — drop the pin and close the
-//    gap). Tracked in g8-test-gaps-unaddressed.md.
+// 6. Previously-pinned gaps — now closed. Kept as positive round-trip
+//    tests to prevent regression.
 // ---------------------------------------------------------------------------
 
-describe("known fidelity gaps (pinned with `.failing`)", () => {
-    // Gap: end-of-file comments after the workflow's closing `}` are not
-    // captured by the parser (parseSingle stops at the workflow boundary
-    // and the comment-attachment loop has no slot for "after the AST").
-    test.failing(
-        "end-of-file comment after the workflow's closing `}` survives",
-        () => {
-            const src = `workflow w(): number {\n    return 1;\n}\n// trailing-of-file\n`;
-            assertDataFidelity(src, "eof-comment");
-        },
-    );
+describe("previously-pinned fidelity gaps (now closed)", () => {
+    test("end-of-file comment after the workflow's closing `}` survives", () => {
+        const src = `workflow w(): number {\n    return 1;\n}\n// trailing-of-file\n`;
+        assertDataFidelity(src, "eof-comment");
+        const out = parseAndFormat(src);
+        expect(out).toContain("// trailing-of-file");
+    });
 
-    // Gap: `attempts(...)`'s fallback callback's parameter name defaults
-    // to `err` in the AST when the source omits it (`() => ...`). The
-    // formatter then prints `(err) => ...` regardless of whether the
-    // source originally had the param.
-    test.failing(
-        "attempts fallback parameter name elided in source is not re-introduced",
-        () => {
-            const src = `workflow w(): number {
+    test("attempts fallback parameter name elided in source is not re-introduced", () => {
+        const src = `workflow w(): number {
     const a = attempts(2, () => {
         return svc.go();
     }, () => {
@@ -538,9 +527,33 @@ describe("known fidelity gaps (pinned with `.failing`)", () => {
     return a;
 }
 `;
-            assertDataFidelity(src, "attempts-fallback-noparam");
-        },
-    );
+        assertDataFidelity(src, "attempts-fallback-noparam");
+        const out = parseAndFormat(src);
+        // Fallback emitted as `() =>`, not `(err) =>`.
+        expect(out).toMatch(/\}, \(\) => \{/);
+    });
+
+    test("attempts fallback parameter name present in source is preserved", () => {
+        const src = `workflow w(): number {
+    const a = attempts(2, () => {
+        return svc.go();
+    }, (myErr) => {
+        return svc.fb();
+    });
+    return a;
+}
+`;
+        assertDataFidelity(src, "attempts-fallback-myErr");
+        const out = parseAndFormat(src);
+        expect(out).toMatch(/\(myErr\) => \{/);
+    });
+
+    test("end-of-file block comment also survives", () => {
+        const src = `workflow w(): number {\n    return 1;\n}\n/* end of file */\n`;
+        assertDataFidelity(src, "eof-block-comment");
+        const out = parseAndFormat(src);
+        expect(out).toContain("/* end of file */");
+    });
 });
 
 describe("documented canonicalizations: trailing comma on multi-line lists", () => {

@@ -937,6 +937,9 @@ where they are anchored:
     `MapNode.bodyInnerComments`, `FilterNode.bodyInnerComments`,
     `ParallelMapNode.bodyInnerComments`, and
     `ParallelNode.bodies[i].bodyInnerComments`.
+  - `WorkflowDecl.trailingComments` — comments that appear AFTER the
+    workflow's closing `}` (between the brace and EOF). No statement
+    can carry them, so they hang off the declaration itself.
 
 Each comment is a `Comment { text, pos }` where `text` includes the
 delimiters (`//…` or `/* … */`). Statements and `ParamDecl` carry an
