@@ -408,8 +408,10 @@ describe("Emitter", () => {
         expect(branchNode.cases).toHaveProperty("true");
         expect(branchNode.cases).toHaveProperty("false");
         // Boolean if-else is exhaustive: no default needed.
+        // { type: "boolean" } is treated as implicit enum [true, false].
         expect(branchNode.default).toBeUndefined();
-        expect(branchNode.selectorSchema.enum).toEqual([true, false]);
+        expect(branchNode.selectorSchema).toEqual({ type: "boolean" });
+        expect(branchNode.selectorSchema.enum).toBeUndefined();
     });
 
     // ---- Switch statement ----

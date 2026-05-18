@@ -1167,6 +1167,8 @@ export class WorkflowEngine {
         if (branchNames.length < 2) {
             throw new EngineError(
                 `Fork "${nodeId}" must have at least 2 branches, got ${branchNames.length}`,
+                "UnrecoverableError",
+                true,
             );
         }
 
@@ -1328,6 +1330,8 @@ export class WorkflowEngine {
             if (!Array.isArray(collection)) {
                 throw new EngineError(
                     `forkMap at "${nodeId}": collection did not resolve to an array`,
+                    "UnrecoverableError",
+                    true,
                 );
             }
 

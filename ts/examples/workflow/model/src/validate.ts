@@ -2161,7 +2161,13 @@ function validateTypeCompatibility(
             // Exhaustiveness: when `default` is omitted, the branch must
             // be statically provable to cover every possible selector value.
             if (node.default === undefined) {
-                const enumValues = node.selectorSchema.enum;
+                // { type: "boolean" } is treated as an implicit enum [true, false].
+                const isBooleanSelector =
+                    node.selectorSchema.type === "boolean" &&
+                    !node.selectorSchema.enum;
+                const enumValues = isBooleanSelector
+                    ? [true, false]
+                    : node.selectorSchema.enum;
                 if (!enumValues || enumValues.length === 0) {
                     errors.push({
                         path: `${path}.default`,

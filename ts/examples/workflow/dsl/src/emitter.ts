@@ -473,13 +473,12 @@ export class Emitter {
             this.patchBranchTail(elseScope, "else_", mergeId, scope);
         }
 
-        // Create branch and merge nodes.
-        // Boolean if-else is always exhaustive: both true and false have
-        // explicit targets (the omitted arm falls through to merge).
+        // Boolean if-else is always exhaustive: { type: "boolean" } is
+        // treated as an implicit enum [true, false] by the validator.
         const branchNode: BranchNode = {
             kind: "branch",
             selector: condTemplate,
-            selectorSchema: { type: "boolean", enum: [true, false] },
+            selectorSchema: { type: "boolean" },
             cases: {
                 true: thenEntry ? `then_${thenEntry}` : mergeId,
                 false: elseEntry ? `else_${elseEntry}` : mergeId,
