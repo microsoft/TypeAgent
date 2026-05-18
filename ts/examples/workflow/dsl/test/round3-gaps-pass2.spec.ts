@@ -96,8 +96,8 @@ describe("round 3 gaps pass 2: same-param leading + trailing both multi-line", (
 //    SwitchStatement.innerComments" change updates the test deliberately.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: empty switch with only inner comment (no slot)", () => {
-    test("comment is not dropped; migrates to the statement after switch", () => {
+describe("round 4: empty switch with only inner comment", () => {
+    test("comment now stays INSIDE the switch body via SwitchStatement.innerComments", () => {
         const src = `workflow w(x: number): string {
     switch (x) {
         /* nothing */
@@ -106,12 +106,12 @@ describe("round 3 gaps pass 2: empty switch with only inner comment (no slot)", 
 }`;
         const out = assertStable(src);
         expect(out).toContain("/* nothing */");
-        // Pin: the comment migrates OUT of the switch body to the
-        // following return statement (since SwitchStatement has no
-        // innerComments slot today).
         const commentIdx = out.indexOf("/* nothing */");
-        const closeBraceIdx = out.indexOf("}", out.indexOf("switch"));
-        expect(commentIdx).toBeGreaterThan(closeBraceIdx);
+        const switchIdx = out.indexOf("switch");
+        const closeBraceIdx = out.indexOf("}", switchIdx);
+        // Now: comment stays INSIDE the switch body (between `{` and `}`).
+        expect(commentIdx).toBeGreaterThan(switchIdx);
+        expect(commentIdx).toBeLessThan(closeBraceIdx);
     });
 });
 
@@ -121,8 +121,8 @@ describe("round 3 gaps pass 2: empty switch with only inner comment (no slot)", 
 //    a block-end trailing of the previous arm's last statement. Pin this.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: comment before a `case` keyword", () => {
-    test("attaches as trailing of previous arm's last statement (round-trip stable)", () => {
+describe("round 4: comment before a `case` keyword attaches to that arm", () => {
+    test("attaches as the next arm's leadingComments (round-trip stable)", () => {
         const src = `workflow w(x: number): string {
     switch (x) {
         case 1:
@@ -135,7 +135,6 @@ describe("round 3 gaps pass 2: comment before a `case` keyword", () => {
 }`;
         const out = assertStable(src);
         expect(out).toContain("// before case 2");
-        // Stable means the formatter's chosen attachment point is fixed.
         const cIdx = out.indexOf("// before case 2");
         const case2Idx = out.indexOf("case 2");
         const returnAIdx = out.indexOf('return "a"');

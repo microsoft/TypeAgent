@@ -248,10 +248,17 @@ export class Parser {
         }
         this.advance();
         const name = this.expect(TokenKind.Identifier).value;
-        this.expect(TokenKind.LParen);
+        const lparen = this.expect(TokenKind.LParen);
         const { params, innerComments: paramInnerComments } =
             this.parseParamList();
-        this.expect(TokenKind.RParen);
+        const rparen = this.expect(TokenKind.RParen);
+        const paramListMultiLine =
+            rparen.line !== lparen.line ||
+            params.some(
+                (p, i) =>
+                    p.loc.line !== lparen.line ||
+                    (i > 0 && p.loc.line !== params[i - 1].loc.line),
+            );
         this.expect(TokenKind.Colon);
         const returnType = this.parseTypeExpr();
         this.expect(TokenKind.LBrace);
@@ -269,6 +276,7 @@ export class Parser {
         if (leadingComments) decl.leadingComments = leadingComments;
         if (innerComments) decl.innerComments = innerComments;
         if (paramInnerComments) decl.paramInnerComments = paramInnerComments;
+        if (paramListMultiLine) decl.paramListMultiLine = true;
         return decl;
     }
 
@@ -362,17 +370,22 @@ export class Parser {
 
     private parseObjectType(): TypeExpr {
         const l = this.loc();
-        this.expect(TokenKind.LBrace);
-        const fields: {
-            name: string;
-            type: TypeExpr;
-            optional: boolean;
-            loc: SourceLocation;
-        }[] = [];
+        const lbrace = this.expect(TokenKind.LBrace);
+        const fields: import("./ast.js").ObjectTypeField[] = [];
+        let innerComments: Comment[] | undefined;
         while (
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
+            const leading = this.takeLeadingComments();
+            if (this.peek().kind === TokenKind.RBrace) {
+                // Comments were the last things before `}`: empty-body
+                // case → record as innerComments.
+                if (leading) {
+                    innerComments = [...(innerComments ?? []), ...leading];
+                }
+                break;
+            }
             const fl = this.loc();
             const fname = this.expect(TokenKind.Identifier).value;
             let optional = false;
@@ -382,13 +395,64 @@ export class Parser {
             }
             this.expect(TokenKind.Colon);
             const ftype = this.parseTypeExpr();
-            fields.push({ name: fname, type: ftype, optional, loc: fl });
+            const field: import("./ast.js").ObjectTypeField = {
+                name: fname,
+                type: ftype,
+                optional,
+                loc: fl,
+            };
+            if (leading) field.leadingComments = leading;
+            if (this.lastToken) field.endLine = this.lastToken.line;
+            // Inline trailing on this field (before the comma).
+            if (field.endLine !== undefined) {
+                const t = this.takeInlineTrailingComments(field.endLine);
+                if (t) field.trailingComments = t;
+            }
             if (this.peek().kind === TokenKind.Comma) {
                 this.advance();
+                // Also scoop same-line comments AFTER the comma.
+                if (field.endLine !== undefined) {
+                    const t = this.takeInlineTrailingComments(field.endLine);
+                    if (t) {
+                        field.trailingComments = [
+                            ...(field.trailingComments ?? []),
+                            ...t,
+                        ];
+                    }
+                }
+            }
+            fields.push(field);
+        }
+        // Drain any remaining comments before `}` and attach them as the
+        // trailing of the last field (if any) or as innerComments otherwise.
+        const remaining = this.takeLeadingComments();
+        if (remaining) {
+            if (fields.length > 0) {
+                const last = fields[fields.length - 1];
+                last.trailingComments = [
+                    ...(last.trailingComments ?? []),
+                    ...remaining,
+                ];
+            } else {
+                innerComments = [...(innerComments ?? []), ...remaining];
             }
         }
-        this.expect(TokenKind.RBrace);
-        return { kind: "ObjectType", fields, loc: l };
+        const rbrace = this.expect(TokenKind.RBrace);
+        const multiLine =
+            rbrace.line !== lbrace.line ||
+            fields.some(
+                (f, i) =>
+                    f.loc.line !== lbrace.line ||
+                    (i > 0 && f.loc.line !== fields[i - 1].loc.line),
+            );
+        const t: import("./ast.js").ObjectType = {
+            kind: "ObjectType",
+            fields,
+            loc: l,
+        };
+        if (multiLine) t.multiLine = true;
+        if (innerComments) t.innerComments = innerComments;
+        return t;
     }
 
     // ---- Statements ----
@@ -516,10 +580,11 @@ export class Parser {
         this.expect(TokenKind.LBrace);
         const { stmts: then, innerComments: thenInner } =
             this.parseStatementsCapturingInner();
-        this.expect(TokenKind.RBrace);
+        const thenRBrace = this.expect(TokenKind.RBrace);
         let else_: Statement[] | undefined;
         let elseInner: Comment[] | undefined;
         let elseLeading: Comment[] | undefined;
+        let elseOnNewLine: boolean | undefined;
         // Capture any comments that appear between the `}` of the then
         // block and the `else` keyword. We have to peek through comments
         // first to know whether an `else` is actually present; if not,
@@ -529,7 +594,9 @@ export class Parser {
         const beforeElse = this.takeLeadingComments();
         if (this.peek().kind === TokenKind.Else) {
             if (beforeElse) elseLeading = beforeElse;
-            this.advance();
+            const elseTok = this.advance();
+            // Track original layout: was `else` on the same line as `}`?
+            if (elseTok.line !== thenRBrace.line) elseOnNewLine = true;
             if (this.peek().kind === TokenKind.If) {
                 // else if: wrap in single-element array
                 const elseIf = this.parseIfStmt();
@@ -558,6 +625,7 @@ export class Parser {
         if (thenInner) result.thenInnerComments = thenInner;
         if (elseInner) result.elseInnerComments = elseInner;
         if (elseLeading) result.elseLeadingComments = elseLeading;
+        if (elseOnNewLine) result.elseOnNewLine = true;
         return result;
     }
 
@@ -573,36 +641,87 @@ export class Parser {
         let default_: Statement[] | undefined;
         let defaultIndex: number | undefined;
         let defaultInnerComments: Comment[] | undefined;
+        let defaultLeadingComments: Comment[] | undefined;
+        let innerComments: Comment[] | undefined;
 
         while (
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
+            // Drain any comments that appear before the next `case`/`default`
+            // keyword. They attach as leadingComments on that arm.
+            const beforeKeyword = this.takeLeadingComments();
             if (this.peek().kind === TokenKind.Case) {
                 const armLoc = this.loc();
                 this.advance(); // case
                 const value = this.parsePrimaryExpr();
                 this.expect(TokenKind.Colon);
-                const { stmts: body, innerComments } =
+                const { stmts: body, innerComments: armInner } =
                     this.parseSwitchArmBody();
                 const arm: SwitchArm = { value, body, loc: armLoc };
-                if (innerComments) arm.innerComments = innerComments;
+                if (beforeKeyword) arm.leadingComments = beforeKeyword;
+                if (armInner) arm.innerComments = armInner;
                 arms.push(arm);
             } else if (this.peek().kind === TokenKind.Default) {
                 this.advance(); // default
                 this.expect(TokenKind.Colon);
+                if (beforeKeyword) defaultLeadingComments = beforeKeyword;
                 // Record the position relative to the case arms parsed so
                 // far so the formatter can reconstruct the original source
                 // order (fallthrough makes this semantically meaningful).
                 defaultIndex = arms.length;
-                const { stmts, innerComments } = this.parseSwitchArmBody();
+                const { stmts, innerComments: defInner } =
+                    this.parseSwitchArmBody();
                 default_ = stmts;
-                if (innerComments) defaultInnerComments = innerComments;
+                if (defInner) defaultInnerComments = defInner;
             } else {
+                // No arm to attach the comments to and no recognisable
+                // keyword — surface as switch-level innerComments. This
+                // also covers the fully empty `switch (x) { /* note */ }`
+                // case, where the while-loop body never enters the
+                // case/default branches.
+                if (beforeKeyword) {
+                    innerComments = [
+                        ...(innerComments ?? []),
+                        ...beforeKeyword,
+                    ];
+                }
                 this.error(
                     `Expected 'case' or 'default' in switch, got ${this.peek().kind}`,
                 );
                 this.advance();
+            }
+        }
+        // Capture any remaining comments before `}` that didn't get attached
+        // to an arm (empty switch body, or trailing comments after the last
+        // arm's body that finalizeBlock didn't already pick up).
+        const trailingBeforeRBrace = this.takeLeadingComments();
+        if (trailingBeforeRBrace) {
+            if (arms.length === 0 && default_ === undefined) {
+                innerComments = [
+                    ...(innerComments ?? []),
+                    ...trailingBeforeRBrace,
+                ];
+            } else {
+                // After the last arm, route to that arm's innerComments
+                // when its body is empty, otherwise into switch-level
+                // innerComments as a safety net.
+                const lastArm =
+                    default_ !== undefined &&
+                    (defaultIndex ?? arms.length) >= arms.length
+                        ? null
+                        : arms[arms.length - 1];
+                if (lastArm && lastArm.body.length === 0) {
+                    lastArm.innerComments = [
+                        ...(lastArm.innerComments ?? []),
+                        ...trailingBeforeRBrace,
+                    ];
+                } else {
+                    innerComments = [
+                        ...(innerComments ?? []),
+                        ...trailingBeforeRBrace,
+                    ];
+                }
             }
         }
 
@@ -622,6 +741,10 @@ export class Parser {
         if (defaultInnerComments) {
             result.defaultInnerComments = defaultInnerComments;
         }
+        if (defaultLeadingComments) {
+            result.defaultLeadingComments = defaultLeadingComments;
+        }
+        if (innerComments) result.innerComments = innerComments;
         return result;
     }
 
@@ -641,10 +764,37 @@ export class Parser {
             const s = this.parseStatement();
             if (s) stmts.push(s);
         }
-        // Drain comments before the next case/default/} so they get attached
-        // to the last statement of this arm (block-end trailing) or
-        // returned as innerComments when the arm is empty.
-        const innerComments = this.finalizeBlock(stmts);
+        // For switch arms we differ from generic finalizeBlock: only
+        // capture inline-trailing comments (same source line as the last
+        // statement's endLine) for the last stmt. Own-line comments that
+        // sit between the last stmt and the next `case`/`default`/`}`
+        // are LEFT for parseSwitchStmt's outer loop to take as the next
+        // arm's `leadingComments`. This is the convention used in TS/JS
+        // and what the user expects per the round-3-pass-2 invariant.
+        let innerComments: Comment[] | undefined;
+        if (stmts.length === 0) {
+            // Empty arm: capture EVERYTHING here so the comment lives
+            // on the arm itself (no other arm to attach to). But: only
+            // do so if the next token is the arm-terminating `}` of the
+            // switch body. If the next token is `case` or `default`,
+            // those comments belong as leadingComments of the NEXT arm,
+            // not as innerComments of the empty current arm.
+            const next = this.peek().kind;
+            if (next === TokenKind.RBrace || next === TokenKind.EOF) {
+                innerComments = this.takeLeadingComments();
+            }
+        } else {
+            const last = stmts[stmts.length - 1];
+            if (last.endLine !== undefined) {
+                const inline = this.takeInlineTrailingComments(last.endLine);
+                if (inline) {
+                    last.trailingComments = [
+                        ...(last.trailingComments ?? []),
+                        ...inline,
+                    ];
+                }
+            }
+        }
         this.inSwitchDepth--;
         return { stmts, innerComments };
     }

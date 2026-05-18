@@ -46,6 +46,13 @@ export interface WorkflowDecl {
      * as that param's `trailingComments`.
      */
     paramInnerComments?: Comment[];
+    /**
+     * True when the original source rendered the parameter list across
+     * multiple lines (e.g. `(`, params, `)` were not all on the same
+     * line). The formatter preserves this layout choice unless the
+     * single-line projection fits within `FormatOptions.printWidth`.
+     */
+    paramListMultiLine?: boolean;
 }
 
 export interface ParamDecl {
@@ -80,6 +87,13 @@ export interface ObjectType {
     kind: "ObjectType";
     fields: ObjectTypeField[];
     loc: SourceLocation;
+    /** True when the original source rendered the object type across
+     *  multiple lines. The formatter preserves this layout unless the
+     *  single-line projection fits within `FormatOptions.printWidth`. */
+    multiLine?: boolean;
+    /** Comments that appear inside an empty `{ }` object type with no
+     *  fields (no field has anywhere to host them). */
+    innerComments?: Comment[];
 }
 
 export interface ObjectTypeField {
@@ -87,6 +101,11 @@ export interface ObjectTypeField {
     type: TypeExpr;
     optional: boolean;
     loc: SourceLocation;
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    /** Line of the field's last token (after the type) — used by the
+     *  formatter to render inline vs. own-line trailing comments. */
+    endLine?: number;
 }
 
 // ---- Statements ----
@@ -147,6 +166,13 @@ export interface IfStatement {
      *  keyword (or before an `else if`). Preserved so source like
      *  `if (x) { ... } /* note *\/ else { ... }` round-trips faithfully. */
     elseLeadingComments?: Comment[];
+    /**
+     * True when the original source placed the `else` keyword on a
+     * different line than the closing `}` of the then block (or when
+     * `elseLeadingComments` contains a `//` line comment, which forces
+     * a break). The formatter preserves this layout choice.
+     */
+    elseOnNewLine?: boolean;
 }
 
 export interface SwitchStatement {
@@ -168,12 +194,21 @@ export interface SwitchStatement {
     endLine?: number;
     /** Comments inside an empty `default:` arm body. */
     defaultInnerComments?: Comment[];
+    /** Comments that appear inside the switch body before any case/default
+     *  (i.e. the switch body is fully empty or comments precede the first
+     *  arm). Without this slot they would migrate to the next statement's
+     *  leadingComments and lose attachment to the switch. */
+    innerComments?: Comment[];
+    /** Comments that appear immediately before the `default` keyword. */
+    defaultLeadingComments?: Comment[];
 }
 
 export interface SwitchArm {
     value: Expr;
     body: Statement[];
     loc: SourceLocation;
+    /** Comments that appear immediately before the `case` keyword. */
+    leadingComments?: Comment[];
     /** Comments inside an empty `case X:` arm body. */
     innerComments?: Comment[];
 }

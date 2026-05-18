@@ -131,12 +131,12 @@ describe("parser: trailing comments", () => {
         expect(s0.trailingComments![1].text).toBe("/* note two */");
     });
 
-    test("trailing comment in switch arm attaches to last stmt of arm, not next case", () => {
+    test("comment between two `case` arms attaches as the next arm's leading", () => {
         const wf = parse(`workflow w(x: number): string {
     switch (x) {
         case 1:
             return "a";
-        // tail of arm 1
+        // before case 2
         case 2:
             return "b";
     }
@@ -144,11 +144,13 @@ describe("parser: trailing comments", () => {
 }`);
         const sw = wf.body[0] as SwitchStatement;
         const arm1Last = sw.arms[0].body[0];
-        expect(arm1Last.trailingComments).toHaveLength(1);
-        expect(arm1Last.trailingComments![0].text).toBe("// tail of arm 1");
-        // case 2 (its first stmt) must NOT receive that comment.
-        const case2First = sw.arms[1].body[0];
-        expect(case2First.leadingComments).toBeUndefined();
+        // The comment is closer to `case 2` than to arm 1's body, so by
+        // round-3 round 4 convention it lives on arm 2's leadingComments
+        // (matching the TS convention and giving the comment a
+        // semantically-meaningful slot).
+        expect(arm1Last.trailingComments).toBeUndefined();
+        expect(sw.arms[1].leadingComments).toHaveLength(1);
+        expect(sw.arms[1].leadingComments![0].text).toBe("// before case 2");
     });
 
     test("inner comments on empty workflow body", () => {

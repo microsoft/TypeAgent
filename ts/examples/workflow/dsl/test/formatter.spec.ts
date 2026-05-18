@@ -101,9 +101,7 @@ describe("formatter: round-trip stability", () => {
 
     test("else-if chain", () => {
         const out = assertStable(`workflow w(a: number): string {
-            if (a === 1) { return "one"; }
-            else if (a === 2) { return "two"; }
-            else { return "other"; }
+            if (a === 1) { return "one"; } else if (a === 2) { return "two"; } else { return "other"; }
         }`);
         expect(out).toMatch(/} else if \(/);
     });

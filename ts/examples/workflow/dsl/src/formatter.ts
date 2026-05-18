@@ -43,11 +43,20 @@ export interface FormatOptions {
     indent?: number;
     /** Line ending. Default "\n". */
     eol?: string;
+    /** Soft column limit used by layout heuristics. When the AST does
+     *  not constrain a layout choice (e.g. no comments forcing a break
+     *  and the original source used inline), the formatter will use
+     *  inline iff the projected single-line width is <= printWidth.
+     *  Default 100. Set to Infinity to never wrap based on width.
+     *  Set to 0 to always wrap when an alternative multi-line layout
+     *  exists. */
+    printWidth?: number;
 }
 
 interface ResolvedOptions {
     indent: number;
     eol: string;
+    printWidth: number;
 }
 
 /** Format a single workflow declaration as DSL source text. */
@@ -55,6 +64,7 @@ export function format(decl: WorkflowDecl, options?: FormatOptions): string {
     const opts: ResolvedOptions = {
         indent: options?.indent ?? 4,
         eol: options?.eol ?? "\n",
+        printWidth: options?.printWidth ?? 100,
     };
     const p = new Printer(opts);
     p.printWorkflow(decl);
@@ -101,6 +111,58 @@ class Printer {
             return fn();
         } finally {
             this.depth--;
+        }
+    }
+
+    /**
+     * Return the current column position on the line being built (0-based).
+     * Walks the parts array backward to the last newline, summing lengths.
+     * If we're at line start, returns the implicit indent that the next
+     * `write` would produce.
+     */
+    private currentColumn(): number {
+        if (this.atLineStart) return this.depth * this.opts.indent;
+        let total = 0;
+        const eol = this.opts.eol;
+        for (let i = this.parts.length - 1; i >= 0; i--) {
+            const p = this.parts[i];
+            const idx = p.lastIndexOf(eol);
+            if (idx >= 0) {
+                total += p.length - idx - eol.length;
+                return total;
+            }
+            total += p.length;
+        }
+        return total;
+    }
+
+    /**
+     * Run `fn` against a temporary copy of the printer state and return
+     * the maximum line length of the produced text (relative to the
+     * column where `fn` was invoked). Caller's state is restored.
+     * Used by layout heuristics to decide between inline and multi-line
+     * renderings.
+     */
+    private measure(fn: () => void): number {
+        const savedParts = this.parts;
+        const savedDepth = this.depth;
+        const savedAtLineStart = this.atLineStart;
+        const startCol = this.currentColumn();
+        this.parts = [];
+        try {
+            fn();
+        } finally {
+            const out = this.parts.join("");
+            this.parts = savedParts;
+            this.depth = savedDepth;
+            this.atLineStart = savedAtLineStart;
+            const lines = out.split(this.opts.eol);
+            let max = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const len = (i === 0 ? startCol : 0) + lines[i].length;
+                if (len > max) max = len;
+            }
+            return max;
         }
     }
 
@@ -190,20 +252,33 @@ class Printer {
 
     /**
      * Emit comments that sit between the `}` of the then-branch and the
-     * `else` keyword. Block comments (slash-star ... star-slash) stay
-     * inline (one space before, one space after). Line comments
-     * (slash-slash) force a line break so `else` lands on its own line.
+     * `else` keyword, then either a separator space or a newline so the
+     * caller can write `"else "`.
      *
-     * Postcondition: cursor is positioned right before where `else` keyword
-     * (and trailing space) should be written. The caller writes `"else "`.
+     * Rules:
+     *   - If any captured comment is a `//` line comment, we MUST break
+     *     before `else` (line comments terminate at EOL by definition).
+     *   - Else if the caller's `forceNewLine` is true (set when the AST
+     *     records `elseOnNewLine` or the inline projection won't fit
+     *     printWidth), emit each block comment on its own line and
+     *     break before `else`.
+     *   - Else emit the block comments inline (` /* x *\/ ` style),
+     *     space-separated, and let `else` follow on the same line.
      */
-    private writeElseLeading(comments: Comment[] | undefined): void {
+    private writeElseLeading(
+        comments: Comment[] | undefined,
+        forceNewLine: boolean,
+    ): void {
         if (!comments || comments.length === 0) {
-            this.write(" ");
+            if (forceNewLine) {
+                this.newline();
+            } else {
+                this.write(" ");
+            }
             return;
         }
         const hasLineComment = comments.some((c) => c.text.startsWith("//"));
-        if (!hasLineComment) {
+        if (!hasLineComment && !forceNewLine) {
             for (const c of comments) {
                 this.write(" ");
                 if (c.text.includes("\n")) {
@@ -215,8 +290,8 @@ class Printer {
             this.write(" ");
             return;
         }
-        // Has at least one line comment: break before each, then drop
-        // `else` on a fresh line at the current indent.
+        // Break before each comment, then drop `else` on a fresh line
+        // at the current indent.
         for (const c of comments) {
             this.write(" ");
             if (c.text.includes("\n")) {
@@ -226,6 +301,9 @@ class Printer {
             }
             this.newline();
         }
+        // If there were no comments at all (handled above) we wouldn't
+        // reach here; if there were comments + forceNewLine but only
+        // block comments, the final newline above already positions us.
     }
 
     // ---- Workflow ----
@@ -233,7 +311,7 @@ class Printer {
     printWorkflow(decl: WorkflowDecl): void {
         this.printLeadingComments(decl.leadingComments);
         this.write(`workflow ${decl.name}(`);
-        this.printParamList(decl.params, decl.paramInnerComments);
+        this.printParamList(decl, decl.params, decl.paramInnerComments);
         this.write("): ");
         this.printType(decl.returnType);
         this.write(" {");
@@ -246,12 +324,20 @@ class Printer {
     }
 
     /**
-     * Print the parameter list. If any param has leading/trailing comments
-     * or there are paramInnerComments, format on multiple lines (one param
-     * per line, trailing comma) so the comments have somewhere to live.
-     * Otherwise, format inline.
+     * Print the parameter list. Layout rules (in priority order):
+     *   1. If any param has comments or `paramInnerComments` is set, must
+     *      be multi-line (the comments need linebreaks to live on).
+     *   2. Else if the AST records `paramListMultiLine` (the original
+     *      source used multi-line), preserve that layout — UNLESS the
+     *      projected single-line width comfortably fits in `printWidth`,
+     *      in which case collapse to inline. (We collapse only when the
+     *      single-line form is strictly shorter, to avoid oscillation.)
+     *   3. Else if the projected inline width exceeds `printWidth`,
+     *      switch to multi-line.
+     *   4. Otherwise, inline.
      */
     private printParamList(
+        decl: WorkflowDecl,
         params: ParamDecl[],
         paramInner: Comment[] | undefined,
     ): void {
@@ -261,7 +347,32 @@ class Printer {
                 (p.trailingComments && p.trailingComments.length > 0),
         );
         const hasInner = !!(paramInner && paramInner.length > 0);
-        if (!hasParamComments && !hasInner) {
+        const forcedMultiLine = hasParamComments || hasInner;
+
+        // Measure the inline-projected width if we might choose inline.
+        // The projection covers `p1: T, p2: T): RT {` (closing-paren
+        // through brace) so we accurately decide whether the full first
+        // line fits.
+        let inlineFits = true;
+        if (!forcedMultiLine) {
+            const projected = this.measure(() => {
+                params.forEach((p, i) => {
+                    if (i > 0) this.write(", ");
+                    this.printParam(p);
+                });
+                this.write("): ");
+                this.printType(decl.returnType);
+                this.write(" {");
+            });
+            inlineFits = projected <= this.opts.printWidth;
+        }
+
+        const useMultiLine =
+            forcedMultiLine ||
+            (!!decl.paramListMultiLine && !inlineFits) ||
+            !inlineFits;
+
+        if (!useMultiLine) {
             params.forEach((p, i) => {
                 if (i > 0) this.write(", ");
                 this.printParam(p);
@@ -270,7 +381,7 @@ class Printer {
         }
         this.newline();
         this.indent(() => {
-            params.forEach((p, i) => {
+            params.forEach((p) => {
                 this.printOwnLineComments(p.leadingComments);
                 this.printParam(p);
                 // Emit inline trailing comments AFTER the comma (and
@@ -348,18 +459,72 @@ class Printer {
                 this.write("[]");
                 return;
             case "ObjectType": {
-                this.write("{ ");
-                t.fields.forEach((f, i) => {
-                    if (i > 0) this.write(", ");
-                    this.write(f.name);
-                    if (f.optional) this.write("?");
-                    this.write(": ");
-                    this.printType(f.type);
-                });
-                this.write(" }");
+                this.printObjectType(t);
                 return;
             }
         }
+    }
+
+    /**
+     * Print an object type literal. Layout follows the same priority as
+     * param lists: comments force multi-line; otherwise preserve the
+     * source layout unless overflow forces a switch.
+     */
+    private printObjectType(t: import("./ast.js").ObjectType): void {
+        const hasFieldComments = t.fields.some(
+            (f) =>
+                (f.leadingComments && f.leadingComments.length > 0) ||
+                (f.trailingComments && f.trailingComments.length > 0),
+        );
+        const hasInner = !!(t.innerComments && t.innerComments.length > 0);
+        const forcedMultiLine = hasFieldComments || hasInner;
+
+        let inlineFits = true;
+        if (!forcedMultiLine) {
+            const projected = this.measure(() => {
+                this.writeObjectTypeInline(t);
+            });
+            inlineFits = projected <= this.opts.printWidth;
+        }
+        const useMultiLine =
+            forcedMultiLine || (!!t.multiLine && !inlineFits) || !inlineFits;
+        if (!useMultiLine) {
+            this.writeObjectTypeInline(t);
+            return;
+        }
+        this.write("{");
+        this.newline();
+        this.indent(() => {
+            t.fields.forEach((f) => {
+                this.printOwnLineComments(f.leadingComments);
+                this.write(f.name);
+                if (f.optional) this.write("?");
+                this.write(": ");
+                this.printType(f.type);
+                this.write(",");
+                this.emitInlineTrailing(f.trailingComments, f.endLine);
+                this.newline();
+                this.emitAfterLineTrailing(f.trailingComments, f.endLine);
+            });
+            this.printOwnLineComments(t.innerComments);
+        });
+        this.write("}");
+    }
+
+    private writeObjectTypeInline(t: import("./ast.js").ObjectType): void {
+        if (t.fields.length === 0) {
+            this.write("{}");
+            return;
+        }
+        this.write("{ ");
+        t.fields.forEach((f, i) => {
+            if (i > 0) this.write(", ");
+            this.write(f.name);
+            if (f.optional) this.write("?");
+            this.write(": ");
+            this.printType(f.type);
+        });
+        this.write(" }");
     }
 
     // ---- Statements ----
@@ -408,7 +573,35 @@ class Printer {
                 });
                 this.write("}");
                 if (s.else_) {
-                    this.writeElseLeading(s.elseLeadingComments);
+                    // Decide whether `else` goes on the same line as `}`
+                    // (inline) or on a new line. The AST flag preserves
+                    // source layout; we also force a new line if the
+                    // projected `} else { ... ` would not fit the width
+                    // budget. Block-only comments may still render inline
+                    // even when the flag is set, IF the projected width
+                    // fits — keeps idiomatic `} /* x */ else` for short
+                    // comments.
+                    const hasLineComment = !!s.elseLeadingComments?.some(
+                        (c) => c.text.startsWith("//"),
+                    );
+                    let forceNewLine =
+                        hasLineComment || s.elseOnNewLine === true;
+                    // Width override: if the inline projection (current
+                    // column through `else {`) would exceed printWidth,
+                    // break.
+                    if (!forceNewLine) {
+                        const projected = this.measure(() => {
+                            this.writeElseLeading(
+                                s.elseLeadingComments,
+                                false,
+                            );
+                            this.write("else {");
+                        });
+                        if (projected > this.opts.printWidth) {
+                            forceNewLine = true;
+                        }
+                    }
+                    this.writeElseLeading(s.elseLeadingComments, forceNewLine);
                     // else-if chain
                     if (
                         s.else_.length === 1 &&
@@ -445,8 +638,12 @@ class Printer {
                           ? s.defaultIndex
                           : s.arms.length;
                 this.indent(() => {
+                    // Comments that appeared before the first arm (or
+                    // before `default` when default is first).
+                    this.printOwnLineComments(s.innerComments);
                     for (let i = 0; i <= s.arms.length; i++) {
                         if (i === defaultIdx) {
+                            this.printOwnLineComments(s.defaultLeadingComments);
                             this.line("default:");
                             this.indent(() => {
                                 for (const st of s.default_!)
@@ -460,6 +657,7 @@ class Printer {
                         }
                         if (i < s.arms.length) {
                             const arm = s.arms[i];
+                            this.printOwnLineComments(arm.leadingComments);
                             this.write("case ");
                             this.printExpr(arm.value);
                             this.write(":");
