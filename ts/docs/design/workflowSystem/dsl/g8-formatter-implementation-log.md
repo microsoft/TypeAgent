@@ -242,6 +242,21 @@ Round 3 (this revision):
     empty nested blocks, `}`/`else` gap).
 17. `1868764e` tests: replace 3 pinning tests with positive round-trip
     tests, add new suites for round-3 surfaces. 351 → 364 tests.
+18. `09031f04` docs: spec §6, decisions §7 retraction + §13/§14/§15,
+    log + unaddressed-* updates.
+19. `975a07d5` review pass 2 fix: parser scoops same-line comments on
+    BOTH sides of the param comma; formatter emits inline trailing
+    AFTER the comma uniformly (matches // line-comment placement).
+20. `a5d3792c` test-gap pass 1: +20 tests (multi-line block-comment
+    indent invariant across new slots, else-if chain elseLeading at
+    every junction, secondary built-in surfaces, param edge cases,
+    stripTrivia structural equivalence). 364 → 384 tests, no bugs.
+21. `14aec90f` test-gap pass 2: +17 tests (adversarial angles —
+    same-param leading+trailing, empty switch with only inner
+    comment, pre-`case` and pre-`workflow` comments, stacked //'s,
+    degenerate /**/ and //, template-literal `}` not triggering else,
+    3-round convergence, nested built-in attachment level, missing
+    endLine fallback). 384 → 401 tests, no bugs.
 
 ## Round 3 — closing the comment-fidelity gaps
 
@@ -268,26 +283,33 @@ What changed:
   `bodyInnerComments`, `ParallelNode.bodies[i].bodyInnerComments`.
 - **`src/parser.ts`** — `parseParamList` rewritten to capture leading,
   inline-trailing, and end-of-list comments and report
-  `paramInnerComments` separately for empty lists. `parseIfStmt`,
-  `parseSwitchStmt`/`parseSwitchArmBody`, and every built-in parser
-  now route through `parseStatementsCapturingInner` and an
-  `extractArrowBodyInner` helper. `parseIfStmt` snapshots `commentIdx`
-  before reading ahead for `else` and rolls back on a no-`else`
-  outcome so a trailing-`}` comment without `else` becomes the
-  IfStatement's own `trailingComments` rather than being stolen.
+  `paramInnerComments` separately for empty lists. After the review
+  pass it now scoops same-line comments on BOTH sides of the comma so
+  `// line trailings` and `/* block */` placements both round-trip
+  to the same param. `parseIfStmt`, `parseSwitchStmt`/
+  `parseSwitchArmBody`, and every built-in parser route through
+  `parseStatementsCapturingInner` and an `extractArrowBodyInner`
+  helper. `parseIfStmt` snapshots `commentIdx` before reading ahead
+  for `else` and rolls back on a no-`else` outcome so a trailing-`}`
+  comment without `else` becomes the IfStatement's own
+  `trailingComments` rather than being stolen.
 - **`src/formatter.ts`** — `printParamList` switches to multi-line
   layout (with unconditional trailing comma) whenever any parameter
-  carries comments or `paramInnerComments` is set. `writeElseLeading`
-  emits block comments inline (`} /* x */ else`) and forces a line
-  break for line comments. `printBlockBody` now accepts an optional
-  `innerComments` array and emits it inside an empty `{ }`. The
-  IfStatement / SwitchStatement / SwitchArm / built-in cases all
-  thread the new buckets through.
+  carries comments or `paramInnerComments` is set. Inline trailing
+  comments are emitted AFTER the comma (uniform for // and /* */).
+  `writeElseLeading` emits block comments inline (`} /* x */ else`)
+  and forces a line break for line comments. `printBlockBody` now
+  accepts an optional `innerComments` array and emits it inside an
+  empty `{ }`. The IfStatement / SwitchStatement / SwitchArm /
+  built-in cases all thread the new buckets through.
 - **`test/trailingComments.spec.ts`** — the 3 "documented gap"
   pinning tests are inverted into positive round-trip tests, and 13
   new tests cover the new surfaces (parameter leading/trailing/inner,
   empty-block inner across every block-bearing AST node, and the
-  three `}`/`else` shapes). Total tests 351 → 364.
+  three `}`/`else` shapes).
+- **`test/round3-gaps.spec.ts`** (pass 1) and
+  **`test/round3-gaps-pass2.spec.ts`** (pass 2) — 37 additional tests
+  across the two test-gap audits.
 - **`test/pass2-coverage.spec.ts`** — `stripTrivia` now also strips
   `paramInnerComments`, `thenInnerComments`, `elseInnerComments`,
   `elseLeadingComments`, `defaultInnerComments`, and
@@ -298,6 +320,9 @@ What changed:
   (`elseLeadingComments` rendering), and D15 (param-list capture
   rolls over commas) document the round-3 decisions.
 
-Round 3 did not require a review pass or test-gap pass because the
-user-supplied test set already covers all three surfaces in both
-directions (positive round-trip + AST inspection + stability).
+Round 3 ran the same review + test-gap workflow as the prior rounds:
+two code-review subagent passes (pass 1 clean, pass 2 found the
+param-trailing-after-comma migration bug fixed in `975a07d5`) and two
+general-purpose test-gap subagent passes (no bugs in either; +20
+then +17 tests). Total test count 351 → 401.
+
