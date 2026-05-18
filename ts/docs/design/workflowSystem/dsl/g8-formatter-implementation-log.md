@@ -172,10 +172,10 @@ code-style check) is clean.
 
 ## Test count progression
 
-| Stage | Passing |
-| --- | --- |
-| Baseline (pre-G8) | 223 |
-| G8 + formatter + review fixes + 2 test-gap passes (round 1) | 286 |
+| Stage                                                               | Passing |
+| ------------------------------------------------------------------- | ------- |
+| Baseline (pre-G8)                                                   | 223     |
+| G8 + formatter + review fixes + 2 test-gap passes (round 1)         | 286     |
 | Trailing/inner comments + review pass + 2 test-gap passes (round 2) | **351** |
 
 Smoke test: both `examples/d1-standup-prep.wf` and
@@ -205,9 +205,9 @@ test-gap passes:
     `writeMultilineCommentText()`.
   - Round 2, test-gap pass 2: none.
 - 5 batches of new tests written (16 + 19 from round 1, then 24
-  + 19 + 19 from round 2).
+  - 19 + 19 from round 2).
 
-Items deliberately *not* acted upon (with rationale) live in:
+Items deliberately _not_ acted upon (with rationale) live in:
 
 - `g8-review-feedback-unaddressed.md` — review feedback.
 - `g8-test-gaps-unaddressed.md` — test gaps.

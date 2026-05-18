@@ -26,7 +26,7 @@ _Introduced round 1._
 between delimiters or the full source span.
 
 Decision: store the full lexeme — `// foo` rather than ` foo`, and
-`/* foo */` rather than ` foo `. Rationale:
+`/* foo */` rather than `foo`. Rationale:
 
 - A round-trip serializer can emit the comment verbatim with no
   reconstruction step (no ambiguity about leading/trailing whitespace,
@@ -50,11 +50,11 @@ lie on the same line as the statement's `endLine`; before each
 block-closing token it drains whatever is left. The result lands in
 one of three buckets:
 
-| Bucket | Lives on | Captures |
-| --- | --- | --- |
-| `leadingComments` | every AST node | comments immediately before the node |
+| Bucket             | Lives on          | Captures                                                                                                                            |
+| ------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `leadingComments`  | every AST node    | comments immediately before the node                                                                                                |
 | `trailingComments` | every `Statement` | comments after the statement, either inline (same line as `endLine`) or block-end (between last statement and `}`/`case`/`default`) |
-| `innerComments` | `WorkflowDecl` | comments inside an otherwise empty workflow body |
+| `innerComments`    | `WorkflowDecl`    | comments inside an otherwise empty workflow body                                                                                    |
 
 `Statement.endLine` is set to the source line of the statement's last
 token (tracked via `Parser.lastToken`). The formatter uses
@@ -148,16 +148,17 @@ retracts that limitation: per-block `*InnerComments` fields now exist on
 every block-bearing AST node, and the formatter emits them inside the
 otherwise-empty `{ }`:
 
-| Node | Field |
-| --- | --- |
-| `IfStatement` | `thenInnerComments`, `elseInnerComments` |
-| `SwitchStatement` | `defaultInnerComments` |
-| `SwitchArm` | `innerComments` |
-| `AttemptsNode` | `bodyInnerComments` (body), `fallback.bodyInnerComments` |
-| `MapNode`, `FilterNode`, `ParallelMapNode` | `bodyInnerComments` |
-| `ParallelNode.bodies[i]` | `bodyInnerComments` |
+| Node                                       | Field                                                    |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `IfStatement`                              | `thenInnerComments`, `elseInnerComments`                 |
+| `SwitchStatement`                          | `defaultInnerComments`                                   |
+| `SwitchArm`                                | `innerComments`                                          |
+| `AttemptsNode`                             | `bodyInnerComments` (body), `fallback.bodyInnerComments` |
+| `MapNode`, `FilterNode`, `ParallelMapNode` | `bodyInnerComments`                                      |
+| `ParallelNode.bodies[i]`                   | `bodyInnerComments`                                      |
 
 Rationale for the retraction:
+
 - "Empty `then` is a smell" turned out to be a wrong reason to drop a
   user's comment — empty bodies frequently appear as `TODO` scaffolds.
 - The AST-surface cost was small and uniform once the parser had a

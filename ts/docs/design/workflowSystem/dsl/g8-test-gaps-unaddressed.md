@@ -5,15 +5,15 @@ and 2 of the G8 work. Round 3 did not add new audits but closed the
 three deliberate gaps documented below, replacing their pinning tests
 with positive round-trip tests.
 
-| Round | Pass | New tests added | Bugs found |
-| --- | --- | --- | --- |
-| 1 | 1 | 16 | 0 |
-| 1 | 2 | 19 | 0 |
-| 2 | 1 | 19 | 1 (multi-line block comment indent — fixed) |
-| 2 | 2 | 19 | 0 |
-| 3 | — | 13 | 0 |
+| Round | Pass | New tests added | Bugs found                                  |
+| ----- | ---- | --------------- | ------------------------------------------- |
+| 1     | 1    | 16              | 0                                           |
+| 1     | 2    | 19              | 0                                           |
+| 2     | 1    | 19              | 1 (multi-line block comment indent — fixed) |
+| 2     | 2    | 19              | 0                                           |
+| 3     | —    | 13              | 0                                           |
 
-This document records gaps that were deliberately *not* covered, with
+This document records gaps that were deliberately _not_ covered, with
 rationale. Items are grouped by category (not by round) so reviewers
 can see the surface area in one pass.
 
@@ -95,7 +95,6 @@ fixed via `writeMultilineCommentText()` (decision §10) and pinned by
 `"multi-line block comment as block-end trailing is round-trip
 stable"`.
 
-
 ## Formatter / FormatOptions
 
 ### Out-of-contract `FormatOptions` values
@@ -174,6 +173,7 @@ equivalence describe. Adding a 4th- or 5th-pass test wouldn't catch
 any additional class of bug — non-idempotence shows up by pass 2.
 
 ### Inline trailing comment on a parameter declared with an inline
+
 object type
 
 Tests would mostly exercise the type-printer and not the round-3
@@ -181,6 +181,7 @@ comment slots, since the trailing-after-comma path is already
 covered by the array-type variant (`xs: string[], // a list`).
 
 ### Single-pass coverage of `endLine` after every type-expression
+
 shape
 
 `endLine` is sourced from `this.lastToken.line` after `parseTypeExpr`
@@ -189,3 +190,72 @@ type's identifier (NamedType), `]` (ArrayType), or `}` (ObjectType).
 The array-type test pins the `]` case; the named-type case is the
 common path under every other param test; the object-type case
 again belongs to a separate gap (above).
+
+## Round 3 test-gap pass 2
+
+Pass 2 added 17 tests in `test/round3-gaps-pass2.spec.ts` targeting
+angles pass 1 didn't cover (same-param leading+trailing both multi-line,
+empty-switch-only-inner pinning, `case`-leading-comment migration,
+comments adjacent to the `workflow` keyword, mixed-comment param
+layout, stacked line comments in inner slots, degenerate `/**/` and
+`//` in new round-3 slots, template-literal `}` not triggering
+elseLeading scan, 3-round convergence over the union of round-3
+surfaces, nested-built-in level attachment, constructed-AST
+trailingComments without `endLine`, multi-line ObjectType param
+non-support).
+
+Deliberately NOT covered in pass 2:
+
+### `SwitchStatement.innerComments` slot (proper inner slot)
+
+`SwitchStatement` has no `innerComments` slot today, so a comment
+inside an empty switch body migrates to the next statement's
+`leadingComments`. Pass 2 pins this migration but does NOT add a new
+slot — that would be an implementation change, not a test. If the
+slot is later added, the pin in pass 2 will fail loudly and force a
+deliberate update.
+
+### `SwitchArm` "leading comment before `case`" slot
+
+Similarly, a `// before case 2` comment becomes a trailing on the
+previous arm's last statement (rendered indented at the previous
+arm's body indent). Pass 2 pins this attachment point. A dedicated
+"comment-before-case" slot would be a separate feature, not a test
+gap.
+
+### Cross-product of every multi-line comment shape × every slot
+
+Pass 1 covered multi-line block comments in each new inner-comment
+slot; pass 2 stacks 3 line comments in two slots and combines
+multi-line leading+trailing on one param. A full N×M cross-product
+(every shape × every slot) would only re-exercise the shared
+`writeMultilineCommentText` / `printLeadingComments` /
+`printTrailingComments` helpers per call site without adding new
+emitter paths.
+
+### Pathological volumes of comments in new round-3 slots
+
+`trailingComments.spec.ts` already has a "pathological volumes" test
+for the legacy slots; the new round-3 slots use the same comment
+writer, so a per-slot volume test would only re-test the writer.
+
+### N-pass (>3) convergence
+
+Pass 1's `assertStable` uses 3 passes and pass 2 adds a single
+explicit 3-pass test on the union document. If a slot is not stable
+by pass 3 it is not stable at any N; adding higher N is not adding
+coverage.
+
+### Parser column / offset checks on new comment slots
+
+`trailingComments.spec.ts > "parser: column information for comments"`
+already pins the per-comment column/offset/line plumbing. The new
+slots store comments through the same `Comment` shape; per-slot
+column tests would be redundant.
+
+### Multi-line ObjectType in a param (implementation-side)
+
+Pass 2 pins that the parser rejects multi-line object types in
+param position. Supporting them is an implementation change (parser
+
+- type printer), not a test gap.

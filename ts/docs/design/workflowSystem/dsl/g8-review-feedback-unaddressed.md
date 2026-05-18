@@ -3,15 +3,15 @@
 Four code-review subagent passes were performed across the two rounds
 of G8 work on `agents/can-you-address-g8-in-the-dsl-v0-f3fc165d`:
 
-| Round | Pass | Result |
-| --- | --- | --- |
-| 1 | 1 | 2 bugs; both fixed (see "Acted upon" below) |
-| 1 | 2 | 1 minor observation about end-of-block comments — see "Acted upon" |
-| 2 | 1 | No significant bugs |
-| 2 | 2 | 1 documentation gap (empty nested blocks) — fixed by pinning tests + entry in `g8-test-gaps-unaddressed.md` |
-| 3 | — | Not run (user request was direct; gaps were enumerated explicitly) |
+| Round | Pass | Result                                                                                                      |
+| ----- | ---- | ----------------------------------------------------------------------------------------------------------- |
+| 1     | 1    | 2 bugs; both fixed (see "Acted upon" below)                                                                 |
+| 1     | 2    | 1 minor observation about end-of-block comments — see "Acted upon"                                          |
+| 2     | 1    | No significant bugs                                                                                         |
+| 2     | 2    | 1 documentation gap (empty nested blocks) — fixed by pinning tests + entry in `g8-test-gaps-unaddressed.md` |
+| 3     | —    | Not run (user request was direct; gaps were enumerated explicitly)                                          |
 
-This document records feedback that was *not* acted upon, with
+This document records feedback that was _not_ acted upon, with
 rationale. The current set is empty — every actionable item was
 addressed in either the round that surfaced it or the next round.
 
