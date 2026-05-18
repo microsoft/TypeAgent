@@ -57,6 +57,8 @@ import {
     SourceLocation,
     BinaryOp,
     AttemptsNode,
+    MapNode,
+    FilterNode,
     ParallelNode,
     ParallelMapNode,
     Comment,
@@ -80,6 +82,7 @@ interface ArrowPlaceholder {
     _isArrow: true;
     params: string[];
     body: Statement[];
+    bodyInnerComments?: Comment[];
 }
 
 export interface ParseError {
@@ -246,7 +249,8 @@ export class Parser {
         this.advance();
         const name = this.expect(TokenKind.Identifier).value;
         this.expect(TokenKind.LParen);
-        const params = this.parseParamList();
+        const { params, innerComments: paramInnerComments } =
+            this.parseParamList();
         this.expect(TokenKind.RParen);
         this.expect(TokenKind.Colon);
         const returnType = this.parseTypeExpr();
@@ -264,27 +268,60 @@ export class Parser {
         };
         if (leadingComments) decl.leadingComments = leadingComments;
         if (innerComments) decl.innerComments = innerComments;
+        if (paramInnerComments) decl.paramInnerComments = paramInnerComments;
         return decl;
     }
 
-    private parseParamList(): ParamDecl[] {
+    private parseParamList(): {
+        params: ParamDecl[];
+        innerComments: Comment[] | undefined;
+    } {
         const params: ParamDecl[] = [];
-        if (this.peek().kind === TokenKind.RParen) return params;
+        if (this.peek().kind === TokenKind.RParen) {
+            // Empty parameter list: any comments inside `()` have no
+            // param to attach to. Surface them via the workflow's
+            // `paramInnerComments` slot.
+            const inner = this.takeLeadingComments();
+            return { params, innerComments: inner };
+        }
         params.push(this.parseParam());
         while (this.peek().kind === TokenKind.Comma) {
-            this.advance();
+            // Capture inline trailing comments on the just-parsed param
+            // BEFORE consuming the comma (e.g. `a: string /* note */, b: ...`).
+            // We allow same-line OR same-line-as-comma matching by line.
+            const prev = params[params.length - 1];
+            if (prev.endLine !== undefined) {
+                const t = this.takeInlineTrailingComments(prev.endLine);
+                if (t) prev.trailingComments = t;
+            }
+            this.advance(); // consume comma
             if (this.peek().kind === TokenKind.RParen) break;
             params.push(this.parseParam());
         }
-        return params;
+        // Trailing comments before the closing `)`: attach to last param.
+        if (params.length > 0) {
+            const last = params[params.length - 1];
+            const remaining = this.takeLeadingComments();
+            if (remaining) {
+                last.trailingComments = [
+                    ...(last.trailingComments ?? []),
+                    ...remaining,
+                ];
+            }
+        }
+        return { params, innerComments: undefined };
     }
 
     private parseParam(): ParamDecl {
+        const leading = this.takeLeadingComments();
         const l = this.loc();
         const name = this.expect(TokenKind.Identifier).value;
         this.expect(TokenKind.Colon);
         const type = this.parseTypeExpr();
-        return { name, type, loc: l };
+        const decl: ParamDecl = { name, type, loc: l };
+        if (leading) decl.leadingComments = leading;
+        if (this.lastToken) decl.endLine = this.lastToken.line;
+        return decl;
     }
 
     // ---- Types ----
@@ -341,19 +378,6 @@ export class Parser {
     }
 
     // ---- Statements ----
-
-    private parseStatements(): Statement[] {
-        const stmts: Statement[] = [];
-        while (
-            this.peek().kind !== TokenKind.RBrace &&
-            this.peek().kind !== TokenKind.EOF
-        ) {
-            const s = this.parseStatement();
-            if (s) stmts.push(s);
-        }
-        this.finalizeBlock(stmts);
-        return stmts;
-    }
 
     /**
      * Like `parseStatements()` but returns any trailing comments that
@@ -476,10 +500,21 @@ export class Parser {
         const condition = this.parseExpression();
         this.expect(TokenKind.RParen);
         this.expect(TokenKind.LBrace);
-        const then = this.parseStatements();
+        const { stmts: then, innerComments: thenInner } =
+            this.parseStatementsCapturingInner();
         this.expect(TokenKind.RBrace);
         let else_: Statement[] | undefined;
+        let elseInner: Comment[] | undefined;
+        let elseLeading: Comment[] | undefined;
+        // Capture any comments that appear between the `}` of the then
+        // block and the `else` keyword. We have to peek through comments
+        // first to know whether an `else` is actually present; if not,
+        // we roll back so the outer parseStatement can pick them up as
+        // the IfStatement's own inline/trailing comments.
+        const snapshot = this.commentIdx;
+        const beforeElse = this.takeLeadingComments();
         if (this.peek().kind === TokenKind.Else) {
+            if (beforeElse) elseLeading = beforeElse;
             this.advance();
             if (this.peek().kind === TokenKind.If) {
                 // else if: wrap in single-element array
@@ -487,11 +522,29 @@ export class Parser {
                 else_ = [elseIf];
             } else {
                 this.expect(TokenKind.LBrace);
-                else_ = this.parseStatements();
+                const r = this.parseStatementsCapturingInner();
+                else_ = r.stmts;
+                elseInner = r.innerComments;
                 this.expect(TokenKind.RBrace);
             }
+        } else if (beforeElse) {
+            // No else keyword. Roll back so the outer parseStatement
+            // can re-take these comments as the IfStatement's own
+            // inline-trailing / leading-of-next-stmt comments,
+            // preserving prior round-2 behavior.
+            this.commentIdx = snapshot;
         }
-        return { kind: "IfStatement", condition, then, else_, loc: l };
+        const result: IfStatement = {
+            kind: "IfStatement",
+            condition,
+            then,
+            else_,
+            loc: l,
+        };
+        if (thenInner) result.thenInnerComments = thenInner;
+        if (elseInner) result.elseInnerComments = elseInner;
+        if (elseLeading) result.elseLeadingComments = elseLeading;
+        return result;
     }
 
     private parseSwitchStmt(): SwitchStatement {
@@ -505,6 +558,7 @@ export class Parser {
         const arms: SwitchArm[] = [];
         let default_: Statement[] | undefined;
         let defaultIndex: number | undefined;
+        let defaultInnerComments: Comment[] | undefined;
 
         while (
             this.peek().kind !== TokenKind.RBrace &&
@@ -515,8 +569,11 @@ export class Parser {
                 this.advance(); // case
                 const value = this.parsePrimaryExpr();
                 this.expect(TokenKind.Colon);
-                const body = this.parseSwitchArmBody();
-                arms.push({ value, body, loc: armLoc });
+                const { stmts: body, innerComments } =
+                    this.parseSwitchArmBody();
+                const arm: SwitchArm = { value, body, loc: armLoc };
+                if (innerComments) arm.innerComments = innerComments;
+                arms.push(arm);
             } else if (this.peek().kind === TokenKind.Default) {
                 this.advance(); // default
                 this.expect(TokenKind.Colon);
@@ -524,7 +581,9 @@ export class Parser {
                 // far so the formatter can reconstruct the original source
                 // order (fallthrough makes this semantically meaningful).
                 defaultIndex = arms.length;
-                default_ = this.parseSwitchArmBody();
+                const { stmts, innerComments } = this.parseSwitchArmBody();
+                default_ = stmts;
+                if (innerComments) defaultInnerComments = innerComments;
             } else {
                 this.error(
                     `Expected 'case' or 'default' in switch, got ${this.peek().kind}`,
@@ -546,11 +605,17 @@ export class Parser {
                 result.defaultIndex = defaultIndex;
             }
         }
+        if (defaultInnerComments) {
+            result.defaultInnerComments = defaultInnerComments;
+        }
         return result;
     }
 
     /** Parse statements until we hit another case/default/} */
-    private parseSwitchArmBody(): Statement[] {
+    private parseSwitchArmBody(): {
+        stmts: Statement[];
+        innerComments: Comment[] | undefined;
+    } {
         this.inSwitchDepth++;
         const stmts: Statement[] = [];
         while (
@@ -563,10 +628,11 @@ export class Parser {
             if (s) stmts.push(s);
         }
         // Drain comments before the next case/default/} so they get attached
-        // to the last statement of this arm rather than the next arm.
-        this.finalizeBlock(stmts);
+        // to the last statement of this arm (block-end trailing) or
+        // returned as innerComments when the arm is empty.
+        const innerComments = this.finalizeBlock(stmts);
         this.inSwitchDepth--;
-        return stmts;
+        return { stmts, innerComments };
     }
 
     private parseReturnStmt(): ReturnStatement {
@@ -890,9 +956,12 @@ export class Parser {
     ): ArrowPlaceholder {
         if (this.peek().kind === TokenKind.LBrace) {
             this.advance(); // {
-            const body = this.parseStatements();
+            const { stmts: body, innerComments } =
+                this.parseStatementsCapturingInner();
             this.expect(TokenKind.RBrace);
-            return { _isArrow: true, params, body };
+            const ph: ArrowPlaceholder = { _isArrow: true, params, body };
+            if (innerComments) ph.bodyInnerComments = innerComments;
+            return ph;
         }
         // Single expression body: wrap in return statement
         const expr = this.parseExpression();
@@ -974,8 +1043,15 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
 
-        let fallback: { param: string; body: Statement[] } | undefined;
+        let fallback:
+            | {
+                  param: string;
+                  body: Statement[];
+                  bodyInnerComments?: Comment[];
+              }
+            | undefined;
         if (this.peek().kind === TokenKind.Comma) {
             this.advance();
             if (this.peek().kind !== TokenKind.RParen) {
@@ -985,6 +1061,8 @@ export class Parser {
                     param: fbParams[0] ?? "err",
                     body: this.extractArrowBody(fbArrow),
                 };
+                const fbInner = this.extractArrowBodyInner(fbArrow);
+                if (fbInner) fallback.bodyInnerComments = fbInner;
             }
         }
 
@@ -996,6 +1074,7 @@ export class Parser {
             loc: l,
         };
         if (fallback) result.fallback = fallback;
+        if (bodyInner) result.bodyInnerComments = bodyInner;
         return result;
     }
 
@@ -1006,14 +1085,17 @@ export class Parser {
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
-        return {
+        const result: MapNode = {
             kind: "MapNode",
             collection,
             param: params[0] ?? "item",
             body,
             loc: l,
         };
+        if (bodyInner) result.bodyInnerComments = bodyInner;
+        return result;
     }
 
     /** filter(collection, (item) => { body }) */
@@ -1023,19 +1105,25 @@ export class Parser {
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
-        return {
+        const result: FilterNode = {
             kind: "FilterNode",
             collection,
             param: params[0] ?? "item",
             body,
             loc: l,
         };
+        if (bodyInner) result.bodyInnerComments = bodyInner;
+        return result;
     }
 
     /** parallel(() => expr1, () => expr2, ..., { maxConcurrency: n }?) */
     private parseParallelBuiltin(l: SourceLocation): Expr {
-        const bodies: { body: Statement[] }[] = [];
+        const bodies: {
+            body: Statement[];
+            bodyInnerComments?: Comment[];
+        }[] = [];
         let maxConcurrency: Expr | undefined;
 
         while (
@@ -1056,7 +1144,13 @@ export class Parser {
             }
 
             const arrow = this.parseArrowArg();
-            bodies.push({ body: this.extractArrowBody(arrow) });
+            const branch: { body: Statement[]; bodyInnerComments?: Comment[] } =
+                {
+                    body: this.extractArrowBody(arrow),
+                };
+            const inner = this.extractArrowBodyInner(arrow);
+            if (inner) branch.bodyInnerComments = inner;
+            bodies.push(branch);
             if (this.peek().kind === TokenKind.Comma) {
                 this.advance();
             }
@@ -1074,6 +1168,7 @@ export class Parser {
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
 
         let maxConcurrency: Expr | undefined;
         if (this.peek().kind === TokenKind.Comma) {
@@ -1098,6 +1193,7 @@ export class Parser {
             loc: l,
         };
         if (maxConcurrency) result.maxConcurrency = maxConcurrency;
+        if (bodyInner) result.bodyInnerComments = bodyInner;
         return result;
     }
 
@@ -1107,6 +1203,14 @@ export class Parser {
             return arg.body;
         }
         return [{ kind: "ReturnStatement", value: arg, loc: arg.loc }];
+    }
+
+    /** Extract body inner comments (if any) from a parsed arrow. */
+    private extractArrowBodyInner(
+        arg: Expr | ArrowPlaceholder,
+    ): Comment[] | undefined {
+        if (this.isArrow(arg)) return arg.bodyInnerComments;
+        return undefined;
     }
 
     /** Extract parameter names from a parsed arrow. */

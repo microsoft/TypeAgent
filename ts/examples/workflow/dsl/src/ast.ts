@@ -38,12 +38,26 @@ export interface WorkflowDecl {
      * formatter emits these on their own lines at body indent.
      */
     innerComments?: Comment[];
+    /**
+     * Comments that appear inside `(` ... `)` when the parameter list is
+     * empty (e.g. `workflow w(... block-comment ...)`). When the parameter
+     * list is non-empty, comments before the first param attach as that
+     * param's `leadingComments` and comments after the last param attach
+     * as that param's `trailingComments`.
+     */
+    paramInnerComments?: Comment[];
 }
 
 export interface ParamDecl {
     name: string;
     type: TypeExpr;
     loc: SourceLocation;
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    /** Line of the last token of this parameter, used to decide inline
+     *  vs. own-line rendering of trailing comments (analogous to
+     *  Statement.endLine). */
+    endLine?: number;
 }
 
 // ---- Types ----
@@ -125,6 +139,14 @@ export interface IfStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    /** Comments inside an empty `then` block. */
+    thenInnerComments?: Comment[];
+    /** Comments inside an empty `else` block. */
+    elseInnerComments?: Comment[];
+    /** Comments that appear between `}` of the then block and the `else`
+     *  keyword (or before an `else if`). Preserved so source like
+     *  `if (x) { ... } /* note *\/ else { ... }` round-trips faithfully. */
+    elseLeadingComments?: Comment[];
 }
 
 export interface SwitchStatement {
@@ -144,12 +166,16 @@ export interface SwitchStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    /** Comments inside an empty `default:` arm body. */
+    defaultInnerComments?: Comment[];
 }
 
 export interface SwitchArm {
     value: Expr;
     body: Statement[];
     loc: SourceLocation;
+    /** Comments inside an empty `case X:` arm body. */
+    innerComments?: Comment[];
 }
 
 export interface ThrowStatement {
@@ -331,8 +357,15 @@ export interface AttemptsNode {
     kind: "AttemptsNode";
     count: Expr;
     body: Statement[];
-    fallback?: { param: string; body: Statement[] };
+    fallback?: {
+        param: string;
+        body: Statement[];
+        /** Comments inside an empty fallback body. */
+        bodyInnerComments?: Comment[];
+    };
     loc: SourceLocation;
+    /** Comments inside an empty attempts body. */
+    bodyInnerComments?: Comment[];
 }
 
 export interface MapNode {
@@ -341,6 +374,8 @@ export interface MapNode {
     param: string;
     body: Statement[];
     loc: SourceLocation;
+    /** Comments inside an empty map body. */
+    bodyInnerComments?: Comment[];
 }
 
 export interface FilterNode {
@@ -349,11 +384,17 @@ export interface FilterNode {
     param: string;
     body: Statement[];
     loc: SourceLocation;
+    /** Comments inside an empty filter body. */
+    bodyInnerComments?: Comment[];
 }
 
 export interface ParallelNode {
     kind: "ParallelNode";
-    bodies: { body: Statement[] }[];
+    bodies: {
+        body: Statement[];
+        /** Comments inside an empty parallel branch body. */
+        bodyInnerComments?: Comment[];
+    }[];
     maxConcurrency?: Expr;
     loc: SourceLocation;
 }
@@ -365,4 +406,6 @@ export interface ParallelMapNode {
     body: Statement[];
     maxConcurrency?: Expr;
     loc: SourceLocation;
+    /** Comments inside an empty parallelMap body. */
+    bodyInnerComments?: Comment[];
 }

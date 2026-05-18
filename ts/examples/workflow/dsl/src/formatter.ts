@@ -188,15 +188,52 @@ class Printer {
         }
     }
 
+    /**
+     * Emit comments that sit between the `}` of the then-branch and the
+     * `else` keyword. Block comments (slash-star ... star-slash) stay
+     * inline (one space before, one space after). Line comments
+     * (slash-slash) force a line break so `else` lands on its own line.
+     *
+     * Postcondition: cursor is positioned right before where `else` keyword
+     * (and trailing space) should be written. The caller writes `"else "`.
+     */
+    private writeElseLeading(comments: Comment[] | undefined): void {
+        if (!comments || comments.length === 0) {
+            this.write(" ");
+            return;
+        }
+        const hasLineComment = comments.some((c) => c.text.startsWith("//"));
+        if (!hasLineComment) {
+            for (const c of comments) {
+                this.write(" ");
+                if (c.text.includes("\n")) {
+                    this.writeMultilineCommentText(c.text);
+                } else {
+                    this.write(c.text);
+                }
+            }
+            this.write(" ");
+            return;
+        }
+        // Has at least one line comment: break before each, then drop
+        // `else` on a fresh line at the current indent.
+        for (const c of comments) {
+            this.write(" ");
+            if (c.text.includes("\n")) {
+                this.writeMultilineCommentText(c.text);
+            } else {
+                this.write(c.text);
+            }
+            this.newline();
+        }
+    }
+
     // ---- Workflow ----
 
     printWorkflow(decl: WorkflowDecl): void {
         this.printLeadingComments(decl.leadingComments);
         this.write(`workflow ${decl.name}(`);
-        decl.params.forEach((p, i) => {
-            if (i > 0) this.write(", ");
-            this.printParam(p);
-        });
+        this.printParamList(decl.params, decl.paramInnerComments);
         this.write("): ");
         this.printType(decl.returnType);
         this.write(" {");
@@ -206,6 +243,83 @@ class Printer {
             this.printOwnLineComments(decl.innerComments);
         });
         this.line("}");
+    }
+
+    /**
+     * Print the parameter list. If any param has leading/trailing comments
+     * or there are paramInnerComments, format on multiple lines (one param
+     * per line, trailing comma) so the comments have somewhere to live.
+     * Otherwise, format inline.
+     */
+    private printParamList(
+        params: ParamDecl[],
+        paramInner: Comment[] | undefined,
+    ): void {
+        const hasParamComments = params.some(
+            (p) =>
+                (p.leadingComments && p.leadingComments.length > 0) ||
+                (p.trailingComments && p.trailingComments.length > 0),
+        );
+        const hasInner = !!(paramInner && paramInner.length > 0);
+        if (!hasParamComments && !hasInner) {
+            params.forEach((p, i) => {
+                if (i > 0) this.write(", ");
+                this.printParam(p);
+            });
+            return;
+        }
+        this.newline();
+        this.indent(() => {
+            params.forEach((p, i) => {
+                this.printOwnLineComments(p.leadingComments);
+                this.printParam(p);
+                const isLast = i === params.length - 1;
+                this.write(isLast ? "," : ",");
+                this.emitInlineTrailing(p.trailingComments, p.endLine);
+                this.newline();
+                this.emitAfterLineTrailing(p.trailingComments, p.endLine);
+            });
+            this.printOwnLineComments(paramInner);
+        });
+    }
+
+    /**
+     * Emit only the trailing comments that originated on the same source
+     * line as the host node, prefixed by a space. Caller is responsible
+     * for the newline.
+     */
+    private emitInlineTrailing(
+        trailing: Comment[] | undefined,
+        endLine: number | undefined,
+    ): void {
+        if (!trailing) return;
+        for (const c of trailing) {
+            if (endLine !== undefined && c.pos.line === endLine) {
+                this.write(" ");
+                this.write(c.text);
+            }
+        }
+    }
+
+    /**
+     * Emit the trailing comments that originated on subsequent source
+     * lines, each on its own line at the current indent.
+     */
+    private emitAfterLineTrailing(
+        trailing: Comment[] | undefined,
+        endLine: number | undefined,
+    ): void {
+        if (!trailing) return;
+        for (const c of trailing) {
+            if (endLine === undefined || c.pos.line !== endLine) {
+                if (c.text.includes("\n")) {
+                    this.writeMultilineCommentText(c.text);
+                    this.newline();
+                } else {
+                    this.line(c.text);
+                }
+            }
+        }
     }
 
     private printParam(p: ParamDecl): void {
@@ -279,23 +393,30 @@ class Printer {
                 this.newline();
                 this.indent(() => {
                     for (const t of s.then) this.printStatement(t);
+                    if (s.then.length === 0) {
+                        this.printOwnLineComments(s.thenInnerComments);
+                    }
                 });
                 this.write("}");
                 if (s.else_) {
+                    this.writeElseLeading(s.elseLeadingComments);
                     // else-if chain
                     if (
                         s.else_.length === 1 &&
                         s.else_[0].kind === "IfStatement"
                     ) {
-                        this.write(" else ");
+                        this.write("else ");
                         this.printStatement(s.else_[0]);
                         // printStatement of an IfStatement already emits a newline
                         return;
                     }
-                    this.write(" else {");
+                    this.write("else {");
                     this.newline();
                     this.indent(() => {
                         for (const t of s.else_!) this.printStatement(t);
+                        if (s.else_!.length === 0) {
+                            this.printOwnLineComments(s.elseInnerComments);
+                        }
                     });
                     this.endStmt(s, "}");
                 } else {
@@ -321,6 +442,11 @@ class Printer {
                             this.indent(() => {
                                 for (const st of s.default_!)
                                     this.printStatement(st);
+                                if (s.default_!.length === 0) {
+                                    this.printOwnLineComments(
+                                        s.defaultInnerComments,
+                                    );
+                                }
                             });
                         }
                         if (i < s.arms.length) {
@@ -332,6 +458,11 @@ class Printer {
                             this.indent(() => {
                                 for (const st of arm.body)
                                     this.printStatement(st);
+                                if (arm.body.length === 0) {
+                                    this.printOwnLineComments(
+                                        arm.innerComments,
+                                    );
+                                }
                             });
                         }
                     }
@@ -500,11 +631,14 @@ class Printer {
 
     // ---- Built-in node printers ----
 
-    private printBlockBody(body: Statement[]): void {
+    private printBlockBody(body: Statement[], innerComments?: Comment[]): void {
         this.write("{");
         this.newline();
         this.indent(() => {
             for (const s of body) this.printStatement(s);
+            if (body.length === 0) {
+                this.printOwnLineComments(innerComments);
+            }
         });
         // Caller is responsible for the closing context (it lives mid-expression).
         this.write("}");
@@ -514,10 +648,10 @@ class Printer {
         this.write("attempts(");
         this.printExpr(e.count);
         this.write(", () => ");
-        this.printBlockBody(e.body);
+        this.printBlockBody(e.body, e.bodyInnerComments);
         if (e.fallback) {
             this.write(`, (${e.fallback.param}) => `);
-            this.printBlockBody(e.fallback.body);
+            this.printBlockBody(e.fallback.body, e.fallback.bodyInnerComments);
         }
         this.write(")");
     }
@@ -529,7 +663,7 @@ class Printer {
         this.write(`${name}(`);
         this.printExpr(e.collection);
         this.write(`, (${e.param}) => `);
-        this.printBlockBody(e.body);
+        this.printBlockBody(e.body, e.bodyInnerComments);
         this.write(")");
     }
 
@@ -538,7 +672,7 @@ class Printer {
         e.bodies.forEach((b, i) => {
             if (i > 0) this.write(", ");
             this.write("() => ");
-            this.printBlockBody(b.body);
+            this.printBlockBody(b.body, b.bodyInnerComments);
         });
         if (e.maxConcurrency) {
             this.write(", { maxConcurrency: ");
@@ -552,7 +686,7 @@ class Printer {
         this.write("parallelMap(");
         this.printExpr(e.collection);
         this.write(`, (${e.param}) => `);
-        this.printBlockBody(e.body);
+        this.printBlockBody(e.body, e.bodyInnerComments);
         if (e.maxConcurrency) {
             this.write(", { maxConcurrency: ");
             this.printExpr(e.maxConcurrency);
