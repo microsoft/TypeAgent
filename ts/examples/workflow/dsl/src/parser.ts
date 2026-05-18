@@ -185,6 +185,17 @@ export class Parser {
     /** Parse a single workflow (backward compat). */
     parseSingle(): { ast: WorkflowDecl | undefined; errors: ParseError[] } {
         const ast = this.parseWorkflow();
+        // Trailing tokens past the workflow are a parse error — without
+        // this check, stray punctuation (e.g. an extra `}`) or a second
+        // unintentional `workflow` would be silently dropped on emit.
+        const next = this.peek();
+        if (next.kind !== TokenKind.EOF) {
+            this.error(
+                `Unexpected token after workflow: ${next.kind} (${JSON.stringify(
+                    next.value,
+                )})`,
+            );
+        }
         return { ast, errors: this.errors };
     }
 

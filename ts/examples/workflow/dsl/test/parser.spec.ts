@@ -662,4 +662,38 @@ describe("parser", () => {
         expect(ast).toBeDefined();
         expect(ast!.name).toBe("processData");
     });
+
+    describe("trailing-tokens-after-workflow", () => {
+        test("stray `}` after workflow is a parse error", () => {
+            const { errors } = parse(
+                `workflow w(): number { return 1; }\n}\n`,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0].message).toMatch(
+                /Unexpected token after workflow/,
+            );
+        });
+
+        test("a second `workflow` keyword is a parse error", () => {
+            const { errors } = parse(
+                `workflow a(): number { return 1; }\nworkflow b(): number { return 2; }\n`,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0].message).toMatch(
+                /Unexpected token after workflow/,
+            );
+        });
+
+        test("trailing whitespace and comments only are NOT a parse error", () => {
+            // Comments after the workflow are not currently attached
+            // anywhere — that's a separate fidelity gap pinned in
+            // contentFidelity.spec.ts. They should not, however, trigger
+            // a parse error (the lexer reports them as comments, not
+            // tokens).
+            const { errors } = parse(
+                `workflow w(): number { return 1; }\n   \n// trailing comment\n`,
+            );
+            expect(errors).toEqual([]);
+        });
+    });
 });

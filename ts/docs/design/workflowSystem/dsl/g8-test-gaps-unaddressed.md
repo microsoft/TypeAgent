@@ -266,12 +266,10 @@ record absence (e.g. `fallback.param: string | undefined`) and the
 formatter to emit `() =>` when the param is undefined. Pinned:
 `contentFidelity.spec.ts > "attempts fallback parameter name elided in source is not re-introduced"`.
 
-### Stray content beyond the parsed workflow (e.g. extra `}` at EOF) is dropped
+### ~~Stray content beyond the parsed workflow (e.g. extra `}` at EOF) is dropped~~ (closed)
 
-Discovered via `examples/d1-standup-prep.wf` which has a trailing
-stray `}` after the workflow's outer `}`. The data-fidelity oracle
-passes for d1 (the dropped token is punctuation, not an
-identifier / literal / comment), so this is captured only as a
-note here. Whether this is a "bug" depends on whether the DSL
-permits more than one workflow per file — the current
-`parseSingle()` contract is "one workflow per parse".
+`parseSingle()` now emits an explicit `"Unexpected token after
+workflow"` parse error when any token other than EOF remains after
+the workflow's outer `}`. The malformed trailing `}` in
+`examples/d1-standup-prep.wf` was also removed. Discovered by the
+`contentFidelity.spec.ts` examples-corpus pass.
