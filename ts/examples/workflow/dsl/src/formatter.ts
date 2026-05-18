@@ -273,8 +273,17 @@ class Printer {
             params.forEach((p, i) => {
                 this.printOwnLineComments(p.leadingComments);
                 this.printParam(p);
-                const isLast = i === params.length - 1;
-                this.write(isLast ? "," : ",");
+                // Emit inline trailing comments AFTER the comma (and
+                // separated by a space). Two reasons:
+                //   1. Line comments (`// ...`) extend to end-of-line,
+                //      so they can never legally precede the comma on
+                //      the same line — they must come after it.
+                //   2. The parser scoops same-line comments both
+                //      before AND after the comma into the prev param's
+                //      trailingComments, so either side round-trips,
+                //      but emitting after the comma is the only form
+                //      that works uniformly for // and /* */ kinds.
+                this.write(",");
                 this.emitInlineTrailing(p.trailingComments, p.endLine);
                 this.newline();
                 this.emitAfterLineTrailing(p.trailingComments, p.endLine);

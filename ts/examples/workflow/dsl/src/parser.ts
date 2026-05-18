@@ -295,6 +295,20 @@ export class Parser {
                 if (t) prev.trailingComments = t;
             }
             this.advance(); // consume comma
+            // After the comma, also scoop any line/block comments that
+            // sit on the SAME source line as the param's last token
+            // (e.g. `a: int, // note`). Without this they would migrate
+            // to the next param's leading on round-trip — which is wrong
+            // because the formatter emits param trailings in this slot.
+            if (prev.endLine !== undefined) {
+                const t = this.takeInlineTrailingComments(prev.endLine);
+                if (t) {
+                    prev.trailingComments = [
+                        ...(prev.trailingComments ?? []),
+                        ...t,
+                    ];
+                }
+            }
             if (this.peek().kind === TokenKind.RParen) break;
             params.push(this.parseParam());
         }
