@@ -1156,16 +1156,20 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
 
 **`source` discriminates the failure origin.**
 
-- `"task"` - the registered task implementation threw, returned a value
+- `"task"` — the registered task implementation threw, returned a value
   that violated `outputSchema` (§5.2), or otherwise signaled failure.
-  `task` and `node` SHOULD be populated.
-- `"runtime"` - the engine itself raised the failure (loop
-  `maxIterations` exceeded, branch selector value did not match any
-  `cases` or `default`, reference resolution failed at runtime, etc.).
-  `code` distinguishes the runtime case (well-known codes include
-  `LoopMaxIterationsExceeded`, `BranchSelectorUnmatched`,
-  `ReferenceUnresolved`; the full list is engine-defined and surfaced
-  through the validator's error-code table - see §4.3).
+  The `code` field is `"TASK_ERROR"`. `task` and `node` SHOULD be
+  populated. `data` carries any additional payload the task returned.
+- `"runtime"` — the engine itself raised the failure (loop
+  `maxIterations` exceeded, reference resolution failed at runtime,
+  etc.). The `code` field is `"RUNTIME_ERROR"`. `node` and `scopePath`
+  identify where the failure occurred; `message` contains a
+  human-readable description (e.g.
+  `"LoopMaxIterationsExceeded at \"nodeId\" (limit: N)"`).
+
+An engine MAY use additional `code` values for finer-grained
+discrimination; consumers MUST treat unknown `code` values as opaque
+and fall back to inspecting `source`.
 
 A recovery task that wants to be type-strict about the error it
 consumes can narrow the schema for its `error` input field below
