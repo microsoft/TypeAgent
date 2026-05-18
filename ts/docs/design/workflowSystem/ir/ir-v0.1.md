@@ -1157,11 +1157,11 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
 **`source` and `code` discriminate the failure origin.**
 
 - `"task"` — the registered task implementation returned `{ kind: "fail" }`
-  or threw. `code` is `"TASK_ERROR"`. `task` and `node` SHOULD be
+  or threw. `code` is `"TaskError"`. `task` and `node` SHOULD be
   populated; `data` carries any additional payload the task returned.
 - `"runtime"` — the engine raised a **recoverable** runtime condition.
   `code` further discriminates the case:
-  - `"RUNTIME_ERROR"` — general engine failure (task timeout, policy
+  - `"RuntimeError"` — general engine failure (task timeout, policy
     denial, cancellation, etc.).
   - `"LoopMaxIterationsExceeded"` — the loop hit its `maxIterations`
     cap. Authors may want to catch this and return a partial result.
@@ -1169,7 +1169,7 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
     its declared `outputSchema`. This indicates a buggy or drifted task
     implementation; authors may want to log or fall back.
   All `"runtime"` errors are routed to `onError` handlers.
-- `"runtime"` with `code: "UNRECOVERABLE_ERROR"` — the engine raised a
+- `"runtime"` with `code: "UnrecoverableError"` — the engine raised a
   condition that is **statically unreachable** after validation
   (e.g., `ReferenceUnresolved`, `BranchSelectorUnmatched`, unknown `$from`
   namespace, missing node). These indicate the IR bypassed the static

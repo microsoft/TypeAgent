@@ -117,7 +117,7 @@ function resolveFromRef(
             // Unreachable after static validation (namespace check).
             throw new EngineError(
                 `Unknown $from namespace: "${from}"`,
-                "UNRECOVERABLE_ERROR",
+                "UnrecoverableError",
                 true,
             );
     }
@@ -127,7 +127,7 @@ function resolveFromRef(
         // Unreachable after static validation (dominator + onError-split coverage).
         throw new EngineError(
             `Reference unresolved: $from "${from}", name "${name}"`,
-            "UNRECOVERABLE_ERROR",
+            "UnrecoverableError",
             true,
         );
     }
@@ -140,7 +140,7 @@ function resolveFromRef(
                 // Unreachable after static validation (type-compat + resolveSchemaPath).
                 throw new EngineError(
                     `Path projection failed at "${segment}" on null/undefined`,
-                    "UNRECOVERABLE_ERROR",
+                    "UnrecoverableError",
                     true,
                 );
             }
@@ -150,7 +150,7 @@ function resolveFromRef(
                     // Unreachable after static validation.
                     throw new EngineError(
                         `Path projection: expected array at index ${segment}`,
-                        "UNRECOVERABLE_ERROR",
+                        "UnrecoverableError",
                         true,
                     );
                 }
@@ -161,7 +161,7 @@ function resolveFromRef(
                     // Unreachable after static validation.
                     throw new EngineError(
                         `Path projection: expected object at key "${segment}"`,
-                        "UNRECOVERABLE_ERROR",
+                        "UnrecoverableError",
                         true,
                     );
                 }
@@ -177,22 +177,22 @@ function resolveFromRef(
 
 /**
  * Well-known engine-level error codes.
- * - "TASK_ERROR": a registered task returned {kind:"fail"} or threw.
- * - "RUNTIME_ERROR": the engine raised a recoverable runtime condition
+ * - "TaskError": a registered task returned {kind:"fail"} or threw.
+ * - "RuntimeError": the engine raised a recoverable runtime condition
  *   (policy/approval, timeout, cancellation).
  * - "LoopMaxIterationsExceeded": loop hit its maxIterations cap (recoverable).
  * - "OutputSchemaViolation": task returned a value that failed outputSchema (recoverable).
- * - "UNRECOVERABLE_ERROR": the engine raised a condition that is
+ * - "UnrecoverableError": the engine raised a condition that is
  *   statically unreachable after validation (ReferenceUnresolved,
  *   BranchSelectorUnmatched, unknown namespace, invalid IR structure).
  *   These bypass onError handlers.
  */
 type EngineErrorCode =
-    | "TASK_ERROR"
-    | "RUNTIME_ERROR"
+    | "TaskError"
+    | "RuntimeError"
     | "LoopMaxIterationsExceeded"
     | "OutputSchemaViolation"
-    | "UNRECOVERABLE_ERROR";
+    | "UnrecoverableError";
 
 class EngineError extends Error {
     readonly code: EngineErrorCode;
@@ -201,7 +201,7 @@ class EngineError extends Error {
 
     constructor(
         message: string,
-        code: EngineErrorCode = "RUNTIME_ERROR",
+        code: EngineErrorCode = "RuntimeError",
         unrecoverable = false,
     ) {
         super(message);
@@ -545,7 +545,7 @@ export class WorkflowEngine {
             // Unreachable after static validation: name-resolution pass
             // verifies all node references exist.
             if (!node) {
-                throw new EngineError(`Node "${currentId}" not found`, "UNRECOVERABLE_ERROR", true);
+                throw new EngineError(`Node "${currentId}" not found`, "UnrecoverableError", true);
             }
 
             // If we have a pending error (dispatching to onError target),
@@ -727,7 +727,7 @@ export class WorkflowEngine {
             if (!task) {
                 throw new EngineError(
                     `Task "${node.task}" not found in registry`,
-                    "UNRECOVERABLE_ERROR",
+                    "UnrecoverableError",
                     true,
                 );
             }
@@ -838,7 +838,7 @@ export class WorkflowEngine {
             if (isNeverSchema(node.outputSchema)) {
                 throw new EngineError(
                     `Task "${node.task}" at "${nodeId}" has never-output schema but returned ok.`,
-                    "UNRECOVERABLE_ERROR",
+                    "UnrecoverableError",
                     true,
                 );
             }
@@ -928,7 +928,7 @@ export class WorkflowEngine {
             // way this indicates a validator bypass — unrecoverable.
             throw new EngineError(
                 `Branch selector resolved to "${selector}" but no matching case or default exists`,
-                "UNRECOVERABLE_ERROR",
+                "UnrecoverableError",
                 true,
             );
         }
@@ -1455,7 +1455,7 @@ function buildErrorObject(
 ): Record<string, unknown> {
     if (err instanceof TaskFailure) {
         return {
-            code: "TASK_ERROR",
+            code: "TaskError",
             message: err.taskError.message,
             source: "task",
             task: err.taskName,
@@ -1465,7 +1465,7 @@ function buildErrorObject(
         };
     }
     return {
-        code: err instanceof EngineError ? err.code : "RUNTIME_ERROR",
+        code: err instanceof EngineError ? err.code : "RuntimeError",
         message: err instanceof Error ? err.message : String(err),
         source: "runtime",
         task: taskName,
