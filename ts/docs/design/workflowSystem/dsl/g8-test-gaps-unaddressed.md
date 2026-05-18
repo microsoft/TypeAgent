@@ -141,3 +141,51 @@ indent accumulation, round 2 pass 1) was acted upon — fixed via
 `writeMultilineCommentText()` (decision §10) and pinned by
 `"multi-line block comment as block-end trailing is round-trip
 stable"`.
+
+## Round 3 test-gap pass 1
+
+Round 3 surfaces audited (`test/round3-gaps.spec.ts`, +20 tests, all
+green; no implementation changes). Areas considered but **not** turned
+into new tests:
+
+### Nested object-type parameter with comments
+
+`workflow w(x: { /* note */ foo: number }): ...` — the parser
+`parseTypeExpr` path has no hook for comments inside an `ObjectType`
+field list, and that surface is outside round-3 scope (round 3 was
+strictly about block bodies + parameter list + `}` else gap). Adding
+a test here would either pass trivially (comment dropped by lexer
+position) or document a separate, unrelated gap.
+
+### Inner comments in built-in **expression-position** nesting
+
+E.g. `const x = parallel(() => map(xs, (i) => { /* hi */ }), () => {})`.
+The inner `map(...)` body uses the same `printBlockBody` /
+`bodyInnerComments` slot already exercised by the top-level
+"comment inside empty map body" test. The expression-nesting context
+adds no new emitter path — the formatter recurses via `printExpr`
+into the inner built-in unchanged.
+
+### `assertStable` × 3-pass for every surface
+
+The new file uses a 3-pass `assertStable` (`format = format =
+format`) and also has a dedicated `stripTrivia(parse(format(parse)))`
+equivalence describe. Adding a 4th- or 5th-pass test wouldn't catch
+any additional class of bug — non-idempotence shows up by pass 2.
+
+### Inline trailing comment on a parameter declared with an inline
+object type
+
+Tests would mostly exercise the type-printer and not the round-3
+comment slots, since the trailing-after-comma path is already
+covered by the array-type variant (`xs: string[], // a list`).
+
+### Single-pass coverage of `endLine` after every type-expression
+shape
+
+`endLine` is sourced from `this.lastToken.line` after `parseTypeExpr`
+returns, so the only variation is whether the last token was the
+type's identifier (NamedType), `]` (ArrayType), or `}` (ObjectType).
+The array-type test pins the `]` case; the named-type case is the
+common path under every other param test; the object-type case
+again belongs to a separate gap (above).
