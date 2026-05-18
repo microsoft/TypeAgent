@@ -63,6 +63,12 @@ function stripTrivia(value: unknown): unknown {
             if (k === "leadingComments") continue;
             if (k === "trailingComments") continue;
             if (k === "innerComments") continue;
+            if (k === "paramInnerComments") continue;
+            if (k === "thenInnerComments") continue;
+            if (k === "elseInnerComments") continue;
+            if (k === "elseLeadingComments") continue;
+            if (k === "defaultInnerComments") continue;
+            if (k === "bodyInnerComments") continue;
             if (k === "endLine") continue;
             // Drop every source-position field. These shift when comments
             // appear or when the formatter re-emits the same AST.

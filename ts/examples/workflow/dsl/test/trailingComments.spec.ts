@@ -315,16 +315,13 @@ describe("compiler/IR: trailing/inner comments don't leak", () => {
     });
 });
 
-describe("documented gap: comments inside empty nested blocks are dropped", () => {
-    // These tests pin the intentional behavior documented in
-    // implementation-decision.md §D7 and g8-test-gaps-unaddressed.md
-    // "Round 2 — Comments inside empty nested blocks".
-    //
-    // innerComments only exist on WorkflowDecl. Empty if/else/switch
-    // arm bodies have no innerComments slot and their contents become
-    // unattached after parse; round-trip loses the comment.
+describe("round 3: comments inside empty nested blocks are preserved", () => {
+    // These were previously documented as a "gap" (see implementation-decision.md
+    // §D7 — superseded in round 3). The parser now captures *innerComments
+    // on every block-bearing AST node, not just WorkflowDecl, and the
+    // formatter emits them inside the empty `{ }`.
 
-    test("comment inside empty 'then' block is lost on round-trip", () => {
+    test("comment inside empty 'then' block round-trips", () => {
         const src = `workflow w(x: number): string {
     if (x === 1) {
         // TODO: handle case 1
@@ -332,11 +329,11 @@ describe("documented gap: comments inside empty nested blocks are dropped", () =
     return "x";
 }`;
         const out = roundTrip(src);
-        // Pin the (lossy) behavior so we notice if it ever changes:
-        expect(out).not.toContain("TODO: handle case 1");
+        expect(out).toContain("// TODO: handle case 1");
+        assertStable(src);
     });
 
-    test("comment inside empty 'else' block is lost on round-trip", () => {
+    test("comment inside empty 'else' block round-trips", () => {
         const src = `workflow w(x: number): string {
     if (x === 1) {
         return "y";
@@ -346,10 +343,11 @@ describe("documented gap: comments inside empty nested blocks are dropped", () =
     return "x";
 }`;
         const out = roundTrip(src);
-        expect(out).not.toContain("TODO: not yet");
+        expect(out).toContain("// TODO: not yet");
+        assertStable(src);
     });
 
-    test("comment inside empty switch case arm is lost on round-trip", () => {
+    test("comment inside empty switch case arm round-trips", () => {
         const src = `workflow w(x: number): string {
     switch (x) {
         case 1:
@@ -359,10 +357,188 @@ describe("documented gap: comments inside empty nested blocks are dropped", () =
     }
     return "x";
 }`;
-        // Note: 'case 1' with no statements then 'default' — the parser
-        // accepts this; the comment is unattached.
         const out = roundTrip(src);
-        expect(out).not.toContain("TODO: arm 1");
+        expect(out).toContain("// TODO: arm 1");
+        assertStable(src);
+    });
+
+    test("comment inside empty 'default' arm round-trips", () => {
+        const src = `workflow w(x: number): string {
+    switch (x) {
+        case 1:
+            return "a";
+        default:
+            // fallthrough handled upstream
+    }
+    return "x";
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// fallthrough handled upstream");
+        assertStable(src);
+    });
+
+    test("comment inside empty workflow with empty if/else round-trips", () => {
+        const src = `workflow w(x: number): string {
+    if (x === 1) {
+        /* maybe later */
+    } else {
+        /* also maybe later */
+    }
+    return "x";
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("/* maybe later */");
+        expect(out).toContain("/* also maybe later */");
+        assertStable(src);
+    });
+
+    test("comment inside empty attempts body round-trips", () => {
+        const src = `workflow w(): string {
+    const x = attempts(3, () => {
+        // retry me
+    });
+    return "ok";
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// retry me");
+        assertStable(src);
+    });
+
+    test("comment inside empty map body round-trips", () => {
+        const src = `workflow w(xs: string[]): string[] {
+    return map(xs, (item) => {
+        // map me
+    });
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// map me");
+        assertStable(src);
+    });
+
+    test("comment inside empty parallel branch round-trips", () => {
+        const src = `workflow w(): string {
+    const x = parallel(() => {
+        // branch 1
+    }, () => {
+        // branch 2
+    });
+    return "ok";
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// branch 1");
+        expect(out).toContain("// branch 2");
+        assertStable(src);
+    });
+});
+
+describe("round 3: comment between } and else", () => {
+    test("inline block comment between } and else round-trips", () => {
+        const src = `workflow w(x: number): string {
+    if (x === 1) {
+        return "a";
+    } /* note */ else {
+        return "b";
+    }
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("/* note */");
+        assertStable(src);
+    });
+
+    test("line comment between } and else forces newline", () => {
+        const src = `workflow w(x: number): string {
+    if (x === 1) {
+        return "a";
+    } // note
+    else {
+        return "b";
+    }
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// note");
+        // After the line comment, "else" must be on its own line (not after //).
+        const lines = out.split("\n");
+        const elseLine = lines.find((l) => l.trim().startsWith("else"));
+        expect(elseLine).toBeDefined();
+        assertStable(out);
+    });
+
+    test("comment between } and else-if round-trips", () => {
+        const src = `workflow w(x: number): string {
+    if (x === 1) {
+        return "a";
+    } /* fallthrough */ else if (x === 2) {
+        return "b";
+    } else {
+        return "c";
+    }
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("/* fallthrough */");
+        assertStable(src);
+    });
+});
+
+describe("round 3: comments around parameters", () => {
+    test("leading comment on parameter round-trips", () => {
+        const src = `workflow w(
+    // the first one
+    a: number,
+    b: string,
+): string {
+    return b;
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// the first one");
+        assertStable(out);
+    });
+
+    test("inline trailing comment on parameter round-trips", () => {
+        const src = `workflow w(
+    a: number, // count
+    b: string, // label
+): string {
+    return b;
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// count");
+        expect(out).toContain("// label");
+        assertStable(out);
+    });
+
+    test("comment in empty parameter list round-trips", () => {
+        const src = `workflow w(
+    // no params yet
+): string {
+    return "x";
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("// no params yet");
+        assertStable(out);
+    });
+
+    test("simple parameter list without comments stays inline", () => {
+        const src = `workflow w(a: number, b: string): string {
+    return b;
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("workflow w(a: number, b: string)");
+    });
+
+    test("mixed param comments preserve order", () => {
+        const src = `workflow w(
+    /* leading-a */
+    a: number, // trail-a
+    // leading-b
+    b: string,
+): string {
+    return b;
+}`;
+        const out = roundTrip(src);
+        expect(out).toContain("/* leading-a */");
+        expect(out).toContain("// trail-a");
+        expect(out).toContain("// leading-b");
+        assertStable(out);
     });
 });
 
