@@ -1,6 +1,6 @@
 # Code-review feedback not acted upon
 
-Four code-review subagent passes were performed across the two rounds
+Five code-review subagent passes were performed across the three rounds
 of G8 work on `agents/can-you-address-g8-in-the-dsl-v0-f3fc165d`:
 
 | Round | Pass | Result                                                                                                      |
@@ -9,7 +9,8 @@ of G8 work on `agents/can-you-address-g8-in-the-dsl-v0-f3fc165d`:
 | 1     | 2    | 1 minor observation about end-of-block comments — see "Acted upon"                                          |
 | 2     | 1    | No significant bugs                                                                                         |
 | 2     | 2    | 1 documentation gap (empty nested blocks) — fixed by pinning tests + entry in `g8-test-gaps-unaddressed.md` |
-| 3     | —    | Not run (user request was direct; gaps were enumerated explicitly)                                          |
+| 3     | 1    | No significant bugs                                                                                         |
+| 3     | 2    | 1 bug — non-last param's inline trailing comment migrated on round-trip; fixed in `975a07d5`                |
 
 This document records feedback that was _not_ acted upon, with
 rationale. The current set is empty — every actionable item was
@@ -75,6 +76,21 @@ Minor refactoring observation; not a functional issue. The two
 helpers intentionally remain separate APIs — their semantic meaning
 is different and they are likely to diverge around blank-line /
 separator handling. Recorded for context in decisions §10.
+
+### Non-last param inline trailing comment migrated (round 3 pass 2)
+
+The pass-2 reviewer (run adversarially) found that for
+`workflow w(a: int, // a-trailer\n  b: int)` the formatter was
+emitting the `// a-trailer` between `a: int` and the `,` (i.e. before
+the comma), but the parser's `takeInlineTrailingComments` only
+captured comments whose offset was before the comma's offset — so on
+round-trip the comment would migrate to the next param's
+`leadingComments`. **Fix in `975a07d5`:** the parser now scoops
+same-line comments on BOTH sides of the comma (call site invokes
+`takeInlineTrailingComments` once before consuming the comma and
+once after), and the formatter emits inline-trailing comments AFTER
+the comma uniformly (line comments cannot legally precede a comma,
+so this is the only safe placement).
 
 ## Outstanding items
 

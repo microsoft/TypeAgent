@@ -170,75 +170,6 @@ The round-2 pinning tests under `"documented gap: comments inside empty
 nested blocks are dropped"` were inverted into positive round-trip
 tests in round 3.
 
-## 13. Parameter comments use multi-line layout only when needed
-
-_Introduced round 3._
-
-`ParamDecl` now carries `leadingComments` and `trailingComments`;
-`WorkflowDecl` carries `paramInnerComments` for the empty-list case.
-The formatter chooses between two layouts:
-
-- **Inline** (`workflow w(a: number, b: string): T { ... }`): used when
-  no param has comments and `paramInnerComments` is empty. Preserves the
-  compact look that 99% of workflows use.
-- **Multi-line** (one param per line, with trailing comma): used as
-  soon as any comment is present anywhere in the parameter list. The
-  trailing comma is unconditional in this mode so a `// trailing` on
-  the last param has a place to live (between the comma and the
-  newline), matching the placement of inline trailing comments on the
-  prior params.
-
-Rationale: a single binary switch is easier to predict than a
-per-param decision. The cost of formatting one rarely-commented param
-on its own line is acceptable; the benefit is that comment placement
-is unambiguous.
-
-## 14. `elseLeadingComments` renders inline OR forces a line break
-
-_Introduced round 3._
-
-Comments between the `}` of the then block and the `else` keyword
-(e.g. `} /* fallthrough */ else {` or `} // note\nelse {`) are
-captured as `IfStatement.elseLeadingComments`. Rendering rule:
-
-- If every captured comment is a block comment (`/* ... */`): emit
-  them on the same line as the `}`/`else` keyword (space-separated).
-- If any captured comment is a line comment (`//`): emit each on its
-  own line and place `else` on a fresh line at the current indent.
-
-Rationale: line comments inherently terminate at end-of-line; trying
-to keep `else` on the same line as a `//` would either swallow the
-comment or generate invalid output. Block comments do not have that
-problem, so for them we preserve the conventional `} <cmt> else`
-shape.
-
-To avoid stealing the IfStatement's own trailing comments
-(`if (...) { ... } // note-on-the-if` — no `else` keyword follows),
-the parser snapshots its `commentIdx` before reading ahead for `else`
-and rolls back on a no-`else` outcome so the outer `parseStatement`
-sees the comments and attaches them as the IfStatement's
-`trailingComments`.
-
-## 15. Parameter list rolls inline-trailing across commas
-
-_Introduced round 3._
-
-For multi-line parameter lists, an inline-trailing comment on a param
-must be captured _before_ the comma is consumed — otherwise the
-comma's `}` (next token) would push the comment forward and it would
-attach as the leading comment of the next param. The implementation:
-
-1. `parseParam` records `endLine` for the param (set from
-   `lastToken.line` after the type is parsed).
-2. The list loop calls `takeInlineTrailingComments(prev.endLine)` for
-   the previous param _then_ consumes the `,`.
-3. For the last param (no trailing comma), the loop calls
-   `takeLeadingComments()` after the param and treats those as the
-   param's trailing.
-
-The empty parameter list `workflow w()` has nowhere to hang
-intervening comments, so they go on `WorkflowDecl.paramInnerComments`.
-
 ## 8. `finalizeBlock` is called from every block parser, not just at EOF
 
 _Introduced round 2._
@@ -332,3 +263,72 @@ Blank lines between statements are a known information loss; if
 needed, they could be added later by capturing blank-line counts on
 the lexer side and storing them on `Statement` as
 `blankLinesBefore: number`.
+
+## 13. Parameter comments use multi-line layout only when needed
+
+_Introduced round 3._
+
+`ParamDecl` now carries `leadingComments` and `trailingComments`;
+`WorkflowDecl` carries `paramInnerComments` for the empty-list case.
+The formatter chooses between two layouts:
+
+- **Inline** (`workflow w(a: number, b: string): T { ... }`): used when
+  no param has comments and `paramInnerComments` is empty. Preserves the
+  compact look that 99% of workflows use.
+- **Multi-line** (one param per line, with trailing comma): used as
+  soon as any comment is present anywhere in the parameter list. The
+  trailing comma is unconditional in this mode so a `// trailing` on
+  the last param has a place to live (between the comma and the
+  newline), matching the placement of inline trailing comments on the
+  prior params.
+
+Rationale: a single binary switch is easier to predict than a
+per-param decision. The cost of formatting one rarely-commented param
+on its own line is acceptable; the benefit is that comment placement
+is unambiguous.
+
+## 14. `elseLeadingComments` renders inline OR forces a line break
+
+_Introduced round 3._
+
+Comments between the `}` of the then block and the `else` keyword
+(e.g. `} /* fallthrough */ else {` or `} // note\nelse {`) are
+captured as `IfStatement.elseLeadingComments`. Rendering rule:
+
+- If every captured comment is a block comment (`/* ... */`): emit
+  them on the same line as the `}`/`else` keyword (space-separated).
+- If any captured comment is a line comment (`//`): emit each on its
+  own line and place `else` on a fresh line at the current indent.
+
+Rationale: line comments inherently terminate at end-of-line; trying
+to keep `else` on the same line as a `//` would either swallow the
+comment or generate invalid output. Block comments do not have that
+problem, so for them we preserve the conventional `} <cmt> else`
+shape.
+
+To avoid stealing the IfStatement's own trailing comments
+(`if (...) { ... } // note-on-the-if` — no `else` keyword follows),
+the parser snapshots its `commentIdx` before reading ahead for `else`
+and rolls back on a no-`else` outcome so the outer `parseStatement`
+sees the comments and attaches them as the IfStatement's
+`trailingComments`.
+
+## 15. Parameter list rolls inline-trailing across commas
+
+_Introduced round 3._
+
+For multi-line parameter lists, an inline-trailing comment on a param
+must be captured _before_ the comma is consumed — otherwise the
+comma's `}` (next token) would push the comment forward and it would
+attach as the leading comment of the next param. The implementation:
+
+1. `parseParam` records `endLine` for the param (set from
+   `lastToken.line` after the type is parsed).
+2. The list loop calls `takeInlineTrailingComments(prev.endLine)` for
+   the previous param _then_ consumes the `,`.
+3. For the last param (no trailing comma), the loop calls
+   `takeLeadingComments()` after the param and treats those as the
+   param's trailing.
+
+The empty parameter list `workflow w()` has nowhere to hang
+intervening comments, so they go on `WorkflowDecl.paramInnerComments`.
