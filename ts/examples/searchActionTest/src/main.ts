@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { ChatModelWithStreaming, openai } from "aiclient";
 import { CalendarSearchAction, CalendarDateTime } from "./calSearchSchema.js";
 import {
@@ -14,8 +14,7 @@ import { readSchemaFile } from "typechat-utils";
 
 import * as fs from "fs";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 const schemaText = readSchemaFile("./calSearchSchema.ts");
 const preamble = "You are a service that translates user calendar queries.\n";

@@ -17,6 +17,8 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
     - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
+- Setup Node native module build tools:
+  - `sudo apt install -y make build-essential`
 - Clone and build:
   - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent` (Note: you can clone this to any location and does not have to be ~/src)
   - `cd ~/src/TypeAgent/ts`

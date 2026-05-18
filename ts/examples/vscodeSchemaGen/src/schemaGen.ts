@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as path from "path";
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import * as fs from "fs";
 import { finished } from "stream/promises";
 import { createPromptLogger } from "telemetry";
@@ -18,8 +18,7 @@ import {
 import { generateActionRequests } from "./actionGen.js";
 import { dedupeList, generateEmbeddingWithRetry, TypeSchema } from "typeagent";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 async function getModelCompletionResponse(
     chatModel: ChatModelWithStreaming,

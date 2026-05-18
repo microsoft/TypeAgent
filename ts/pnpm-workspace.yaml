@@ -13,8 +13,10 @@ packages:
   - packages/security/*
   - examples/*
   - examples/agentExamples/*
+  - examples/workflow/*
   - extensions/*
   - tools
+  - tools/*
 
 onlyBuiltDependencies:
   - "@azure/msal-node-extensions"

@@ -263,6 +263,8 @@ async function listVaultSecretNames(vault) {
                 vault,
                 "--query",
                 "[].name",
+                "-o",
+                "json",
             ],
             { shell: true },
             (e, stdout, stderr) => {

@@ -57,7 +57,9 @@ export type ClientAction =
     | "send-sms"
     | "search-nearby"
     | "automate-phone-ui"
-    | "open-folder";
+    | "open-folder"
+    | "trash-restore"
+    | "trash-flush";
 
 export interface ActionIO {
     // Set the display to the content provided

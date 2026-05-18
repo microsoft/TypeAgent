@@ -19,8 +19,8 @@
     "./generation": "./dist/generation/index.js"
   },
   "bin": {
-    "generate-grammar": "./dist/generation/generate-grammar-cli.js",
-    "test-grammar": "./dist/generation/test-grammar-cli.js"
+    "generate-grammar": "./bin/generate-grammar.js",
+    "test-grammar": "./bin/test-grammar.js"
   },
   "files": [
     "dist",
@@ -48,6 +48,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.4.5",
     "regexp.escape": "^2.0.1"

@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import { defaultFileLoader } from "./defaultFileLoader.js";
-import { compileGrammar, FileLoader, SchemaLoader } from "./grammarCompiler.js";
+import {
+    compileGrammar,
+    FileLoader,
+    SchemaLoader,
+    DebugInfoCollector,
+} from "./grammarCompiler.js";
 import { GrammarOptimizationOptions } from "./grammarOptimizer.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
@@ -14,6 +19,8 @@ export type LoadGrammarRulesOptions = {
     enableValueExpressions?: boolean; // Enable JavaScript-like value expressions (default: true)
     /** Compile-time AST optimizations.  All optimizations default to off. */
     optimizations?: GrammarOptimizationOptions;
+    /** When provided, the compiler populates this with partId/ruleId source positions. */
+    debugCollector?: DebugInfoCollector;
 };
 
 function parseAndCompileGrammar(
@@ -58,6 +65,7 @@ function parseAndCompileGrammar(
         parseResult.imports,
         options?.schemaLoader,
         options?.optimizations,
+        options?.debugCollector,
     );
     return grammar;
 }

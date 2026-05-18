@@ -15,6 +15,9 @@ interface UserSettings {
   conversation: {
     resume: boolean; // Resume last conversation on startup
   };
+  ui: {
+    autoComplete: boolean; // Show inline autocomplete suggestions in the CLI (default: true)
+  };
 }
 ```
 
@@ -30,6 +33,9 @@ interface UserSettings {
   },
   "conversation": {
     "resume": false
+  },
+  "ui": {
+    "autoComplete": true
   }
 }
 ```
@@ -38,13 +44,16 @@ interface UserSettings {
 
 All under `@system settings`:
 
-| Command                                              | Description                  |
-| ---------------------------------------------------- | ---------------------------- |
-| `@system settings`                                   | Show all current settings    |
-| `@system settings server hidden [true\|false]`       | Toggle hidden server startup |
-| `@system settings server idleTimeout <seconds>`      | Set idle timeout             |
-| `@system settings conversation resume [true\|false]` | Toggle conversation resume   |
-| `@system settings reset`                             | Reset all to defaults        |
+| Command                                              | Description                      |
+| ---------------------------------------------------- | -------------------------------- |
+| `@system settings`                                   | Show all current settings        |
+| `@system settings server hidden [true\|false]`       | Toggle hidden server startup     |
+| `@system settings server idleTimeout <seconds>`      | Set idle timeout                 |
+| `@system settings conversation resume [true\|false]` | Toggle conversation resume       |
+| `@system settings ui autoComplete [true\|false]`     | Toggle inline autocomplete (CLI) |
+| `@system settings reset`                             | Reset all to defaults            |
+
+These commands are also accessible via natural language, e.g. "disable autocomplete", "turn on autocomplete".
 
 ## Startup Integration
 
@@ -54,12 +63,13 @@ All under `@system settings`:
 - Explicit CLI flags override user settings via nullish coalescing (`??`)
 - Boolean flags support `--no-<flag>` (e.g., `--no-hidden`, `--no-resume`) to explicitly override a saved `true` setting
 - Omitting a flag leaves it as `undefined`, which falls through to the saved user setting
+- `ui.autoComplete` controls whether inline completions appear in the prompt. The completion controller is always active (it owns stdin in raw mode); when `autoComplete` is `false`, the controller is passed as `undefined` to `questionWithCompletion`, suppressing suggestions while keeping stdin handling consistent. This avoids mid-session stdin ownership conflicts between `questionWithCompletion` and readline.
 
 ### Shell (`packages/shell/src/main/instance.ts`)
 
 - On startup, load user settings and apply to `ensureAgentServer()` calls
 - Shell args support `--hidden`/`--no-hidden`, `--idle-timeout <n>`, `--resume`/`--no-resume`
-- Shell settings UI can be extended later
+- `ui.autoComplete` hot-reloads immediately in the shell: `instance.ts` watches `~/.typeagent/user-settings.json` with `fs.watch` and calls `shellWindow.setUserSettingValue("partialCompletion", ...)` on any change, which triggers the IPC cascade to `enablePartialInput()` in the renderer with no restart needed
 
 ## Storage Layer
 

@@ -65,11 +65,24 @@
     "powershell": {
       "name": "powershell-typeagent"
     },
+    "screencapture": {
+      "name": "screencapture-agent",
+      "execMode": "separate"
+    },
+    "workflow": {
+      "name": "workflow-agent"
+    },
     "utility": {
       "name": "utility-typeagent"
     },
     "onboarding": {
       "name": "onboarding-agent"
+    },
+    "osNotifications": {
+      "name": "os-notifications-agent"
+    },
+    "timer": {
+      "name": "timer-agent"
     },
     "github-cli": {
       "name": "github-cli-agent"
@@ -79,6 +92,9 @@
     },
     "visualStudio": {
       "name": "visualstudio-agent"
+    },
+    "discord": {
+      "name": "discord-agent"
     }
   },
   "mcpServers": {

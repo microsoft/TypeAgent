@@ -13,6 +13,7 @@ import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import {
     AgentServerChannelName,
+    AGENT_SERVER_DEFAULT_URL,
     DispatcherConnectOptions,
     JoinConversationResult,
     AgentServerInvokeFunctions,
@@ -22,7 +23,7 @@ import {
 import type { ChatPanel } from "chat-ui";
 import type { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 
-const DEFAULT_AGENT_SERVER_URL = "ws://localhost:8999";
+const DEFAULT_AGENT_SERVER_URL = AGENT_SERVER_DEFAULT_URL;
 
 export interface DispatcherHandle {
     dispatcher: Dispatcher;

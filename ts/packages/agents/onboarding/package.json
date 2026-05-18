@@ -62,6 +62,218 @@
     "typescript": "~5.4.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc:main": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/onboardingSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/onboardingSchema.ag.json"
+          ]
+        }
+      },
+      "agc:discovery": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/discovery/discoverySchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/discoverySchema.ag.json"
+          ]
+        }
+      },
+      "agc:grammargen": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/grammarGen/grammarGenSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/grammarGenSchema.ag.json"
+          ]
+        }
+      },
+      "agc:packaging": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/packaging/packagingSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/packagingSchema.ag.json"
+          ]
+        }
+      },
+      "agc:phrasegen": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/phraseGen/phraseGenSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/phraseGenSchema.ag.json"
+          ]
+        }
+      },
+      "agc:scaffolder": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/scaffolder/scaffolderSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/scaffolderSchema.ag.json"
+          ]
+        }
+      },
+      "agc:schemagen": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/schemaGen/schemaGenSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/schemaGenSchema.ag.json"
+          ]
+        }
+      },
+      "agc:testing": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/testing/testingSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/testingSchema.ag.json"
+          ]
+        }
+      },
+      "asc:main": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/onboardingSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/onboardingSchema.pas.json"
+          ]
+        }
+      },
+      "asc:discovery": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/discovery/discoverySchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/discoverySchema.pas.json"
+          ]
+        }
+      },
+      "asc:grammargen": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/grammarGen/grammarGenSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/grammarGenSchema.pas.json"
+          ]
+        }
+      },
+      "asc:packaging": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/packaging/packagingSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/packagingSchema.pas.json"
+          ]
+        }
+      },
+      "asc:phrasegen": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/phraseGen/phraseGenSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/phraseGenSchema.pas.json"
+          ]
+        }
+      },
+      "asc:scaffolder": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/scaffolder/scaffolderSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/scaffolderSchema.pas.json"
+          ]
+        }
+      },
+      "asc:schemagen": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/schemaGen/schemaGenSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/schemaGenSchema.pas.json"
+          ]
+        }
+      },
+      "asc:testing": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/testing/testingSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/testingSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

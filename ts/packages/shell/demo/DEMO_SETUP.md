@@ -31,8 +31,9 @@ Reinstall vscode-shell after any changes to `ts/packages/vscode-shell` (includin
 ## 2. Processes that must be running before you start
 
 1. **Agent server** — `pnpm --filter agent-server start` (listens on `ws://localhost:8999`).
-2. **Code agent's WebSocket** on port `8082` — started automatically when the
-   `code` schema is enabled in your session, and consumed by the coda extension.
+2. **Code agent's WebSocket** — started automatically when the `code` schema
+   is enabled in your session (binds an OS-assigned port). The coda extension
+   discovers it through the agent-server's discovery channel.
 3. **VS Code** open, with the **TypeAgent activity-bar icon visible**
    (vscode-shell installed). Do **not** click the icon until Part 1 hands off.
 4. **gh CLI authenticated** — `gh auth status` should be green. Set the default
@@ -94,7 +95,7 @@ listener installed by the webview.
 | `show check runs for that PR` runs `gh run view <num>` and 404s                    | Reasoning maps "for that PR" to a workflow-run id, and there's no conversation memory of the prior PR       | Use the explicit phrasing `show check runs for PR N [in OWNER/REPO]` (now backed by `gh pr checks`)                                   |
 | `create scratch.ts` returns "Unknown action name: code.code-general"               | Reasoning hallucinates a sub-schema name as an action name                                                  | Rephrase as `create a typescript file scratch.ts with a hello world function` (drop "called" and "new"); long-term tracked in plan.md |
 | `splitEditor` returns "Did not handle the action"                                  | Installed coda is older than `ts/packages/coda` source                                                      | Rebuild & reinstall coda                                                                                                              |
-| `splitEditor` returns "No websocket connection"                                    | Code agent WS server isn't up in this session                                                               | `@config schema code on` (then verify port 8082 is listening)                                                                         |
+| `splitEditor` returns "No websocket connection"                                    | Code agent WS server isn't up in this session                                                               | `@config schema code on` (the agent-server's discovery channel will then publish the dynamic port to the coda extension)              |
 | `create scratch.ts` returns "Integration ... not found"                            | Onboarding agent grabbed the request                                                                        | `@config schema onboarding off`                                                                                                       |
 | `change my color theme to ...` toggles the title-bar instead of the theme          | Desktop agent grabbed the request because the prompt didn't say "vscode"                                    | Use the exact wording in the demo file                                                                                                |
 | "remind me which PR we were just looking at" hallucinates PR #123 / `example/repo` | Reasoning has no conversation memory                                                                        | `@config request reasoning copilot`                                                                                                   |

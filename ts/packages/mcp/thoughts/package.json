@@ -36,13 +36,14 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@anthropic-ai/sdk": "^0.91.1",
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "dotenv": "^16.4.5",
     "microsoft-cognitiveservices-speech-sdk": "^1.40.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.19",
+    "@types/node": "^22.0.0",
     "rimraf": "^6.0.1",
-    "typescript": "^5.5.4"
+    "typescript": "~5.4.5"
   }
 }

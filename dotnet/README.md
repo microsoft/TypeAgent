@@ -13,6 +13,7 @@ TypeAgent includes [KnowPro.NET](./typeagent/src/knowpro/), which explores how t
 
   - [AutoShell](./autoShell/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.
   - [email](./email/)(Windows Only) - Sample code for importing emails from Outlook.
+  - [osNotificationListener](./osNotificationListener/)(Windows Only) - Sparse-packaged helper exe for the [OS notifications agent](../ts/packages/agents/osNotifications/) — subscribes to `Windows.UI.Notifications.Management.UserNotificationListener` and streams events as JSON-per-line on stdout.
 
 ## Trademarks
 

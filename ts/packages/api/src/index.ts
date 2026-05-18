@@ -2,11 +2,10 @@
 // Licensed under the MIT License.
 
 import { TypeAgentServer } from "./typeAgentServer.js";
-import findConfig from "find-config";
-import assert from "assert";
+import { loadConfig } from "@typeagent/config";
 
-const envPath = findConfig(".env");
-assert(envPath, ".env file not found!");
+// Load config from YAML layers + Key Vault (replacing legacy dotenv).
+await loadConfig({ keyVault: {}, strict: false });
 
-const typeAgentServer: TypeAgentServer = new TypeAgentServer(envPath);
+const typeAgentServer: TypeAgentServer = new TypeAgentServer();
 typeAgentServer.start();

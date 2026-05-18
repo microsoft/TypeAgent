@@ -33,6 +33,23 @@
     "typescript": "~5.4.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "asc:main": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windowsClockSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/windowsClockSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

@@ -100,6 +100,12 @@ body {
     color: #999;
   }
 
+  .chat-message-agent.notification .chat-message-content {
+    background-color: rgba(167, 139, 250, 0.07);
+    border-left-color: #7c3aed;
+    color: #c4b5fd;
+  }
+
   details.reasoning-thinking {
     border-color: #3a3a50;
   }
@@ -753,6 +759,22 @@ body {
   font-size: 0.85em;
   color: #666;
   padding: 2px 0;
+}
+
+/* Notification messages — agent-initiated toast/inline (via
+ * SessionContext.beginAgentThread) and OS-forwarded notifications (via the
+ * osNotifications agent). Rendered with a muted background and a left accent
+ * stripe so they read as system/ephemeral rather than as a normal agent reply.
+ * The class is applied to the message-container div by ChatView's
+ * addNotificationMessage path. */
+.chat-message-agent.notification {
+  .chat-message-content {
+    background-color: rgba(120, 144, 156, 0.08);
+    border-left: 3px solid #78909c;
+    box-shadow: none;
+    font-size: 0.92em;
+    padding: 6px 12px 6px 13px;
+  }
 }
 
 /* Collapsible thinking block for reasoning engine */
@@ -1524,5 +1546,350 @@ input[type="file"] {
   .session-loading,
   .session-error {
     color: #aaa;
+  }
+}
+
+/* ----- Feedback widget --------------------------------------------------- */
+
+@feedback-accent: #1f6feb;
+@feedback-dim: #8a8a8a;
+
+/* Bubble hidden via the trash icon. The whole MessageGroup is hidden in
+   place — user message + status + every agent reply collapse to slim
+   placeholders. The placeholder line fades and the container fully
+   collapses 10 s after the class is applied (so the chat reflows and the
+   trashed bubble doesn't permanently take up a line). `@shell trash
+   restore` removes the class and the container snaps back to normal. */
+.chat-message-container-agent.chat-message-trashed,
+.chat-message-container-user.chat-message-trashed {
+  // Real content snaps away as soon as the class is applied — no fade.
+  & > .chat-timestamp-agent,
+  & > .chat-timestamp-user,
+  & > .agent-icon,
+  & > .user-icon,
+  & > .chat-message-body,
+  & > .chat-message-body-hide-metrics,
+  & > .chat-message-actions {
+    display: none;
+  }
+  // .chat-message-container's base rule has `transform: scale(0)` plus
+  // a 0.15s `message` enter-animation that fills forward to scale(1).
+  // Setting `animation` below replaces that animation outright, so the
+  // forwards-fill state is dropped and the container would snap back to
+  // scale(0) — invisible — taking the placeholder ::after with it.
+  // Pin scale(1) explicitly so the row stays visible while the
+  // placeholder fades.
+  transform: scale(1);
+  // The container itself stays solid for the full 10 s window so the
+  // row keeps its slot in the chat — only the placeholder text fades.
+  // At t=10 s the container collapses to display:none in one snap.
+  animation: chat-trashed-collapse 6s linear forwards;
+}
+.chat-message-container-agent.chat-message-trashed::after,
+.chat-message-container-user.chat-message-trashed::after {
+  content: "🗑  message hidden — `@shell trash restore` to recover";
+  display: block;
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  padding: 4px 0;
+  // Placeholder is at full opacity for the first 4 s then fades 1 → 0
+  // over the last 2 s (66.67% of a 6 s window). The container's
+  // collapse keyframe handles vanishing the row after the fade.
+  animation: chat-trashed-fade 6s linear forwards;
+}
+.chat-message-container-agent.chat-message-trashed::after {
+  margin-left: 40px;
+}
+.chat-message-container-user.chat-message-trashed::after {
+  text-align: right;
+  margin-right: 40px;
+}
+@keyframes chat-trashed-fade {
+  0%,
+  66.67% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes chat-trashed-collapse {
+  0%,
+  99.99% {
+    /* container stays in place while the placeholder fades */
+  }
+  100% {
+    display: none;
+  }
+}
+
+/* Trash button — anchored absolute top-right inside the bubble body
+ * for both user and agent messages. Hidden until the user hovers the
+ * container, brightens to red to telegraph the destructive intent. */
+.chat-message-container-agent .chat-message-agent,
+.chat-message-container-user .chat-message-user {
+  position: relative;
+}
+.chat-message-trash {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  color: @feedback-dim;
+  transition:
+    opacity 0.15s ease,
+    color 0.12s ease;
+  &:hover {
+    color: #c83e3e;
+  }
+}
+.chat-message-container-agent:hover .chat-message-trash,
+.chat-message-container-user:hover .chat-message-trash {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: @feedback-dim;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+
+  i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  i svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #333;
+  }
+  &:focus-visible {
+    outline: 2px solid @feedback-accent;
+    outline-offset: 1px;
+  }
+  &.feedback-selected {
+    color: @feedback-accent;
+  }
+  &[data-action="thumbs-down"].feedback-selected {
+    color: #c83e3e;
+  }
+  &.feedback-copied {
+    color: #2e8b57; // sea green — quick "copied!" confirmation
+  }
+}
+
+.chat-message-actions {
+  display: flex;
+  gap: 2px;
+  margin: 2px 0 6px 40px; // align under the bubble (left of agent icon area)
+  align-items: center;
+  opacity: 0.65;
+  transition: opacity 0.15s ease;
+}
+
+.chat-message-container-agent:hover .chat-message-actions,
+.chat-message-container-agent.feedback-rated .chat-message-actions {
+  opacity: 1;
+}
+
+/* Variant: footer-always — covered by the base .chat-message-actions rules. */
+
+/* Dropdown menu (⋯ more / category menu) */
+.chat-feedback-menu {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 220px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+.chat-feedback-menu-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  color: #222;
+}
+.chat-feedback-menu-item:hover {
+  background: #f3f5f7;
+}
+
+/* Popover card (thumbs-down detail) */
+.chat-feedback-popover {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
+  padding: 14px 16px;
+  width: 340px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #222;
+}
+.chat-feedback-popover-heading {
+  font-weight: 600;
+  font-size: 14px;
+}
+.chat-feedback-popover-subtitle {
+  color: #555;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.chat-feedback-popover-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+.chat-feedback-popover-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  padding: 6px 8px;
+  font: inherit;
+}
+.chat-feedback-popover-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.chat-feedback-popover-fieldset legend {
+  font-weight: 500;
+  font-size: 12px;
+  padding: 0 0 4px 0;
+  color: #444;
+}
+.chat-feedback-popover-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.chat-feedback-popover-share {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: #444;
+  line-height: 1.4;
+}
+.chat-feedback-popover-share input {
+  margin-top: 2px;
+}
+.chat-feedback-popover-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chat-feedback-popover-button {
+  border: 1px solid #d0d7de;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: #222;
+}
+.chat-feedback-popover-button:hover {
+  background: #f3f5f7;
+}
+.chat-feedback-popover-button.submit {
+  background: @feedback-accent;
+  color: #fff;
+  border-color: @feedback-accent;
+}
+.chat-feedback-popover-button.submit:hover {
+  background: darken(@feedback-accent, 6%);
+}
+.chat-feedback-popover-button.clear {
+  color: #a23737;
+  border-color: transparent;
+}
+
+/* Dark mode */
+body.dark-mode {
+  .chat-action-button {
+    color: #9aa0a6;
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #d7dbe0;
+    }
+    &.feedback-selected {
+      color: #6aa3ff;
+    }
+    &[data-action="thumbs-down"].feedback-selected {
+      color: #e87a7a;
+    }
+  }
+  .chat-feedback-menu,
+  .chat-feedback-popover {
+    background: #2a2a36;
+    border-color: #4a4a5c;
+    color: #e1e4ea;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  }
+  .chat-feedback-menu-item {
+    color: #e1e4ea;
+  }
+  .chat-feedback-menu-item:hover {
+    background: #353648;
+  }
+  .chat-feedback-popover-subtitle,
+  .chat-feedback-popover-fieldset legend,
+  .chat-feedback-popover-share {
+    color: #b4b9c2;
+  }
+  .chat-feedback-popover-textarea {
+    background: #1f1f29;
+    border-color: #4a4a5c;
+    color: #e1e4ea;
+  }
+  .chat-feedback-popover-button {
+    background: #353648;
+    border-color: #4a4a5c;
+    color: #e1e4ea;
+  }
+  .chat-feedback-popover-button:hover {
+    background: #44455c;
   }
 }

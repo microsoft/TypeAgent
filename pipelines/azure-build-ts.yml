@@ -28,8 +28,8 @@ jobs:
     displayName: "Build TypeScript Project"
     strategy:
       matrix:
-        node_22:
-          nodeVersion: "22"
+        node_24:
+          nodeVersion: "24"
     steps:
       - template: include-prepare-repo.yml
         parameters:

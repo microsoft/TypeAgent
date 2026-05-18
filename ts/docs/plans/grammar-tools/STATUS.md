@@ -9,6 +9,84 @@ work**. Update it whenever an action is started, completed, or a new
 follow-up surfaces. Keep entries terse - one line per item where
 possible.
 
+## Progress by track
+
+_Last updated: 2026-05-08_
+
+### Track 0 - Critical path
+
+| Item | Description                                                     | Status |
+| ---- | --------------------------------------------------------------- | ------ |
+| 0a   | Resolve ADR 0001 (UI tech) and ADR 0002 (trace hook)            | done   |
+| 0b   | Chunk 02: matcher instrumentation (spans + trace hook + PartId) | done   |
+| 0c   | Chunk 01 scaffold: `grammar-tools-core` package layout          | done   |
+
+### Track A - Core language services
+
+| Item | Description                                          | Status |
+| ---- | ---------------------------------------------------- | ------ |
+| A.1  | Loader (file, agent, snapshot)                       | done   |
+| A.2  | Diagnostics                                          | done   |
+| A.3  | Symbol index (definitions / references / signatures) | done   |
+| A.4  | Formatter (wraps `writeGrammarRules`)                | done   |
+| A.5  | `GrammarDebugInfo` emission (compiler-side sidecar)  | done   |
+
+### Track B - Core debug + quality services
+
+| Item | Description                               | Status |
+| ---- | ----------------------------------------- | ------ |
+| B.1  | Completion preview                        | done   |
+| B.2  | Rule-level trace                          | done   |
+| B.3  | Coverage (per-rule / per-part hit counts) | done   |
+| B.4  | Diff (structural rule-level diff)         | done   |
+
+### Track C - VS Code extension
+
+| Item | Description                                  | Status |
+| ---- | -------------------------------------------- | ------ |
+| C.0  | Multi-package layout, reuse TextMate grammar | done   |
+| C.1  | LSP diagnostics                              | done   |
+| C.2  | LSP go-to-definition                         | done   |
+| C.3  | LSP find-references                          | done   |
+| C.4  | LSP hover                                    | done   |
+| C.5  | LSP document formatting                      | done   |
+| C.6  | Webview debug panel                          | done   |
+| C.7  | Coverage decorations                         | done   |
+| C.8  | Diff command                                 | done   |
+
+### Track D - Shared UI
+
+| Item | Description                                 | Status |
+| ---- | ------------------------------------------- | ------ |
+| D.0  | Scaffold `grammar-tools-ui` with Lit        | done   |
+| D.1  | `<gt-completion-panel>` component           | done   |
+| D.2  | `<gt-trace-timeline>` component             | done   |
+| D.3  | `<gt-source-view>` (grammar picker)         | done   |
+| D.4  | `<gt-coverage-heatmap>` component           | done   |
+| D.5  | `<gt-diff-view>` component                  | done   |
+| D.6  | `<gt-debug-panel>` composite host component | done   |
+
+### Track E - CLI
+
+| Item | Description                  | Status |
+| ---- | ---------------------------- | ------ |
+| E.0  | Scaffold `grammar-tools-cli` | done   |
+| E.1  | `grammar load` command       | done   |
+| E.2  | `grammar complete` command   | done   |
+| E.3  | `grammar trace` command      | done   |
+| E.4  | `grammar coverage` command   | done   |
+| E.5  | `grammar diff` command       | done   |
+
+### Track F - Dispatcher snapshot
+
+| Item | Description                                 | Status      |
+| ---- | ------------------------------------------- | ----------- |
+| F.1  | Dispatcher RPC `getCompiledGrammarSnapshot` | not started |
+
+### Tracks G & H - Web app + Shell (post-gate)
+
+All items not started. Blocked by Phase 2 decision gate.
+
 ## Conventions
 
 - **Status**: `queued` / `in-progress` / `done` / `dropped`.
@@ -100,11 +178,18 @@ Promote into "Queued actions" when scheduling.
   coverage analysis for the NFA/DFA compile paths as well. Lower
   priority since the rule-level matcher is the primary matching backend
   for authoring/debugging; NFA/DFA are production-optimized paths.
-- **B.3 coverage / B.4 diff implementation.** Stubs (`runCoverage`,
-  `diffGrammars`) removed during self-review (2026-05-07) to avoid
-  shipping dead code. Types (`CoverageReport`, `RuleCoverage`, etc.)
-  remain in `types.ts` as the agreed shape. Implement when Track A.5
-  (`GrammarDebugInfo` emission) lands.
+- **Optimizer partId lineage map.** When the grammar optimizer
+  (dispatchify) merges or splits parts, only the first token of an
+  exploded string keeps its original partId. This makes coverage
+  attribution approximate for optimized grammars. Explore emitting an
+  `optimizedPartId -> originalPartId[]` map from the optimizer so
+  coverage and trace can attribute merged tokens back to all source
+  parts. Touches `grammarOptimizer.ts` (emit the map alongside the
+  optimized grammar) and `GrammarDebugInfo` (carry the map).
+- **B.3 coverage / B.4 diff implementation.** ~~Stubs removed during
+  self-review (2026-05-07).~~ Implemented 2026-05-07: `computeCoverage`
+  in `coverage.ts`, `diffGrammars` in `diff.ts`. CLI commands E.4 and
+  E.5 (`grammar coverage`, `grammar diff`) also landed.
 
 ## Out of scope for this pass
 

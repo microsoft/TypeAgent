@@ -6,15 +6,9 @@
  * Command line tool for testing grammar generation on individual request/action pairs
  */
 
-import { config } from "dotenv";
-import * as path from "path";
-import { fileURLToPath } from "url";
+import { loadConfigSync } from "@typeagent/config";
 
-// Load .env file
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, "../../../..");
-config({ path: path.join(repoRoot, ".env") });
+loadConfigSync();
 
 import { ClaudeGrammarGenerator } from "./grammarGenerator.js";
 import { loadSchemaInfo } from "./schemaReader.js";

@@ -101,13 +101,13 @@ e.g. `@code rename this conversation to Brainstorm`.
 
 ### Keybindings (defaults)
 
-| Action                | Windows / Linux | macOS         |
-| --------------------- | --------------- | ------------- |
-| New Chat in Editor    | `Ctrl+K Ctrl+T` | `Cmd+K Cmd+T` |
-| New Conversation      | `Ctrl+K Ctrl+N` | `Cmd+K Cmd+N` |
-| Switch Conversation   | `Ctrl+K Ctrl+S` | `Cmd+K Cmd+S` |
-| Rename Conversation   | `Ctrl+K Ctrl+R` | `Cmd+K Cmd+R` |
-| Clear Chat View       | `Ctrl+K Ctrl+L` | `Cmd+K Cmd+L` |
+| Action              | Windows / Linux | macOS         |
+| ------------------- | --------------- | ------------- |
+| New Chat in Editor  | `Ctrl+K Ctrl+T` | `Cmd+K Cmd+T` |
+| New Conversation    | `Ctrl+K Ctrl+N` | `Cmd+K Cmd+N` |
+| Switch Conversation | `Ctrl+K Ctrl+S` | `Cmd+K Cmd+S` |
+| Rename Conversation | `Ctrl+K Ctrl+R` | `Cmd+K Cmd+R` |
+| Clear Chat View     | `Ctrl+K Ctrl+L` | `Cmd+K Cmd+L` |
 
 These chord bindings are gated on the chat being focused (a `when` clause
 on the `vscode-shell.chatFocused` context key).

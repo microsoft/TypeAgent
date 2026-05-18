@@ -7,6 +7,7 @@ export interface BenchmarkScenario {
         | "grammar-match"
         | "grammar-subschemas"
         | "grammar-competition"
+        | "grammar-collision"
         | "llm-translation"
         | "execution"
         | "fallback-chain"

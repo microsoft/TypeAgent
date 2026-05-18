@@ -7,50 +7,174 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Grammar Tools UI - Dev Harness</title>
+    <link rel="stylesheet" href="../src/theme-defaults.css" />
     <style>
-      :root {
-        --vscode-font-family: "Segoe UI", sans-serif;
-        --vscode-font-size: 13px;
-        --vscode-foreground: #cccccc;
-        --vscode-editor-background: #1e1e1e;
-      }
       body {
         margin: 0;
         padding: 16px;
-        background: #1e1e1e;
-        color: #cccccc;
-        font-family: var(--vscode-font-family);
+        background: var(--vscode-editor-background, #1e1e1e);
+        color: var(--vscode-foreground, #cccccc);
+        font-family: var(--vscode-font-family, sans-serif);
+        font-size: var(--vscode-font-size, 13px);
       }
       h1 {
-        font-size: 1.2em;
+        font-size: 1.4em;
+        margin-top: 0;
+        border-bottom: 1px solid var(--vscode-panel-border, #80808059);
+        padding-bottom: 8px;
+      }
+      h2 {
+        font-size: 1.1em;
         margin-top: 2em;
+        color: var(--vscode-descriptionForeground, #9d9d9d);
       }
       section {
-        border: 1px solid #333;
+        border: 1px solid var(--vscode-panel-border, #333);
         padding: 12px;
         margin: 8px 0;
+        max-width: 900px;
+      }
+      .description {
+        font-size: 0.85em;
+        color: var(--vscode-descriptionForeground, #9d9d9d);
+        margin-bottom: 8px;
+      }
+
+      /* Debug panel takes full height */
+      section.full-height {
+        min-height: 500px;
       }
     </style>
   </head>
   <body>
-    <h1>gt-rule-list</h1>
-    <section><gt-rule-list></gt-rule-list></section>
+    <h1>Grammar Tools UI - Dev Harness</h1>
+    <p class="description">
+      All components below use the <strong>FixtureBackend</strong> with canned
+      player-grammar data. No real grammar-tools-core or file system access is
+      needed.
+    </p>
 
-    <h1>gt-source-view</h1>
-    <section><gt-source-view></gt-source-view></section>
+    <h2>D.6: gt-debug-panel (composite)</h2>
+    <p class="description">
+      Full debug panel with grammar picker, tab bar, and all sub-components.
+    </p>
+    <section class="full-height">
+      <gt-debug-panel id="debug-panel"></gt-debug-panel>
+    </section>
 
-    <h1>gt-completion-panel</h1>
-    <section><gt-completion-panel></gt-completion-panel></section>
+    <h2>D.1: gt-completion-panel</h2>
+    <p class="description">
+      Standalone completion preview. Pre-filled with "play " to show live
+      results.
+    </p>
+    <section>
+      <gt-completion-panel
+        id="completion-panel"
+        initial-input="play "
+      ></gt-completion-panel>
+    </section>
 
-    <h1>gt-trace-timeline</h1>
-    <section><gt-trace-timeline></gt-trace-timeline></section>
+    <h2>D.2: gt-trace-timeline</h2>
+    <p class="description">
+      Standalone trace view. Pre-filled with the fixture trace input.
+    </p>
+    <section>
+      <gt-trace-timeline
+        id="trace-timeline"
+        initial-input="play songs by the beatles"
+      ></gt-trace-timeline>
+    </section>
 
-    <h1>gt-coverage-heatmap</h1>
-    <section><gt-coverage-heatmap></gt-coverage-heatmap></section>
+    <h2>D.3: gt-source-view (grammar picker)</h2>
+    <p class="description">Grammar source selector: file, agent, or live.</p>
+    <section>
+      <gt-source-view id="source-view"></gt-source-view>
+    </section>
 
-    <h1>gt-diff-view</h1>
-    <section><gt-diff-view></gt-diff-view></section>
+    <h2>gt-rule-list</h2>
+    <p class="description">Navigable list of grammar rules.</p>
+    <section>
+      <gt-rule-list id="rule-list"></gt-rule-list>
+    </section>
 
-    <script type="module" src="../src/index.ts"></script>
+    <h2>D.4: gt-coverage-heatmap</h2>
+    <p class="description">Coverage report rendered from fixture data.</p>
+    <section>
+      <gt-coverage-heatmap id="coverage-heatmap"></gt-coverage-heatmap>
+    </section>
+
+    <h2>D.5: gt-diff-view</h2>
+    <p class="description">
+      Side-by-side rule diff with fixture data (all changed rules expanded).
+    </p>
+    <section>
+      <gt-diff-view
+        id="diff-view"
+        expand-all
+        label-a="v1"
+        label-b="v2"
+      ></gt-diff-view>
+    </section>
+
+    <script type="module">
+      import { FixtureBackend } from "../src/index.ts";
+      // Import to register all custom elements
+      import "../src/index.ts";
+
+      const backend = new FixtureBackend({ delayMs: 50 });
+
+      // Load a grammar to get fixture data for standalone components
+      const loadResult = await backend.loadGrammarFromFile("player.agr");
+      const grammar = loadResult.ok ? loadResult.grammar : undefined;
+
+      // D.6: Debug panel (self-contained; user picks grammar via picker)
+      const debugPanel = document.getElementById("debug-panel");
+      debugPanel.backend = backend;
+      debugPanel.agents = await backend.listAgents();
+
+      // D.1: Completion panel (standalone)
+      const completionPanel = document.getElementById("completion-panel");
+      completionPanel.backend = backend;
+      completionPanel.grammar = grammar;
+
+      // D.2: Trace timeline (standalone)
+      const traceTimeline = document.getElementById("trace-timeline");
+      traceTimeline.backend = backend;
+      traceTimeline.grammar = grammar;
+      traceTimeline.onSourceClick = (loc) => {
+        console.log("Source click (trace):", loc);
+      };
+
+      // D.3: Source view (standalone)
+      const sourceView = document.getElementById("source-view");
+      sourceView.backend = backend;
+      sourceView.agents = await backend.listAgents();
+      sourceView.onLoad = (result) => {
+        console.log("Grammar loaded:", result);
+      };
+
+      // Rule list
+      const ruleList = document.getElementById("rule-list");
+      ruleList.grammar = grammar;
+      ruleList.onRuleClick = (ruleId, loc) => {
+        console.log("Rule click:", ruleId, loc);
+      };
+
+      // D.4: Coverage (pre-computed)
+      const coverageHeatmap = document.getElementById("coverage-heatmap");
+      const coverageReport = await backend.computeCoverage(grammar, []);
+      coverageHeatmap.report = coverageReport;
+      coverageHeatmap.onSourceClick = (loc) => {
+        console.log("Source click (coverage):", loc);
+      };
+
+      // D.5: Diff (pre-computed)
+      const diffView = document.getElementById("diff-view");
+      const diffResult = await backend.diffGrammars(grammar, grammar);
+      diffView.diff = diffResult;
+      diffView.onSourceClick = (loc) => {
+        console.log("Source click (diff):", loc);
+      };
+    </script>
   </body>
 </html>

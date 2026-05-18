@@ -145,6 +145,12 @@ async function initializeChatHistory(chatView: ChatView) {
 
             // TODO: wire up any other functionality (player agent?)
         }
+
+        // Reattach feedback widgets on restored agent bubbles. Each
+        // container that was saved with a data-feedback-request-id gets
+        // a fresh widget wired to a dispatcher-backed controller so the
+        // copy / 👍 / 👎 / ⋯ buttons work again.
+        chatView.rewireHistoricalFeedback();
     }
 }
 
@@ -198,11 +204,31 @@ function registerClient(
             if (seq !== undefined) {
                 maxSeqSeen = Math.max(maxSeqSeen, seq);
             }
+            // Agent-initiated messages (SessionContext.beginAgentThread) carry
+            // a render kind. "toast" and "inline" go through the same
+            // ephemeral notification path used for AppAgentEvent.Toast/Inline
+            // above; "bubble" (or absent) renders as a regular agent bubble.
+            if (message.kind === "toast" || message.kind === "inline") {
+                chatView.addNotificationMessage(
+                    message.message,
+                    message.source,
+                    message.requestId,
+                );
+                return;
+            }
             chatView.addAgentMessage(message);
         },
         appendDisplay: (message, mode, seq?) => {
             if (seq !== undefined) {
                 maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            if (message.kind === "toast" || message.kind === "inline") {
+                chatView.addNotificationMessage(
+                    message.message,
+                    message.source,
+                    message.requestId,
+                );
+                return;
             }
             chatView.addAgentMessage(message, { appendMode: mode });
         },
@@ -329,6 +355,9 @@ function registerClient(
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
+                    // Keep all Info/Warning/Error events in the @notify
+                    // buffer (including osNotifications) so @notify show can
+                    // surface them consistently.
                     notifications.push({
                         event,
                         source,
@@ -343,14 +372,29 @@ function registerClient(
                 case AppAgentEvent.Inline:
                 case AppAgentEvent.Toast:
                     chatView.addNotificationMessage(data, source, requestId);
-                    // Also add to notifications list for @notify show
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    if (source !== "osNotifications") {
+                        // OS notifications are tracked by the OS itself; do
+                        // not surface them in @notify show.
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                    }
+                    break;
+
+                // OS-notifications agent: the underlying OS notification has
+                // been dismissed (left the action center). Remove the chat
+                // bubble we added when it first arrived. data.id matches the
+                // notificationId we used on the corresponding "added" event.
+                case "osDismiss":
+                    if (data && typeof data.id === "string") {
+                        chatView.removeNotificationGroup(
+                            `notification-async-osNotifications-${data.id}`,
+                        );
+                    }
                     break;
 
                 default:
@@ -455,6 +499,22 @@ function registerClient(
                 switch (action) {
                     case "show-camera": {
                         cameraView.show();
+                        break;
+                    }
+                    case "trash-restore": {
+                        chatView.dispatcher
+                            ?.restoreAllHidden()
+                            .catch((e: any) =>
+                                console.error("restoreAllHidden failed", e),
+                            );
+                        break;
+                    }
+                    case "trash-flush": {
+                        chatView.dispatcher
+                            ?.flushHidden()
+                            .catch((e: any) =>
+                                console.error("flushHidden failed", e),
+                            );
                         break;
                     }
                     case "set-alarm": {
@@ -882,6 +942,12 @@ function registerClient(
                 console.log(e);
             }
         },
+        onUserFeedback: (entry) => {
+            chatView.applyFeedback(entry);
+        },
+        onUserHide: (entry) => {
+            chatView.applyHide(entry);
+        },
     };
 
     const client: Client = {
@@ -1146,6 +1212,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
+    // Settings / Metrics / Help dialogs live in TabView; they overlay the
+    // chat (z-index 1000) when shown via @shell show settings. The tabs
+    // container itself was never appended to the wrapper, so `showTab`
+    // was a no-op visually.
+    wrapper.appendChild(tabs.getContainer());
 
     chatView.chatInput!.camButton.onclick = () => {
         cameraView.toggleVisibility();

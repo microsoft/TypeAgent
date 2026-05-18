@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
-import findConfig from "find-config";
+import { loadConfigSync } from "@typeagent/config";
 import {
     CommandHandler,
     CommandMetadata,
@@ -37,10 +36,7 @@ import { createSettingsSchemaCommand } from "./schemaCommands.js";
 import { createBatchPopulateCommand } from "./batchPopulateCommand.js";
 import { createMergeCacheCommand } from "./mergeCacheCommand.js";
 
-const envPath = findConfig(".env");
-if (envPath) {
-    dotenv.config({ path: envPath });
-}
+loadConfigSync();
 
 interface VariationOptions extends VariationSettings {
     depth: number;

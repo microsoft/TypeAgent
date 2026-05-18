@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -10,7 +11,11 @@ import {
     getRequestId,
 } from "../../commandHandlerContext.js";
 import { NotifyCommands } from "../../interactiveIO.js";
-import { ActionContext } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAgentEvent,
+    ParsedCommandParams,
+} from "@typeagent/agent-sdk";
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
@@ -78,6 +83,68 @@ class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+// Mapping from --mode flag values to AppAgentEvent. Bare strings are
+// preferred over the enum here so users can type `--mode toast` instead of
+// having to know the enum value.
+const NOTIFY_TEST_MODES = {
+    toast: AppAgentEvent.Toast,
+    inline: AppAgentEvent.Inline,
+    info: AppAgentEvent.Info,
+    warning: AppAgentEvent.Warning,
+    error: AppAgentEvent.Error,
+} as const;
+
+type NotifyTestMode = keyof typeof NOTIFY_TEST_MODES;
+
+class NotifyTestCommandHandler implements CommandHandler {
+    public readonly description =
+        "Fire a synthetic notification through the channel — for verifying chat rendering without an agent";
+    public readonly parameters = {
+        args: {
+            message: {
+                description: "Notification body text",
+                implicitQuotes: true,
+            },
+        },
+        flags: {
+            mode: {
+                description:
+                    "Render mode: toast | inline | info | warning | error",
+                default: "toast",
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const systemContext = context.sessionContext.agentContext;
+        const mode = params.flags.mode as string;
+        const event =
+            NOTIFY_TEST_MODES[mode as NotifyTestMode] ?? AppAgentEvent.Toast;
+        if (NOTIFY_TEST_MODES[mode as NotifyTestMode] === undefined) {
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `Unknown mode '${mode}', falling back to 'toast'.`,
+                    kind: "warning",
+                },
+                "block",
+            );
+        }
+        // Fire-and-forget. notificationId left undefined so it broadcasts
+        // (if running under agent-server) and so dismiss tracking doesn't
+        // tie to anything — synthetic notifications can't be dismissed.
+        systemContext.clientIO.notify(
+            undefined,
+            event,
+            params.args.message,
+            "notify-test",
+        );
+    }
+}
+
 export function getNotifyCommandHandlers(): CommandHandlerTable {
     return {
         description: "Notify commands",
@@ -85,6 +152,7 @@ export function getNotifyCommandHandlers(): CommandHandlerTable {
         commands: {
             info: new NotifyInfoCommandHandler(),
             clear: new NotifyClearCommandHandler(),
+            test: new NotifyTestCommandHandler(),
             show: {
                 description: "Show notifications",
                 defaultSubCommand: "unread",

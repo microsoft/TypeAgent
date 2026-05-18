@@ -1,0 +1,16 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Natural-language entry points for the OS notifications agent. Both actions
+// also have explicit @osNotifications subcommands; the grammar here covers
+// the conversational form ("sync os notifications", "test notification …").
+
+import { OsNotificationsActions } from "./osNotificationsSchema.ts";
+
+<Start> : OsNotificationsActions = <syncOsNotifications> | <testOsNotification>;
+
+<Polite> = ("can you" | "please" | "would you")?;
+
+<syncOsNotifications> = <Polite> ('sync' | 'pull' | 'show me' | 'replay') ('the' | 'my' | 'all')? ('os' | 'system' | 'windows')? 'notification' 's'? -> { actionName: "syncOsNotifications", parameters: {} };
+
+<testOsNotification> = <Polite> ('test' | 'send' ('a' | 'me' 'a')?) ('os' | 'system')? 'notification' ('saying' | 'with' 'message' | 'that' 'says')? $(message:string) -> { actionName: "testOsNotification", parameters: { message: message } };

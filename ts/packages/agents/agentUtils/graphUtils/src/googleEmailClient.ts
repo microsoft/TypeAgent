@@ -202,7 +202,7 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
                 const msg =
                     "Google not configured. Set GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET.";
                 debugError(msg);
-                if (callback) callback("ERROR", "", msg);
+                if (callback) callback({ kind: "error", message: msg });
                 return false;
             }
         }
@@ -307,11 +307,11 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
                 });
 
                 if (callback) {
-                    callback(
-                        "BROWSER_AUTH",
-                        authUrl,
-                        "Opening browser for Google authorization...",
-                    );
+                    callback({
+                        kind: "browser",
+                        url: authUrl,
+                        message: "Opening browser for Google authorization...",
+                    });
                 }
 
                 try {
@@ -479,9 +479,10 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             debug(`Email sent: ${response.data.id}`);
             return !!response.data.id;
         } catch (error: any) {
+            // Let the handler surface a meaningful error message to the
+            // user instead of swallowing it as a generic falsy return.
             debugError(`Failed to send email: ${error}`);
-            console.error(`[Gmail] Failed to send: ${error?.message || error}`);
-            return false;
+            throw error;
         }
     }
 
@@ -541,11 +542,10 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             debug(`Reply sent: ${response.data.id}`);
             return !!response.data.id;
         } catch (error: any) {
+            // Let the handler surface a meaningful error message to the
+            // user instead of swallowing it as a generic falsy return.
             debugError(`Failed to reply: ${error}`);
-            console.error(
-                `[Gmail] Failed to reply: ${error?.message || error}`,
-            );
-            return false;
+            throw error;
         }
     }
 
@@ -604,11 +604,10 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             debug(`Forward sent: ${response.data.id}`);
             return !!response.data.id;
         } catch (error: any) {
+            // Let the handler surface a meaningful error message to the
+            // user instead of swallowing it as a generic falsy return.
             debugError(`Failed to forward: ${error}`);
-            console.error(
-                `[Gmail] Failed to forward: ${error?.message || error}`,
-            );
-            return false;
+            throw error;
         }
     }
 

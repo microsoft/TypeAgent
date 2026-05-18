@@ -56,21 +56,9 @@ export class MSGraphCalendarProvider
     // =========================================================================
 
     async login(callback?: DeviceCodeCallback): Promise<boolean> {
-        // Convert our callback type to the Graph client's callback type
-        const graphCallback: DevicePromptCallback | undefined = callback
-            ? (prompt: string) => {
-                  // Parse the device code from the prompt message
-                  // Format: "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code XXXXXXX"
-                  const codeMatch = prompt.match(/enter the code (\S+)/);
-                  const urlMatch = prompt.match(/open the page (\S+)/);
-                  callback(
-                      codeMatch?.[1] || "",
-                      urlMatch?.[1] || "https://microsoft.com/devicelogin",
-                      prompt,
-                  );
-              }
-            : undefined;
-
+        // The graph client and the provider interface now share the same
+        // discriminated SignInPrompt shape, so this is a straight pass-through.
+        const graphCallback: DevicePromptCallback | undefined = callback;
         return this.client.login(graphCallback);
     }
 

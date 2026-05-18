@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SessionContext } from "@typeagent/agent-sdk";
+import { SessionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { WebFlowStore } from "./store/webFlowStore.mjs";
 import { WebFlowDefinition } from "./types.js";
@@ -496,6 +496,46 @@ async function handleGenerateWebFlow(
         };
     }
 
+    // Validate grammar patterns before saving
+    if (flow.grammarPatterns.length > 0 && context.validateGrammarPatterns) {
+        const validationResult = await context.validateGrammarPatterns({
+            actionName: flow.name,
+            description: flow.description,
+            patterns: flow.grammarPatterns,
+        });
+
+        if (!validationResult.approved) {
+            const errorMsg = [
+                "❌ Grammar pattern validation failed:",
+                "",
+                ...(validationResult.errors ?? []),
+            ].join("\n");
+
+            const suggestionMsg = validationResult.suggestions
+                ? ["", "Suggestions:", ...validationResult.suggestions].join(
+                      "\n",
+                  )
+                : "";
+
+            return {
+                displayText: errorMsg + suggestionMsg,
+                data: { success: false, error: "validation_failed" },
+            };
+        }
+
+        if (validationResult.warnings && validationResult.warnings.length > 0) {
+            context.notify(
+                AppAgentEvent.Warning,
+                `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+            );
+        }
+
+        // Use refined patterns if provided
+        if (validationResult.patterns && validationResult.patterns.length > 0) {
+            flow.grammarPatterns = validationResult.patterns;
+        }
+    }
+
     // Save the generated flow (store already fetched above for dedup context)
     await store.save(flow);
     debug(`Saved generated WebFlow: ${flow.name}`);
@@ -622,6 +662,46 @@ async function handleGenerateWebFlowFromRecording(
         timestamp: new Date().toISOString(),
         ...(traceId && { traceId }),
     };
+
+    // Validate grammar patterns before saving
+    if (flow.grammarPatterns.length > 0 && context.validateGrammarPatterns) {
+        const validationResult = await context.validateGrammarPatterns({
+            actionName: flow.name,
+            description: flow.description,
+            patterns: flow.grammarPatterns,
+        });
+
+        if (!validationResult.approved) {
+            const errorMsg = [
+                "❌ Grammar pattern validation failed:",
+                "",
+                ...(validationResult.errors ?? []),
+            ].join("\n");
+
+            const suggestionMsg = validationResult.suggestions
+                ? ["", "Suggestions:", ...validationResult.suggestions].join(
+                      "\n",
+                  )
+                : "";
+
+            return {
+                displayText: errorMsg + suggestionMsg,
+                data: { success: false, error: "validation_failed", traceId },
+            };
+        }
+
+        if (validationResult.warnings && validationResult.warnings.length > 0) {
+            context.notify(
+                AppAgentEvent.Warning,
+                `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+            );
+        }
+
+        // Use refined patterns if provided
+        if (validationResult.patterns && validationResult.patterns.length > 0) {
+            flow.grammarPatterns = validationResult.patterns;
+        }
+    }
 
     await store.save(flow);
     debug(`Saved WebFlow from recording: ${flow.name}`);

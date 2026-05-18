@@ -7,6 +7,12 @@ import type {
     GrammarPattern,
     SandboxPolicy,
 } from "../types/scriptRecipe.js";
+import {
+    generateGrammarRuleText,
+    assembleDynamicGrammar,
+    generateFlowActionTypes,
+    buildUnionType,
+} from "@typeagent/agent-flows";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:store");
@@ -63,33 +69,7 @@ function emptyIndex(): PowerShellFlowIndex {
     };
 }
 
-export function generateGrammarRuleText(
-    actionName: string,
-    patterns: GrammarPattern[],
-): string {
-    const rules: string[] = [];
-    let aliasIndex = 0;
-
-    for (const pattern of patterns) {
-        const ruleName = pattern.isAlias
-            ? `${actionName}Alias${++aliasIndex}`
-            : actionName;
-
-        // Preserve named parameter captures — use flow's own actionName
-        const captures = [...pattern.pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
-            (m) => m[1],
-        );
-        const paramJson =
-            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
-
-        rules.push(
-            `<${ruleName}> [spacing=optional] = ${pattern.pattern}` +
-                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
-        );
-    }
-
-    return rules.join("\n");
-}
+// Grammar generation uses @typeagent/workflow's generateGrammarRuleText
 
 export class PowerShellStore {
     private index: PowerShellFlowIndex = emptyIndex();
@@ -350,30 +330,11 @@ export class PowerShellStore {
     }
 
     async writeDynamicGrammarFile(): Promise<void> {
-        const ruleNames: string[] = [];
-        const ruleTexts: string[] = [];
-
-        for (const entry of Object.values(this.index.flows)) {
-            if (!entry.enabled || !entry.grammarRuleText) continue;
-            ruleTexts.push(entry.grammarRuleText);
-            // Extract rule definition names (lines starting with <Name>)
-            for (const line of entry.grammarRuleText.split("\n")) {
-                const m = line.match(/^<(\w+)>/);
-                if (m && !ruleNames.includes(m[1])) {
-                    ruleNames.push(m[1]);
-                }
-            }
-        }
-
-        if (ruleNames.length === 0) {
-            await this.storage.write("grammar/dynamic.agr", "");
-            return;
-        }
-
-        const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
-        const fullGrammar = `${startRule}\n\n${ruleTexts.join("\n\n")}`;
+        const fullGrammar = assembleDynamicGrammar(
+            Object.values(this.index.flows),
+        );
         await this.storage.write("grammar/dynamic.agr", fullGrammar);
-        debug("Wrote grammar/dynamic.agr with %d rule(s)", ruleNames.length);
+        debug("Wrote grammar/dynamic.agr");
     }
 
     generateDynamicSchemaText(): string {
@@ -387,7 +348,7 @@ export class PowerShellStore {
                 ? flowNames.map((n) => `"${n}"`).join(" | ")
                 : "string";
 
-        const lines: string[] = [
+        const builtInTypesStart = [
             "// Lists all registered PowerShell flows",
             "export type ListPowerShellFlows = {",
             '    actionName: "listPowerShellFlows";',
@@ -400,44 +361,12 @@ export class PowerShellStore {
             "        name: string;",
             "    };",
             "};",
-        ];
+        ].join("\n");
 
-        // Generate per-flow action types with unique actionNames
-        const flowTypeNames: string[] = [];
-        for (const entry of enabledFlows) {
-            const typeName =
-                entry.actionName.charAt(0).toUpperCase() +
-                entry.actionName.slice(1) +
-                "Action";
-            flowTypeNames.push(typeName);
+        const { typeDefinitions, typeNames } =
+            generateFlowActionTypes(enabledFlows);
 
-            lines.push("");
-            lines.push(`// ${entry.description}`);
-            lines.push(`export type ${typeName} = {`);
-            lines.push(`    actionName: "${entry.actionName}";`);
-
-            if ((entry.parameters ?? []).length > 0) {
-                lines.push("    parameters: {");
-                for (const p of entry.parameters ?? []) {
-                    const tsType =
-                        p.type === "number"
-                            ? "number"
-                            : p.type === "boolean"
-                              ? "boolean"
-                              : "string";
-                    const opt = p.required ? "" : "?";
-                    if (p.description) {
-                        lines.push(`        // ${p.description}`);
-                    }
-                    lines.push(`        ${p.name}${opt}: ${tsType};`);
-                }
-                lines.push("    };");
-            }
-
-            lines.push("};");
-        }
-
-        lines.push(
+        const builtInTypesEnd = [
             "",
             "// Test a script without registering it (test-then-register pattern)",
             "export type TestPowerShellFlow = {",
@@ -497,43 +426,30 @@ export class PowerShellStore {
             "        actionName?: string;",
             "    };",
             "};",
-        );
+        ].join("\n");
 
-        lines.push("");
-        lines.push("export type PowerShellActions =");
-        lines.push("    | ListPowerShellFlows");
-        lines.push("    | DeletePowerShellFlow");
-        for (const typeName of flowTypeNames) {
-            lines.push(`    | ${typeName}`);
-        }
-        lines.push("    | TestPowerShellFlow");
-        lines.push("    | CreatePowerShellFlow");
-        lines.push("    | EditPowerShellFlow");
-        lines.push("    | ImportPowerShellFlow;");
-        lines.push("");
+        const allTypeNames = [
+            "ListPowerShellFlows",
+            "DeletePowerShellFlow",
+            ...typeNames,
+            "TestPowerShellFlow",
+            "CreatePowerShellFlow",
+            "EditPowerShellFlow",
+            "ImportPowerShellFlow",
+        ];
 
-        return lines.join("\n");
+        return [
+            builtInTypesStart,
+            typeDefinitions,
+            builtInTypesEnd,
+            "",
+            buildUnionType("PowerShellActions", allTypeNames),
+            "",
+        ].join("\n");
     }
 
     getDynamicGrammarText(): string {
-        const ruleNames: string[] = [];
-        const ruleTexts: string[] = [];
-
-        for (const entry of Object.values(this.index.flows)) {
-            if (!entry.enabled || !entry.grammarRuleText) continue;
-            ruleTexts.push(entry.grammarRuleText);
-            for (const line of entry.grammarRuleText.split("\n")) {
-                const m = line.match(/^<(\w+)>/);
-                if (m && !ruleNames.includes(m[1])) {
-                    ruleNames.push(m[1]);
-                }
-            }
-        }
-
-        if (ruleNames.length === 0) return "";
-
-        const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
-        return `${startRule}\n\n${ruleTexts.join("\n\n")}`;
+        return assembleDynamicGrammar(Object.values(this.index.flows));
     }
 
     private async regenerateGrammarRules(): Promise<void> {

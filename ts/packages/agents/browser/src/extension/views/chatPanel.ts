@@ -18,6 +18,18 @@ import type {
     ChatPanelCallFunctions,
 } from "../../common/serviceTypes.mjs";
 
+// Extract a stable threadId from a dispatcher RequestId. Prefers the
+// server-assigned UUID; falls back to clientRequestId for agent-initiated
+// threads (which carry an empty requestId and a "agent-..." clientRequestId).
+function extractThreadId(requestId: any): string | undefined {
+    if (!requestId || typeof requestId !== "object") return undefined;
+    const r = requestId.requestId;
+    if (typeof r === "string" && r.length > 0) return r;
+    const c = requestId.clientRequestId;
+    if (typeof c === "string" && c.length > 0) return c;
+    return undefined;
+}
+
 // Platform adapter: open links in a real Chrome tab
 const platformAdapter: PlatformAdapter = {
     handleLinkClick(href: string, _target: string | null) {
@@ -99,21 +111,62 @@ function initialize() {
                 // No-op in extension
             },
             dispatcherSetDisplayInfo(data) {
-                chatPanel.setDisplayInfo(data.source, data.actionIndex);
+                chatPanel.setDisplayInfo(
+                    data.source,
+                    undefined,
+                    data.action,
+                    extractThreadId(data.requestId),
+                );
             },
             dispatcherSetDisplay(data) {
+                const msg = data.message;
+                const tid = extractThreadId(msg.requestId);
+                if (msg.kind === "toast") {
+                    chatPanel.showToast(
+                        msg.message as DisplayContent,
+                        msg.source,
+                        msg.sourceIcon,
+                    );
+                    return;
+                }
+                if (msg.kind === "inline") {
+                    chatPanel.showInline(
+                        msg.message as DisplayContent,
+                        msg.source,
+                    );
+                    return;
+                }
                 chatPanel.replaceAgentMessage(
-                    data.message.message as DisplayContent,
-                    data.message.source,
-                    data.message.sourceIcon,
+                    msg.message as DisplayContent,
+                    msg.source,
+                    msg.sourceIcon,
+                    tid,
                 );
             },
             dispatcherAppendDisplay(data) {
+                const msg = data.message;
+                const tid = extractThreadId(msg.requestId);
+                if (msg.kind === "toast") {
+                    chatPanel.showToast(
+                        msg.message as DisplayContent,
+                        msg.source,
+                        msg.sourceIcon,
+                    );
+                    return;
+                }
+                if (msg.kind === "inline") {
+                    chatPanel.showInline(
+                        msg.message as DisplayContent,
+                        msg.source,
+                    );
+                    return;
+                }
                 chatPanel.addAgentMessage(
-                    data.message.message as DisplayContent,
-                    data.message.source,
-                    data.message.sourceIcon,
+                    msg.message as DisplayContent,
+                    msg.source,
+                    msg.sourceIcon,
                     data.mode as DisplayAppendMode,
+                    tid,
                 );
             },
             dispatcherSetDynamicDisplay(data) {
@@ -163,9 +216,31 @@ function initialize() {
                             data.source,
                         );
                         break;
+                    case "inline": {
+                        const content: DisplayContent =
+                            typeof data.data === "string"
+                                ? {
+                                      type: "text",
+                                      content: data.data,
+                                      kind: "info",
+                                  }
+                                : (data.data as DisplayContent);
+                        chatPanel.showInline(content, data.source);
+                        break;
+                    }
+                    case "toast": {
+                        const content: DisplayContent =
+                            typeof data.data === "string"
+                                ? {
+                                      type: "text",
+                                      content: data.data,
+                                      kind: "info",
+                                  }
+                                : (data.data as DisplayContent);
+                        chatPanel.showToast(content, data.source);
+                        break;
+                    }
                     case "info":
-                    case "inline":
-                    case "toast":
                         chatPanel.addAgentMessage(
                             typeof data.data === "string"
                                 ? {

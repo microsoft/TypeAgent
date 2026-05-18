@@ -7,8 +7,10 @@ import {
     EmailProviderType,
     EmailSearchQuery,
     createEmailProviderFromConfig,
+    evaluateGraphReadiness,
     GoogleEmailClient,
     parseDayRange,
+    probeGraphConfig,
 } from "graph-utils";
 import chalk from "chalk";
 import {
@@ -22,15 +24,21 @@ import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
 import {
     ActionContext,
+    ActionResult,
     AppAgent,
     AppAgentEvent,
+    ReadinessReport,
     SessionContext,
     TypeAgentAction,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
+    ChoiceManager,
     createActionResult,
+    createActionResultFromError,
     createActionResultFromHtmlDisplay,
+    createActionResultFromTextDisplay,
+    createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ActionResultSuccess } from "@typeagent/agent-sdk";
 import {
@@ -58,6 +66,52 @@ import { emailsToChunks } from "./emailKpBridge.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:email");
 
+/**
+ * Permissive RFC-5321-ish check: a single `@`, at least one char on each
+ * side, and a `.` in the domain. Intentionally not a full RFC validator —
+ * we just want to identify inputs that are *already* email addresses so
+ * we can skip the directory lookup (which needs the `User.ReadBasic.All`
+ * Graph scope — user-consentable, no admin consent required). Display-name
+ * lookups still go through the provider for inputs that don't look like
+ * addresses.
+ */
+const EMAIL_ADDRESS_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+function isLikelyEmailAddress(input: string): boolean {
+    return EMAIL_ADDRESS_RE.test(input.trim());
+}
+
+/**
+ * Split recipient inputs into "already-an-address" (passthrough) and
+ * "needs directory lookup" (delegated to the provider's resolveUserEmails).
+ * Combined result is a flat list of resolved addresses.
+ *
+ * Lets users send mail to literal addresses (`robgruen@microsoft.com`) even
+ * when the directory lookup permission isn't granted, while preserving the
+ * name-resolution path for inputs like `"robert gruen"`.
+ */
+async function resolveRecipients(
+    inputs: string[],
+    provider: IEmailProvider,
+): Promise<string[]> {
+    if (inputs.length === 0) return [];
+    const direct: string[] = [];
+    const needsLookup: string[] = [];
+    for (const input of inputs) {
+        const trimmed = input.trim();
+        if (isLikelyEmailAddress(trimmed)) {
+            direct.push(trimmed);
+        } else {
+            needsLookup.push(trimmed);
+        }
+    }
+    const resolved =
+        needsLookup.length > 0
+            ? await provider.resolveUserEmails(needsLookup)
+            : [];
+    return [...direct, ...resolved];
+}
+
 class EmailLoginCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log into email service";
     public async run(context: ActionContext<EmailActionContext>) {
@@ -82,18 +136,33 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
             context,
         );
 
-        const success = await provider.login(
-            (userCode, verificationUri, message) => {
-                displayStatus(message, context);
-            },
-        );
+        const success = await provider.login((prompt) => {
+            if (prompt.kind === "error") {
+                displayWarn(prompt.message, context);
+            } else {
+                // Both deviceCode and browser surface the message as-is; the
+                // device-code message contains the URL+code, the browser
+                // message says "opening your browser...".
+                displayStatus(prompt.message, context);
+            }
+        });
 
         if (success) {
             const user = await provider.getUser();
+            const name = user.displayName || "Unknown";
+            const email = user.email || "Unknown";
             displaySuccess(
-                `Successfully logged in as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
+                `Successfully logged in as ${name} <${email}>`,
                 context,
             );
+            // Hidden marker the chat-ui / shell scan for after each agent
+            // message. Lifts the signed-in identity into UI state so the
+            // user-letter avatar shows the real initial and stops triggering
+            // login on click.
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}" hidden></span>`,
+            });
 
             // Kick off async index build/sync after successful login
             const agentCtx = context.sessionContext.agentContext;
@@ -120,11 +189,19 @@ class EmailLogoutCommandHandler implements CommandHandlerNoParams {
         if (provider === undefined) {
             throw new Error("Email provider not initialized");
         }
-        if (provider.logout()) {
+        const wasLoggedIn = provider.logout();
+        if (wasLoggedIn) {
             displaySuccess("Successfully logged out", context);
         } else {
             displayWarn("Already logged out", context);
         }
+        // Reset the chat UI's user-letter avatar back to "U" / clickable.
+        // Emitted regardless of wasLoggedIn so the avatar resyncs even if a
+        // prior @calendar logout already cleared the in-memory client.
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: `<span class="typeagent-user-signed-out" hidden></span>`,
+        });
     }
 }
 
@@ -243,6 +320,13 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeEmailContext,
         updateAgentContext: updateEmailContext,
         executeAction: executeEmailAction,
+        checkReadiness: checkEmailReadiness,
+        setup: setupEmail,
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<EmailActionContext>)
+                .sessionContext.agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
         ...getCommandInterface(handlers),
     };
 }
@@ -255,6 +339,11 @@ type EmailActionContext = {
     sessionContext?: SessionContext<EmailActionContext>;
     /** Whether a background index operation is currently running */
     indexingInProgress: boolean;
+    /**
+     * Manages yes/no choice callbacks (currently only the setup-flow card).
+     * The AppAgent.handleChoice in instantiate() delegates back to this.
+     */
+    choiceManager: ChoiceManager;
 };
 
 async function initializeEmailContext(): Promise<EmailActionContext> {
@@ -269,7 +358,128 @@ async function initializeEmailContext(): Promise<EmailActionContext> {
         providerType: undefined,
         kpIndex,
         indexingInProgress: false,
+        choiceManager: new ChoiceManager(),
     };
+}
+
+// HH:MM timestamp for setup status updates — same convention as
+// calendar / desktop / screencapture.
+function emailTs(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// Cheap readiness probe: env config + provider.isAuthenticated().
+// See graphUtils/readiness.ts for the decision logic — shared with the
+// calendar agent since both use the same provider abstraction and env vars.
+async function checkEmailReadiness(
+    context: SessionContext<EmailActionContext>,
+): Promise<ReadinessReport> {
+    const config = probeGraphConfig(process.env);
+    let provider = context.agentContext?.emailProvider;
+    if (!provider && (config.msGraphConfigured || config.googleConfigured)) {
+        provider = createEmailProviderFromConfig();
+    }
+    return evaluateGraphReadiness("email", {
+        ...config,
+        isAuthenticated: provider?.isAuthenticated() === true,
+        providerName: provider?.providerName,
+    });
+}
+
+// setup hook — drives the device-code / OAuth login flow. Mirrors the
+// calendar agent's setup; the only differences are the agent name in
+// messaging and which factory we call.
+async function setupEmail(
+    actionContext: ActionContext<EmailActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const config = probeGraphConfig(process.env);
+    if (!config.msGraphConfigured && !config.googleConfigured) {
+        return createActionResultFromError(
+            "No email provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh email`.",
+        );
+    }
+    if (!ctx.emailProvider) {
+        ctx.emailProvider = createEmailProviderFromConfig();
+        if (ctx.emailProvider) {
+            ctx.providerType = ctx.emailProvider
+                .providerName as EmailProviderType;
+        }
+    }
+    const provider = ctx.emailProvider;
+    if (!provider) {
+        return createActionResultFromError(
+            "Email env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+        );
+    }
+    if (provider.isAuthenticated()) {
+        return createActionResultFromTextDisplay("Already signed in to email.");
+    }
+    const providerLabel =
+        ctx.providerType === "google" ? "Gmail" : "Microsoft 365";
+    return createYesNoChoiceResult(
+        ctx.choiceManager,
+        `Sign in to ${providerLabel}? You'll be shown a device code (or browser link) to complete the flow. Sign-in usually takes under a minute — I'll post the result here.`,
+        async (confirmed, liveActionContext) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Sign-in skipped. Run `@email login` later to sign in.",
+                );
+            }
+            return runEmailLogin(
+                liveActionContext as ActionContext<EmailActionContext>,
+            );
+        },
+    );
+}
+
+// Drives provider.login() in the choice callback. Exported for unit tests.
+export async function runEmailLogin(
+    actionContext: ActionContext<EmailActionContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    const provider = ctx.emailProvider;
+    if (!provider) {
+        return createActionResultFromError("Email provider not initialized.");
+    }
+    actionContext.actionIO.appendDisplay(
+        {
+            type: "text",
+            content: `[${emailTs()}] Starting sign-in…`,
+            kind: "status",
+        },
+        "block",
+    );
+    try {
+        const success = await provider.login((prompt) => {
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `[${emailTs()}] ${prompt.message}`,
+                    kind: "status",
+                },
+                "block",
+            );
+        });
+        if (!success) {
+            const tip =
+                ctx.providerType === "google"
+                    ? " You can also try `@email google-auth <code>` with a manual authorization code."
+                    : "";
+            return createActionResultFromError(
+                `[${emailTs()}] Sign-in failed.${tip}`,
+            );
+        }
+        const user = await provider.getUser();
+        return createActionResultFromTextDisplay(
+            `[${emailTs()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your email command — readiness was re-checked automatically.`,
+        );
+    } catch (e: any) {
+        return createActionResultFromError(
+            `[${emailTs()}] Sign-in failed: ${e?.message ?? e}`,
+        );
+    }
 }
 
 async function updateEmailContext(
@@ -345,7 +555,7 @@ async function handleEmailAction(
                     action.parameters.to,
                     emailProvider,
                 );
-                to_addrs = await emailProvider.resolveUserEmails(expandedTo);
+                to_addrs = await resolveRecipients(expandedTo, emailProvider);
             }
 
             let cc_addrs: string[] | undefined = [];
@@ -354,7 +564,7 @@ async function handleEmailAction(
                     action.parameters.cc,
                     emailProvider,
                 );
-                cc_addrs = await emailProvider.resolveUserEmails(expandedCc);
+                cc_addrs = await resolveRecipients(expandedCc, emailProvider);
             }
 
             let bcc_addrs: string[] | undefined = [];
@@ -363,7 +573,7 @@ async function handleEmailAction(
                     action.parameters.bcc,
                     emailProvider,
                 );
-                bcc_addrs = await emailProvider.resolveUserEmails(expandedBcc);
+                bcc_addrs = await resolveRecipients(expandedBcc, emailProvider);
             }
 
             let genContent: string = "";
@@ -398,13 +608,35 @@ async function handleEmailAction(
             emailBody = await resolveBodyPlaceholders(emailBody, emailProvider);
 
             debug(chalk.green("Handling sendEmail action ..."));
-            res = await emailProvider.sendEmail(
-                action.parameters.subject,
-                emailBody,
-                to_addrs,
-                cc_addrs,
-                bcc_addrs,
-            );
+            // Reject early if recipient resolution dropped everything —
+            // empty arrays would otherwise produce an unhelpful Graph 400.
+            if (
+                (!to_addrs || to_addrs.length === 0) &&
+                (!cc_addrs || cc_addrs.length === 0) &&
+                (!bcc_addrs || bcc_addrs.length === 0)
+            ) {
+                const requested = [
+                    ...(action.parameters.to ?? []),
+                    ...(action.parameters.cc ?? []),
+                    ...(action.parameters.bcc ?? []),
+                ];
+                return `Could not resolve any recipients for: ${requested.map((s) => `"${s}"`).join(", ")}. Pass a full email address (e.g. user@domain.com), or consent to User.ReadBasic.All so name lookups work.`;
+            }
+            try {
+                res = await emailProvider.sendEmail(
+                    action.parameters.subject,
+                    emailBody,
+                    to_addrs,
+                    cc_addrs,
+                    bcc_addrs,
+                );
+            } catch (e: any) {
+                // Surface the underlying Graph/Gmail error to the user
+                // instead of the prior generic "Error encountered when
+                // sending email!" — providers throw rather than swallow.
+                const detail = e?.message ?? String(e);
+                return `Error sending email: ${detail}`;
+            }
 
             if (res) {
                 return "Email sent ...";
@@ -443,7 +675,7 @@ async function handleForwardOrReplyAction(
 
         let senders: string[] | undefined = [];
         if (msgRef.senders && msgRef.senders.length > 0) {
-            senders = await emailProvider.resolveUserEmails(msgRef.senders);
+            senders = await resolveRecipients(msgRef.senders, emailProvider);
         }
 
         if (senders && senders.length > 0) {
@@ -462,26 +694,33 @@ async function handleForwardOrReplyAction(
             if (msg_id) {
                 let cc_addrs: string[] | undefined = [];
                 if (action.parameters.cc && action.parameters.cc.length > 0) {
-                    cc_addrs = await emailProvider.resolveUserEmails(
+                    cc_addrs = await resolveRecipients(
                         action.parameters.cc,
+                        emailProvider,
                     );
                 }
 
                 let bcc_addrs: string[] | undefined = [];
                 if (action.parameters.bcc && action.parameters.bcc.length > 0) {
-                    bcc_addrs = await emailProvider.resolveUserEmails(
+                    bcc_addrs = await resolveRecipients(
                         action.parameters.bcc,
+                        emailProvider,
                     );
                 }
 
                 // reply to the email
                 if (action.actionName === "replyEmail") {
-                    let res = await emailProvider.replyToEmail(
-                        msg_id,
-                        action.parameters.body ?? "",
-                        cc_addrs,
-                        bcc_addrs,
-                    );
+                    let res;
+                    try {
+                        res = await emailProvider.replyToEmail(
+                            msg_id,
+                            action.parameters.body ?? "",
+                            cc_addrs,
+                            bcc_addrs,
+                        );
+                    } catch (e: any) {
+                        return `Error replying to email: ${e?.message ?? String(e)}`;
+                    }
 
                     if (res) {
                         return "Email replied ...";
@@ -494,18 +733,24 @@ async function handleForwardOrReplyAction(
                         action.parameters.to &&
                         action.parameters.to.length > 0
                     ) {
-                        to_addrs = await emailProvider.resolveUserEmails(
+                        to_addrs = await resolveRecipients(
                             action.parameters.to,
+                            emailProvider,
                         );
                     }
 
-                    let res = await emailProvider.forwardEmail(
-                        msg_id,
-                        action.parameters.additionalMessage ?? "",
-                        to_addrs,
-                        cc_addrs,
-                        bcc_addrs,
-                    );
+                    let res;
+                    try {
+                        res = await emailProvider.forwardEmail(
+                            msg_id,
+                            action.parameters.additionalMessage ?? "",
+                            to_addrs,
+                            cc_addrs,
+                            bcc_addrs,
+                        );
+                    } catch (e: any) {
+                        return `Error forwarding email: ${e?.message ?? String(e)}`;
+                    }
 
                     if (res) {
                         return "Email forwarded ...";
@@ -719,7 +964,10 @@ async function handleFindEmailAction(
             msgRef.senders,
             emailProvider,
         );
-        const resolved = await emailProvider.resolveUserEmails(expandedSenders);
+        const resolved = await resolveRecipients(
+            expandedSenders,
+            emailProvider,
+        );
         if (resolved.length > 0) {
             searchQuery.sender = resolved[0];
         }

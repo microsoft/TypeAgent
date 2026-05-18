@@ -11,7 +11,22 @@
 
 import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
+import type {
+    PhaseTiming,
+    CompletionUsageStats,
+    NotifyExplainedData,
+    RequestId,
+    UserFeedbackCategory,
+    UserFeedbackEntry,
+    UserFeedbackRating,
+} from "@typeagent/dispatcher-types";
 import { setContent } from "./setContent.js";
+import {
+    FEEDBACK_VARIANTS,
+    FeedbackController,
+    FeedbackUIVariant,
+    FeedbackWidget,
+} from "./feedbackWidget.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -88,28 +103,13 @@ export interface DynamicDisplayResult {
     nextRefreshMs: number;
 }
 
-// Local mirror of dispatcher-types PhaseTiming — kept here to avoid
-// pulling the full dispatcher-types dependency into chat-ui.
-export interface PhaseTiming {
-    duration?: number;
-    marks?: Record<string, { duration: number; count: number }>;
-}
-
-// Local mirror of dispatcher-types CompletionUsageStats.
-export interface CompletionUsageStats {
-    completion_tokens: number;
-    prompt_tokens: number;
-    total_tokens: number;
-}
-
-// Local mirror of dispatcher-types NotifyExplainedData — kept here to avoid
-// pulling the full dispatcher-types dependency into chat-ui.
-export interface NotifyExplainedData {
-    error?: string | undefined;
-    fromCache: "construction" | "grammar" | false;
-    fromUser: boolean;
-    time: string;
-}
+// Re-exported from @typeagent/dispatcher-types so consumers of chat-ui that
+// already have a dispatcher-types dependency get a single canonical type
+// (and so we don't drift). Previously these were locally mirrored to avoid
+// pulling dispatcher-types in; the rationale is stale now that
+// dispatcher-types is a small types package with minimal dependencies (just
+// @typeagent/agent-sdk, which chat-ui already depends on).
+export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData };
 
 /**
  * One entry in a session history transcript replayed via
@@ -405,6 +405,23 @@ export interface ChatPanelOptions {
         source: string,
         displayId: string,
     ) => Promise<DynamicDisplayResult>;
+    /**
+     * Optional callback fired when the user rates an agent message via the
+     * feedback widget. The host should call dispatcher.recordUserFeedback
+     * (or its own equivalent) so the rating is persisted and broadcast.
+     */
+    onFeedback?: (
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ) => Promise<void> | void;
+    /**
+     * Initial feedback widget placement variant. Defaults to "footer-always".
+     * Change at runtime via ChatPanel.setFeedbackUIVariant.
+     */
+    feedbackUIVariant?: FeedbackUIVariant;
 }
 
 /**
@@ -423,27 +440,57 @@ export class ChatPanel {
     private readonly stopButton: HTMLButtonElement;
     private readonly ghostSpan: HTMLSpanElement;
     private reconnectBanner: HTMLDivElement | undefined;
-    private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
     private historyAgentContainer: AgentMessageContainer | undefined;
     /**
-     * Per-requestId agent bubble lookup. Populated when add/replaceAgentMessage
-     * is called with a requestId. Allows out-of-order or concurrent flows to
-     * route follow-up content to the correct bubble (instead of always
-     * appending to the most recent one).
+     * Per-thread agent message containers. A thread is keyed by either the
+     * user-generated requestId (user-driven thread) or a dispatcher-supplied
+     * synthetic id (e.g. "agent-N") for agent-initiated flows. Decoupling
+     * threads fixes the bug where an agent-initiated message arriving
+     * mid-conversation would glomm onto the previous user request's bubble.
+     * Toast and inline rows do NOT participate in this map.
      */
-    private agentContainersByRequestId = new Map<
+    private threadContainers = new Map<string, AgentMessageContainer>();
+    /**
+     * The threadId of the most-recent user request. Methods that take an
+     * optional requestId/threadId default to this when no explicit id is
+     * supplied.
+     */
+    private currentUserThreadId: string | undefined;
+    /**
+     * Counter for ad-hoc thread ids — used as a last-resort fallback when a
+     * caller invokes a thread-bearing method with no id AND no current user
+     * thread (e.g. agent-initiated message arriving before any user input
+     * via an embedder that hasn't been updated to pass an id yet).
+     */
+    private nextAdHocThreadId = 0;
+    /**
+     * Per-thread setDisplayInfo metadata stashed when it arrives before the
+     * first setDisplay/appendDisplay for the thread; consumed by
+     * getOrCreateAgentContainer when it creates the container.
+     */
+    private pendingThreadDisplayInfo = new Map<
         string,
-        AgentMessageContainer
+        { source: string; sourceIcon?: string; action?: unknown }
     >();
-    private pendingDisplayInfo:
-        | { source: string; sourceIcon?: string; action?: unknown }
-        | undefined;
+    /**
+     * Floating overlay surface for showToast() — fixed-positioned above the
+     * chat in rootElement, lazily created on first toast.
+     */
+    private toastStack: HTMLDivElement | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     /** Local user's display name + initial used in user-bubble headers. */
     private userName = "You";
     private userInitial = "U";
+    /**
+     * Whether the local user has signed in to a Microsoft / Graph identity
+     * (set via setUserSignedIn after `@calendar login` / `@email login`).
+     * The avatar's click handler reads this at click time and no-ops when
+     * true so signed-in users don't re-trigger the login flow.
+     */
+    private isUserSignedIn = false;
+    private signedInEmail?: string;
     /**
      * Optional host-driven command-completion controller. Mounted by
      * attachCompletion(); pcState messages are forwarded via applyPcState().
@@ -522,6 +569,17 @@ export class ChatPanel {
         source: string,
         displayId: string,
     ) => Promise<DynamicDisplayResult>;
+    public onFeedback?: (
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ) => Promise<void> | void;
+    private _feedbackUIVariant: FeedbackUIVariant = "footer-always";
+    // Tracks the current rating per requestId so re-rendering / replay
+    // can apply the latest state. Keyed by RequestId.requestId (UUID).
+    private feedbackByRequestId = new Map<string, UserFeedbackEntry>();
 
     constructor(
         private readonly rootElement: HTMLElement,
@@ -533,6 +591,8 @@ export class ChatPanel {
         this.onCancel = options.onCancel;
         this.getCompletions = options.getCompletions;
         this.getDynamicDisplay = options.getDynamicDisplay;
+        this.onFeedback = options.onFeedback;
+        this._feedbackUIVariant = options.feedbackUIVariant ?? "footer-always";
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -1033,9 +1093,16 @@ export class ChatPanel {
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
-        // A new user request invalidates the previous "current" agent bubble so
-        // a follow-up addAgentMessage with no requestId starts a fresh one.
-        this.currentAgentContainer = undefined;
+        // Reap stale per-thread bubble lookups now that a new user request
+        // is starting. completeRequest() intentionally leaves the entry in
+        // threadContainers so out-of-band setDisplay updates from a host's
+        // takeAction handler can still target the existing bubble (see
+        // PR #2306). Once the user starts a new request, any pending late
+        // update from a prior thread would be unsafe to apply, so we free
+        // the references here. New threads will re-populate the map via
+        // getOrCreateAgentContainer.
+        this.threadContainers.clear();
+        this.pendingThreadDisplayInfo.clear();
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
@@ -1043,6 +1110,19 @@ export class ChatPanel {
         const iconDiv = document.createElement("div");
         iconDiv.className = "user-icon";
         iconDiv.textContent = this.userInitial;
+        // Click the user-letter avatar to start a Microsoft sign-in flow.
+        // Routes through the standard send path so it appears in history,
+        // shows in the user's bubble, and the dispatcher handles it like
+        // any typed `@calendar login`. Calendar+email share an MS Graph
+        // identity (single tenant), so one login covers both. The handler
+        // reads isUserSignedIn at click time so the avatar becomes inert
+        // once the user is signed in (without needing to remove listeners
+        // from each historic bubble).
+        this.applyUserIconState(iconDiv);
+        iconDiv.addEventListener("click", () => {
+            if (this.isUserSignedIn) return;
+            this.injectCommand("@calendar login");
+        });
         container.appendChild(iconDiv);
 
         const bodyDiv = document.createElement("div");
@@ -1077,6 +1157,12 @@ export class ChatPanel {
         if (!this.suppressFirstMessageTracking) {
             this.requestStartByRequestId.set(id, Date.now());
         }
+        // The new user request becomes the default thread for subsequent
+        // setDisplay/appendDisplay calls that omit a requestId. Old threads
+        // (agent-initiated reminders, prior user requests) stay alive in
+        // threadContainers and continue to receive their own follow-up
+        // messages addressed by their threadId.
+        this.currentUserThreadId = id;
     }
 
     /**
@@ -1187,7 +1273,7 @@ export class ChatPanel {
         // for host-driven `showStatus()` calls that have no request context.
         if (
             appendMode === "temporary" &&
-            (requestId || this.currentAgentContainer)
+            (requestId !== undefined || this.currentUserThreadId !== undefined)
         ) {
             const tempContainer = this.getOrCreateAgentContainer(
                 source,
@@ -1252,16 +1338,39 @@ export class ChatPanel {
             appendMode === "step" ? "block" : appendMode,
         );
 
+        // After the agent's HTML lands in the DOM, lift any embedded
+        // user-signed-in marker into ChatPanel state. The marker is emitted
+        // by the calendar/email login handlers on success.
+        this.extractUserMarker(this.messageDiv);
+
         this.scrollToBottom();
     }
 
     /**
-     * Drop the bubble association for a completed request id. Future
+     * Drop the bubble association for a completed thread/request id. Future
      * add/replaceAgentMessage calls with this id will create a fresh bubble.
      * Called by hosts when a request completes; safe to call for unknown ids.
      */
     public clearRequest(requestId: string): void {
-        this.agentContainersByRequestId.delete(requestId);
+        this.threadContainers.delete(requestId);
+        this.pendingThreadDisplayInfo.delete(requestId);
+        if (this.currentUserThreadId === requestId) {
+            this.currentUserThreadId = undefined;
+        }
+    }
+
+    /**
+     * Resolve a threadId for a thread-bearing call. Caller-supplied id wins;
+     * otherwise default to the current user-driven thread; otherwise mint an
+     * ad-hoc id so a misconfigured embedder still produces sensible (if
+     * uncorrelated) output instead of glomming onto an unrelated bubble.
+     */
+    private resolveThreadId(requestId?: string): string {
+        if (requestId !== undefined) return requestId;
+        if (this.currentUserThreadId !== undefined) {
+            return this.currentUserThreadId;
+        }
+        return `ad-hoc-${this.nextAdHocThreadId++}`;
     }
 
     private getOrCreateAgentContainer(
@@ -1269,52 +1378,51 @@ export class ChatPanel {
         sourceIcon: string | undefined,
         requestId: string | undefined,
     ): AgentMessageContainer {
-        if (requestId && this.agentContainersByRequestId.has(requestId)) {
-            return this.agentContainersByRequestId.get(requestId)!;
+        const threadId = this.resolveThreadId(requestId);
+        const existing = this.threadContainers.get(threadId);
+        if (existing) {
+            return existing;
         }
-        if (!requestId && this.currentAgentContainer) {
-            return this.currentAgentContainer;
-        }
-        // If the dispatcher already announced this action's source/icon
-        // via setDisplayInfo, use those when creating the bubble — even
-        // if the first message routed into it is the dispatcher's own
-        // transient "[X] Executing action ..." status (source="dispatcher",
-        // no icon). Without this, the bubble would be created with the
-        // dispatcher robot avatar and stay that way (subsequent setMessage
-        // calls only update the name label, not the icon).
-        const effectiveSource = this.pendingDisplayInfo?.source ?? source;
-        const effectiveIcon =
-            this.pendingDisplayInfo?.sourceIcon ??
-            sourceIcon ??
-            this.iconForSource(effectiveSource);
+        // sourceIcon="🤖"). Without this, the bubble would be created with
+        // the dispatcher robot avatar and stay that way (subsequent
+        // setMessage calls only update the name label, not the icon).
+        //
+        // When pending source info is present we treat it as authoritative:
+        // even though setDisplayInfo doesn't carry sourceIcon, we resolve
+        // the icon from pending.source via iconForSource so the dispatcher's
+        // 🤖 from the "Executing action ..." caller doesn't win the fallback
+        // chain.
+        const pending = this.pendingThreadDisplayInfo.get(threadId);
+        const effectiveSource = pending?.source ?? source;
+        const effectiveIcon = pending
+            ? (pending.sourceIcon ?? this.iconForSource(effectiveSource))
+            : (sourceIcon ?? this.iconForSource(effectiveSource));
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
+            threadId,
         );
-        this.currentAgentContainer = container;
-        if (requestId) {
-            this.agentContainersByRequestId.set(requestId, container);
-            // Capture the elapsed time from request send to first agent
-            // bubble for this request — drives the "First Message"
-            // metric line on the agent metrics tooltip.
-            if (!this.firstMessageMsByRequestId.has(requestId)) {
-                const start = this.requestStartByRequestId.get(requestId);
-                if (start !== undefined) {
-                    this.firstMessageMsByRequestId.set(
-                        requestId,
-                        Date.now() - start,
-                    );
-                }
+        this.threadContainers.set(threadId, container);
+        // Capture the elapsed time from request send to first agent
+        // bubble for this thread — drives the "First Message"
+        // metric line on the agent metrics tooltip.
+        if (!this.firstMessageMsByRequestId.has(threadId)) {
+            const start = this.requestStartByRequestId.get(threadId);
+            if (start !== undefined) {
+                this.firstMessageMsByRequestId.set(
+                    threadId,
+                    Date.now() - start,
+                );
             }
         }
         // Apply any action metadata that arrived via setDisplayInfo
         // before the first render — the dispatcher fires it before
         // the agent's first setDisplay/appendDisplay (including the
         // "Executing action ..." temporary status emitted via displayStatus).
-        if (this.pendingDisplayInfo?.action !== undefined) {
-            container.setActionData(this.pendingDisplayInfo.action);
+        if (pending?.action !== undefined) {
+            container.setActionData(pending.action);
         }
-        this.pendingDisplayInfo = undefined;
+        this.pendingThreadDisplayInfo.delete(threadId);
         return container;
     }
 
@@ -1337,6 +1445,107 @@ export class ChatPanel {
      */
     public setAvatarMap(map: Record<string, string>): void {
         this.avatarMap = { ...DEFAULT_AVATAR_MAP, ...map };
+    }
+
+    /**
+     * Show a floating toast overlay (auto-dismisses after ~5s, click to
+     * dismiss). Lives outside the chat scroll. Toasts do NOT participate in
+     * the thread map — each call is fire-and-forget.
+     */
+    public showToast(
+        content: DisplayContent,
+        source?: string,
+        _sourceIcon?: string,
+    ) {
+        if (!this.toastStack) {
+            const stack = document.createElement("div");
+            stack.className = "chat-toast-stack";
+            stack.style.cssText =
+                "position: absolute; top: 12px; right: 12px; z-index: 1000; " +
+                "display: flex; flex-direction: column; gap: 8px; " +
+                "pointer-events: none; max-width: 320px;";
+            // Append to messageDiv's parent (the chat-panel-wrapper) so the
+            // overlay is bounded to the panel rather than the whole document.
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                stack,
+            );
+            this.toastStack = stack;
+        }
+
+        const toast = document.createElement("div");
+        toast.className = "chat-toast";
+        toast.style.cssText =
+            "background: rgba(40,42,54,0.96); color: #f8f8f2; " +
+            "padding: 10px 14px; border-radius: 6px; " +
+            "box-shadow: 0 4px 12px rgba(0,0,0,0.25); " +
+            "pointer-events: auto; cursor: pointer; " +
+            "font-size: 13px; line-height: 1.4; " +
+            "transition: opacity 0.3s ease;";
+
+        if (source) {
+            const header = document.createElement("div");
+            header.style.cssText =
+                "font-size: 11px; opacity: 0.65; margin-bottom: 4px;";
+            header.textContent = source;
+            toast.appendChild(header);
+        }
+
+        const body = document.createElement("div");
+        setContent(
+            body,
+            content,
+            this.settingsView,
+            "agent",
+            this.platformAdapter,
+        );
+        toast.appendChild(body);
+
+        let dismissed = false;
+        const dismiss = () => {
+            if (dismissed) return;
+            dismissed = true;
+            toast.style.opacity = "0";
+            window.setTimeout(() => toast.remove(), 300);
+        };
+        toast.addEventListener("click", dismiss);
+        window.setTimeout(dismiss, 5000);
+
+        this.toastStack.appendChild(toast);
+    }
+
+    /**
+     * Show a compact inline row in the chat scroll (no bubble chrome,
+     * single line, dim styling). Persists in scroll history. Does NOT
+     * participate in the thread map — fire-and-forget.
+     */
+    public showInline(content: DisplayContent, source?: string) {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const row = document.createElement("div");
+        row.className = "chat-message-inline";
+        row.style.cssText =
+            "padding: 4px 12px; font-size: 12px; color: #888; " +
+            "border-left: 2px solid #aaa; margin: 4px 12px; " +
+            "display: flex; gap: 6px; align-items: baseline;";
+
+        if (source) {
+            const sourceSpan = document.createElement("span");
+            sourceSpan.style.cssText = "font-weight: 600; flex-shrink: 0;";
+            sourceSpan.textContent = `${source}:`;
+            row.appendChild(sourceSpan);
+        }
+
+        const body = document.createElement("span");
+        setContent(
+            body,
+            content,
+            this.settingsView,
+            "agent",
+            this.platformAdapter,
+        );
+        row.appendChild(body);
+
+        sentinel.before(row);
+        this.scrollToBottom();
     }
 
     /**
@@ -1377,7 +1586,9 @@ export class ChatPanel {
         const firstHistoryIdx = this.messageDiv.children.length;
 
         // Reset live state so replay starts fresh.
-        this.currentAgentContainer = undefined;
+        this.threadContainers.clear();
+        this.currentUserThreadId = undefined;
+        this.pendingThreadDisplayInfo.clear();
 
         // Suppress first-message timing tracking during replay — those
         // timestamps would reflect the speed of replay, not the original
@@ -1455,29 +1666,41 @@ export class ChatPanel {
         }
 
         // Reset state so the next live message starts a fresh bubble and
-        // doesn't reuse a history bubble via the requestId map.
+        // doesn't reuse a history bubble via the thread map.
         // Also clear userMessageById: clientRequestIds from prior sessions
         // (e.g. the shell's cmd-N counter resets each launch) can collide
         // with new live requests, causing hasUserMessage() to return a
         // false positive and silently drop the live user-message bubble.
-        this.currentAgentContainer = undefined;
-        this.agentContainersByRequestId.clear();
+        this.threadContainers.clear();
+        this.currentUserThreadId = undefined;
+        this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
     }
 
-    /** Update the source/agent label on the current agent message. */
+    /** Update the source/agent label on the targeted thread's bubble. */
     public setDisplayInfo(
         source: string,
         sourceIcon?: string,
         action?: unknown,
         requestId?: string,
     ) {
-        const target =
-            (requestId && this.agentContainersByRequestId.get(requestId)) ||
-            this.currentAgentContainer;
+        const threadId = this.resolveThreadId(requestId);
+        const target = this.threadContainers.get(threadId);
         if (target) {
-            target.updateSource(source, sourceIcon);
+            // Fall back to the avatar map when the host doesn't pass an
+            // icon — matches the create-path in getOrCreateAgentContainer
+            // (effectiveIcon ?? iconForSource(effectiveSource)). Without
+            // this, a bubble that was first created by the dispatcher's
+            // "Translating ..." / "Executing action ..." status (source
+            // "dispatcher", icon 🤖) and is later re-tagged via
+            // setDisplayInfo to the real agent source would keep the
+            // robot icon — updateSource is a no-op on icon when called
+            // with undefined.
+            target.updateSource(
+                source,
+                sourceIcon ?? this.iconForSource(source),
+            );
             if (action !== undefined) {
                 target.setActionData(action);
             }
@@ -1485,8 +1708,12 @@ export class ChatPanel {
         }
         // No container yet — stash so the next one gets the action JSON
         // attached (the dispatcher fires setDisplayInfo before the
-        // agent's first setDisplay/appendDisplay).
-        this.pendingDisplayInfo = { source, sourceIcon, action };
+        // agent's first setDisplay/appendDisplay for this thread).
+        this.pendingThreadDisplayInfo.set(threadId, {
+            source,
+            sourceIcon,
+            action,
+        });
     }
 
     /** Returns true if a user-message bubble for `requestId` already exists. */
@@ -1509,15 +1736,19 @@ export class ChatPanel {
         const sentinel = document.createElement("div");
         sentinel.className = "chat-sentinel";
         this.messageDiv.appendChild(sentinel);
-        this.currentAgentContainer = undefined;
-        this.agentContainersByRequestId.clear();
+        this.threadContainers.clear();
+        this.currentUserThreadId = undefined;
+        this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
-        this.pendingDisplayInfo = undefined;
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
+        }
+        // Drop any active toasts as well — clear() means "reset the chat".
+        if (this.toastStack) {
+            this.toastStack.replaceChildren();
         }
     }
 
@@ -1604,13 +1835,9 @@ export class ChatPanel {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
-        const target =
-            (requestId && this.agentContainersByRequestId.get(requestId)) ||
-            this.currentAgentContainer;
-        const firstMessageMs =
-            requestId !== undefined
-                ? this.firstMessageMsByRequestId.get(requestId)
-                : undefined;
+        const threadId = this.resolveThreadId(requestId);
+        const target = this.threadContainers.get(threadId);
+        const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
             // Mirror the Electron shell's "⚠ Cancelled" status line so the
             // user has visible confirmation that Stop / Esc cancelled the
@@ -1651,15 +1878,16 @@ export class ChatPanel {
                 result.totalDuration,
             );
         }
-        if (requestId) {
-            this.agentContainersByRequestId.delete(requestId);
-            this.requestStartByRequestId.delete(requestId);
-            this.firstMessageMsByRequestId.delete(requestId);
-        }
-        // If we just finalized the active bubble, reset it so the next
-        // request starts fresh.
-        if (!requestId || target === this.currentAgentContainer) {
-            this.currentAgentContainer = undefined;
+        // Keep the thread's bubble in the map after completion so late
+        // setDisplay calls (e.g. validation results from a host's takeAction
+        // handler that runs out-of-band with the action's own ActionResult)
+        // can still target the existing bubble instead of creating a new
+        // empty one. addUserMessage() reaps stale entries when the next
+        // user request starts.
+        this.requestStartByRequestId.delete(threadId);
+        this.firstMessageMsByRequestId.delete(threadId);
+        if (this.currentUserThreadId === threadId) {
+            this.currentUserThreadId = undefined;
         }
     }
 
@@ -1973,6 +2201,83 @@ export class ChatPanel {
     }
 
     /**
+     * Mark the local user as signed in to a Microsoft / Graph identity.
+     * Updates userName/userInitial (so subsequent bubbles show the real
+     * initial), retroactively rewrites every existing user-icon div in the
+     * transcript, and flips isUserSignedIn so the avatar's click handler
+     * stops triggering sign-in. Called after `@calendar login` succeeds —
+     * either by the host directly, or via the embedded HTML marker scanner
+     * in addAgentMessage.
+     */
+    public setUserSignedIn(name: string, email: string) {
+        this.setUserInfo(name);
+        this.isUserSignedIn = true;
+        this.signedInEmail = email;
+        this.refreshAllUserIcons();
+    }
+
+    public setUserSignedOut() {
+        this.isUserSignedIn = false;
+        this.signedInEmail = undefined;
+        // Reset display name/initial back to the default placeholders so
+        // future user bubbles show "U" instead of the previously-signed-in
+        // user's initial. Mirrors what setUserSignedIn does on its own
+        // path (where it overwrites userName/userInitial via setUserInfo).
+        this.userName = "You";
+        this.userInitial = "U";
+        this.refreshAllUserIcons();
+    }
+
+    private applyUserIconState(iconDiv: HTMLElement) {
+        iconDiv.textContent = this.userInitial;
+        if (this.isUserSignedIn) {
+            iconDiv.style.cursor = "default";
+            iconDiv.title = this.signedInEmail
+                ? `Signed in as ${this.userName} <${this.signedInEmail}>`
+                : `Signed in as ${this.userName}`;
+        } else {
+            iconDiv.style.cursor = "pointer";
+            iconDiv.title = "Sign in to Microsoft (calendar + email)";
+        }
+    }
+
+    private refreshAllUserIcons() {
+        const icons =
+            this.messageDiv.querySelectorAll<HTMLElement>(".user-icon");
+        icons.forEach((el) => this.applyUserIconState(el));
+    }
+
+    /**
+     * Look for the hidden user-signed-in / user-signed-out markers that
+     * calendar/email login + logout handlers append to their displays, and
+     * lift them into UI state. The shapes are:
+     *   <span class="typeagent-user-signed-in" data-name="..." data-email="..." hidden></span>
+     *   <span class="typeagent-user-signed-out" hidden></span>
+     * Markers are removed from the DOM after extraction so they don't leak
+     * into subsequent history replays / copy-as-text.
+     */
+    private extractUserMarker(root: HTMLElement) {
+        const signedIn = root.querySelectorAll<HTMLElement>(
+            "span.typeagent-user-signed-in",
+        );
+        signedIn.forEach((el) => {
+            const name = el.getAttribute("data-name");
+            const email = el.getAttribute("data-email");
+            if (name && email) {
+                this.setUserSignedIn(name, email);
+            }
+            el.remove();
+        });
+        const signedOut = root.querySelectorAll<HTMLElement>(
+            "span.typeagent-user-signed-out",
+        );
+        signedOut.forEach((el) => {
+            this.setUserSignedOut();
+            el.remove();
+        });
+    }
+
+    /**
      * Mount inline + dropdown command-completion driven by the host. The
      * `post` callback receives messages (`pcUpdate` / `pcAccept` /
      * `pcDismiss` / `pcHide` / `pcDispose`) which the host should forward
@@ -2195,6 +2500,7 @@ export class ChatPanel {
     private createAgentContainer(
         source: string,
         icon: string,
+        threadId?: string,
     ): AgentMessageContainer {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = new AgentMessageContainer(
@@ -2204,7 +2510,71 @@ export class ChatPanel {
             this.settingsView,
             this.platformAdapter,
         );
+        if (threadId !== undefined) {
+            this.attachFeedbackToContainer(container, threadId);
+        }
         return container;
+    }
+
+    private attachFeedbackToContainer(
+        container: AgentMessageContainer,
+        threadId: string,
+    ) {
+        // The thread id IS the canonical requestId.requestId for user-driven
+        // threads. For synthetic agent-N ids we still attach so the UI is
+        // consistent; the host can choose to ignore feedback callbacks
+        // whose requestId doesn't correspond to a known request.
+        const requestId: RequestId = { requestId: threadId };
+        const controller: FeedbackController = {
+            getCurrentFeedback: () =>
+                this.feedbackByRequestId.get(threadId) ?? null,
+            submit: async (rating, category, comment, includeContext) => {
+                const cb = this.onFeedback;
+                if (!cb) return;
+                try {
+                    await cb(
+                        requestId,
+                        rating,
+                        category,
+                        comment,
+                        includeContext,
+                    );
+                } catch (e) {
+                    console.error("onFeedback callback failed", e);
+                }
+            },
+        };
+        container.attachFeedbackController(controller, this._feedbackUIVariant);
+        const existing = this.feedbackByRequestId.get(threadId);
+        if (existing) {
+            container.setFeedbackState(existing);
+        }
+    }
+
+    /**
+     * Apply a feedback entry to the matching bubble. Hosts call this when
+     * the dispatcher broadcasts a UserFeedbackEntry (via ClientIO
+     * onUserFeedback) or during replay of historical entries.
+     */
+    public applyFeedback(entry: UserFeedbackEntry): void {
+        const tid = entry.requestId.requestId;
+        if (!tid) return;
+        this.feedbackByRequestId.set(tid, entry);
+        const container = this.threadContainers.get(tid);
+        container?.setFeedbackState(entry.rating === null ? null : entry);
+    }
+
+    public get feedbackUIVariant(): FeedbackUIVariant {
+        return this._feedbackUIVariant;
+    }
+
+    /** Switch the variant for every existing agent bubble in the panel. */
+    public setFeedbackUIVariant(variant: FeedbackUIVariant): void {
+        if (this._feedbackUIVariant === variant) return;
+        this._feedbackUIVariant = variant;
+        for (const c of this.threadContainers.values()) {
+            c.setFeedbackVariant(variant);
+        }
     }
 
     private createTimestamp(
@@ -2234,7 +2604,11 @@ export class ChatPanel {
     public addFollowUpButtons(
         buttons: { label: string; command: string; displayText?: string }[],
     ) {
-        if (!this.currentAgentContainer || buttons.length === 0) return;
+        const target =
+            this.currentUserThreadId !== undefined
+                ? this.threadContainers.get(this.currentUserThreadId)
+                : undefined;
+        if (!target || buttons.length === 0) return;
 
         const buttonDiv = document.createElement("div");
         buttonDiv.className = "chat-followup-buttons";
@@ -2250,7 +2624,7 @@ export class ChatPanel {
             buttonDiv.appendChild(el);
         }
 
-        this.currentAgentContainer.appendElement(buttonDiv);
+        target.appendElement(buttonDiv);
         this.scrollToBottom();
     }
 
@@ -2264,12 +2638,14 @@ export class ChatPanel {
  * Manages a single agent message container within the chat panel.
  */
 class AgentMessageContainer {
-    private readonly div: HTMLDivElement;
+    public readonly div: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
     private readonly detailsDiv: HTMLDivElement;
     private readonly metricsDiv: HTMLDivElement;
     private readonly nameSpan: HTMLSpanElement;
     private readonly iconDiv: HTMLDivElement;
+    private readonly timestampDiv: HTMLDivElement;
+    private feedbackWidget?: FeedbackWidget;
     private lastAppendMode?: DisplayAppendMode;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
@@ -2320,6 +2696,7 @@ class AgentMessageContainer {
         dateSpan.textContent = "- " + new Date().toLocaleTimeString();
         timestampDiv.appendChild(dateSpan);
 
+        this.timestampDiv = timestampDiv;
         this.div.appendChild(timestampDiv);
 
         // Icon
@@ -2614,6 +2991,40 @@ class AgentMessageContainer {
     /** Remove this container from the DOM. */
     public remove() {
         this.div.remove();
+    }
+
+    /** Plain-text contents of the rendered message — used by the copy action. */
+    public getMessageText(): string {
+        return this.messageDiv.innerText;
+    }
+
+    public attachFeedbackController(
+        controller: FeedbackController,
+        variant: FeedbackUIVariant,
+    ) {
+        if (this.feedbackWidget !== undefined) return;
+        this.feedbackWidget = new FeedbackWidget(
+            {
+                container: this.div,
+                // chat-ui doesn't expose the bubble body as a separate
+                // element — the message content sits directly inside the
+                // container div. For bubble-corner placement we use the
+                // messageDiv as the body so the action row anchors to it.
+                bodyDiv: this.messageDiv,
+                headerDiv: this.timestampDiv,
+                messageDiv: this.messageDiv,
+            },
+            controller,
+            variant,
+        );
+    }
+
+    public setFeedbackState(entry: UserFeedbackEntry | null) {
+        this.feedbackWidget?.setFeedbackState(entry);
+    }
+
+    public setFeedbackVariant(variant: FeedbackUIVariant) {
+        this.feedbackWidget?.setVariant(variant);
     }
 
     /**

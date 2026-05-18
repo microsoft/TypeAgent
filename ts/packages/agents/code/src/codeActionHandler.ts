@@ -7,6 +7,7 @@ import {
     ActionContext,
     AppAction,
     AppAgent,
+    ReadinessReport,
     SessionContext,
 } from "@typeagent/agent-sdk";
 import Database from "better-sqlite3";
@@ -17,20 +18,37 @@ import os from "os";
 import registerDebug from "debug";
 import chalk from "chalk";
 import {
+    ChoiceManager,
     createActionResult,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
+import {
+    evaluateCodeReadiness,
+    resolveCodePortOverride,
+    setupCode,
+    whichExists,
+} from "./readiness.js";
 
 const debug = registerDebug("typeagent:code");
 
 // Shared WebSocket server that bridges this code agent to the Coda VS Code
-// extension (ts/packages/coda) on port 8082. Created on first enable, closed
-// when the last session disables the code agent. Storing it per-session caused
-// "No websocket connection" errors when an action ran on a session different
-// from the one that originally created the server (e.g. after schema enable on
-// a different conversation), and also masked EADDRINUSE failures from a second
-// bind attempt on port 8082.
+// extension (ts/packages/coda). Created on first session-enable, closed when
+// the last session disables. Storing it per-session caused "No websocket
+// connection" errors when an action ran on a session different from the one
+// that originally created the server (e.g. after schema enable on a different
+// conversation), and also masked EADDRINUSE failures from a second bind
+// attempt on the configured port.
+//
+// Port allocation: by default the OS picks a free ephemeral port (port=0).
+// Each session that uses the shared server registers it under its own
+// `sessionContextId`, so the PortRegistrar's `closeSessionContext` backstop
+// auto-releases per-session entries and `lookup("code")` keeps returning the
+// shared port as long as ≥1 session has it enabled. `CODE_WEBSOCKET_PORT`
+// remains an explicit override (useful for pinning the port when debugging
+// or when an external client expects a known address).
 let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
+let sharedStartingPromise: Promise<CodeAgentWebSocketServer> | undefined;
+let sharedClosingPromise: Promise<void> | undefined;
 let sharedWebSocketRefCount = 0;
 const sharedPendingCalls: Map<
     number,
@@ -50,6 +68,22 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeCodeContext,
         updateAgentContext: updateCodeContext,
         executeAction: executeCodeAction,
+        checkReadiness: checkCodeReadiness,
+        setup: (actionContext) => {
+            const ctx = (actionContext as ActionContext<CodeActionContext>)
+                .sessionContext.agentContext;
+            return setupCode(
+                actionContext,
+                ctx.choiceManager,
+                () => ctx.webSocketServer?.isConnected() === true,
+                getKnownCodePort(),
+            );
+        },
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<CodeActionContext>)
+                .sessionContext.agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
+        },
     };
 }
 
@@ -63,6 +97,14 @@ type CodeActionContext = {
             context?: ActionContext<CodeActionContext> | undefined;
         }
     >;
+    // Manages yes/no choice callbacks (currently only the setup-flow card).
+    // Hooked up via the AppAgent.handleChoice in instantiate() above.
+    choiceManager: ChoiceManager;
+    // Handle returned by sessionContext.registerPort, kept so we can release
+    // exactly this session's registration on disable. The
+    // closeSessionContext backstop will also release it if the disable path
+    // is skipped.
+    portRegistration?: { release: () => void };
 };
 
 async function initializeCodeContext(): Promise<CodeActionContext> {
@@ -70,7 +112,128 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
         enabled: new Set(),
         webSocketServer: undefined,
         pendingCall: new Map(),
+        choiceManager: new ChoiceManager(),
     };
+}
+
+// Cheap readiness probe — checks (1) whether any client is connected to
+// the WebSocket server, and (2) whether the `code` CLI is on PATH. (2)
+// is the cheap proxy for "VS Code is installed at all" so we can
+// distinguish a real configuration gap from the common transient case
+// of VS Code just being closed. See evaluateCodeReadiness for the
+// branching messages.
+//
+// The `webSocketServer` field is undefined until updateAgentContext
+// fires (on first enable), so initial probes can show setup-required
+// even when the agent is healthy. The dispatcher's post-handleChoice
+// readiness refresh + explicit `@config agent refresh code` are the
+// recovery paths.
+async function checkCodeReadiness(
+    context: SessionContext<CodeActionContext>,
+): Promise<ReadinessReport> {
+    const clientConnected =
+        context.agentContext?.webSocketServer?.isConnected() === true;
+    // Skip the PATH probe when we already know the answer is "ready" —
+    // saves a subprocess on every refresh of a healthy agent.
+    const vsCodeCliInstalled = clientConnected
+        ? true
+        : await whichExists("code");
+    return evaluateCodeReadiness({
+        clientConnected,
+        vsCodeCliInstalled,
+        port: getKnownCodePort(),
+    });
+}
+
+// Returns the port the code agent's WS server is/will be reachable on,
+// for display in readiness/setup messaging. Two phases:
+//   - After bind: `getSharedCodePort()` returns the actual bound port
+//     (OS-assigned by default, or `CODE_WEBSOCKET_PORT` if set; either way,
+//     this is the authoritative answer).
+//   - Before bind: no live port exists, so we fall back to the static
+//     prediction from `CODE_WEBSOCKET_PORT` if set, else `undefined`
+//     (the UI shows "port unknown until bind").
+function getKnownCodePort(): number | undefined {
+    return getSharedCodePort() ?? resolveCodePortOverride(process.env);
+}
+
+// Bind hint for the shared server. Returns the explicit override if
+// CODE_WEBSOCKET_PORT is set (useful for pinning the port when debugging);
+// otherwise 0 so the OS picks a free port and the registrar/discovery
+// channel publishes it.
+//
+// Note: we only validate the *shape* of the env var here (numeric, >= 0).
+// If the caller asks for a specific port and the OS can't bind it
+// (EADDRINUSE), `CodeAgentWebSocketServer.start()` rejects with that error
+// and the schema-enable fails loudly — we deliberately do NOT silently
+// fall back to an OS-assigned port, since the user explicitly asked for
+// a specific one.
+function getCodeBindPort(): number {
+    const raw = process.env["CODE_WEBSOCKET_PORT"];
+    if (raw === undefined) return 0;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+        debug(
+            `Ignoring malformed CODE_WEBSOCKET_PORT=${raw}; using OS-assigned port instead`,
+        );
+        return 0;
+    }
+    return n;
+}
+
+// Wire the shared server's onMessage handler. Module-scoped because the
+// server itself is module-scoped — all sessions route their pending-call
+// completions through the same handler.
+function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
+    server.onMessage = (message: string) => {
+        try {
+            const data = JSON.parse(message) as WebSocketMessageV2;
+
+            if (data.id !== undefined && data.result !== undefined) {
+                const pendingCall = sharedPendingCalls.get(Number(data.id));
+
+                if (pendingCall) {
+                    sharedPendingCalls.delete(Number(data.id));
+                    const { resolve, context } = pendingCall;
+                    if (context?.actionIO) {
+                        context.actionIO.setDisplay(data.result);
+                    }
+                    resolve();
+                }
+            }
+        } catch (error) {
+            debug("Error parsing WebSocket message:", error);
+        }
+    };
+}
+
+// Start (or attach to an in-flight start of) the shared WebSocket server.
+// Concurrent enables from different sessions can race; serialize via
+// sharedStartingPromise so only one bind attempt is in flight.
+async function ensureSharedServer(): Promise<CodeAgentWebSocketServer> {
+    // If a previous teardown is still releasing the port (matters under
+    // CODE_WEBSOCKET_PORT override), await it before binding again.
+    if (sharedClosingPromise !== undefined) {
+        await sharedClosingPromise;
+    }
+    if (sharedWebSocketServer !== undefined) {
+        return sharedWebSocketServer;
+    }
+    if (sharedStartingPromise !== undefined) {
+        return sharedStartingPromise;
+    }
+    sharedStartingPromise = (async () => {
+        try {
+            const server =
+                await CodeAgentWebSocketServer.start(getCodeBindPort());
+            attachSharedOnMessage(server);
+            sharedWebSocketServer = server;
+            return server;
+        } finally {
+            sharedStartingPromise = undefined;
+        }
+    })();
+    return sharedStartingPromise;
 }
 
 async function updateCodeContext(
@@ -83,43 +246,33 @@ async function updateCodeContext(
         if (agentContext.enabled.has(schemaName)) {
             return;
         }
-        if (agentContext.enabled.size === 0) {
-            sharedWebSocketRefCount++;
-        }
+        const isFirstSchemaForSession = agentContext.enabled.size === 0;
         agentContext.enabled.add(schemaName);
-
-        if (!sharedWebSocketServer) {
-            // TODO: stop hardcoding the port. The dispatcher should hand each
-            // agent a free port at initialize time so multiple TypeAgent
-            // installs / sessions on one host can't collide on 8082.
-            const port = parseInt(process.env["CODE_WEBSOCKET_PORT"] || "8082");
-            sharedWebSocketServer = new CodeAgentWebSocketServer(port);
-
-            sharedWebSocketServer.onMessage = (message: string) => {
-                try {
-                    const data = JSON.parse(message) as WebSocketMessageV2;
-
-                    if (data.id !== undefined && data.result !== undefined) {
-                        const pendingCall = sharedPendingCalls.get(
-                            Number(data.id),
-                        );
-
-                        if (pendingCall) {
-                            sharedPendingCalls.delete(Number(data.id));
-                            const { resolve, context } = pendingCall;
-                            if (context?.actionIO) {
-                                context.actionIO.setDisplay(data.result);
-                            }
-                            resolve();
-                        }
-                    }
-                } catch (error) {
-                    debug("Error parsing WebSocket message:", error);
-                }
-            };
+        try {
+            const server = await ensureSharedServer();
+            agentContext.webSocketServer = server;
+            agentContext.pendingCall = sharedPendingCalls;
+            if (isFirstSchemaForSession) {
+                // Per-session registration: the registrar allows multiple
+                // entries for `(code, default)` across sessions and lookup
+                // returns the most recent, so each active session
+                // independently keeps the shared port discoverable. The
+                // backstop in closeSessionContext releases ours if disable
+                // is skipped.
+                agentContext.portRegistration = context.registerPort(
+                    "default",
+                    server.port,
+                );
+                sharedWebSocketRefCount++;
+            }
+        } catch (e) {
+            // Roll back the per-session schema bookkeeping so a subsequent
+            // retry sees a clean slate. Don't touch shared module state —
+            // the bind itself failed, so we never incremented the refcount
+            // or registered.
+            agentContext.enabled.delete(schemaName);
+            throw e;
         }
-        agentContext.webSocketServer = sharedWebSocketServer;
-        agentContext.pendingCall = sharedPendingCalls;
     } else {
         if (!agentContext.enabled.has(schemaName)) {
             return;
@@ -127,14 +280,33 @@ async function updateCodeContext(
         agentContext.enabled.delete(schemaName);
         if (agentContext.enabled.size === 0) {
             agentContext.webSocketServer = undefined;
+            // Release this session's registration before potentially closing
+            // the server. Release is idempotent and a no-op if already
+            // released by the backstop.
+            agentContext.portRegistration?.release();
+            delete agentContext.portRegistration;
+
             sharedWebSocketRefCount = Math.max(0, sharedWebSocketRefCount - 1);
             if (sharedWebSocketRefCount === 0 && sharedWebSocketServer) {
-                sharedWebSocketServer.close();
+                const server = sharedWebSocketServer;
                 sharedWebSocketServer = undefined;
                 sharedPendingCalls.clear();
+                // Track the in-flight close so a rapid re-enable awaits
+                // port release under a fixed-port override.
+                sharedClosingPromise = server.close().finally(() => {
+                    sharedClosingPromise = undefined;
+                });
+                await sharedClosingPromise;
             }
         }
     }
+}
+
+// Exposed for readiness/setup messaging — undefined when the shared server
+// isn't bound yet, otherwise the actual bound port. Lets readiness messages
+// always reflect the real listener.
+export function getSharedCodePort(): number | undefined {
+    return sharedWebSocketServer?.port;
 }
 
 function getVSCodeStoragePath(): string {
@@ -305,7 +477,7 @@ async function executeConversationAction(
         case "newConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Created new conversation "${action.parameters.name}".`
+                    ? `Creating conversation "${action.parameters.name}".`
                     : "Creating a new conversation.",
             );
         case "renameConversation":
@@ -315,8 +487,14 @@ async function executeConversationAction(
         case "switchConversation":
             return createActionResult(
                 action.parameters.name
-                    ? `Switched to conversation "${action.parameters.name}".`
+                    ? `Switching to conversation "${action.parameters.name}".`
                     : "Switching conversation.",
+            );
+        case "deleteConversation":
+            return createActionResult(
+                action.parameters.name
+                    ? `Deleting conversation "${action.parameters.name}".`
+                    : "Deleting conversation.",
             );
         default: {
             const _exhaustive: never = action;
@@ -340,7 +518,11 @@ async function executeCodeAction(
     // handled locally and routed back to the originating extension webview
     // via takeAction. All other code sub-schemas are forwarded to the Coda
     // VS Code extension over the WebSocket bridge below.
-    if (action.schemaName === "code-vscode-shell") {
+    //
+    // Note: sub-schema names are dot-prefixed with the parent agent name by
+    // the dispatcher (see actionConfig.collectActionConfigs), so the runtime
+    // schemaName here is "code.code-vscode-shell", not "code-vscode-shell".
+    if (action.schemaName === "code.code-vscode-shell") {
         return executeConversationAction(
             action as VSCodeConversationActions,
             context,

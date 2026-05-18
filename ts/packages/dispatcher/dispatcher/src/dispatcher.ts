@@ -215,6 +215,67 @@ async function getAgentSchemas(
     return result;
 }
 
+/**
+ * Resolve the surrounding context for a feedback report by replaying
+ * the displayLog. Returns the user prompt, agent response messages,
+ * and any action JSON that was recorded for the rated request — the
+ * same data the user saw on screen at the time. Used to attach
+ * actionable context to telemetry when the user opts in.
+ */
+function gatherFeedbackContext(
+    context: CommandHandlerContext,
+    requestId: RequestId,
+):
+    | {
+          prompt?: string;
+          responses: unknown[];
+          actions: unknown[];
+      }
+    | undefined {
+    const match = requestId.requestId;
+    if (!match) return undefined;
+    let prompt: string | undefined;
+    const responses: unknown[] = [];
+    const actions: unknown[] = [];
+    for (const e of context.displayLog.getEntries()) {
+        switch (e.type) {
+            case "user-request":
+                if (e.requestId.requestId === match) {
+                    prompt = e.command;
+                }
+                break;
+            case "set-display":
+            case "append-display":
+                if (e.message.requestId.requestId === match) {
+                    responses.push(e.message.message);
+                }
+                break;
+            case "set-display-info":
+                if (e.requestId.requestId === match && e.action !== undefined) {
+                    actions.push(e.action);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    if (
+        prompt === undefined &&
+        responses.length === 0 &&
+        actions.length === 0
+    ) {
+        return undefined;
+    }
+    const result: ReturnType<typeof gatherFeedbackContext> = {
+        responses,
+        actions,
+    };
+    if (prompt !== undefined) {
+        result!.prompt = prompt;
+    }
+    return result;
+}
+
 export function createDispatcherFromContext(
     context: CommandHandlerContext,
     connectionId?: ConnectionId,
@@ -306,6 +367,115 @@ export function createDispatcherFromContext(
                 controller.abort();
             }
         },
+        async recordUserHide(
+            requestId: RequestId,
+            hidden: boolean,
+            target?: "user" | "agent",
+            permanent?: boolean,
+        ): Promise<void> {
+            const entry = context.displayLog.logUserHide(
+                requestId,
+                hidden,
+                target,
+                permanent,
+            );
+            context.displayLog.saveQueued();
+            try {
+                context.clientIO.onUserHide?.(entry);
+            } catch {
+                // best-effort
+            }
+        },
+        async restoreAllHidden(): Promise<number> {
+            const hides = context.displayLog.getCurrentHides();
+            let count = 0;
+            for (const h of hides) {
+                if (h.permanent === true) continue;
+                if (h.hidden !== true) continue;
+                const entry = context.displayLog.logUserHide(
+                    h.requestId,
+                    false,
+                    h.target,
+                );
+                try {
+                    context.clientIO.onUserHide?.(entry);
+                } catch {
+                    // best-effort
+                }
+                count++;
+            }
+            context.displayLog.saveQueued();
+            return count;
+        },
+        async flushHidden(): Promise<number> {
+            const hides = context.displayLog.getCurrentHides();
+            let count = 0;
+            for (const h of hides) {
+                if (h.permanent === true) continue;
+                if (h.hidden !== true) continue;
+                const entry = context.displayLog.logUserHide(
+                    h.requestId,
+                    true,
+                    h.target,
+                    true,
+                );
+                try {
+                    context.clientIO.onUserHide?.(entry);
+                } catch {
+                    // best-effort
+                }
+                count++;
+            }
+            context.displayLog.saveQueued();
+            return count;
+        },
+        async recordUserFeedback(
+            requestId: RequestId,
+            rating,
+            category,
+            comment,
+            includeContext,
+        ): Promise<void> {
+            const entry = context.displayLog.logUserFeedback(
+                requestId,
+                rating,
+                category,
+                comment,
+            );
+            context.displayLog.saveQueued();
+
+            // Telemetry. The includeContext flag is the user's opt-in to
+            // ship the surrounding prompt/response/action JSON with the
+            // event; resolve those from the displayLog (so we capture
+            // the state as the user saw it, not the live state).
+            try {
+                const payload: Record<string, unknown> = {
+                    requestId: requestId.requestId,
+                    rating,
+                    category,
+                    comment,
+                    includeContext: includeContext === true,
+                };
+                if (includeContext === true) {
+                    const ctx = gatherFeedbackContext(context, requestId);
+                    if (ctx) {
+                        payload.context = ctx;
+                    }
+                }
+                context.logger?.logEvent("userFeedback", payload);
+            } catch {
+                // best-effort
+            }
+
+            // Fan out to all connected clients (including the originator)
+            // so multi-window setups stay in sync. Optional on ClientIO —
+            // CLI/test sinks may not implement it.
+            try {
+                context.clientIO.onUserFeedback?.(entry);
+            } catch {
+                // best-effort
+            }
+        },
         async respondToChoice(choiceId: string, response: boolean | number[]) {
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);
@@ -351,6 +521,24 @@ export function createDispatcherFromContext(
                         }
                     } finally {
                         closeActionContext();
+                        // Choice callbacks are how setup hooks defer their
+                        // actual work — setup() returns the yes/no card
+                        // immediately, then the install/build/whatever runs
+                        // later when the user clicks. runSetup's own readiness
+                        // refresh fires when setup() returns (before the
+                        // click), so the cache reflects the pre-work state.
+                        // Refresh again here, after the deferred work, so a
+                        // successful install / build is picked up without the
+                        // user having to manually run @config agent refresh.
+                        // Wrapped to avoid masking handleChoice's own errors.
+                        try {
+                            await context.agents.refreshReadiness(
+                                pending.agentName,
+                            );
+                        } catch {
+                            // Non-fatal — the agent will reconcile on the
+                            // next explicit refresh or setupOnFirstUse pass.
+                        }
                     }
                 } finally {
                     const result = context.commandResult;

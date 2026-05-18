@@ -190,7 +190,30 @@ By default agents runs out of proc in their own process. This is to ensure that 
 | ----------------------------- | ------------------------------------------------------------------------------ |
 | `@config bot on\|off`         | Toggle the LLM translation (Turn off to rely on constructions only if enabled) |
 | `@config explanation on\|off` | Toggle LLM explanation (Turn off to stop updating construction store)          |
-| `@config log db on\|off`      | Toggle sending logging information to a remote database                        |
+| `@config log db on\|off`      | Toggle sending logging information to a remote database (default: on)          |
+
+### User feedback
+
+When the user rates an agent message via the chat UI's thumbs-up/down buttons or moves a bubble to the trash, the dispatcher persists each event to the per-session `displayLog.json` (as `user-feedback` and `user-message-hidden` entries) and emits a `userFeedback` telemetry event through `Logger.logEvent`. The `@feedback` command group lets you inspect and export those entries.
+
+| Command                        | Description                                                                                                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@feedback` / `@feedback list` | Recent feedback, newest first. `--limit N` (default 20), `--all` to include re-rates.                                                                                                  |
+| `@feedback top`                | Totals by rating + top thumbs-down categories. `--limit N` controls category depth.                                                                                                    |
+| `@feedback filter`             | Filtered list. Flags: `--rating up\|down\|cleared`, `--category wrong-agent\|didnt-understand\|bad-response\|other`, `--since YYYY-MM-DD`, `--until YYYY-MM-DD`, `--limit N`, `--all`. |
+| `@feedback export <file>`      | Dump entries to disk. `--format json\|jsonl` (default: inferred from extension). `--all` to include re-rates. Uses `~` expansion and prompts before overwriting an existing file.      |
+| `@feedback count`              | One-line summary: total entries and unique-request count.                                                                                                                              |
+
+By default each command reduces to the latest rating per request (so a user who flipped 👍 → 👎 shows once with 👎). Pass `--all` to see the full append-only history.
+
+#### Trash bin
+
+The trash icon on a message bubble routes through a separate persistence path. The user can hide either a user-message or an agent-response independently; restoration is bulk via two shell commands:
+
+| Command                | Description                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `@shell trash restore` | Un-hide every bubble that's currently in the trash (skips entries previously flushed).        |
+| `@shell trash flush`   | Permanently delete every bubble currently in the trash — the user can no longer restore them. |
 
 ## Developer
 

@@ -67,13 +67,30 @@ export interface CalendarUser {
 }
 
 /**
- * Callback for device code authentication flow
+ * Sign-in prompt surfaced to the user during authentication.
+ *
+ * The MS Graph + Google flows each pick a kind based on what they need to
+ * communicate: a device code, a "we're opening your browser" notice, or a
+ * configuration error. Handlers branch on `kind` to render appropriately
+ * (status text vs. clickable link).
  */
-export type DeviceCodeCallback = (
-    userCode: string,
-    verificationUri: string,
-    message: string,
-) => void;
+export type SignInPrompt =
+    | {
+          kind: "deviceCode";
+          userCode: string;
+          verificationUri: string;
+          message: string;
+      }
+    | { kind: "browser"; url?: string; message: string }
+    | { kind: "error"; message: string };
+
+/**
+ * Callback for sign-in prompts (device code, browser open, or error).
+ * Renamed from DeviceCodeCallback once the browser flow was added; the old
+ * (userCode, verificationUri, message) tuple shape is gone — handlers receive
+ * the discriminated SignInPrompt directly.
+ */
+export type DeviceCodeCallback = (prompt: SignInPrompt) => void;
 
 /**
  * Calendar provider interface - implement this for each calendar service

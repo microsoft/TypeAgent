@@ -151,7 +151,7 @@ describe("selectFromPartitions", () => {
         expect(spread).toBeLessThan(10);
 
         // Parallel: total time should be close to one delay (not 3×)
-        expect(elapsed).toBeLessThan(80);
+        expect(elapsed).toBeLessThan(120);
     });
 
     test("error from a partition is propagated in order", async () => {

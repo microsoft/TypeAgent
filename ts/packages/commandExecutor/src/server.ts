@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { CommandServer } from "./commandServer.js";
-import dotenv from "dotenv";
+import { loadConfig } from "@typeagent/config";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+// Load config from YAML layers + Key Vault (replacing legacy dotenv).
+await loadConfig({ keyVault: {}, strict: false });
 
 console.log("Starting Command Executor Server");
 

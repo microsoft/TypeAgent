@@ -92,10 +92,29 @@ export async function replayDisplayHistory(
                     entry.action,
                 );
                 break;
+            case "notify":
+                // Only persist:true notifications are written to the log, so
+                // any notify entry we see here was opted in to replay. Re-emit
+                // through the same channel; downstream renderers handle it.
+                clientIO.notify(
+                    entry.notificationId,
+                    entry.event,
+                    entry.data,
+                    entry.source,
+                );
+                break;
+            case "user-feedback":
+                // Last-wins is enforced at apply time by the renderer
+                // (newer entry replaces older). The renderer simply applies
+                // each entry in order.
+                clientIO.onUserFeedback?.(entry);
+                break;
+            case "user-message-hidden":
+                clientIO.onUserHide?.(entry);
+                break;
             // pending-interaction, interaction-resolved, interaction-cancelled
             // are not replayed — the Shell does not yet support deferred
             // interactions so there is no UI to display them.
-            // notify entries are ephemeral — skip them.
         }
     }
 

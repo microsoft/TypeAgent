@@ -1,0 +1,232 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+/**
+ * CLI integration tests (Phase 6).
+ *
+ * These tests spawn the CLI as a child process and verify behavior
+ * against real workflow files. They exercise the full pipeline:
+ * load IR -> validate -> register tasks -> run -> output.
+ */
+
+import { execFile, execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CLI = resolve(__dirname, "../cli.js");
+const WORKFLOWS = resolve(__dirname, "../../../workflows");
+
+/** Run the CLI and return { stdout, stderr, code }. */
+function runCli(
+    args: string[],
+): Promise<{ stdout: string; stderr: string; code: number }> {
+    return new Promise((resolve) => {
+        execFile(
+            "node",
+            [CLI, ...args],
+            { timeout: 30_000, maxBuffer: 1024 * 1024 },
+            (err, stdout, stderr) => {
+                const code = err && "code" in err ? (err.code as number) : 0;
+                resolve({ stdout, stderr, code: code ?? 0 });
+            },
+        );
+    });
+}
+
+describe("CLI integration", () => {
+    describe("list-tasks", () => {
+        it("lists all registered tasks", async () => {
+            const { stdout, code } = await runCli(["list-tasks"]);
+            expect(code).toBe(0);
+            expect(stdout).toContain("shell.exec");
+            expect(stdout).toContain("llm.generate");
+            expect(stdout).toContain("http.get");
+            expect(stdout).toContain("file.read");
+            expect(stdout).toContain("file.write");
+            expect(stdout).toContain("text.template");
+            expect(stdout).toContain("math.add");
+        });
+    });
+
+    describe("validate", () => {
+        it("validates d1-standup-prep.json", async () => {
+            const { stdout, code } = await runCli([
+                "validate",
+                join(WORKFLOWS, "d1-standup-prep.json"),
+            ]);
+            expect(code).toBe(0);
+            expect(stdout).toContain("Valid");
+        });
+
+        it("validates d4-commit-summary.json", async () => {
+            const { stdout, code } = await runCli([
+                "validate",
+                join(WORKFLOWS, "d4-commit-summary.json"),
+            ]);
+            expect(code).toBe(0);
+            expect(stdout).toContain("Valid");
+        });
+
+        it("validates d5-code-review-prep.json", async () => {
+            const { stdout, code } = await runCli([
+                "validate",
+                join(WORKFLOWS, "d5-code-review-prep.json"),
+            ]);
+            expect(code).toBe(0);
+            expect(stdout).toContain("Valid");
+        });
+
+        it("validates d8-summarize-url.json", async () => {
+            const { stdout, code } = await runCli([
+                "validate",
+                join(WORKFLOWS, "d8-summarize-url.json"),
+            ]);
+            expect(code).toBe(0);
+            expect(stdout).toContain("Valid");
+        });
+
+        it("rejects invalid workflow file", async () => {
+            const tmp = mkdtempSync(join(tmpdir(), "wf-test-"));
+            const bad = join(tmp, "bad.json");
+            writeFileSync(
+                bad,
+                JSON.stringify({
+                    kind: "workflow",
+                    name: "bad",
+                    version: "1",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    nodes: {
+                        step: {
+                            kind: "task",
+                            task: "nonexistent.task",
+                            inputSchema: { type: "object" },
+                            outputSchema: { type: "object" },
+                            inputs: {},
+                            bind: "r",
+                        },
+                    },
+                    entry: "step",
+                    output: { $from: "scope", name: "r" },
+                }),
+            );
+
+            const { stderr, code } = await runCli(["validate", bad]);
+            expect(code).not.toBe(0);
+            expect(stderr).toContain("not registered");
+
+            rmSync(tmp, { recursive: true });
+        });
+    });
+
+    describe("run --dry-run", () => {
+        it("d1: denies shell.exec in dry-run mode", async () => {
+            const input = JSON.stringify({
+                repos: ["/tmp/fake-repo"],
+                author: "test@example.com",
+            });
+            const { stderr, code } = await runCli([
+                "run",
+                join(WORKFLOWS, "d1-standup-prep.json"),
+                "--input",
+                input,
+                "--dry-run",
+            ]);
+            expect(code).not.toBe(0);
+            expect(stderr).toContain("denied by policy");
+        });
+
+        it("d4: denies shell.exec in dry-run mode", async () => {
+            const input = JSON.stringify({ repoPath: "/tmp/fake" });
+            const { stderr, code } = await runCli([
+                "run",
+                join(WORKFLOWS, "d4-commit-summary.json"),
+                "--input",
+                input,
+                "--dry-run",
+            ]);
+            expect(code).not.toBe(0);
+            expect(stderr).toContain("denied by policy");
+        });
+
+        it("d8: denies http.get in dry-run mode", async () => {
+            const input = JSON.stringify({
+                url: "https://example.com",
+                outputPath: "/tmp/out.md",
+            });
+            const { stderr, code } = await runCli([
+                "run",
+                join(WORKFLOWS, "d8-summarize-url.json"),
+                "--input",
+                input,
+                "--dry-run",
+            ]);
+            expect(code).not.toBe(0);
+            expect(stderr).toContain("denied by policy");
+        });
+    });
+
+    describe("run (D1 end-to-end with real git repo)", () => {
+        let repoDir: string;
+
+        beforeAll(() => {
+            // Create a temp git repo with a known commit
+            repoDir = mkdtempSync(join(tmpdir(), "wf-e2e-"));
+            const run = (cmd: string, args: string[]) =>
+                execFileSync(cmd, args, { cwd: repoDir, encoding: "utf8" });
+
+            run("git", ["init"]);
+            run("git", ["config", "user.email", "test@example.com"]);
+            run("git", ["config", "user.name", "Test User"]);
+            run("git", ["config", "commit.gpgsign", "false"]);
+            // Create a commit
+            writeFileSync(join(repoDir, "hello.txt"), "world");
+            run("git", ["add", "."]);
+            run("git", [
+                "commit",
+                "-m",
+                "Initial commit",
+                "--date",
+                "2026-05-05T10:00:00",
+            ]);
+        });
+
+        afterAll(() => {
+            rmSync(repoDir, { recursive: true, force: true });
+        });
+
+        it("runs D1 and produces markdown with commit info", async () => {
+            const input = JSON.stringify({
+                repos: [repoDir],
+                author: "test@example.com",
+            });
+            const { stdout, code } = await runCli([
+                "run",
+                join(WORKFLOWS, "d1-standup-prep.json"),
+                "--input",
+                input,
+                "--allow-all",
+            ]);
+
+            expect(code).toBe(0);
+            const output = JSON.parse(stdout) as string;
+            expect(output).toContain("Initial commit");
+            // Output is formatted per-repo with ## headers
+            expect(output).toContain("##");
+        });
+    });
+
+    describe("usage", () => {
+        it("prints usage with no args", async () => {
+            const { stdout, code } = await runCli([]);
+            expect(code).toBe(0);
+            expect(stdout).toContain("Usage:");
+            expect(stdout).toContain("workflow run");
+            expect(stdout).toContain("workflow validate");
+            expect(stdout).toContain("workflow list-tasks");
+        });
+    });
+});

@@ -2,12 +2,17 @@
 // Licensed under the MIT License.
 
 import {
+    AgentMessageKind,
     DisplayAppendMode,
     DisplayContent,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestId, RequestMetrics } from "./dispatcher.js";
+import type {
+    UserFeedbackEntry,
+    UserMessageHiddenEntry,
+} from "./displayLogEntry.js";
 import type { PendingInteractionRequest } from "./pendingInteraction.js";
 
 export type TemplateData = {
@@ -32,6 +37,9 @@ export interface IAgentMessage {
     sourceIcon?: string | undefined;
     actionIndex?: number | undefined;
     metrics?: RequestMetrics | undefined;
+    // Render style for agent-initiated messages. Absent for messages that are
+    // a response to a user request — those continue to render as bubbles.
+    kind?: AgentMessageKind | undefined;
 }
 
 export type NotifyExplainedData = {
@@ -39,6 +47,13 @@ export type NotifyExplainedData = {
     fromCache: "construction" | "grammar" | false;
     fromUser: boolean;
     time: string;
+};
+
+// Options for ClientIO.notify. All notifications are ephemeral by default and
+// are NOT written to the DisplayLog — set persist:true to opt a notification
+// in to durable logging and replay on conversation rejoin.
+export type NotifyOptions = {
+    persist?: boolean;
 };
 
 // Client provided IO
@@ -86,12 +101,16 @@ export interface ClientIO {
     ): Promise<unknown>;
 
     // Notification (TODO: turn these in to dispatcher events)
+    // Default behavior is ephemeral: notifications are broadcast to clients
+    // but not written to the DisplayLog. Pass options.persist=true to opt in
+    // to logging and history replay.
     notify(
         notificationId: string | RequestId | undefined,
         event: string,
         data: any,
         source: string,
         seq?: number,
+        options?: NotifyOptions,
     ): void;
     notify(
         requestId: RequestId,
@@ -99,6 +118,7 @@ export interface ClientIO {
         data: NotifyExplainedData,
         source: string,
         seq?: number,
+        options?: NotifyOptions,
     ): void;
 
     openLocalView(requestId: RequestId, port: number): Promise<void>;
@@ -121,4 +141,15 @@ export interface ClientIO {
 
     // Host specific (TODO: Formalize the API)
     takeAction(requestId: RequestId, action: string, data: unknown): void;
+
+    // User-feedback broadcast. When one client posts a rating via
+    // Dispatcher.recordUserFeedback, the dispatcher fans the resulting
+    // UserFeedbackEntry out to all connected clients via this call so
+    // their views stay in sync without a full history refetch.
+    // Optional: tests and CLI-only implementations may omit it.
+    onUserFeedback?(entry: UserFeedbackEntry): void;
+
+    // User-hide broadcast — fanned out when the user trashes or restores
+    // a bubble via the UI, or when @shell trash flush/restore runs.
+    onUserHide?(entry: UserMessageHiddenEntry): void;
 }

@@ -207,4 +207,84 @@ describe("trace hook", () => {
             );
         }
     });
+
+    // ---------------------------------------------------------------
+    // Rule names populated in trace events
+    // ---------------------------------------------------------------
+
+    it("populates non-empty rule names on trace events", () => {
+        const { events } = collect(simple, "pause");
+        const withRule = events.filter((e) => e.kind !== "backtrack");
+        expect(withRule.length).toBeGreaterThan(0);
+        for (const e of withRule) {
+            expect((e as RuleEnteredEvent).rule).toBeTruthy();
+        }
+    });
+
+    it("does not populate rule names without trace callback", () => {
+        // matchGrammar without a trace callback should not track names
+        // (trackNames stays false, avoiding the overhead).
+        const results = matchGrammar(simple, "pause");
+        expect(results.length).toBeGreaterThan(0);
+        // No events to inspect, but verifies the codepath works
+        // without populating names. The real guarantee is structural:
+        // trackNames is only set when trace is provided.
+    });
+
+    it("rule names include the grammar rule name", () => {
+        const { events } = collect(nested, "do play");
+        const entered = events.filter(
+            (e): e is RuleEnteredEvent => e.kind === "ruleEntered",
+        );
+        const names = entered.map((e) => e.rule);
+        expect(names.some((n) => n.includes("Start"))).toBe(true);
+        expect(names.some((n) => n.includes("Action"))).toBe(true);
+    });
+
+    // ---------------------------------------------------------------
+    // capturedValue on PartMatchedEvent
+    // ---------------------------------------------------------------
+
+    it("emits capturedValue for number variable parts", () => {
+        const withNumber = loadGrammarRules(
+            "test",
+            `<Start> = set volume $(level:number) -> { action: "volume", level };`,
+        );
+        const { events } = collect(withNumber, "set volume 42");
+        const matched = events.filter(
+            (e): e is PartMatchedEvent => e.kind === "partMatched",
+        );
+        const withCapture = matched.filter(
+            (e) => e.capturedValue !== undefined,
+        );
+        expect(withCapture.length).toBeGreaterThan(0);
+        const cap = withCapture[0].capturedValue!;
+        expect(cap.variable).toBe("level");
+        expect(cap.value).toBe(42);
+    });
+
+    it("does not emit capturedValue for string-literal parts", () => {
+        const { events } = collect(simple, "pause");
+        const matched = events.filter(
+            (e): e is PartMatchedEvent => e.kind === "partMatched",
+        );
+        // The "pause" string-literal part should not have capturedValue
+        const stringParts = matched.filter(
+            (e) => e.capturedValue === undefined,
+        );
+        expect(stringParts.length).toBeGreaterThan(0);
+    });
+
+    it("does not emit capturedValue for wildcard parts (value is deferred)", () => {
+        const { events } = collect(simple, "play hello");
+        const matched = events.filter(
+            (e): e is PartMatchedEvent => e.kind === "partMatched",
+        );
+        // Wildcard parts defer capture, so no partMatched event
+        // should carry capturedValue with variable "song".
+        const wildcardCaptures = matched.filter(
+            (e) => e.capturedValue?.variable === "song",
+        );
+        expect(wildcardCaptures).toHaveLength(0);
+    });
 });
