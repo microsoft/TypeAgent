@@ -641,6 +641,16 @@ export function createAgentRpcServer(
                     contextId,
                 });
             },
+            notifyClientCountChanged: async (
+                role: string,
+                count: number,
+            ): Promise<void> => {
+                return rpc.invoke("notifyClientCountChanged", {
+                    contextId,
+                    role,
+                    count,
+                });
+            },
         };
     }
 

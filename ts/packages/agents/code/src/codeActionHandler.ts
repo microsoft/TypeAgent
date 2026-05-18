@@ -50,6 +50,13 @@ let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
 let sharedStartingPromise: Promise<CodeAgentWebSocketServer> | undefined;
 let sharedClosingPromise: Promise<void> | undefined;
 let sharedWebSocketRefCount = 0;
+// Sessions currently sharing the bound port. The shared WS server has
+// no per-session client tracking (code's WS protocol carries no session
+// id), so a single global count is fanned out to every active session
+// — each session's registrar entry surfaces the same global number via
+// `@system ports`. Sessions are added on first-schema-enable and
+// removed on last-schema-disable.
+const sharedActiveSessions = new Set<SessionContext<CodeActionContext>>();
 const sharedPendingCalls: Map<
     number,
     {
@@ -205,6 +212,14 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
             debug("Error parsing WebSocket message:", error);
         }
     };
+    // Fan out client-count updates to every active session so each
+    // session's `@system ports` row reflects the (global) count. The
+    // SDK method swallows errors internally.
+    server.onClientCountChanged = (count: number) => {
+        for (const sc of sharedActiveSessions) {
+            void sc.notifyClientCountChanged("default", count);
+        }
+    };
 }
 
 // Start (or attach to an in-flight start of) the shared WebSocket server.
@@ -264,6 +279,14 @@ async function updateCodeContext(
                     server.port,
                 );
                 sharedWebSocketRefCount++;
+                sharedActiveSessions.add(context);
+                // Publish the current (global) count to this session's
+                // newly-registered row so `@system ports` doesn't show
+                // "?" until the next connect/disconnect event.
+                void context.notifyClientCountChanged(
+                    "default",
+                    server.getConnectedCount(),
+                );
             }
         } catch (e) {
             // Roll back the per-session schema bookkeeping so a subsequent
@@ -285,6 +308,7 @@ async function updateCodeContext(
             // released by the backstop.
             agentContext.portRegistration?.release();
             delete agentContext.portRegistration;
+            sharedActiveSessions.delete(context);
 
             sharedWebSocketRefCount = Math.max(0, sharedWebSocketRefCount - 1);
             if (sharedWebSocketRefCount === 0 && sharedWebSocketServer) {

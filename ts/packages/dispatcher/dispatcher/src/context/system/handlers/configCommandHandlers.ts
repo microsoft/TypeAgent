@@ -46,6 +46,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
+import { SYSTEM_SESSION_CONTEXT_ID } from "../../portRegistrar.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
@@ -992,28 +993,153 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
 }
 
 class ConfigPortsCommandHandler implements CommandHandler {
-    public readonly description = "Lists the ports assigned to agents.";
+    public readonly description =
+        "Lists ports registered by agents and the number of clients connected to each.";
 
     public readonly parameters = {};
 
-    public async run(context: ActionContext<CommandHandler>) {
-        const ports: string[][] = [["", "Agent", "Port"]];
-        const cmdContext = context.sessionContext.agentContext as any;
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const cmdContext = context.sessionContext.agentContext;
+        const registrar = cmdContext.portRegistrar;
+        const agents = cmdContext.agents;
 
-        cmdContext.agents.getAppAgentNames().forEach((name: string) => {
-            const port = cmdContext.agents.getLocalHostPort(name);
-
-            if (port !== undefined) {
-                ports.push([
-                    cmdContext.agents.getAppAgentEmoji(name),
-                    name,
-                    port.toString(),
-                ]);
+        // Group registrar entries by (agentName, role, port). Code's
+        // shared WS server has no per-session client identity, so its
+        // count is global and the same number is reported across every
+        // session that registered the shared port. Grouping collapses
+        // those duplicates into one row with the (shared) count.
+        type Row = {
+            agentName: string;
+            role: string;
+            port: number;
+            isSystem: boolean;
+            // undefined === "agent never reported a count" (distinct from 0)
+            clientCount: number | undefined;
+        };
+        const grouped = new Map<string, Row>();
+        for (const alloc of registrar.list()) {
+            const key = `${alloc.agentName}\u0000${alloc.role}\u0000${alloc.port}`;
+            const isSystem =
+                alloc.sessionContextId === SYSTEM_SESSION_CONTEXT_ID;
+            const cc = registrar.getClientCount(
+                alloc.agentName,
+                alloc.role,
+                alloc.sessionContextId,
+            );
+            const existing = grouped.get(key);
+            if (existing === undefined) {
+                grouped.set(key, {
+                    agentName: alloc.agentName,
+                    role: alloc.role,
+                    port: alloc.port,
+                    isSystem,
+                    clientCount: cc,
+                });
+            } else {
+                // System tag is sticky: if any underlying allocation is
+                // system-owned, treat the group as system.
+                if (isSystem) existing.isSystem = true;
+                // Sum across sessions when ≥1 has reported a count.
+                // Leave undefined only if NO underlying allocation has
+                // ever reported a count.
+                if (cc !== undefined) {
+                    existing.clientCount = (existing.clientCount ?? 0) + cc;
+                }
             }
+        }
+
+        const rows = Array.from(grouped.values()).sort((a, b) => {
+            const an = a.agentName.localeCompare(b.agentName);
+            if (an !== 0) return an;
+            const ar = a.role.localeCompare(b.role);
+            if (ar !== 0) return ar;
+            return a.port - b.port;
         });
 
-        displayResult(ports, context);
+        if (rows.length === 0) {
+            displayWarn("No ports registered", context);
+            return;
+        }
+
+        // Plain-text (CLI / console) — fixed-width via chalk for alignment.
+        const text: string[][] = [["", "Agent", "Role", "Port", "Clients"]];
+        for (const r of rows) {
+            const emoji = agents.getAppAgentEmoji(r.agentName) ?? "";
+            const name = r.isSystem
+                ? `${r.agentName} ${chalk.gray("[system]")}`
+                : r.agentName;
+            const clients =
+                r.clientCount === undefined
+                    ? chalk.gray("?")
+                    : r.clientCount.toString();
+            text.push([emoji, name, r.role, r.port.toString(), clients]);
+        }
+
+        // Rich HTML for the shell.
+        const html = buildPortsHtml(rows, agents);
+
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: text,
+            alternates: [{ type: "html", content: html }],
+        });
     }
+}
+
+function escapeHtml(s: string): string {
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function buildPortsHtml(
+    rows: ReadonlyArray<{
+        agentName: string;
+        role: string;
+        port: number;
+        isSystem: boolean;
+        clientCount: number | undefined;
+    }>,
+    agents: { getAppAgentEmoji(name: string): string },
+): string {
+    const thStyle = `text-align:left;padding:4px 8px;font-weight:600;font-size:13px;color:#64748b;border-bottom:2px solid #e2e8f0`;
+    const headerCols = [
+        `<th style="${thStyle}">Agent</th>`,
+        `<th style="${thStyle}">Role</th>`,
+        `<th style="${thStyle};text-align:right">Port</th>`,
+        `<th style="${thStyle};text-align:right">Clients</th>`,
+    ];
+
+    const tdBase = `padding:3px 12px;border-bottom:1px solid #f1f5f9;white-space:nowrap`;
+    const rowsHtml = rows
+        .map((r) => {
+            const emoji = agents.getAppAgentEmoji(r.agentName) ?? "";
+            const systemTag = r.isSystem
+                ? ` <span style="color:#64748b;font-size:12px;font-style:italic">[system]</span>`
+                : "";
+            const clientCell =
+                r.clientCount === undefined
+                    ? `<span style="color:#94a3b8" title="No count reported (this agent does not publish client counts)" aria-label="No count reported">?</span>`
+                    : escapeHtml(r.clientCount.toString());
+            return (
+                `<tr>` +
+                `<td style="${tdBase};font-weight:600;color:#1e293b">${emoji ? emoji + " " : ""}${escapeHtml(r.agentName)}${systemTag}</td>` +
+                `<td style="${tdBase};color:#475569">${escapeHtml(r.role)}</td>` +
+                `<td style="${tdBase};text-align:right;font-family:'Cascadia Code',Consolas,monospace">${r.port}</td>` +
+                `<td style="${tdBase};text-align:right">${clientCell}</td>` +
+                `</tr>`
+            );
+        })
+        .join("");
+
+    return (
+        `<table style="border-collapse:collapse;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.4">` +
+        `<thead><tr>${headerCols.join("")}</tr></thead>` +
+        `<tbody>${rowsHtml}</tbody></table>`
+    );
 }
 
 class FixedSchemaCommandHandler implements CommandHandler {
