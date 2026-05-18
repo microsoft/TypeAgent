@@ -430,3 +430,45 @@ Test count progression for round 4:
     + tighter parser heuristic for `paramListMultiLine` /
     `ObjectType.multiLine` to avoid false positives when a nested type
     spans multiple lines.
+
+## Round 4 — addendum: content-fidelity oracle (`contentFidelity.spec.ts`)
+
+Added a dedicated 34-test suite that directly encodes the user's
+"complete fidelity for any content (except spacing and line breaks)"
+rule, organised in three layers:
+
+1. **Data multiset oracle** — every Identifier / String / Number /
+   Boolean / Null / Template literal value and every comment lexeme
+   must appear the same number of times in `format(parse(src))` as
+   in `src`. This is run over all `examples/*.wf` plus 11 per-feature
+   fixtures plus a kitchen-sink doc.
+2. **Strict token-stream oracle** — exact ordered (kind, value)
+   sequence over the per-feature fixtures that avoid documented
+   canonicalization triggers (so they keep block-bodied arrows, stay
+   under printWidth, etc.).
+3. **Documented canonicalizations** — pinned tests for expression-
+   bodied → block-bodied arrow wrapping and multi-line list
+   trailing-comma insertion (both intentional, documented in
+   implementation-decision.md).
+
+Plus two `test.failing` pins that document gaps the oracle
+discovered:
+- End-of-file comments after the workflow's closing `}` are
+  dropped (parseSingle has no trailing-trivia slot).
+- `attempts(...)` fallback callbacks with an empty parameter list
+  `() =>` are canonicalised to `(err) =>` (the parser defaults the
+  missing param name to `"err"`).
+
+These gaps are tracked in `g8-test-gaps-unaddressed.md` under
+"Content-fidelity gaps discovered by `test/contentFidelity.spec.ts`".
+
+Test count: 422 → 456 (+34).
+
+## Commit sequence (round 4, continued)
+
+22. `bbb…` — G8: rename round/pass-numbered test files and describes
+    to topic names (commentFidelity / commentEdgeCases /
+    layoutFidelity / commentNeutrality).
+22. `???` — G8: add `contentFidelity.spec.ts` (data + strict-token +
+    pinned-canonicalization layers); document two newly-discovered
+    fidelity gaps as `test.failing` pins.

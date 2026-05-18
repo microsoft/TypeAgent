@@ -224,3 +224,54 @@ accepts `,`. This is a syntax-extension concern (line-break choice
 is not "content" by the round-4 fidelity rule "complete fidelity
 for any content (except spacing and line breaks)") so it remains
 out of scope.
+
+## Content-fidelity gaps discovered by `test/contentFidelity.spec.ts`
+
+A token-multiset + comment-multiset oracle (the cleanest direct
+encoding of the user's rule "complete fidelity for any content,
+except spaces and line breaks") was added in
+`test/contentFidelity.spec.ts`. It runs three layers:
+
+1. **Data fidelity** — multiset of every Identifier, literal kind
+   (String / Number / Boolean / Null / Template parts), and comment
+   lexeme — over both `examples/*.wf` and a per-feature fixture
+   set plus a kitchen-sink doc.
+2. **Strict token-stream fidelity** — exact ordered token stream
+   over the per-feature fixtures that avoid documented
+   canonicalization triggers.
+3. **Documented canonicalizations** — pinned: expression-bodied
+   arrow → block-bodied arrow, multi-line list trailing comma.
+
+Two new fidelity gaps were discovered during the build-out of this
+oracle and are pinned in `contentFidelity.spec.ts` with
+`test.failing` so they fail loudly the moment they're fixed:
+
+### End-of-file comment after the workflow's closing `}` is dropped
+
+`parseSingle()` stops at the workflow boundary, so a `// trailing`
+comment that sits AFTER the workflow's outer `}` is not attached to
+any AST node and is silently dropped on emit. Closing this gap
+would require either an explicit "trailing trivia" slot on
+`WorkflowDecl` (or on the parse result) plus an emitter pass that
+prints it after the closing `}`. Pinned: `contentFidelity.spec.ts
+> "end-of-file comment after the workflow's closing \`}\` survives"`.
+
+### `attempts(...)` fallback parameter name `() => ...` is canonicalised to `(err) => ...`
+
+The parser stores `fallback.param = fbParams[0] ?? "err"`, so a
+source that omits the fallback's parameter name (`() => { ... }`)
+becomes `(err) => { ... }` on emit. This adds an Identifier token
+that wasn't in the source. Closing this gap requires the parser to
+record absence (e.g. `fallback.param: string | undefined`) and the
+formatter to emit `() =>` when the param is undefined. Pinned:
+`contentFidelity.spec.ts > "attempts fallback parameter name elided in source is not re-introduced"`.
+
+### Stray content beyond the parsed workflow (e.g. extra `}` at EOF) is dropped
+
+Discovered via `examples/d1-standup-prep.wf` which has a trailing
+stray `}` after the workflow's outer `}`. The data-fidelity oracle
+passes for d1 (the dropped token is punctuation, not an
+identifier / literal / comment), so this is captured only as a
+note here. Whether this is a "bug" depends on whether the DSL
+permits more than one workflow per file — the current
+`parseSingle()` contract is "one workflow per parse".
