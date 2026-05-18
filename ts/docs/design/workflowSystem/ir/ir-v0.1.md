@@ -1154,18 +1154,27 @@ Required fields: `code`, `message`, `source`. The remaining fields are
 optional and may be absent. An engine MAY include additional fields
 beyond those listed; consumers MUST treat unknown fields as opaque.
 
-**`source` discriminates the failure origin.**
+**`source` and `code` discriminate the failure origin.**
 
-- `"task"` - the registered task implementation threw, returned a value
-  that violated `outputSchema` (§5.2), or otherwise signaled failure.
-  `task` and `node` SHOULD be populated.
-- `"runtime"` - the engine itself raised the failure (loop
-  `maxIterations` exceeded, branch selector value did not match any
-  `cases` or `default`, reference resolution failed at runtime, etc.).
-  `code` distinguishes the runtime case (well-known codes include
-  `LoopMaxIterationsExceeded`, `BranchSelectorUnmatched`,
-  `ReferenceUnresolved`; the full list is engine-defined and surfaced
-  through the validator's error-code table - see §4.3).
+- `"task"` — the registered task implementation returned `{ kind: "fail" }`
+  or threw. `code` is `"TASK_ERROR"`. `task` and `node` SHOULD be
+  populated; `data` carries any additional payload the task returned.
+- `"runtime"` — the engine raised a **recoverable** runtime condition.
+  `code` is `"RUNTIME_ERROR"`. These errors are routed to `onError`
+  handlers like task failures. Examples: `LoopMaxIterationsExceeded`,
+  `OutputSchemaViolation`, task timeout, policy denial.
+- `"runtime"` with `code: "UNRECOVERABLE_ERROR"` — the engine raised a
+  condition that is **statically unreachable** after validation
+  (e.g., `ReferenceUnresolved`, `BranchSelectorUnmatched`, unknown `$from`
+  namespace, missing node). These indicate the IR bypassed the static
+  validator. They are **not** routed to `onError` handlers — the run
+  fails immediately regardless of any `onError` edge. Authors MUST NOT
+  write workflows that depend on catching these; they should instead
+  ensure the IR passes static validation.
+
+An engine MAY use additional `code` values for finer-grained
+discrimination; consumers MUST treat unknown `code` values as opaque
+and fall back to inspecting `source`.
 
 A recovery task that wants to be type-strict about the error it
 consumes can narrow the schema for its `error` input field below

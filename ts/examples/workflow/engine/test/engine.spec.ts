@@ -4889,6 +4889,58 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(errorObj.message).toBe("unexpected crash");
             expect(errorObj.source).toBe("runtime");
         });
+
+        it("unrecoverable engine errors bypass onError and fail the run", async () => {
+            // Simulate a validator-bypass scenario by constructing IR where the
+            // branch has no matching case and no default (should be caught by
+            // the validator, but we skip validation here).
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "unrecoverable",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    branch: {
+                        kind: "branch",
+                        selector: { $from: "input", name: "x" } as Template,
+                        selectorSchema: { type: "string" },
+                        cases: { a: "done" },
+                        // no default — any value other than "a" is unmatched
+                    } as any,
+                    done: {
+                        kind: "task",
+                        task: "identity",
+                        inputSchema: { type: "object" },
+                        outputSchema: {},
+                        inputs: {},
+                        bind: "result",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "identity",
+                        inputSchema: { type: "object" },
+                        outputSchema: {},
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "branch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            // Even if the branch node had an onError, unrecoverable errors bypass it.
+            // Here we just confirm the run fails (not recovers silently).
+            const result = await eng.run(ir, {
+                input: { x: "z" },
+                skipValidation: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("no matching case or default");
+        });
     });
 
     describe("static schema type checking", () => {

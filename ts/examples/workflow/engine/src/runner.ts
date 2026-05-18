@@ -115,7 +115,11 @@ function resolveFromRef(
             break;
         default:
             // Unreachable after static validation (namespace check).
-            throw new EngineError(`Unknown $from namespace: "${from}"`);
+            throw new EngineError(
+                `Unknown $from namespace: "${from}"`,
+                "UNRECOVERABLE_ERROR",
+                true,
+            );
     }
 
     if (value === undefined) {
@@ -123,6 +127,8 @@ function resolveFromRef(
         // Unreachable after static validation (dominator + onError-split coverage).
         throw new EngineError(
             `Reference unresolved: $from "${from}", name "${name}"`,
+            "UNRECOVERABLE_ERROR",
+            true,
         );
     }
 
@@ -134,6 +140,8 @@ function resolveFromRef(
                 // Unreachable after static validation (type-compat + resolveSchemaPath).
                 throw new EngineError(
                     `Path projection failed at "${segment}" on null/undefined`,
+                    "UNRECOVERABLE_ERROR",
+                    true,
                 );
             }
             if (typeof segment === "number") {
@@ -142,6 +150,8 @@ function resolveFromRef(
                     // Unreachable after static validation.
                     throw new EngineError(
                         `Path projection: expected array at index ${segment}`,
+                        "UNRECOVERABLE_ERROR",
+                        true,
                     );
                 }
                 value = (value as unknown[])[segment];
@@ -151,6 +161,8 @@ function resolveFromRef(
                     // Unreachable after static validation.
                     throw new EngineError(
                         `Path projection: expected object at key "${segment}"`,
+                        "UNRECOVERABLE_ERROR",
+                        true,
                     );
                 }
                 value = (value as Record<string, unknown>)[segment];
@@ -163,10 +175,36 @@ function resolveFromRef(
 
 // ---- Error types ----
 
+/**
+ * Well-known engine-level error codes.
+ * - "TASK_ERROR": a registered task returned {kind:"fail"} or threw.
+ * - "RUNTIME_ERROR": the engine raised a recoverable runtime condition
+ *   (LoopMaxIterationsExceeded, OutputSchemaViolation, policy/approval,
+ *   timeout, cancellation).
+ * - "UNRECOVERABLE_ERROR": the engine raised a condition that is
+ *   statically unreachable after validation (ReferenceUnresolved,
+ *   BranchSelectorUnmatched, unknown namespace, invalid IR structure).
+ *   These bypass onError handlers.
+ */
+type EngineErrorCode =
+    | "TASK_ERROR"
+    | "RUNTIME_ERROR"
+    | "UNRECOVERABLE_ERROR";
+
 class EngineError extends Error {
-    constructor(message: string) {
+    readonly code: EngineErrorCode;
+    /** When true, this error bypasses onError handlers. */
+    readonly unrecoverable: boolean;
+
+    constructor(
+        message: string,
+        code: EngineErrorCode = "RUNTIME_ERROR",
+        unrecoverable = false,
+    ) {
         super(message);
         this.name = "EngineError";
+        this.code = code;
+        this.unrecoverable = unrecoverable;
     }
 }
 
@@ -504,7 +542,7 @@ export class WorkflowEngine {
             // Unreachable after static validation: name-resolution pass
             // verifies all node references exist.
             if (!node) {
-                throw new EngineError(`Node "${currentId}" not found`);
+                throw new EngineError(`Node "${currentId}" not found`, "UNRECOVERABLE_ERROR", true);
             }
 
             // If we have a pending error (dispatching to onError target),
@@ -686,6 +724,8 @@ export class WorkflowEngine {
             if (!task) {
                 throw new EngineError(
                     `Task "${node.task}" not found in registry`,
+                    "UNRECOVERABLE_ERROR",
+                    true,
                 );
             }
             const validTask = task;
@@ -795,16 +835,19 @@ export class WorkflowEngine {
             if (isNeverSchema(node.outputSchema)) {
                 throw new EngineError(
                     `Task "${node.task}" at "${nodeId}" has never-output schema but returned ok.`,
+                    "UNRECOVERABLE_ERROR",
+                    true,
                 );
             }
 
-            // Runtime output schema validation.
+            // Runtime output schema validation (essential check §5.8.1 — always runs).
             if (node.outputSchema) {
                 const validate = this.getValidator(node.outputSchema);
                 if (!validate(result.output)) {
                     const msg = this.ajv.errorsText(validate.errors);
                     throw new EngineError(
                         `Output schema violation at "${nodeId}" (task "${node.task}"): ${msg}`,
+                        "RUNTIME_ERROR",
                     );
                 }
             }
@@ -825,7 +868,10 @@ export class WorkflowEngine {
 
             return node.next;
         } catch (err) {
-            if (node.onError) {
+            if (
+                node.onError &&
+                !(err instanceof EngineError && err.unrecoverable)
+            ) {
                 const errorObj = buildErrorObject(
                     err,
                     node.task,
@@ -847,7 +893,7 @@ export class WorkflowEngine {
                 return node.onError;
             }
 
-            // No onError: propagate
+            // No onError (or unrecoverable): propagate
             if (err instanceof TaskFailure || err instanceof EngineError) {
                 throw err;
             }
@@ -874,10 +920,13 @@ export class WorkflowEngine {
         if (!next) {
             // For exhaustive branches (default omitted), this is unreachable
             // after static validation: the validator proves every selector
-            // value has a matching case. For non-exhaustive branches, this
-            // surfaces a legitimate runtime "BranchSelectorUnmatched" error.
+            // value has a matching case. For non-exhaustive branches, this is
+            // also unreachable because the validator requires a default. Either
+            // way this indicates a validator bypass — unrecoverable.
             throw new EngineError(
                 `Branch selector resolved to "${selector}" but no matching case or default exists`,
+                "UNRECOVERABLE_ERROR",
+                true,
             );
         }
         debug("branch selector=%s -> %s", selector, next);
@@ -1065,7 +1114,10 @@ export class WorkflowEngine {
                 `LoopMaxIterationsExceeded at "${nodeId}" (limit: ${maxIter})`,
             );
         } catch (err) {
-            if (node.onError) {
+            if (
+                node.onError &&
+                !(err instanceof EngineError && err.unrecoverable)
+            ) {
                 const errorObj = buildErrorObject(
                     err,
                     "loop",
@@ -1206,7 +1258,10 @@ export class WorkflowEngine {
 
             return node.next;
         } catch (err) {
-            if (node.onError) {
+            if (
+                node.onError &&
+                !(err instanceof EngineError && err.unrecoverable)
+            ) {
                 const errorObj = buildErrorObject(
                     err,
                     "fork",
@@ -1360,7 +1415,10 @@ export class WorkflowEngine {
 
             return node.next;
         } catch (err) {
-            if (node.onError) {
+            if (
+                node.onError &&
+                !(err instanceof EngineError && err.unrecoverable)
+            ) {
                 const errorObj = buildErrorObject(
                     err,
                     "forkMap",
@@ -1403,7 +1461,7 @@ function buildErrorObject(
         };
     }
     return {
-        code: "RUNTIME_ERROR",
+        code: err instanceof EngineError ? err.code : "RUNTIME_ERROR",
         message: err instanceof Error ? err.message : String(err),
         source: "runtime",
         task: taskName,
