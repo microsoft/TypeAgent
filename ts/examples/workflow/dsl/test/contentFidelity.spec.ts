@@ -25,7 +25,7 @@
  *           `{ return ... ; }` (the AST has no ArrowFunction node).
  *        b. Multi-line parameter / argument / object-type lists
  *           always carry a trailing comma.
- *      Both are documented in implementation-decision.md and pinned
+ *      Both are documented in formatter-design.md and pinned
  *      here so any change is loud.
  *
  * The cleanest answer to "do we have full content fidelity?" is

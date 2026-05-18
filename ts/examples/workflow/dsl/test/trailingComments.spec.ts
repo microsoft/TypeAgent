@@ -318,7 +318,7 @@ describe("compiler/IR: trailing/inner comments don't leak", () => {
 });
 
 describe("comments inside empty nested blocks are preserved", () => {
-    // These were previously documented as a "gap" (see implementation-decision.md
+    // These were previously documented as a "gap" (see formatter-design.md
     // §D7 — superseded in round 3). The parser now captures *innerComments
     // on every block-bearing AST node, not just WorkflowDecl, and the
     // formatter emits them inside the empty `{ }`.

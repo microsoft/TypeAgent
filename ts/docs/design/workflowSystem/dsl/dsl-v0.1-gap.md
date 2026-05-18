@@ -316,7 +316,7 @@ between source and AST.
 - A new formatter (`formatter.ts`, exported as `format`) lowers a
   `WorkflowDecl` back to DSL source and emits `leadingComments` in
   attached positions, completing the round trip.
-- See `implementation-decision.md` for design notes (e.g., the full-text
+- See `formatter-design.md` for design notes (e.g., the full-text
   comment representation, trailing-comment handling).
 
 ## G9: Bare task calls wrapped as synthetic ConstStatement
