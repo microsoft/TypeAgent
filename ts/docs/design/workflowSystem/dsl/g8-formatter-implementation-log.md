@@ -503,3 +503,30 @@ Test count: 459 → 461 (+2).
 25. `???` — G8: close the EOF-comment and attempts-fallback-param
     fidelity gaps; positive round-trip tests; spec §6 +
     implementation-decision §20/§21.
+
+## Round 4, pass 4 — FormatOptions validation + cross-product matrix
+
+Two of the three remaining "out of scope" items in
+`g8-test-gaps-unaddressed.md` were promoted to closed:
+
+- **FormatOptions validation** (`src/formatter.ts`,
+  `test/formatOptions.spec.ts`): `format()` now validates resolved
+  options eagerly. `indent` must be a non-negative integer; `eol`
+  must be `"\n"`, `"\r\n"`, or `"\r"`; `printWidth` must be a
+  non-negative integer or `Infinity`. Invalid values throw
+  `RangeError`/`TypeError` naming the offending field. (Decision §22.)
+- **Cross-product comment-fidelity matrix**
+  (`test/contentFidelity.spec.ts`): 6 comment shapes × ~17 reachable
+  slots. About 88 (shape, slot) cells exercise multi-slot
+  interactions in a single sweep; line-shape × line-unsafe slots
+  (e.g. `} // … else`) are skipped as grammar concerns.
+
+The third remaining item — `ObjectType` `;` field separator — is
+out of grammar scope for v0.1 and stays open pending a grammar
+decision. The visualize-API comment-passthrough item is
+structurally out of scope (the graph IR has no comment slot).
+
+Test count: 462 → 573 (+111).
+
+26. `???` — G8: FormatOptions validation + cross-product comment-shape
+    × slot fidelity matrix.

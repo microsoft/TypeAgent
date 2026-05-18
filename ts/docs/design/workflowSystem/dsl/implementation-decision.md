@@ -491,3 +491,29 @@ one, so it doesn't leak back through the round-trip.
 
 This is the model we'd extend to any other built-in whose
 callback's parameter list is optional.
+
+## 22. `FormatOptions` validation: explicit, eager, narrow
+
+Resolved `FormatOptions` are validated up front in `format()` before
+any printing. Invalid values throw `RangeError` / `TypeError` with
+a field-named message rather than letting downstream
+`String.prototype.repeat(-1)` produce an opaque generic error or
+letting `eol: ""` silently collapse the output onto one line.
+
+The contract is intentionally narrow:
+- `indent`: non-negative integer.
+- `eol`: exactly one of `"\n"`, `"\r\n"`, `"\r"`.
+- `printWidth`: non-negative integer OR `Infinity`. (`0` means
+  "always wrap"; `Infinity` means "never wrap".)
+
+Rejected as out-of-contract:
+- `eol: "\n\n"` (previously worked by accident — the formatter
+  treated it as a single separator and the parser re-accepted the
+  result because consecutive blank lines are insignificant; but it
+  was never an intended layout and downstream tooling that counts
+  lines would break).
+- Fractional indent / printWidth.
+- Negative or NaN values.
+
+The pre-existing test that exercised `eol: "\n\n"` was updated to
+assert the new throw behaviour.

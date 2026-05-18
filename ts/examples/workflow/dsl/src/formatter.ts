@@ -39,17 +39,17 @@ import {
 } from "./ast.js";
 
 export interface FormatOptions {
-    /** Number of spaces per indent level. Default 4. */
+    /** Number of spaces per indent level. Non-negative integer. Default 4. */
     indent?: number;
-    /** Line ending. Default "\n". */
+    /** Line ending. Must be `"\n"`, `"\r\n"`, or `"\r"`. Default `"\n"`. */
     eol?: string;
     /** Soft column limit used by layout heuristics. When the AST does
      *  not constrain a layout choice (e.g. no comments forcing a break
      *  and the original source used inline), the formatter will use
      *  inline iff the projected single-line width is <= printWidth.
-     *  Default 100. Set to Infinity to never wrap based on width.
-     *  Set to 0 to always wrap when an alternative multi-line layout
-     *  exists. */
+     *  Must be a non-negative integer or `Infinity`. Default 100. Set
+     *  to `Infinity` to never wrap based on width; set to `0` to
+     *  always wrap when an alternative multi-line layout exists. */
     printWidth?: number;
 }
 
@@ -66,9 +66,66 @@ export function format(decl: WorkflowDecl, options?: FormatOptions): string {
         eol: options?.eol ?? "\n",
         printWidth: options?.printWidth ?? 100,
     };
+    validateFormatOptions(opts);
     const p = new Printer(opts);
     p.printWorkflow(decl);
     return p.toString();
+}
+
+/**
+ * Validate resolved FormatOptions. Throws RangeError / TypeError with a
+ * clear message rather than letting downstream `String.prototype.repeat`
+ * or arithmetic failures bubble up as opaque exceptions.
+ *
+ * Contract:
+ * - `indent`: finite integer, >= 0.
+ * - `eol`: string containing only line-terminator characters
+ *   (`"\n"`, `"\r\n"`, or `"\r"`). Must be non-empty — an empty `eol`
+ *   would collapse every statement onto one line and break round-trip.
+ * - `printWidth`: number > 0 (Infinity is allowed; finite values must
+ *   be a positive integer).
+ */
+function validateFormatOptions(opts: ResolvedOptions): void {
+    if (
+        typeof opts.indent !== "number" ||
+        !Number.isFinite(opts.indent) ||
+        !Number.isInteger(opts.indent) ||
+        opts.indent < 0
+    ) {
+        throw new RangeError(
+            `FormatOptions.indent must be a non-negative integer, got ${String(opts.indent)}`,
+        );
+    }
+    if (typeof opts.eol !== "string") {
+        throw new TypeError(
+            `FormatOptions.eol must be a string, got ${typeof opts.eol}`,
+        );
+    }
+    if (opts.eol.length === 0) {
+        throw new RangeError(
+            `FormatOptions.eol must be non-empty (use "\\n", "\\r\\n", or "\\r")`,
+        );
+    }
+    if (!/^(\r\n|\n|\r)$/.test(opts.eol)) {
+        throw new RangeError(
+            `FormatOptions.eol must be "\\n", "\\r\\n", or "\\r", got ${JSON.stringify(opts.eol)}`,
+        );
+    }
+    if (typeof opts.printWidth !== "number" || Number.isNaN(opts.printWidth)) {
+        throw new TypeError(
+            `FormatOptions.printWidth must be a number, got ${String(opts.printWidth)}`,
+        );
+    }
+    if (opts.printWidth < 0) {
+        throw new RangeError(
+            `FormatOptions.printWidth must be >= 0, got ${opts.printWidth}`,
+        );
+    }
+    if (Number.isFinite(opts.printWidth) && !Number.isInteger(opts.printWidth)) {
+        throw new RangeError(
+            `FormatOptions.printWidth must be an integer (or Infinity), got ${opts.printWidth}`,
+        );
+    }
 }
 
 class Printer {
@@ -76,7 +133,7 @@ class Printer {
     private depth = 0;
     private atLineStart = true;
 
-    constructor(private opts: ResolvedOptions) {}
+    constructor(private opts: ResolvedOptions) { }
 
     toString(): string {
         // Ensure trailing newline.
@@ -644,8 +701,8 @@ class Printer {
                     s.default_ === undefined
                         ? -1
                         : s.defaultIndex !== undefined
-                          ? s.defaultIndex
-                          : s.arms.length;
+                            ? s.defaultIndex
+                            : s.arms.length;
                 this.indent(() => {
                     // Comments that appeared before the first arm (or
                     // before `default` when default is first).

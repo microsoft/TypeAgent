@@ -319,12 +319,9 @@ describe("FormatOptions corner cases", () => {
         expect(out).toMatch(/\n {32}\S/);
     });
 
-    test('eol: "\\n\\n" does not crash and stays parseable', () => {
+    test('eol: "\\n\\n" is rejected by validation (must be a single line terminator)', () => {
         const ast = parseNoComments(SAMPLE);
-        const out = format(ast, { eol: "\n\n" });
-        expect(() => parseNoComments(out)).not.toThrow();
-        // Double-newline between logical lines should appear.
-        expect(out).toContain("\n\n");
+        expect(() => format(ast, { eol: "\n\n" })).toThrow(/eol/);
     });
 
     test('eol: "\\r\\n" produces CRLF-terminated output that re-parses', () => {

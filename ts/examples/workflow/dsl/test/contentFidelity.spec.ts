@@ -356,7 +356,7 @@ workflow w(
 
 describe("content fidelity (data): examples/*.wf preserve all identifiers, literals, and comments", () => {
     if (!fs.existsSync(EXAMPLES_DIR)) {
-        test.skip("examples directory not available in this build", () => {});
+        test.skip("examples directory not available in this build", () => { });
         return;
     }
     const files = fs
@@ -364,7 +364,7 @@ describe("content fidelity (data): examples/*.wf preserve all identifiers, liter
         .filter((f) => f.endsWith(".wf"))
         .sort();
     if (files.length === 0) {
-        test.skip("no .wf example files found", () => {});
+        test.skip("no .wf example files found", () => { });
         return;
     }
     for (const f of files) {
@@ -599,5 +599,165 @@ describe("documented canonicalizations: trailing comma on multi-line lists", () 
             tokenStreamOf(out),
         );
         expect(diff).toBe(null);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Cross-product: comment shapes × comment slots
+//
+//   Single combinatorial sweep that places each comment shape into each
+//   reachable slot and asserts data fidelity. Each individual slot has
+//   per-slot tests elsewhere — this guards against an integration bug
+//   where two slots (or a slot + a shape) interact incorrectly when
+//   they appear together in the same workflow.
+// ---------------------------------------------------------------------------
+
+describe("cross-product: comment shapes × slots are all preserved together", () => {
+    // Note: line-comment shapes are intentionally excluded from
+    // type-expression-internal slots (object-type field leading /
+    // inner). Putting a `// L` mid-type-expression swallows the rest
+    // of the type's tokens up to a newline, which is a grammar
+    // limitation of single-line type expressions — not a fidelity gap.
+    const SHAPES: Record<string, { c: string; lineOk: boolean }> = {
+        line: { c: "// L", lineOk: true },
+        block: { c: "/* B */", lineOk: false },
+        multiLineBlock: { c: "/*\n   M1\n   M2\n*/", lineOk: true },
+        emptyBlock: { c: "/**/", lineOk: false },
+        emptyLine: { c: "//", lineOk: true },
+        docBlock: { c: "/** D */", lineOk: false },
+    };
+
+    // Each slot is a small standalone workflow with ONE comment
+    // placed into ONE specific position. The matrix exercises every
+    // (shape, slot) pair independently — so a failure pinpoints the
+    // offending pair rather than a sea-of-errors mega-doc.
+    type SlotBuilder = (c: string) => string;
+    const SLOTS: Record<string, { build: SlotBuilder; lineSafe: boolean }> = {
+        "workflow-leading": {
+            build: (c) => `${c}\nworkflow w(): number { return 1; }\n`,
+            lineSafe: true,
+        },
+        "param-leading": {
+            build: (c) => `workflow w(${c}\n    a: number): number { return a; }\n`,
+            lineSafe: true,
+        },
+        "param-trailing-inline": {
+            build: (c) =>
+                `workflow w(\n    a: number, ${c}\n    b: number\n): number { return a; }\n`,
+            lineSafe: true,
+        },
+        "workflow-body-leading": {
+            build: (c) => `workflow w(): number {\n    ${c}\n    return 1;\n}\n`,
+            lineSafe: true,
+        },
+        "statement-trailing-inline": {
+            build: (c) =>
+                `workflow w(): number {\n    const r = 1; ${c}\n    return r;\n}\n`,
+            lineSafe: true,
+        },
+        "if-then-inner-empty": {
+            build: (c) =>
+                `workflow w(): number {\n    if (true) { ${c} }\n    return 1;\n}\n`,
+            // line comment opens a comment to end-of-line, including
+            // the `}` — keep it block-only.
+            lineSafe: false,
+        },
+        "if-else-inner-empty": {
+            build: (c) =>
+                `workflow w(): number {\n    if (true) { return 1; } else { ${c} }\n    return 1;\n}\n`,
+            lineSafe: false,
+        },
+        "else-leading-between-brace-and-else": {
+            build: (c) =>
+                `workflow w(): number {\n    if (true) {\n        return 1;\n    } ${c} else {\n        return 2;\n    }\n}\n`,
+            // line shape would swallow `else` to end of line; block-only.
+            lineSafe: false,
+        },
+        "switch-inner-empty": {
+            build: (c) =>
+                `workflow w(a: number): number {\n    switch (a) {\n        ${c}\n    }\n    return a;\n}\n`,
+            lineSafe: true,
+        },
+        "default-arm-leading": {
+            build: (c) =>
+                `workflow w(a: number): number {\n    switch (a) {\n        ${c}\n        default: return a;\n    }\n    return a;\n}\n`,
+            lineSafe: true,
+        },
+        "attempts-body-inner-empty": {
+            build: (c) =>
+                `workflow w(): number {\n    const r = attempts(1, () => { ${c} });\n    return r;\n}\n`,
+            lineSafe: false,
+        },
+        "attempts-fallback-body-inner-empty": {
+            build: (c) =>
+                `workflow w(): number {\n    const r = attempts(1, () => { return 1; }, (e) => { ${c} });\n    return r;\n}\n`,
+            lineSafe: false,
+        },
+        "map-body-inner-empty": {
+            build: (c) =>
+                `workflow w(): number[] {\n    const r = map([1], (x) => { ${c} });\n    return r;\n}\n`,
+            lineSafe: false,
+        },
+        "filter-body-inner-empty": {
+            build: (c) =>
+                `workflow w(): number[] {\n    const r = filter([1], (x) => { ${c} });\n    return r;\n}\n`,
+            lineSafe: false,
+        },
+        "object-type-field-leading": {
+            build: (c) =>
+                `workflow w(o: {\n    ${c}\n    foo: number,\n    bar: string\n}): number { return 1; }\n`,
+            lineSafe: true,
+        },
+        "object-type-inner-empty": {
+            build: (c) =>
+                `workflow w(o: {\n    ${c}\n}): number { return 1; }\n`,
+            lineSafe: true,
+        },
+        "eof-trailing": {
+            build: (c) => `workflow w(): number { return 1; }\n${c}\n`,
+            lineSafe: true,
+        },
+        "workflow-inner-empty": {
+            build: (c) => `workflow w(): number {\n    ${c}\n}\n`,
+            // Empty body has no return; not legal — skip via a body
+            // that retains return.
+            lineSafe: false,
+        },
+    };
+
+    for (const [shapeName, { c, lineOk }] of Object.entries(SHAPES)) {
+        for (const [slotName, { build, lineSafe }] of Object.entries(SLOTS)) {
+            const isLineShape = c === "// L" || c === "//";
+            if (isLineShape && !lineOk) continue;
+            if (isLineShape && !lineSafe) continue;
+            // workflow-inner-empty needs a return; skip — separate test below.
+            if (slotName === "workflow-inner-empty") continue;
+            test(`shape=${shapeName} slot=${slotName}`, () => {
+                const src = build(c);
+                assertDataFidelity(src, `xprod-${shapeName}-${slotName}`);
+            });
+        }
+    }
+
+    // Stack ALL six shapes adjacently in a single leading slot — pins
+    // that a heterogeneous sequence of comments survives as one
+    // contiguous group on round-trip.
+    test("stack of every shape in one leading slot survives", () => {
+        const stack = Object.values(SHAPES)
+            .map((s) => s.c)
+            .join("\n");
+        const src = `${stack}\nworkflow w(): number { return 1; }\n`;
+        assertDataFidelity(src, "all-shapes-stacked");
+    });
+
+    // Adjacent same-line trailing + leading on the same statement.
+    test("block trailing + next-statement block leading on same line", () => {
+        const src = `workflow w(): number {
+    const a = 1; /* trailA */ /* leadB */
+    const b = 2;
+    return a;
+}
+`;
+        assertDataFidelity(src, "adjacent-trailing-leading");
     });
 });

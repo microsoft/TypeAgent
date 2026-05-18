@@ -51,13 +51,19 @@ the suite `"round 3: comment between } and else"`.
 
 ## Formatter / FormatOptions
 
-### Out-of-contract `FormatOptions` values
+### ~~Out-of-contract `FormatOptions` values~~ (closed)
 
-`indent: -1`, fractional indents, non-string `eol`, `eol: ""`, etc.
-These would be input-validation tests for an API contract that isn't
-currently documented as accepting them; `String.prototype.repeat` on
-negative numbers throws a `RangeError`, which is fine for misuse.
-Adding validation + tests is a separate API-hardening task.
+`format()` now validates resolved options up front and throws
+`RangeError`/`TypeError` with a field-named message:
+
+- `indent` must be a non-negative integer.
+- `eol` must be `"\n"`, `"\r\n"`, or `"\r"` (no empty strings, no
+  arbitrary separators — previously `eol: ""` collapsed every line
+  silently and `eol: "\n\n"` produced double-spaced output that
+  re-parsed by accident).
+- `printWidth` must be a non-negative integer or `Infinity`.
+
+Coverage in `test/formatOptions.spec.ts`. See decision §22.
 
 ### Long arg lists / deep nesting stress
 
@@ -176,15 +182,19 @@ the next arm's leading. The pass 2 pinning test was inverted into a
 positive round-trip test, and
 `test/layoutFidelity.spec.ts` adds focused coverage.
 
-### Cross-product of every multi-line comment shape × every slot
+### ~~Cross-product of every multi-line comment shape × every slot~~ (closed)
 
-Pass 1 covered multi-line block comments in each new inner-comment
-slot; pass 2 stacks 3 line comments in two slots and combines
-multi-line leading+trailing on one param. A full N×M cross-product
-(every shape × every slot) would only re-exercise the shared
-`writeMultilineCommentText` / `printLeadingComments` /
-`printTrailingComments` helpers per call site without adding new
-emitter paths.
+`test/contentFidelity.spec.ts > "cross-product: comment shapes ×
+slots are all preserved together"` now sweeps each comment shape
+(`//`, `/* */`, multi-line block, `/**/`, empty `//`, `/** */`)
+across every reachable slot (workflow leading/inner/trailing,
+param leading/trailing-inline, if-then/else inner, between `}` and
+`else`, switch inner, default-arm leading, attempts body/fallback
+inner, map/filter body inner, object-type field leading + inner,
+EOF). Line-shape × slot combinations where the line comment would
+swallow following tokens (e.g. `} // ... else`) are explicitly
+skipped as a grammar concern, not a fidelity concern. ~88 matrix
+cells; integration-level guard against multi-slot interactions.
 
 ### Pathological volumes of comments in new round-3 slots
 
