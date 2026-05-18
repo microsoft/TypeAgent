@@ -1783,13 +1783,13 @@ function resolveTemplateType(
     ctx: TypeResolutionContext,
 ): JSONSchema | undefined {
     if (template === null) return { type: "null" };
-    if (typeof template === "string") return { type: "string" };
+    if (typeof template === "string") return { type: "string", const: template };
     if (typeof template === "number") {
         return Number.isInteger(template)
-            ? { type: "integer" }
-            : { type: "number" };
+            ? { type: "integer", const: template }
+            : { type: "number", const: template };
     }
-    if (typeof template === "boolean") return { type: "boolean" };
+    if (typeof template === "boolean") return { type: "boolean", const: template };
     if (Array.isArray(template)) {
         const elemSchemas = template
             .map((e) => resolveTemplateType(e, ctx))
