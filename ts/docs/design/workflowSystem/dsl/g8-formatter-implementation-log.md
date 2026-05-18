@@ -326,3 +326,107 @@ param-trailing-after-comma migration bug fixed in `975a07d5`) and two
 general-purpose test-gap subagent passes (no bugs in either; +20
 then +17 tests). Total test count 351 → 401.
 
+
+## Round 4 — layout fidelity + remaining comment-fidelity slots
+
+Round 3 closed the comment slots that had no AST representation but
+deferred (and in some cases pinned with negative tests) four further
+items that surfaced during the doc-review work:
+
+1. `SwitchStatement` had no inner-comment slot — a comment inside
+   `switch (x) { /* nothing */ }` migrated to the next statement.
+2. `SwitchArm` had no pre-`case` slot — a comment immediately before
+   `case 2:` was attached as a trailing comment on the previous arm's
+   last statement, away from its semantic home.
+3. `ObjectType` had no support for field comments or for preserving
+   the original multi-line layout (it was always re-emitted inline).
+4. `WorkflowDecl` parameter lists and `IfStatement.else` were always
+   canonicalised to a single layout regardless of what the source
+   used. Per user feedback we now preserve the source's choice
+   between inline and multi-line, falling back to width-driven
+   wrapping when a single line would exceed `printWidth`.
+
+Implementation:
+
+- **`src/ast.ts`** — added `WorkflowDecl.paramListMultiLine`,
+  `IfStatement.elseOnNewLine`, `ObjectType.multiLine`,
+  `ObjectType.innerComments`,
+  `ObjectTypeField.leadingComments` / `trailingComments` / `endLine`,
+  `SwitchStatement.innerComments`,
+  `SwitchStatement.defaultLeadingComments`, and
+  `SwitchArm.leadingComments`.
+- **`src/parser.ts`** —
+  - `parseWorkflow` tracks LParen / RParen line and first-param line
+    to set `paramListMultiLine` (true only when the list itself uses
+    newlines, NOT when a single param's type spans multiple lines).
+  - `parseIfStmt` records the `}` and `else` token lines and sets
+    `elseOnNewLine` when they differ.
+  - `parseSwitchStmt` drains pre-keyword comments into the next arm's
+    `leadingComments` (or `defaultLeadingComments`); residual comments
+    before `}` go to `SwitchStatement.innerComments`.
+  - `parseSwitchArmBody` no longer drains all block-end comments — it
+    only captures **inline-trailing** (same-line as last stmt's
+    `endLine`); own-line comments fall through to the outer switch
+    loop and become the next arm's leading.
+  - `parseObjectType` captures field-level leading/trailing/inner
+    comments on both sides of the `,` and records `multiLine` based
+    on the same first-field-line heuristic.
+- **`src/formatter.ts`** —
+  - New `FormatOptions.printWidth` (default 100). Pass `Infinity` to
+    disable width-driven wrapping; pass `0` to always wrap when an
+    alternative multi-line layout exists.
+  - New `currentColumn()` and `measure(fn)` helpers. `measure` runs a
+    sub-emission against a temporary buffer and returns the max line
+    length, used to decide between inline and multi-line.
+  - `printParamList`: multi-line iff (any param has comments) OR
+    (`paramListMultiLine` is set) OR (projected width > printWidth).
+  - `printObjectType`: same decision but on the object type's fields.
+    The multi-line layout uses trailing-comma fields with leading /
+    inline-trailing / own-line-after-trailing slots, mirroring the
+    param-list layout.
+  - `writeElseLeading(forceNewLine)`: caller passes `forceNewLine`
+    when the AST records `elseOnNewLine` or width would overflow.
+  - The IfStatement case computes `forceNewLine` itself; when neither
+    the AST nor a `//` line comment forces a break, it measures the
+    inline projection `} <leading> else {` and breaks only if that
+    overflows `printWidth`.
+  - The SwitchStatement emitter prints `innerComments` before the
+    first arm, `defaultLeadingComments` before `default:`, and each
+    arm's `leadingComments` before `case ...:`.
+- **`test/round4-layout-and-fidelity.spec.ts`** (new, 21 tests) —
+  pins all of the above, including the `printWidth` boundary cases.
+- **`test/trailingComments.spec.ts`** — the "comment between arms"
+  test was retargeted to assert the new (correct) attachment point:
+  next arm's `leadingComments`.
+- **`test/round3-gaps-pass2.spec.ts`** — the two pinning tests
+  (`"empty switch with only inner comment"` and
+  `"comment before a case keyword"`) are inverted into positive
+  round-trip tests under `"round 4: ..."` describes.
+- **`test/formatter.spec.ts > else-if chain`** — the input source
+  was rewritten to use the single-line `} else if` shape (the test
+  was previously asserting that the formatter canonicalises a
+  multi-line input to single-line; with layout preservation that
+  canonicalisation no longer happens).
+- **`test/pass2-coverage.spec.ts`** — `stripTrivia` now also strips
+  `defaultLeadingComments`, `paramListMultiLine`, `elseOnNewLine`,
+  and `multiLine` so AST-equivalence comparisons remain stable.
+- **`implementation-decision.md`** — new sections D16 (layout
+  preservation), D17 (`printWidth`), and D18 (ObjectType comments)
+  document the round-4 decisions; D7 already noted in round 3 as
+  superseded.
+
+Test count progression for round 4:
+- 401 (round 3 final) → 422 (round 4 final), all green.
+
+## Commit sequence (round 4)
+
+22. `4036c0df` — G8 round 4: doc cleanup (dedupe `g8-test-gaps-unaddressed.md`,
+    renumber `implementation-decision.md`, drop the unmaintained
+    `decisions/0002-comments-and-formatter.md` mirror, document the
+    round-3 review pass-2 bug + fix in `g8-review-feedback-unaddressed.md`).
+22. `89da0190` — G8 round 4: layout fidelity + remaining comment-fidelity
+    slots (ast/parser/formatter + minimal test updates).
+22. `f8b0263d` — G8 round 4: +21 tests in `round4-layout-and-fidelity.spec.ts`
+    + tighter parser heuristic for `paramListMultiLine` /
+    `ObjectType.multiLine` to avoid false positives when a nested type
+    spans multiple lines.

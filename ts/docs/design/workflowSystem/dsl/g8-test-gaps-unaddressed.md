@@ -160,22 +160,22 @@ non-support).
 
 Deliberately NOT covered in pass 2:
 
-### `SwitchStatement.innerComments` slot (proper inner slot)
+### ~~`SwitchStatement.innerComments` slot (proper inner slot)~~ (closed round 4)
 
-`SwitchStatement` has no `innerComments` slot today, so a comment
-inside an empty switch body migrates to the next statement's
-`leadingComments`. Pass 2 pins this migration but does NOT add a new
-slot — that would be an implementation change, not a test. If the
-slot is later added, the pin in pass 2 will fail loudly and force a
-deliberate update.
+Round 4 added the slot. The pass 2 pinning test was inverted into a
+positive round-trip test under
+`test/round3-gaps-pass2.spec.ts > "round 4: ..."` and additional
+coverage lives in `test/round4-layout-and-fidelity.spec.ts`.
 
-### `SwitchArm` "leading comment before `case`" slot
+### ~~`SwitchArm` "leading comment before `case`" slot~~ (closed round 4)
 
-Similarly, a `// before case 2` comment becomes a trailing on the
-previous arm's last statement (rendered indented at the previous
-arm's body indent). Pass 2 pins this attachment point. A dedicated
-"comment-before-case" slot would be a separate feature, not a test
-gap.
+Round 4 added `SwitchArm.leadingComments` (and
+`SwitchStatement.defaultLeadingComments` for the `default` case).
+`parseSwitchArmBody` no longer scoops own-line comments after the
+arm body — they fall through to the outer switch loop and attach as
+the next arm's leading. The pass 2 pinning test was inverted into a
+positive round-trip test, and
+`test/round4-layout-and-fidelity.spec.ts` adds focused coverage.
 
 ### Cross-product of every multi-line comment shape × every slot
 
@@ -207,9 +207,20 @@ already pins the per-comment column/offset/line plumbing. The new
 slots store comments through the same `Comment` shape; per-slot
 column tests would be redundant.
 
-### Multi-line ObjectType in a param (implementation-side)
+### ~~Multi-line ObjectType in a param (implementation-side)~~ (closed round 4)
 
-Pass 2 pins that the parser rejects multi-line object types in
-param position. Supporting them is an implementation change (parser
+Round 4 added `ObjectType.multiLine` / `ObjectType.innerComments`
+and field-level `ObjectTypeField.leadingComments` /
+`trailingComments`. The parser accepts newlines and trailing commas
+inside an object-type body, the formatter preserves the layout, and
+field comments round-trip on both sides of `,`. Coverage in
+`test/round4-layout-and-fidelity.spec.ts > "ObjectType ..."`.
 
-- type printer), not a test gap.
+## Round 4 — remaining items
+
+After round 4, the only known un-pinned non-fidelity is the
+`;` field separator inside `ObjectType` — the parser still only
+accepts `,`. This is a syntax-extension concern (line-break choice
+is not "content" by the round-4 fidelity rule "complete fidelity
+for any content (except spacing and line breaks)") so it remains
+out of scope.

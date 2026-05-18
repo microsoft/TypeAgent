@@ -920,7 +920,19 @@ where they are anchored:
   - `IfStatement.elseLeadingComments` — between the `}` of the `then`
     block and the `else` keyword (e.g. `} /* note */ else`).
   - `SwitchStatement.defaultInnerComments` — empty `default:` arm.
+  - `SwitchStatement.innerComments` — comments inside an empty
+    `switch (x) { }` body, and any pre-first-arm comments.
+  - `SwitchStatement.defaultLeadingComments` — comments immediately
+    before the `default` keyword.
   - `SwitchArm.innerComments` — empty `case` arm body.
+  - `SwitchArm.leadingComments` — comments immediately before the
+    `case` keyword (e.g. a `// before case 2` line).
+  - `ObjectType.innerComments` — comments inside an empty object
+    type body (`{ /* shape: empty */ }`).
+  - `ObjectTypeField.leadingComments` / `trailingComments` —
+    comments on each side of an object-type field's `,`. The field
+    also carries an `endLine` used for inline-vs-own-line trailing
+    placement.
   - `AttemptsNode.bodyInnerComments` / `fallback.bodyInnerComments`,
     `MapNode.bodyInnerComments`, `FilterNode.bodyInnerComments`,
     `ParallelMapNode.bodyInnerComments`, and
@@ -948,6 +960,25 @@ attachment. _(from principle 6: AST is canonical)_
 
 No ArrowFunction in the AST: the parser dissolves arrow function syntax into
 the parent built-in node's `body` field directly.
+
+### Layout-preservation flags
+
+Three AST flags let the text serializer preserve the source's
+choice of inline vs. multi-line layout for constructs that have
+both:
+
+- `WorkflowDecl.paramListMultiLine` — `true` when the source put
+  the parameter list across multiple lines.
+- `ObjectType.multiLine` — same for object-type literals.
+- `IfStatement.elseOnNewLine` — `true` when the source put the
+  `else` keyword on a different line from the preceding `}`.
+
+The serializer respects these flags unconditionally and otherwise
+falls back to a `printWidth`-driven decision (`FormatOptions.printWidth`,
+default 100): inline if the projected single-line emission fits,
+multi-line otherwise. Comments that cannot live in the inline
+layout (e.g. a `//` line comment between parameters) always force
+multi-line regardless of the flags.
 
 ---
 

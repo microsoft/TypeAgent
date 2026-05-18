@@ -332,3 +332,123 @@ attach as the leading comment of the next param. The implementation:
 
 The empty parameter list `workflow w()` has nowhere to hang
 intervening comments, so they go on `WorkflowDecl.paramInnerComments`.
+
+## 16. Original layout is preserved for parameter lists, object types, and `else`
+
+_Introduced round 4._
+
+When the formatter has a layout choice (inline vs. multi-line) and no
+comment forces a break, it now respects the **original source's
+choice** rather than canonicalising to one form. Three sites:
+
+- `WorkflowDecl.paramListMultiLine`: tracks whether the source
+  rendered the parameter list across multiple lines.
+- `ObjectType.multiLine`: same for object-type literals in type
+  position.
+- `IfStatement.elseOnNewLine`: tracks whether the source placed
+  `else` on a different line from the preceding `}`.
+
+Rule (in priority order):
+
+1. If a comment forces a layout (e.g. a `//` line comment can't be
+   inline-trailing across the comma), use that layout.
+2. Else if the AST records the source was multi-line, stay
+   multi-line.
+3. Else if the projected single-line width would exceed
+   `printWidth` (decision D17), break to multi-line.
+4. Otherwise, inline.
+
+A consequence: a source like
+
+    if (a) { ... }
+    else { ... }
+
+now round-trips as-is rather than being canonicalised to
+`} else {`. The user's selection ("Both — track original layout
+AND wrap if it would exceed printWidth") drove this.
+
+Parser heuristic for `paramListMultiLine`/`multiLine`: a list is
+"multi-line" only when (a) a newline separates the opening
+`(`/`{` from the first param/field, OR (b) consecutive
+params/fields are on different lines. A nested type that itself
+spans multiple lines (e.g. a single param whose type is a
+multi-line object type) does NOT flip the outer list to
+multi-line — which keeps round-trip stable when the formatter
+chose to keep the outer list inline but emit the inner type
+multi-line.
+
+## 17. `FormatOptions.printWidth` (default 100)
+
+_Introduced round 4._
+
+A soft column budget used by the layout heuristic (D16) when neither
+a comment nor the AST flag has already decided the layout. The
+default of 100 matches Prettier's default. Two special values:
+
+- `Infinity` disables width-driven wrapping entirely — useful when
+  the caller wants byte-stable output regardless of column count.
+- `0` always forces multi-line where a multi-line alternative
+  exists — useful in tests.
+
+The formatter measures projected widths via a
+`measure(fn)` helper that runs `fn` against a temporary buffer and
+returns the maximum line length (relative to the column where
+`fn` was invoked). The measurement covers the relevant span
+(parameter list including `): ReturnType {`; the `} <leading>
+else {` projection for IfStatement; the object type body). Cost is
+one extra render of the projected span when the AST flag does not
+already constrain the layout.
+
+The formatter does not currently use printWidth for other constructs
+(task-call arg lists, expression trees, etc.) — extending it there
+is a separate change.
+
+## 18. `ObjectType` carries field comments and an inner-comment slot
+
+_Introduced round 4._
+
+`ObjectTypeField` now has `leadingComments`, `trailingComments`,
+and `endLine`, mirroring `ParamDecl`. The parser captures comments
+on both sides of the field's terminating `,` (matching the
+parameter-list logic from D15). `ObjectType` itself has
+`innerComments` for the empty case (`{ /* shape: empty */ }`) and
+`multiLine` for layout preservation.
+
+The formatter switches to multi-line layout for object types as
+soon as any field carries comments OR `innerComments` is set OR
+the AST `multiLine` flag is set OR the projected inline width
+exceeds `printWidth`. The multi-line layout uses unconditional
+trailing commas so a `// trailing` on the last field can live
+after the comma (uniform with parameter lists).
+
+## 19. `SwitchStatement.innerComments` and pre-keyword arm comments
+
+_Introduced round 4._
+
+Three new slots close the remaining "comment migrates to next
+statement" cases:
+
+- `SwitchStatement.innerComments`: holds comments inside an
+  otherwise empty switch body (`switch (x) { /* nothing */ }`)
+  AND comments that appear before the first arm.
+- `SwitchStatement.defaultLeadingComments`: holds comments
+  immediately before the `default` keyword.
+- `SwitchArm.leadingComments`: holds comments immediately before
+  the `case` keyword.
+
+The parser drains `takeLeadingComments()` at the top of each
+iteration of the switch arm loop and routes the result to the
+appropriate slot based on the next keyword. The previous
+`finalizeBlock`-driven behaviour for switch arm bodies — which
+attached all unattributed comments as block-end trailings on the
+last statement of the arm — has been replaced by an inline-only
+scoop (`takeInlineTrailingComments(last.endLine)`). Own-line
+comments between an arm's last statement and the next `case` /
+`default` / `}` therefore fall through to the outer loop and
+attach as the next arm's `leadingComments`. This matches
+TypeScript / Prettier convention and gives the comment a
+semantically-stable slot independent of the arm's body length.
+
+The empty-arm case still routes comments to that arm's
+`innerComments` (no other slot makes sense when the body is
+empty).
