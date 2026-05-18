@@ -183,3 +183,44 @@ implementation.
 
 - Baseline (after round 1): 286 passing.
 - After this work: 310 passing (286 + 24 new).
+
+### Round 2 review + test-gap passes
+
+- **Review pass 1** (code-review subagent): no significant bugs found.
+- **Review pass 2** (code-review subagent): flagged a documentation
+  gap — empty nested blocks (if/else/case bodies) silently drop their
+  inner comments. Addressed by adding three pinning tests under
+  `"documented gap: comments inside empty nested blocks are dropped"`
+  and a Round 2 section in `g8-test-gaps-unaddressed.md`.
+- **Test-gap pass 1** (general-purpose subagent): added 19 tests
+  covering additional Statement kinds, multi-line statements, mixed
+  comment forms, FormatOptions interactions, built-in node bodies,
+  and graphExtractor transparency. **Found a real bug**: multi-line
+  block comments accumulated `depth * indent` extra spaces on every
+  reformat because `Printer.write()` re-applied the current indent
+  at line start even for the comment's own continuation lines. Fixed
+  by introducing `writeMultilineCommentText()` which writes the first
+  line through `write()` and then pushes continuation lines verbatim
+  via `parts.push()`. Used from all three sites that render
+  multi-line comments (`printLeadingComments`, `printOwnLineComments`,
+  `endStmt`'s own-line branch).
+- **Test-gap pass 2** (general-purpose subagent): added another 19
+  tests for degenerate comment lexemes (`/**/`, `//`, `// /*`,
+  `/* // */`), column information, leading-vs-trailing independence,
+  multi-workflow trailing preservation, pathological volume (1000
+  inline comments), and a 3-pass property test on the union of
+  leading + trailing + inner comments. No bugs found.
+
+### Final test count for round 2
+
+- Round 1 baseline: 286 passing.
+- After all of round 2: **351 passing** (+65 net).
+
+### Final commit sequence (round 2)
+
+1. `c582f275` — code: ast/parser/formatter/spec
+2. `83cbf929` — tests for trailing + inner comments
+3. `9f5e6e91` — docs: log + implementation decisions
+4. `d608e1ce` — review pass 2: empty-block pinning tests + gap doc
+5. `944696e3` — test-gap pass 1: 19 tests + multi-line indent fix
+6. `0758b69b` — test-gap pass 2: 19 additional tests
