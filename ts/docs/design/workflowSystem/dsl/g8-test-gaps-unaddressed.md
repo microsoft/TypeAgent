@@ -69,13 +69,12 @@ expression-tree stress would be additive.
 
 ## Examples / smoke
 
-### Stress with `examples/d1-standup-prep.wf`
+### ~~Stress with `examples/d1-standup-prep.wf`~~ (closed)
 
-This file contains a pre-existing stray trailing `}` unrelated to G8
-that the parser flags as an error. Including it in round-trip tests
-would only mask that unrelated issue. The other example
-(`d8-summarize-url.wf`) is exercised in the example-file round-trip
-test (smoke + structural-equivalence).
+The stray trailing `}` in this file was removed in `99127d35` (the
+parser now errors on trailing content). `d1-standup-prep.wf` is
+now included in the example-file round-trip suite in
+`commentNeutrality.spec.ts`, alongside `d8-summarize-url.wf`.
 
 ## Visualization
 

@@ -278,6 +278,16 @@ describe("parse(format(parse(src))) structurally equals parse(src)", () => {
         const src = fs.readFileSync(file, "utf8");
         structurallyEqualAfterFormat(src);
     });
+
+    test("example file: d1-standup-prep.wf", () => {
+        const file = path.join(EXAMPLES_DIR, "d1-standup-prep.wf");
+        if (!fs.existsSync(file)) {
+            // examples dir may not be copied into dist; skip gracefully.
+            return;
+        }
+        const src = fs.readFileSync(file, "utf8");
+        structurallyEqualAfterFormat(src);
+    });
 });
 
 // ---------------------------------------------------------------------------
