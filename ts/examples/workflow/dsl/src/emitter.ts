@@ -2228,8 +2228,12 @@ export class Emitter {
                 }
             }
             clone.cases = cases;
-            if (!node.default.startsWith("@")) {
-                clone.default = `${prefix}${node.default}`;
+            if (node.default !== undefined) {
+                if (!node.default.startsWith("@")) {
+                    clone.default = `${prefix}${node.default}`;
+                } else {
+                    clone.default = node.default;
+                }
             }
         }
         return clone as unknown as WorkflowNode;

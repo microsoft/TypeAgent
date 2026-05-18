@@ -864,7 +864,7 @@ export class WorkflowEngine {
         node: {
             selector: Template;
             cases: Record<string, string>;
-            default: string;
+            default?: string;
         },
         scope: ScopeContext,
     ): string {
@@ -872,6 +872,10 @@ export class WorkflowEngine {
         const selector = String(raw);
         const next = node.cases[selector] ?? node.default;
         if (!next) {
+            // For exhaustive branches (default omitted), this is unreachable
+            // after static validation: the validator proves every selector
+            // value has a matching case. For non-exhaustive branches, this
+            // surfaces a legitimate runtime "BranchSelectorUnmatched" error.
             throw new EngineError(
                 `Branch selector resolved to "${selector}" but no matching case or default exists`,
             );

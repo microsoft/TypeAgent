@@ -207,10 +207,12 @@ function buildScopeCFG(
                     succs.add(target);
                 }
             }
-            if (isSentinel(node.default)) {
-                addSentinel(id, node.default);
-            } else {
-                succs.add(node.default);
+            if (node.default !== undefined) {
+                if (isSentinel(node.default)) {
+                    addSentinel(id, node.default);
+                } else {
+                    succs.add(node.default);
+                }
             }
         } else if (isBindableNode(node)) {
             if (node.next) {
@@ -950,7 +952,7 @@ function validateOnErrorRules(
                     normalTargets.add(target);
                 }
             }
-            if (!isSentinel(node.default)) {
+            if (node.default !== undefined && !isSentinel(node.default)) {
                 normalTargets.add(node.default);
             }
         }
@@ -1262,18 +1264,20 @@ function validateScope(
                     });
                 }
             }
-            if (isSentinel(node.default)) {
-                if (!insideLoop) {
+            if (node.default !== undefined) {
+                if (isSentinel(node.default)) {
+                    if (!insideLoop) {
+                        errors.push({
+                            path: `${path}.default`,
+                            message: `Sentinel "${node.default}" is only valid inside a loop body.`,
+                        });
+                    }
+                } else if (!nodeIds.has(node.default)) {
                     errors.push({
                         path: `${path}.default`,
-                        message: `Sentinel "${node.default}" is only valid inside a loop body.`,
+                        message: `Default target "${node.default}" does not exist.`,
                     });
                 }
-            } else if (!nodeIds.has(node.default)) {
-                errors.push({
-                    path: `${path}.default`,
-                    message: `Default target "${node.default}" does not exist.`,
-                });
             }
         } else if (node.kind === "loop") {
             if (!(node.body.entry in node.body.nodes)) {
@@ -1470,7 +1474,7 @@ function bodyScopeHasSentinel(nodes: Record<string, WorkflowNode>): boolean {
             for (const target of Object.values(node.cases)) {
                 if (isSentinel(target)) return true;
             }
-            if (isSentinel(node.default)) {
+            if (node.default !== undefined && isSentinel(node.default)) {
                 return true;
             }
         } else if (node.kind === "task") {
@@ -1736,13 +1740,13 @@ interface TypeResolutionContext {
 /** Derive a JSON Schema from a literal JSON value. */
 function jsonValueToSchema(value: unknown): JSONSchema {
     if (value === null) return { type: "null" };
-    if (typeof value === "string") return { type: "string" };
+    if (typeof value === "string") return { type: "string", const: value };
     if (typeof value === "number") {
         return Number.isInteger(value)
-            ? { type: "integer" }
-            : { type: "number" };
+            ? { type: "integer", const: value }
+            : { type: "number", const: value };
     }
-    if (typeof value === "boolean") return { type: "boolean" };
+    if (typeof value === "boolean") return { type: "boolean", const: value };
     if (Array.isArray(value)) {
         if (value.length === 0) return { type: "array" };
         const elemSchemas = value.map(jsonValueToSchema);
@@ -1896,6 +1900,30 @@ function isStructuralSubtype(
         );
     }
 
+    // Const / enum narrowing checks.
+    // Only applied when both sides have const/enum constraints. When the
+    // producer is wider (no const/enum), we stay lenient — narrowing is
+    // verified by runtime input/selectorSchema validation. Exhaustiveness
+    // checking uses isProvablyNarrowedTo (see below) for strict subset.
+    if (consumer.const !== undefined) {
+        if (producer.const !== undefined) {
+            return producer.const === consumer.const;
+        }
+        if (producer.enum) {
+            return producer.enum.every((v) => v === consumer.const);
+        }
+        // Producer is wider; stay lenient (defense-in-depth at runtime).
+    } else if (consumer.enum) {
+        const allowed = new Set(consumer.enum);
+        if (producer.const !== undefined) {
+            return allowed.has(producer.const);
+        }
+        if (producer.enum) {
+            return producer.enum.every((v) => allowed.has(v));
+        }
+        // Producer is wider; stay lenient (defense-in-depth at runtime).
+    }
+
     // Handle allOf: intersection semantics.
     if (producer.allOf) {
         // Producer satisfies every allOf member simultaneously (intersection).
@@ -1973,6 +2001,38 @@ function isStructuralSubtype(
     }
 
     return true;
+}
+
+/**
+ * Strict narrowing check used by exhaustive branch verification.
+ *
+ * Returns true iff `producer` is provably constrained to a subset of
+ * `allowedValues`. Unlike `isStructuralSubtype` which stays lenient when
+ * the producer is wider than a constraint, this function requires the
+ * producer to have an explicit `const` or `enum` whose values all fall
+ * within `allowedValues`.
+ *
+ * Used when `default` is absent on a branch: the selector's resolved
+ * type must be statically narrowed so the engine can prove every
+ * possible value has a matching case.
+ */
+function isProvablyNarrowedTo(
+    producer: JSONSchema,
+    allowedValues: ReadonlyArray<unknown>,
+): boolean {
+    const allowed = new Set(allowedValues);
+    if (producer.const !== undefined) return allowed.has(producer.const);
+    if (producer.enum) return producer.enum.every((v) => allowed.has(v));
+
+    // Recurse into union variants — every variant must be narrowed.
+    const variants = producer.anyOf ?? producer.oneOf;
+    if (variants) {
+        return variants.every(
+            (v) =>
+                typeof v !== "boolean" && isProvablyNarrowedTo(v, allowedValues),
+        );
+    }
+    return false;
 }
 
 /**
@@ -2088,6 +2148,58 @@ function validateTypeCompatibility(
                                 `value in selectorSchema.enum ` +
                                 `${JSON.stringify(node.selectorSchema.enum)}.`,
                         });
+                    }
+                }
+            }
+
+            // Exhaustiveness: when `default` is omitted, the branch must
+            // be statically provable to cover every possible selector value.
+            if (node.default === undefined) {
+                const enumValues = node.selectorSchema.enum;
+                if (!enumValues || enumValues.length === 0) {
+                    errors.push({
+                        path: `${path}.default`,
+                        message:
+                            `Branch has no default but selectorSchema is ` +
+                            `not a closed enum (selectorSchema: ` +
+                            `${formatSchemaType(node.selectorSchema)}). ` +
+                            `Fix: add a default target, or declare ` +
+                            `selectorSchema with an "enum" constraint.`,
+                    });
+                } else {
+                    // Every enum value must have a matching case key.
+                    const caseKeys = new Set(Object.keys(node.cases));
+                    const missing = enumValues
+                        .map(String)
+                        .filter((v) => !caseKeys.has(v));
+                    if (missing.length > 0) {
+                        errors.push({
+                            path: `${path}.cases`,
+                            message:
+                                `Branch has no default and is not ` +
+                                `exhaustive. Missing case(s): ` +
+                                `${JSON.stringify(missing)}. ` +
+                                `Fix: add a case for each missing value, ` +
+                                `or add a default target.`,
+                        });
+                    }
+                    // Selector must be statically narrowed to the enum.
+                    if (selectorType) {
+                        if (!isProvablyNarrowedTo(selectorType, enumValues)) {
+                            errors.push({
+                                path: `${path}.selector`,
+                                message:
+                                    `Branch has no default but selector ` +
+                                    `resolved type ` +
+                                    `${formatSchemaType(selectorType)} is ` +
+                                    `not statically narrowed to the enum ` +
+                                    `${JSON.stringify(enumValues)}. ` +
+                                    `Fix: narrow the selector's upstream ` +
+                                    `type (declare an "enum" on the ` +
+                                    `producing task output / constant), ` +
+                                    `or add a default target.`,
+                            });
+                        }
                     }
                 }
             }

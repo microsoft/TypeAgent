@@ -48,7 +48,16 @@ export interface BranchNode {
     selector: Template;
     selectorSchema: JSONSchema;
     cases: Record<string, string>;
-    default: string;
+    /**
+     * Target when selector matches no case.
+     *
+     * If omitted, the branch must be **exhaustive**: `selectorSchema` must
+     * declare an `enum` and every value in the enum must have a matching
+     * case key. Additionally the selector's resolved type must be provably
+     * narrowed to a subset of the enum. The static validator rejects
+     * non-exhaustive branches that omit `default`.
+     */
+    default?: string;
 }
 
 export interface LoopStateVar {
