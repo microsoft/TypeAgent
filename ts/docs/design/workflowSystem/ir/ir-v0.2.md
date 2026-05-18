@@ -68,55 +68,59 @@ sub-scope (same contract as loop bodies in v1).
       "inputs": {
         "doc": { "$from": "scope", "name": "document" },
       },
-      "inputSchema": {
-        "type": "object",
-        "properties": { "doc": { "type": "string" } },
-        "required": ["doc"],
-      },
-      "entry": "analyze",
-      "nodes": {
-        "analyze": {
-          "kind": "task",
-          "task": "text.analyze",
-          "inputs": { "text": { "$from": "input", "name": "doc" } },
-          "inputSchema": {
-            "type": "object",
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"],
-          },
-          "outputSchema": { "$ref": "#/types/TextResult" },
-          "next": null,
+      "scope": {
+        "inputSchema": {
+          "type": "object",
+          "properties": { "doc": { "type": "string" } },
+          "required": ["doc"],
         },
+        "entry": "analyze",
+        "nodes": {
+          "analyze": {
+            "kind": "task",
+            "task": "text.analyze",
+            "inputs": { "text": { "$from": "input", "name": "doc" } },
+            "inputSchema": {
+              "type": "object",
+              "properties": { "text": { "type": "string" } },
+              "required": ["text"],
+            },
+            "outputSchema": { "$ref": "#/types/TextResult" },
+            "next": null,
+          },
+        },
+        "output": { "$from": "scope", "name": "analyze" },
+        "outputSchema": { "$ref": "#/types/TextResult" },
       },
-      "output": { "$from": "scope", "name": "analyze" },
-      "outputSchema": { "$ref": "#/types/TextResult" },
     },
     "imageAnalysis": {
       "inputs": {
         "doc": { "$from": "scope", "name": "document" },
       },
-      "inputSchema": {
-        "type": "object",
-        "properties": { "doc": { "type": "string" } },
-        "required": ["doc"],
-      },
-      "entry": "analyze",
-      "nodes": {
-        "analyze": {
-          "kind": "task",
-          "task": "image.analyze",
-          "inputs": { "text": { "$from": "input", "name": "doc" } },
-          "inputSchema": {
-            "type": "object",
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"],
-          },
-          "outputSchema": { "$ref": "#/types/ImageResult" },
-          "next": null,
+      "scope": {
+        "inputSchema": {
+          "type": "object",
+          "properties": { "doc": { "type": "string" } },
+          "required": ["doc"],
         },
+        "entry": "analyze",
+        "nodes": {
+          "analyze": {
+            "kind": "task",
+            "task": "image.analyze",
+            "inputs": { "text": { "$from": "input", "name": "doc" } },
+            "inputSchema": {
+              "type": "object",
+              "properties": { "text": { "type": "string" } },
+              "required": ["text"],
+            },
+            "outputSchema": { "$ref": "#/types/ImageResult" },
+            "next": null,
+          },
+        },
+        "output": { "$from": "scope", "name": "analyze" },
+        "outputSchema": { "$ref": "#/types/ImageResult" },
       },
-      "output": { "$from": "scope", "name": "analyze" },
-      "outputSchema": { "$ref": "#/types/ImageResult" },
     },
   },
   "outputSchema": {
@@ -137,7 +141,7 @@ sub-scope (same contract as loop bodies in v1).
 | Field            | Required | Description                                                                                                                                                   |
 | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kind`           | yes      | `"fork"`                                                                                                                                                      |
-| `branches`       | yes      | Map of branch name to sub-scope. Each sub-scope has the same contract as v1 loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`, `output`, `outputSchema`. |
+| `branches`       | yes      | Map of branch name to branch object. Each branch object has `inputs` (templates resolved in the outer scope) and `scope` (a `WorkflowScope` with `inputSchema`, `entry`, `nodes`, `output`, `outputSchema` — the same contract as v1 loop bodies). The `scope` nesting is intentional: `WorkflowScope` is shared with loop bodies and the top-level workflow for type-system reuse. |
 | `outputSchema`   | yes      | Schema of the fork's combined output. Object with one property per branch name.                                                                               |
 | `maxConcurrency` | no       | Positive integer. Max concurrent branches. Engine queues excess in declaration order. Defaults to unbounded.                                                  |
 | `next`           | no       | Next node ID, or `null` / sentinel.                                                                                                                           |
