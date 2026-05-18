@@ -1,226 +1,237 @@
 # G8 + Formatter implementation log
 
 Working tree: `agents-can-you-address-g8-in-the-dsl-v0-f3fc165d`
+
 Scope: address gap item **G8** ("Comments not preserved in AST") in
-`ts/docs/design/workflowSystem/dsl/dsl-v0.1-gap.md` and implement a
-formatter (AST -> source / "prettier") that completes the source <->
-AST round trip.
+`dsl-v0.1-gap.md` and implement a formatter (AST → source / "prettier")
+that completes the source ↔ AST round trip. The work was carried out
+in two rounds; the second round extended the originally-incomplete spec
+to cover trailing and inner comments. This log describes the final
+state and surfaces only the differences that matter for review.
 
-## Changes
+## What ships
 
-### `ts/examples/workflow/dsl/src/lexer.ts`
+The workflow DSL lexer now keeps comments. The parser attaches them to
+three buckets on the AST:
 
-- Added `LexComment` interface (`text`, `line`, `col`, `offset`, `block`).
-- `lex()` now returns `{ tokens, errors, comments }`.
-- `//` and `/* */` branches collect the comment lexeme (including
-  delimiters) instead of discarding it. Unterminated block comments
-  still record the captured text up to EOF.
+- **`leadingComments`** on any node — comments that appear immediately
+  before the node.
+- **`trailingComments`** on every `Statement` — comments that appear
+  after a statement. A comment is _inline trailing_ if its source line
+  equals the statement's `endLine` (`return x; // why`) and _block-end
+  trailing_ otherwise (a comment that appears between the last
+  statement of a block and the block's closing `}`, `case`, or
+  `default`). The two share the same array; the formatter decides
+  rendering at print time by comparing `comment.pos.line` against the
+  statement's `endLine`.
+- **`innerComments`** on `WorkflowDecl` — comments inside an otherwise
+  empty workflow body that have no statement to attach to.
 
-### `ts/examples/workflow/dsl/src/parser.ts`
+The formatter (`format(decl, options?) -> string`) re-emits a parsed
+workflow as canonical DSL source with comments preserved in their
+attached positions. It is deterministic, configurable only on `indent`
+and `eol`, and stable: `format(parse(format(parse(s))))` always equals
+`format(parse(s))` for all supported comment shapes (including
+multi-line block comments).
+
+## Code changes
+
+### `src/lexer.ts`
+
+- Added `LexComment` interface (`text`, `line`, `col`, `offset`,
+  `block`). The `text` field stores the **full lexeme including
+  delimiters** (`// foo`, `/* foo */`) so the serializer can emit
+  verbatim with no reconstruction step.
+- `lex()` now returns `{ tokens, errors, comments }`. The `//` and
+  `/* */` branches collect the lexeme instead of discarding it.
+  Unterminated block comments still record the captured text up to EOF.
+
+### `src/ast.ts`
+
+- `WorkflowDecl` gained optional `leadingComments?: Comment[]` and
+  `innerComments?: Comment[]`.
+- Every `Statement` subtype (`ConstStatement`, `DestructuringConst`,
+  `IfStatement`, `SwitchStatement`, `ThrowStatement`, `ReturnStatement`,
+  `BreakStatement`) gained optional `leadingComments?`,
+  `trailingComments?`, and `endLine?: number`.
+- `ConstStatement` gained `isSynthetic?: boolean` (set by the parser
+  when wrapping a bare expression statement; replaces the original
+  regex-on-name heuristic — see decision §3).
+- `SwitchStatement` gained `defaultIndex?: number` (records where the
+  `default:` arm appeared in source order so the formatter can
+  reconstruct fallthrough faithfully).
+
+### `src/parser.ts`
 
 - `Parser` constructor now accepts an optional `comments: LexComment[]`
   (defaults to `[]` so existing callers compile unchanged).
-- Added `takeLeadingComments()` cursor-walker.
-- `parseWorkflow()` and `parseStatement()` call it and attach the
-  result to the produced node's `leadingComments` (omitted when empty).
-- `parseStatement` was split: outer wrapper attaches comments, inner
-  `parseStatementInner` retains the original switch.
+- Added a cursor (`commentIdx`) into the lexer's comment list and
+  these helpers:
+  - `takeLeadingComments()` — drains comments whose offset precedes
+    the next token's offset.
+  - `takeInlineTrailingComments(line)` — variant that only consumes
+    comments whose line equals the just-parsed statement's `endLine`.
+    The same-line guard is what keeps leading-vs-trailing semantics
+    distinct (see decision §9).
+  - `finalizeBlock(stmts)` — drains remaining comments before the next
+    block-closing token (`}`, `case`, `default`, EOF), appends them to
+    the last statement's `trailingComments`, or returns them if the
+    block is empty.
+- Added `lastToken` tracking in `advance()` so the wrapper that calls
+  `parseStatementInner()` can record each statement's `endLine`.
+- `parseStatement` was split: the outer wrapper attaches
+  `leadingComments`, sets `endLine`, and takes `trailingComments`;
+  the inner `parseStatementInner` retains the original switch.
+- `parseStatements` calls `finalizeBlock` before returning.
+- `parseSwitchArmBody` also calls `finalizeBlock` — without this, a
+  comment at the tail of a `case` body would migrate onto the next
+  `case`'s leading comments (a subtle semantic shift the round-1
+  reviewers flagged; see decision §8).
+- `parseWorkflow` uses `parseStatementsCapturingInner()` to recover
+  the leftover from an empty body and attach it as
+  `decl.innerComments`.
 
-### `ts/examples/workflow/dsl/src/formatter.ts` (new)
+### `src/formatter.ts` (new)
 
-- `format(decl, options?) -> string`.
-- Configurable indent and EOL only.
-- Handles all statement and expression kinds, including all built-in
+- `format(decl, options?) -> string`. Options: `indent` (default 4)
+  and `eol` (default `\n`).
+- Handles every statement and expression kind, including all built-in
   nodes (`attempts`, `map`, `filter`, `parallel`, `parallelMap`),
-  template literals, destructuring `const`, switch with default arm,
-  else-if chains, and ternary/binary precedence with parenthesization.
-- Detects synthetic `ConstStatement` names (`_<line>_<col>`) produced
-  for bare-call statements and re-emits them as expression statements.
-- Emits `leadingComments` for any node that has them, preserving block
-  comments with embedded newlines.
+  template literals, destructuring `const`, switch with default arm
+  preserved at its original position via `defaultIndex`, else-if
+  chains, and ternary/binary precedence with parenthesization.
+- Emits bare expression statements (parser-wrapped synthetic consts)
+  as expressions when `s.isSynthetic` is set, keeping `format`
+  → `parse` → `format` stable.
+- Comment rendering:
+  - `printLeadingComments` emits leading comments on their own
+    indented line.
+  - `endStmt(stmt, terminator)` writes the terminator, then for each
+    trailing comment splits into inline (same line as `stmt.endLine`,
+    rendered with a leading space before the newline) vs. own-line
+    (rendered on its own indented line after the newline). All
+    statement printers use it instead of `this.line(…)`.
+  - `printOwnLineComments` emits a list of comments at the current
+    indent (used for `WorkflowDecl.innerComments`).
+  - `writeMultilineCommentText` writes the first line through `write()`
+    (so the current indent applies) and pushes continuation lines
+    verbatim via `parts.push()` (so the comment's own internal
+    alignment is preserved). Without this helper, a block comment
+    spanning multiple lines accumulated `depth * indent` extra spaces
+    on every reformat — this was the only real bug found across all
+    review and test-gap passes.
 
-### `ts/examples/workflow/dsl/src/index.ts`
+### `src/index.ts`, `src/compiler.ts`, `src/visualize.ts`
 
-- Re-exports `format`, `FormatOptions`, `LexComment`, and `Comment`.
+- `index.ts` re-exports `format`, `FormatOptions`, `LexComment`, and
+  `Comment`.
+- `compile()` and `visualize()` thread `comments` from `lex()` into
+  `new Parser(tokens, comments)` so the public APIs preserve comments
+  with no further user action. Neither pipeline copies comments into
+  IR or graph output.
 
-### `ts/examples/workflow/dsl/src/compiler.ts`, `src/visualize.ts`
+## Spec changes
 
-- Threaded `comments` from `lex()` into `new Parser(tokens, comments)`
-  so the public APIs preserve comments without further user action.
+`dsl-v0.1.md` §6 "Comments" was rewritten to describe the three
+buckets (`leadingComments`, `trailingComments` with inline-vs-block
+semantics via `endLine`, `innerComments`), supported comment forms
+(`//`, `/* */`), and rendering rules. The pre-existing one-sentence
+description of `leadingComments` did not say where trailing or inner
+comments live; closing that ambiguity was the explicit goal of round 2.
 
-### `ts/examples/workflow/dsl/test/formatter.spec.ts` (new)
+## Test changes
 
-- 25 tests covering: lexer comment collection, parser attachment to
-  workflow and statements (line + block), comment survival across
-  round-trip, format stability (`format(parse(format(parse(s))))` ==
-  `format(parse(s))`), all statement kinds, all expression kinds,
-  operator precedence preservation, synthetic-const rewriting,
-  destructuring, switch, attempts (with and without fallback),
-  parallel, map/filter, template literals, string escaping, and the
-  `indent`/`eol` options.
+Two spec files contain the new coverage:
 
-### Docs
+- `test/formatter.spec.ts` — round-1 tests (lexer collection, parser
+  attachment, all statement/expression kinds, precedence preservation,
+  synthetic-const rewriting, switch, attempts with and without
+  fallback, parallel, map/filter, template literals, string escaping,
+  `indent`/`eol` options).
+- `test/trailingComments.spec.ts` — round-2 tests (inline trailing on
+  every Statement kind, block-end trailing inside workflow body and
+  switch arm, multiple trailings, leading-vs-trailing boundary, inner
+  comments on empty body, parser/formatter/stability triples for each
+  shape, multi-line statements, mixed `//` + `/* */` inline trailings,
+  multi-line block comment stability, FormatOptions interaction with
+  trailing comments, built-in node body trailings, graphExtractor
+  transparency, compiler IR non-leakage, degenerate comment lexemes
+  (`/**/`, `//`, `// /*`, `/* // */`), column preservation,
+  multi-workflow trailing preservation, pathological 1000-comment
+  stress, and a 3-pass property test on the union of all three
+  comment kinds).
 
-- `ts/docs/design/workflowSystem/dsl/dsl-v0.1-gap.md`: G8 marked
-  Resolved with a summary of the fix.
-- `ts/docs/design/workflowSystem/dsl/implementation-decision.md`
-  (and duplicate at `decisions/0002-comments-and-formatter.md`):
-  records design choices (full-lexeme comment text, leading-only
-  attachment, synthetic-name detection in formatter, precedence
-  parenthesization, no width/quote-style options, no whitespace
-  preservation).
-
-## Test results
-
-Baseline: **223 passed**.
-After all changes (G8 + formatter + review fixes + 2 test-gap passes):
-**286 passed** (63 new, 0 regressions, 0 skipped).
+`test/pass2-coverage.spec.ts:stripTrivia` was updated to strip
+`trailingComments`, `innerComments`, and `endLine` alongside the
+original `leadingComments`/`loc`/`pos` so the structural-equality
+property test (`parse(format(parse(src))) ≡ parse(src)`) continues
+to hold.
 
 `pnpm -C examples/workflow/dsl run prettier` (the project's own
-formatter check) clean.
+code-style check) is clean.
+
+## Test count progression
+
+| Stage | Passing |
+| --- | --- |
+| Baseline (pre-G8) | 223 |
+| G8 + formatter + review fixes + 2 test-gap passes (round 1) | 286 |
+| Trailing/inner comments + review pass + 2 test-gap passes (round 2) | **351** |
 
 Smoke test: both `examples/d1-standup-prep.wf` and
-`examples/d8-summarize-url.wf` round-trip stably with their leading
+`examples/d8-summarize-url.wf` round-trip stably with all their
 comments preserved.
 
-## Commit stages
+## Review and test-gap passes
 
-1. `a931f891` Lexer + parser: comments collected and attached.
-2. `976e2419` Formatter implementation and exports; compiler/visualize
-   wired through.
-3. `8ad1fd36` Tests for comments and formatter (25 tests).
-4. `b07dd3fb` Documentation updates (gap doc, decisions, this log).
-5. `c97b36b6` Address review pass 1 feedback (synthetic-name flag,
-   switch defaultIndex).
-6. `002a8c56` Test-gap pass 1: +16 tests, record unaddressed review
-   feedback.
-7. `8815ae3b` Test-gap pass 2: +19 tests (component interaction,
-   format options, parser robustness).
+For both rounds the same workflow was followed: implement → commit in
+stages → run two code-review subagent passes addressing bugs as found
+→ run two general-purpose test-gap subagent passes filling gaps as
+found. Net result across all four review passes and all four
+test-gap passes:
 
-## Review / test-gap artifacts
+- 4 real bugs found (3 in round 1, 1 in round 2) and fixed:
+  - Round 1, review pass 1: synthetic-name regex collision when a
+    user variable matched `_<num>_<num>`. Fixed by storing
+    `ConstStatement.isSynthetic` at parse time.
+  - Round 1, review pass 1: switch default arm reordering. Fixed by
+    storing `SwitchStatement.defaultIndex`.
+  - Round 1, review pass 2: none.
+  - Round 2, review pass 1 + 2: only one documentation gap (empty
+    nested blocks dropping inner comments); pinned by tests, recorded
+    in `g8-test-gaps-unaddressed.md`.
+  - Round 2, test-gap pass 1: multi-line block comments accumulated
+    `depth * indent` extra spaces per reformat. Fixed by
+    `writeMultilineCommentText()`.
+  - Round 2, test-gap pass 2: none.
+- 5 batches of new tests written (16 + 19 from round 1, then 24
+  + 19 + 19 from round 2).
 
-- `g8-review-feedback-unaddressed.md` — code-review items deliberately
-  not acted upon, with rationale.
-- `g8-test-gaps-unaddressed.md` — test gaps deliberately not filled,
-  with rationale.
+Items deliberately *not* acted upon (with rationale) live in:
 
----
+- `g8-review-feedback-unaddressed.md` — review feedback.
+- `g8-test-gaps-unaddressed.md` — test gaps.
 
-## Round 2: trailing comments (spec extension)
+## Commit sequence
 
-### Motivation
+Round 1:
 
-Round 1's spec only described `leadingComments`. Reviewers noted that
-inline comments like `return x; // why` and block-tail comments like
+1. `a931f891` lexer + parser comment collection and attachment.
+2. `976e2419` formatter implementation; compiler/visualize threading.
+3. `8ad1fd36` formatter spec (25 tests).
+4. `b07dd3fb` docs (gap doc, decisions, this log).
+5. `c97b36b6` review pass 1 fixes (`isSynthetic`, `defaultIndex`).
+6. `002a8c56` test-gap pass 1 (+16 tests, unaddressed-feedback doc).
+7. `8815ae3b` test-gap pass 2 (+19 tests for cross-component
+   interaction, format options, parser robustness).
+8. `31967f93` test-gap unaddressed doc + log update.
 
-```
-return x;
-// note about return
-}
-```
+Round 2:
 
-would be lost on round-trip because they had no place to attach. The
-DSL spec was incomplete; this round extends both the spec and the
-implementation.
-
-### Changes
-
-1. **AST** (`src/ast.ts`)
-   - Added `trailingComments?: Comment[]` and `endLine?: number` to every
-     `Statement` subtype (Const/DestructuringConst/If/Switch/Throw/
-     Return/Break).
-   - Added `innerComments?: Comment[]` to `WorkflowDecl` for the
-     empty-body case.
-
-2. **Parser** (`src/parser.ts`)
-   - Added `lastToken` tracking in `advance()` so `parseStatement` can
-     record the statement's `endLine`.
-   - Added `takeInlineTrailingComments(line)` (variant of
-     `takeLeadingComments`) that only consumes comments on the given
-     source line.
-   - Added `finalizeBlock(stmts)` which is invoked just before each
-     block-closing token (`}`, `case`, `default`, EOF): it drains the
-     remaining unconsumed comments and either appends them to the last
-     statement's `trailingComments` or returns them when the block is
-     empty.
-   - Added `parseStatementsCapturingInner()` used only by `parseWorkflow`
-     so the leftover from an empty workflow body becomes
-     `decl.innerComments`.
-   - Invoked `finalizeBlock` from `parseStatements` and
-     `parseSwitchArmBody` (so case-arm trailing comments don't migrate
-     onto the next case).
-
-3. **Formatter** (`src/formatter.ts`)
-   - Added `endStmt(stmt, terminator)` helper. It writes the terminator,
-     then for each trailing comment splits into inline (same line as
-     `stmt.endLine`, rendered with a leading space before the newline)
-     vs. own-line (rendered on its own indented line after the newline).
-   - All statement printers now use `endStmt` instead of `this.line(…)`.
-   - `printWorkflow` emits `decl.innerComments` on their own indented
-     lines after the body loop.
-
-4. **Spec** (`docs/.../dsl-v0.1.md` §6 Comments)
-   - Rewrote the Comments section to describe the three buckets
-     (`leadingComments`, `trailingComments` with inline-vs-block
-     semantics, `innerComments`) and the `endLine` field.
-
-5. **Tests** (`test/trailingComments.spec.ts`, new — 24 tests)
-   - Parser tests: inline trailing on const/return/throw/break, if's
-     trailing-after-brace, block-end trailing on workflow body, multiple
-     trailing comments at block end, switch arm trailing doesn't migrate
-     to next case, inner comments on empty body, leading-vs-trailing
-     boundary.
-   - Formatter tests: each parser scenario above renders correctly.
-   - Stability tests: assertStable on inline / block-end / inner /
-     switch-arm / if-trailing / mixed-leading-and-trailing.
-   - Compiler tests: trailing/inner comments don't change IR; IR JSON
-     contains none of the comment fields or text.
-   - Updated `test/pass2-coverage.spec.ts:stripTrivia` to also strip
-     `trailingComments`, `innerComments`, and `endLine` (so the
-     structural-equality property test still passes).
-
-### Test count
-
-- Baseline (after round 1): 286 passing.
-- After this work: 310 passing (286 + 24 new).
-
-### Round 2 review + test-gap passes
-
-- **Review pass 1** (code-review subagent): no significant bugs found.
-- **Review pass 2** (code-review subagent): flagged a documentation
-  gap — empty nested blocks (if/else/case bodies) silently drop their
-  inner comments. Addressed by adding three pinning tests under
-  `"documented gap: comments inside empty nested blocks are dropped"`
-  and a Round 2 section in `g8-test-gaps-unaddressed.md`.
-- **Test-gap pass 1** (general-purpose subagent): added 19 tests
-  covering additional Statement kinds, multi-line statements, mixed
-  comment forms, FormatOptions interactions, built-in node bodies,
-  and graphExtractor transparency. **Found a real bug**: multi-line
-  block comments accumulated `depth * indent` extra spaces on every
-  reformat because `Printer.write()` re-applied the current indent
-  at line start even for the comment's own continuation lines. Fixed
-  by introducing `writeMultilineCommentText()` which writes the first
-  line through `write()` and then pushes continuation lines verbatim
-  via `parts.push()`. Used from all three sites that render
-  multi-line comments (`printLeadingComments`, `printOwnLineComments`,
-  `endStmt`'s own-line branch).
-- **Test-gap pass 2** (general-purpose subagent): added another 19
-  tests for degenerate comment lexemes (`/**/`, `//`, `// /*`,
-  `/* // */`), column information, leading-vs-trailing independence,
-  multi-workflow trailing preservation, pathological volume (1000
-  inline comments), and a 3-pass property test on the union of
-  leading + trailing + inner comments. No bugs found.
-
-### Final test count for round 2
-
-- Round 1 baseline: 286 passing.
-- After all of round 2: **351 passing** (+65 net).
-
-### Final commit sequence (round 2)
-
-1. `c582f275` — code: ast/parser/formatter/spec
-2. `83cbf929` — tests for trailing + inner comments
-3. `9f5e6e91` — docs: log + implementation decisions
-4. `d608e1ce` — review pass 2: empty-block pinning tests + gap doc
-5. `944696e3` — test-gap pass 1: 19 tests + multi-line indent fix
-6. `0758b69b` — test-gap pass 2: 19 additional tests
+9. `c582f275` ast/parser/formatter/spec — trailing + inner comments.
+10. `83cbf929` trailing-comments tests (24).
+11. `9f5e6e91` docs: log + decisions (D6–D9).
+12. `d608e1ce` review pass 2: pin empty-block comment loss.
+13. `944696e3` test-gap pass 1: +19 tests + multi-line indent fix.
+14. `0758b69b` test-gap pass 2: +19 additional tests.
+15. `8baf8599` finalize log (this file's previous revision).

@@ -1,61 +1,75 @@
 # Code-review feedback not acted upon
 
-Review passes were performed by a code-review subagent twice on the
-G8/formatter changeset (`agents/can-you-address-g8-in-the-dsl-v0-f3fc165d`).
-This document records feedback that was *not* acted upon, with rationale.
+Four code-review subagent passes were performed across the two rounds
+of G8 work on `agents/can-you-address-g8-in-the-dsl-v0-f3fc165d`:
 
-## Review pass 1
+| Round | Pass | Result |
+| --- | --- | --- |
+| 1 | 1 | 2 bugs; both fixed (see "Acted upon" below) |
+| 1 | 2 | 1 minor observation about end-of-block comments — see "Acted upon" |
+| 2 | 1 | No significant bugs |
+| 2 | 2 | 1 documentation gap (empty nested blocks) — fixed by pinning tests + entry in `g8-test-gaps-unaddressed.md` |
 
-Both findings were acted upon. No outstanding items.
+This document records feedback that was *not* acted upon, with
+rationale. The current set is empty — every actionable item was
+addressed in either the round that surfaced it or the next round.
 
-- Synthetic-name regex collision → fixed via `ConstStatement.isSynthetic`.
-- Switch default arm reordering → fixed via `SwitchStatement.defaultIndex`.
+## Items addressed (for context)
 
-## Review pass 2
+### Synthetic-name regex collision (round 1 pass 1)
 
-The reviewer's final verdict was "No significant issues found." Along the
-way they observed one minor point worth recording explicitly:
+The original formatter detected bare-expression statements by matching
+the parser's synthetic name pattern (`/^_\d+_\d+$/`) against the
+ConstStatement name. A legitimate user variable named `_12_5` would
+have been silently re-emitted as a bare expression. **Fix:**
+`ConstStatement.isSynthetic` set explicitly by the parser; formatter
+keys off the flag.
 
-### Trailing/dangling comments at the end of a block
+### Switch default arm reordering (round 1 pass 1)
 
-A comment that appears after the last statement of a block but before
-the closing `}` (or after the final statement of the whole file) is
-either reattached as the leading comment of the next outer statement
-or, if there is no next statement, dropped.
+The original AST stored `default_` separately from `arms`, and the
+formatter always emitted `default:` last. Switch falls through in this
+DSL, so reordering changed program meaning. **Fix:**
+`SwitchStatement.defaultIndex` records the source position of `default`
+and the formatter weaves it back in at the same index.
 
-Example:
+### End-of-block / trailing comments dropped (round 1 pass 2)
 
-```
-workflow w(): string {
-    const x = "a";
-    return x;
-    // trailing comment
-}
-```
+The reviewer observed that a comment after the last statement of a
+block (e.g., `return x; // tail` or a comment between the last
+statement and `}`) was lost on round-trip because round 1 only
+modeled `leadingComments`. Originally **not** acted upon in round 1
+on the basis that the dsl-v0.1 spec section 6 only describes leading
+comments and a `trailingComments` channel would be a larger,
+properly-scoped follow-up.
 
-The `// trailing comment` is dropped from the AST (no next statement to
-attach it to).
+**Now acted upon** as the entirety of round 2: the spec was extended
+to cover trailing and inner comments, the AST grew
+`Statement.trailingComments`/`endLine` and
+`WorkflowDecl.innerComments`, and the parser/formatter were updated
+to round-trip them faithfully. See `g8-formatter-implementation-log.md`
+and decisions §2, §6–§9.
 
-**Not acted upon because:**
+### Empty nested blocks drop inner comments (round 2 pass 2)
 
-1. The dsl-v0.1 spec section 6 explicitly defines comments as
-   `leadingComments` attached to the *following* AST node. There is no
-   spec'd notion of `trailingComments`.
-2. The decision is already documented in
-   `implementation-decision.md` section 2.
-3. Adding `trailingComments` would require new AST fields on every
-   node-with-a-block kind (block bodies, switch arms, attempts/map/
-   filter/parallel bodies, workflow body) and matching emitter logic.
-   That is a larger change properly scoped to a follow-up gap item.
+The reviewer noted that comments inside `if (x) { /* TODO */ }`,
+empty `else`, empty `case` arm, or empty built-in lambda bodies are
+silently dropped — by design (decision §7), but there was no test
+pinning the behavior and no entry in the unaddressed-gaps file.
 
-If a future requirement makes trailing-block comments important (e.g.,
-license footers, "// end of switch" annotations), the recommended
-follow-up is:
+**Fix:** Three pinning tests added under
+`"documented gap: comments inside empty nested blocks are dropped"`
+in `test/trailingComments.spec.ts`, and the limitation is now
+documented in `g8-test-gaps-unaddressed.md` along with a related
+between-brace attachment quirk (`} /* note */ else { ... }`).
 
-- Add `trailingComments?: Comment[]` to AST node kinds that have
-  enclosed bodies (or to a block wrapper).
-- Update the parser to take comments accumulated after the last
-  statement and before the closing brace.
-- Update the formatter to emit them after the last statement.
+### Code duplication between `printLeadingComments` and `printOwnLineComments` (round 2 pass 2)
 
-No other feedback was outstanding from either review pass.
+Minor refactoring observation; not a functional issue. The two
+helpers intentionally remain separate APIs — their semantic meaning
+is different and they are likely to diverge around blank-line /
+separator handling. Recorded for context in decisions §10.
+
+## Outstanding items
+
+None.

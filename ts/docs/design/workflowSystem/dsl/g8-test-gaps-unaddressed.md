@@ -1,79 +1,92 @@
 # Test gaps not acted upon
 
-Two test-gap audit passes were performed by a general-purpose subagent
-on the G8/formatter changeset. Most gaps were filled by writing tests;
-this document records gaps that were deliberately *not* covered.
+Four general-purpose subagent test-gap audits were run across the two
+rounds of G8 work:
 
-## Pass 1 — gaps not filled
+| Round | Pass | New tests added | Bugs found |
+| --- | --- | --- | --- |
+| 1 | 1 | 16 | 0 |
+| 1 | 2 | 19 | 0 |
+| 2 | 1 | 19 | 1 (multi-line block comment indent — fixed) |
+| 2 | 2 | 19 | 0 |
 
-- **Comments between parameters** (e.g.,
-  `workflow w(a: string, /* note */ b: number)`). Currently re-attached
-  to the first body statement during parse, and re-emitted there.
-  Rationale: lossy but non-crashing; the spec does not promise
-  param-internal trivia preservation. Spec'd by
-  `implementation-decision.md` §2.
-- **Trailing comment after the last `}` of a workflow.** Silently
-  dropped. Same rationale (no `trailingComments` channel; see
-  `g8-review-feedback-unaddressed.md`).
-- **Long arg lists / deep nesting stress tests.** The formatter is a
-  straight recursive visitor with no width-aware wrapping logic, so a
-  stress test would only exercise paths already covered by simpler
-  tests. No new edge case is revealed.
-- **Mixed comment placements (trailing-on-same-line).** The AST type
-  only carries `leadingComments`. A test would just document the
-  absence of `trailingComments` rather than guard a behavior.
+This document records gaps that were deliberately *not* covered, with
+rationale. Items are grouped by category (not by round) so reviewers
+can see the surface area in one pass.
 
-## Pass 2 — gaps not filled
+## Comment-attachment edge cases (intentional limits)
 
-- **Stress with the second example file `d1-standup-prep.wf`.** It
-  contains a pre-existing stray trailing `}` unrelated to G8; the
-  parser flags it. Including it in round-trip tests would only mask
-  that unrelated issue. The other example, `d8-summarize-url.wf`, is
-  exercised in the example-file round-trip test (smoke and in the
-  parse(format(parse(x))) structural equivalence test).
-- **Out-of-contract `FormatOptions` values** (`indent: -1`, fractional
-  indents, non-string `eol`). These would be input-validation tests
-  for an API contract that isn't currently documented as accepting
-  them; `String.prototype.repeat` on negative numbers throws a
-  `RangeError`, which is fine for misuse. Adding validation + tests is
-  a separate API-hardening task.
-- **Cross-workflow comment ordering when there are multiple workflows
-  in a file.** The `Parser.parse()` multi-workflow path is exercised
-  by existing parser tests, and comment attachment uses a single
-  cursor that advances naturally across workflow boundaries. A
-  dedicated test would be additive but unlikely to catch a regression
-  not already covered by the single-workflow tests.
+### Comments between parameters
 
-No gap from either pass revealed a real bug.
+`workflow w(a: string, /* note */ b: number)` parses cleanly but the
+`/* note */` is reattached to the first body statement as a leading
+comment. The spec does not promise param-internal trivia preservation.
+Adding a `paramComments` channel would touch `ParamDecl` for a
+rarely-needed case.
 
-## Round 2 (trailing comments) — gaps not filled
+### Comments inside empty nested blocks
 
-- **Comments inside empty nested blocks** (`if (x) { /* TODO */ }`,
-  `else { /* TODO */ }`, empty `case` arm body, empty
-  `attempts`/`map`/`filter`/`parallel` lambda body). Round 2 surfaces
-  `innerComments` only on `WorkflowDecl` (see implementation-decision
-  §D7). These nested empty blocks silently drop their inner comments.
-  Round 2 adds an explicit test
-  (`trailingComments.spec.ts: "documented gap: comment inside empty
-  if/else/switch body is dropped"`) demonstrating and pinning this
-  behavior. Adding `innerComments` to every block-holding AST node was
-  judged too invasive for a rarely-needed case; users with a TODO
-  body should write a placeholder statement (`return null;` etc.) or
-  put the TODO above the block.
+`if (x) { /* TODO */ }`, empty `else { /* TODO */ }`, empty `case`
+arm body, and empty `attempts`/`map`/`filter`/`parallel` lambda
+bodies all silently drop their inner comments. `innerComments` only
+exists on `WorkflowDecl` (decision §7).
 
-- **Comment between `}` and `else` keyword**
-  (`if (x) { ... } /* note */ else { ... }`). Currently this comment
-  is captured by `finalizeBlock` of the `then` block (it's
-  unconsumed before the `else` keyword, but `else` is not a stop
-  token for the inner block parser — the inner block stops at `}`
-  and the comment lives after `}`). Specifically, since `then`'s
-  closing `}` has already been consumed when we look for `else`,
-  the comment becomes a leading comment of the first statement of
-  `else`. This is a reasonable but non-ideal attachment;
-  systematically modeling "between-brace comments" was out of scope.
+Pinned by three tests under `"documented gap: comments inside empty
+nested blocks are dropped"` in `test/trailingComments.spec.ts`. Users
+who want a TODO body should write a placeholder statement
+(`return null;`) or put the TODO above the block.
 
-## Round 2 (trailing comments) — review feedback acted upon
+### Comment between `}` and `else` keyword
 
-- Pass 1: no significant bugs.
-- Pass 2: documentation gap for empty-block comment loss — addressed
-  by adding a pinning test and this section.
+`if (x) { ... } /* note */ else { ... }` currently captures the
+comment as the leading comment of the first statement of `else`
+(because the `then`'s closing `}` is consumed before we look for
+`else`, and the comment lives after `}`). This is a reasonable but
+non-ideal attachment; systematically modeling "between-brace
+comments" was out of scope.
+
+## Formatter / FormatOptions
+
+### Out-of-contract `FormatOptions` values
+
+`indent: -1`, fractional indents, non-string `eol`, `eol: ""`, etc.
+These would be input-validation tests for an API contract that isn't
+currently documented as accepting them; `String.prototype.repeat` on
+negative numbers throws a `RangeError`, which is fine for misuse.
+Adding validation + tests is a separate API-hardening task.
+
+### Long arg lists / deep nesting stress
+
+The formatter is a straight recursive visitor with no width-aware
+wrapping logic, so a stress test would only exercise paths already
+covered by simpler tests. A pathological 1000-trailing-comments test
+was added to cover the comment-emission loop specifically; deeper
+expression-tree stress would be additive.
+
+## Examples / smoke
+
+### Stress with `examples/d1-standup-prep.wf`
+
+This file contains a pre-existing stray trailing `}` unrelated to G8
+that the parser flags as an error. Including it in round-trip tests
+would only mask that unrelated issue. The other example
+(`d8-summarize-url.wf`) is exercised in the example-file round-trip
+test (smoke + structural-equivalence).
+
+## Visualization
+
+### Visualize API trailing-comment passthrough
+
+`src/visualize.ts` has no API surface that emits comments —
+comments are intentionally stripped at the `extractGraph` boundary,
+already covered by an existing test. There is no public function
+where comments could be carried through.
+
+## Summary
+
+No deliberately-skipped gap revealed a real bug across either round.
+The only bug found by the test-gap audits (multi-line block comment
+indent accumulation, round 2 pass 1) was acted upon — fixed via
+`writeMultilineCommentText()` (decision §10) and pinned by
+`"multi-line block comment as block-end trailing is round-trip
+stable"`.

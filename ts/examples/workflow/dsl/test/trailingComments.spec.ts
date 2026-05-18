@@ -378,7 +378,9 @@ describe("parser: trailing comments on additional statement kinds", () => {
         expect(s0.trailingComments![0].text).toBe("// unpack");
         // Round-trip preserves
         const out = format(wf);
-        expect(out).toContain(`const [a, b] = text.split(s: "x", sep: ","); // unpack`);
+        expect(out).toContain(
+            `const [a, b] = text.split(s: "x", sep: ","); // unpack`,
+        );
         assertStable(`workflow w(): string {
     const [a, b] = text.split(s: "x", sep: ","); // unpack
     return a;
@@ -600,9 +602,13 @@ describe("formatter: FormatOptions interaction with trailing comments", () => {
 }`);
         const out = format(wf, { eol: "\r\n" });
         // No bare \n anywhere — every newline must be \r\n.
-        expect(out.split("\n").every((seg, i, arr) =>
-            i === arr.length - 1 ? true : seg.endsWith("\r"),
-        )).toBe(true);
+        expect(
+            out
+                .split("\n")
+                .every((seg, i, arr) =>
+                    i === arr.length - 1 ? true : seg.endsWith("\r"),
+                ),
+        ).toBe(true);
         // The trailing comment line is present.
         expect(out).toContain("// tail");
     });
@@ -877,9 +883,13 @@ workflow b(): string {
         expect(errors).toEqual([]);
         expect(workflows).toHaveLength(2);
         expect(workflows[0].body[0].trailingComments).toHaveLength(1);
-        expect(workflows[0].body[0].trailingComments![0].text).toBe("// tail-a");
+        expect(workflows[0].body[0].trailingComments![0].text).toBe(
+            "// tail-a",
+        );
         expect(workflows[1].body[0].trailingComments).toHaveLength(1);
-        expect(workflows[1].body[0].trailingComments![0].text).toBe("// tail-b");
+        expect(workflows[1].body[0].trailingComments![0].text).toBe(
+            "// tail-b",
+        );
     });
 
     test("formatting both workflows and re-parsing preserves their trailing comments", () => {
