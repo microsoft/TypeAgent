@@ -857,7 +857,7 @@ validator, and analyzers in agreement on a single observable behavior
   "cases": {
     "<caseValue>": "<nodeId>",
   },
-  "default": "<nodeId>",
+  "default": "<nodeId>", // optional; see exhaustiveness rule below
   "onError": "<nodeId>", // optional; see section 3.3
 }
 ```
@@ -866,10 +866,18 @@ validator, and analyzers in agreement on a single observable behavior
   be string-typed: either `{ "type": "string" }` or `{ "enum": [...] }`
   with all-string members. Non-string discriminants (e.g., booleans from
   `int.lessThan`) require an explicit conversion task such as `bool.toLabel`
-  ([decision 0008](decisions/0008-discriminant-key-encoding.md)). The
-  validator requires `cases` to be exhaustive over the declared enum **or**
-  for `default` to be present. v1 requires both: `default` is mandatory
-  (P5: no implicit fall-through).
+  ([decision 0008](decisions/0008-discriminant-key-encoding.md)).
+- **Exhaustiveness contract.** Either `default` is present, **or** the
+  branch is statically exhaustive. A branch is statically exhaustive when:
+  1. `selectorSchema` declares an `enum` (or is `{ "type": "boolean" }`,
+     which is treated as the implicit enum `[true, false]`), AND
+  2. `cases` contains a key for every enum member, AND
+  3. The discriminant's resolved producer type is provably narrowed to a
+     subset of the declared enum (the producer carries a matching `const`,
+     `enum`, or `boolean` type — see [§3.6.1](#361-discriminant-narrowing)).
+  When all three hold, omitting `default` is legal and
+  `BranchSelectorUnmatched` is statically unreachable. Otherwise `default`
+  is required (P5: no implicit fall-through).
 - A branch has no `inputs` other than `selector`, no `outputs`, and no
   `bind` (it produces no value). It is pure control flow. Data needed
   downstream of the branch must already be available via dominator
@@ -1650,6 +1658,7 @@ if an IR somehow bypasses static validation.
 | **Unregistered task** | §4.1 IR/task drift pass | Null check; all task names are checked against the registry at validation time |
 | **Fork min-2 branches** | §4.1 structural check | Comparison; branch count is a static IR property |
 | **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | `Array.isArray` check; static proves collection resolves to array type |
+| **Branch selector unmatched** | §3.6 exhaustiveness contract + §4.1 type-compatibility | When `default` is absent the validator proves the branch is exhaustive (selectorSchema has enum, all enum values appear as cases, and selector producer is provably narrowed). When `default` is present, unmatched values route to it. Either way, raising `BranchSelectorUnmatched` is unreachable. |
 
 **Template resolution (dominator analysis + type checking)**
 

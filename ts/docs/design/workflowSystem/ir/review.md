@@ -13,14 +13,26 @@ node kind. §3.6 shows `onError` on the branch schema.
 field. The engine's `executeBranch` does not handle errors — if template
 resolution of the selector fails, the error propagates uncaught.
 
-**Discussion:** Branch evaluation is a simple selector lookup. The only
-failure mode is template resolution of `selector` failing. Adding
-`onError` to branches is straightforward but may not be worth the
-complexity if selector resolution failures are always programming errors
-(bad IR) rather than runtime conditions. The spec requires it, so this
-should be added for conformance.
+**Discussion:** A branch has only two runtime failure modes:
 
-**Impact:** Low — branch selector failures are rare in valid IR.
+1. **Selector template resolution failure** — proven unreachable by the
+   static validator's dominator + path-projection passes
+   (§5.8.3 template-resolution checks).
+2. **`BranchSelectorUnmatched`** — runtime value not in `cases` and no
+   `default`. Following the exhaustiveness work, this is also proven
+   unreachable by static validation: a branch without `default` must be
+   statically exhaustive (§3.6 exhaustiveness contract), and a branch
+   with `default` routes unmatched values there.
+
+Both failure modes are unreachable when static validation passes, so
+adding `onError` provides no useful runtime behavior. The spec mention
+is now misleading.
+
+**Recommendation:** Remove `onError` from the spec's BranchNode schema
+(§3.6) and the common-fields list (§3.3) for branch. The current
+implementation is correct.
+
+**Impact:** Low — purely a spec-vs-implementation reconciliation.
 
 ## R2: Fork branch sub-scope structure diverges from spec
 

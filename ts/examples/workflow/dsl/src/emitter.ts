@@ -81,6 +81,50 @@ interface ScopeContext {
     parent?: ScopeContext | undefined;
 }
 
+function inferCommonType(
+    values: ReadonlyArray<unknown>,
+):
+    | "string"
+    | "number"
+    | "integer"
+    | "boolean"
+    | undefined {
+    if (values.length === 0) return undefined;
+    let inferred:
+        | "string"
+        | "number"
+        | "integer"
+        | "boolean"
+        | undefined;
+    for (const v of values) {
+        let t:
+            | "string"
+            | "number"
+            | "integer"
+            | "boolean"
+            | undefined;
+        if (typeof v === "string") t = "string";
+        else if (typeof v === "boolean") t = "boolean";
+        else if (typeof v === "number")
+            t = Number.isInteger(v) ? "integer" : "number";
+        else return undefined;
+        if (inferred === undefined) {
+            inferred = t;
+        } else if (inferred !== t) {
+            // Allow integer/number mixing as "number".
+            if (
+                (inferred === "integer" && t === "number") ||
+                (inferred === "number" && t === "integer")
+            ) {
+                inferred = "number";
+            } else {
+                return undefined;
+            }
+        }
+    }
+    return inferred;
+}
+
 export class Emitter {
     private errors: EmitError[] = [];
     private taskSchemas: Map<string, TaskSchemaInfo>;
@@ -429,15 +473,17 @@ export class Emitter {
             this.patchBranchTail(elseScope, "else_", mergeId, scope);
         }
 
-        // Create branch and merge nodes
+        // Create branch and merge nodes.
+        // Boolean if-else is always exhaustive: both true and false have
+        // explicit targets (the omitted arm falls through to merge).
         const branchNode: BranchNode = {
             kind: "branch",
             selector: condTemplate,
-            selectorSchema: { type: "boolean" },
+            selectorSchema: { type: "boolean", enum: [true, false] },
             cases: {
                 true: thenEntry ? `then_${thenEntry}` : mergeId,
+                false: elseEntry ? `else_${elseEntry}` : mergeId,
             },
-            default: elseEntry ? `else_${elseEntry}` : mergeId,
         };
 
         // Merge is a noop task that serves as the continuation point
@@ -484,8 +530,9 @@ export class Emitter {
         const mergeId = this.freshId("merge");
 
         const cases: Record<string, string> = {};
-        let defaultTarget = mergeId; // fallthrough to merge if no default
+        let defaultTarget: string | undefined;
         let branchOutput: Template | undefined;
+        const caseValues: unknown[] = [];
 
         for (let i = 0; i < stmt.arms.length; i++) {
             const arm = stmt.arms[i];
@@ -509,6 +556,7 @@ export class Emitter {
             this.patchBranchTail(armScope, armPrefix, mergeId, scope);
 
             const caseValue = this.constExprToValue(arm.value);
+            caseValues.push(caseValue);
             const caseKey = String(caseValue);
             cases[caseKey] =
                 armScope.nodeOrder.length > 0
@@ -516,9 +564,13 @@ export class Emitter {
                     : mergeId;
         }
 
-        if (stmt.default_ && stmt.default_.length > 0) {
+        const hasSourceDefault = !!(
+            stmt.default_ && stmt.default_.length > 0
+        );
+
+        if (hasSourceDefault) {
             const defScope = this.childScope(scope);
-            for (const s of stmt.default_) {
+            for (const s of stmt.default_!) {
                 const r = this.emitStatement(s, defScope);
                 if (r?.output !== undefined && branchOutput === undefined) {
                     branchOutput = r.output;
@@ -540,12 +592,26 @@ export class Emitter {
                     : mergeId;
         }
 
+        // Infer selectorSchema from case value types.  When the source
+        // omits `default`, treat the switch as exhaustive: emit an enum
+        // selectorSchema and no default. Static validation then enforces
+        // that the discriminant's resolved type is provably narrowed.
+        const inferredType = inferCommonType(caseValues);
+        let selectorSchema: JSONSchema;
+        if (!hasSourceDefault && inferredType) {
+            selectorSchema = { type: inferredType, enum: caseValues as any };
+        } else if (inferredType) {
+            selectorSchema = { type: inferredType };
+        } else {
+            selectorSchema = {};
+        }
+
         const branchNode: BranchNode = {
             kind: "branch",
             selector: discTemplate,
-            selectorSchema: {},
+            selectorSchema,
             cases,
-            default: defaultTarget,
+            ...(defaultTarget !== undefined ? { default: defaultTarget } : {}),
         };
 
         const mergeNode: TaskNode = {

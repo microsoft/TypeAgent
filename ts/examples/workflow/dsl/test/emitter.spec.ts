@@ -406,7 +406,10 @@ describe("Emitter", () => {
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
         expect(branchNode.cases).toHaveProperty("true");
-        expect(branchNode.default).toBeDefined();
+        expect(branchNode.cases).toHaveProperty("false");
+        // Boolean if-else is exhaustive: no default needed.
+        expect(branchNode.default).toBeUndefined();
+        expect(branchNode.selectorSchema.enum).toEqual([true, false]);
     });
 
     // ---- Switch statement ----
@@ -426,6 +429,62 @@ describe("Emitter", () => {
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
         expect(branchNode.cases).toHaveProperty("a");
         expect(branchNode.cases).toHaveProperty("b");
+    });
+
+    test("switch without default emits exhaustive branch (no default, enum selectorSchema)", () => {
+        const ir = compileOk(`
+            workflow test(x: string): unknown {
+                switch (x) {
+                    case "a":
+                        const r1 = web.fetch("https://a.com");
+                    case "b":
+                        const r2 = web.fetch("https://b.com");
+                }
+                return "done";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.default).toBeUndefined();
+        expect(branchNode.selectorSchema).toEqual({
+            type: "string",
+            enum: ["a", "b"],
+        });
+    });
+
+    test("switch with default emits default-targeted branch", () => {
+        const ir = compileOk(`
+            workflow test(x: string): unknown {
+                switch (x) {
+                    case "a":
+                        const r1 = web.fetch("https://a.com");
+                    default:
+                        const r2 = web.fetch("https://other.com");
+                }
+                return "done";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.default).toBeDefined();
+        expect(branchNode.selectorSchema).toEqual({ type: "string" });
+    });
+
+    test("switch over integer case values infers integer type", () => {
+        const ir = compileOk(`
+            workflow test(x: number): unknown {
+                switch (x) {
+                    case 1:
+                        const r1 = web.fetch("https://a.com");
+                    case 2:
+                        const r2 = web.fetch("https://b.com");
+                }
+                return "done";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.selectorSchema).toEqual({
+            type: "integer",
+            enum: [1, 2],
+        });
     });
 
     // ---- Throw statement ----

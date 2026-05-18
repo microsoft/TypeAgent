@@ -2024,6 +2024,12 @@ function isProvablyNarrowedTo(
     if (producer.const !== undefined) return allowed.has(producer.const);
     if (producer.enum) return producer.enum.every((v) => allowed.has(v));
 
+    // Boolean is inherently a closed set {true, false}; treat it as
+    // implicitly enum-typed.
+    if (producer.type === "boolean") {
+        return allowed.has(true) && allowed.has(false);
+    }
+
     // Recurse into union variants — every variant must be narrowed.
     const variants = producer.anyOf ?? producer.oneOf;
     if (variants) {
