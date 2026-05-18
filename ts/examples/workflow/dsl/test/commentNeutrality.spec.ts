@@ -1,3 +1,15 @@
+/**
+ * Cross-component neutrality tests for the comment-bearing AST:
+ *   - Type checker, graph extractor, and emitter all behave the same
+ *     whether the source carries comments or not (comments are not
+ *     observable downstream).
+ *   - parse(format(parse(src))) is structurally equal to parse(src).
+ *   - FormatOptions corner cases (indent: 0, large indent, custom eol)
+ *     stay parseable.
+ *   - Parser robustness with comments, no cross-Parser sharing
+ *     mutation, and compile() does not surface comments on its IR.
+ */
+
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -96,7 +108,7 @@ function stripTrivia(value: unknown): unknown {
 // 1. Interaction with other components
 // ---------------------------------------------------------------------------
 
-describe("pass2: comments don't affect typeChecker", () => {
+describe("comments don't affect typeChecker", () => {
     const SCHEMAS: TaskSchemaInfo[] = [];
 
     test("workflow heavy with comments type-checks identically", () => {
@@ -137,7 +149,7 @@ describe("pass2: comments don't affect typeChecker", () => {
     });
 });
 
-describe("pass2: comments don't affect graphExtractor", () => {
+describe("comments don't affect graphExtractor", () => {
     test("graph from commented source equals graph from bare source", () => {
         const bare = `workflow w(a: string): string {
             const x = a;
@@ -177,7 +189,7 @@ describe("pass2: comments don't affect graphExtractor", () => {
     });
 });
 
-describe("pass2: comments don't leak into emitter IR", () => {
+describe("comments don't leak into emitter IR", () => {
     test("IR from commented source equals IR from bare source", () => {
         const bare = `workflow w(a: string): string {
             const x = a;
@@ -227,7 +239,7 @@ function structurallyEqualAfterFormat(source: string): void {
     expect(stripTrivia(ast2)).toEqual(stripTrivia(ast1));
 }
 
-describe("pass2: parse(format(parse(src))) structurally equals parse(src)", () => {
+describe("parse(format(parse(src))) structurally equals parse(src)", () => {
     test("inline: const + return", () => {
         structurallyEqualAfterFormat(`workflow w(a: string): string {
             const x = a;
@@ -272,7 +284,7 @@ describe("pass2: parse(format(parse(src))) structurally equals parse(src)", () =
 // 3. FormatOptions corner cases
 // ---------------------------------------------------------------------------
 
-describe("pass2: FormatOptions corner cases", () => {
+describe("FormatOptions corner cases", () => {
     const SAMPLE = `workflow w(a: string): string {
         if (true) { const x = a; return x; } else { return "n"; }
     }`;
@@ -317,7 +329,7 @@ describe("pass2: FormatOptions corner cases", () => {
 // 4. Parser robustness with comments
 // ---------------------------------------------------------------------------
 
-describe("pass2: parser robustness with comments", () => {
+describe("parser robustness with comments", () => {
     test("lex errors and comments coexist on the same source", () => {
         // Unterminated string is a classic lex error.
         const src = `// header
@@ -361,7 +373,7 @@ describe("pass2: parser robustness with comments", () => {
 // 5. Concurrency / immutability: same comments array, two Parsers
 // ---------------------------------------------------------------------------
 
-describe("pass2: comments array is safe to share across Parser instances", () => {
+describe("comments array is safe to share across Parser instances", () => {
     test("two parsers fed the same comments array both attach comments and don't mutate it", () => {
         const src = `// h1
         workflow w(): string {
@@ -397,7 +409,7 @@ describe("pass2: comments array is safe to share across Parser instances", () =>
 // 6. compile() API surface
 // ---------------------------------------------------------------------------
 
-describe("pass2: compile() API surface", () => {
+describe("compile() API surface", () => {
     test("compile() does NOT expose an AST on the result (only ir + errors)", () => {
         const src = `// header
         workflow w(a: string): string {

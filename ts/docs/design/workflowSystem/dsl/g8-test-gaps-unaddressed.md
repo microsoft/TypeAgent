@@ -97,7 +97,7 @@ stable"`.
 
 ## Round 3 test-gap pass 1
 
-Round 3 surfaces audited (`test/round3-gaps.spec.ts`, +20 tests, all
+Round 3 surfaces audited (`test/commentFidelity.spec.ts`, +20 tests, all
 green; no implementation changes). Areas considered but **not** turned
 into new tests:
 
@@ -147,7 +147,7 @@ again belongs to a separate gap (above).
 
 ## Round 3 test-gap pass 2
 
-Pass 2 added 17 tests in `test/round3-gaps-pass2.spec.ts` targeting
+Pass 2 added 17 tests in `test/commentEdgeCases.spec.ts` targeting
 angles pass 1 didn't cover (same-param leading+trailing both multi-line,
 empty-switch-only-inner pinning, `case`-leading-comment migration,
 comments adjacent to the `workflow` keyword, mixed-comment param
@@ -164,8 +164,8 @@ Deliberately NOT covered in pass 2:
 
 Round 4 added the slot. The pass 2 pinning test was inverted into a
 positive round-trip test under
-`test/round3-gaps-pass2.spec.ts > "round 4: ..."` and additional
-coverage lives in `test/round4-layout-and-fidelity.spec.ts`.
+`test/commentEdgeCases.spec.ts > "round 4: ..."` and additional
+coverage lives in `test/layoutFidelity.spec.ts`.
 
 ### ~~`SwitchArm` "leading comment before `case`" slot~~ (closed round 4)
 
@@ -175,7 +175,7 @@ Round 4 added `SwitchArm.leadingComments` (and
 arm body — they fall through to the outer switch loop and attach as
 the next arm's leading. The pass 2 pinning test was inverted into a
 positive round-trip test, and
-`test/round4-layout-and-fidelity.spec.ts` adds focused coverage.
+`test/layoutFidelity.spec.ts` adds focused coverage.
 
 ### Cross-product of every multi-line comment shape × every slot
 
@@ -214,7 +214,7 @@ and field-level `ObjectTypeField.leadingComments` /
 `trailingComments`. The parser accepts newlines and trailing commas
 inside an object-type body, the formatter preserves the layout, and
 field comments round-trip on both sides of `,`. Coverage in
-`test/round4-layout-and-fidelity.spec.ts > "ObjectType ..."`.
+`test/layoutFidelity.spec.ts > "ObjectType ..."`.
 
 ## Round 4 — remaining items
 

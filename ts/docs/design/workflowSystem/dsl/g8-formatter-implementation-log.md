@@ -161,7 +161,7 @@ Two spec files contain the new coverage:
   stress, and a 3-pass property test on the union of all three
   comment kinds).
 
-`test/pass2-coverage.spec.ts:stripTrivia` was updated to strip
+`test/commentNeutrality.spec.ts:stripTrivia` was updated to strip
 `trailingComments`, `innerComments`, and `endLine` alongside the
 original `leadingComments`/`loc`/`pos` so the structural-equality
 property test (`parse(format(parse(src))) ≡ parse(src)`) continues
@@ -307,10 +307,10 @@ What changed:
   new tests cover the new surfaces (parameter leading/trailing/inner,
   empty-block inner across every block-bearing AST node, and the
   three `}`/`else` shapes).
-- **`test/round3-gaps.spec.ts`** (pass 1) and
-  **`test/round3-gaps-pass2.spec.ts`** (pass 2) — 37 additional tests
+- **`test/commentFidelity.spec.ts`** (pass 1) and
+  **`test/commentEdgeCases.spec.ts`** (pass 2) — 37 additional tests
   across the two test-gap audits.
-- **`test/pass2-coverage.spec.ts`** — `stripTrivia` now also strips
+- **`test/commentNeutrality.spec.ts`** — `stripTrivia` now also strips
   `paramInnerComments`, `thenInnerComments`, `elseInnerComments`,
   `elseLeadingComments`, `defaultInnerComments`, and
   `bodyInnerComments`.
@@ -393,12 +393,12 @@ Implementation:
   - The SwitchStatement emitter prints `innerComments` before the
     first arm, `defaultLeadingComments` before `default:`, and each
     arm's `leadingComments` before `case ...:`.
-- **`test/round4-layout-and-fidelity.spec.ts`** (new, 21 tests) —
+- **`test/layoutFidelity.spec.ts`** (new, 21 tests) —
   pins all of the above, including the `printWidth` boundary cases.
 - **`test/trailingComments.spec.ts`** — the "comment between arms"
   test was retargeted to assert the new (correct) attachment point:
   next arm's `leadingComments`.
-- **`test/round3-gaps-pass2.spec.ts`** — the two pinning tests
+- **`test/commentEdgeCases.spec.ts`** — the two pinning tests
   (`"empty switch with only inner comment"` and
   `"comment before a case keyword"`) are inverted into positive
   round-trip tests under `"round 4: ..."` describes.
@@ -407,7 +407,7 @@ Implementation:
   was previously asserting that the formatter canonicalises a
   multi-line input to single-line; with layout preservation that
   canonicalisation no longer happens).
-- **`test/pass2-coverage.spec.ts`** — `stripTrivia` now also strips
+- **`test/commentNeutrality.spec.ts`** — `stripTrivia` now also strips
   `defaultLeadingComments`, `paramListMultiLine`, `elseOnNewLine`,
   and `multiLine` so AST-equivalence comparisons remain stable.
 - **`implementation-decision.md`** — new sections D16 (layout
@@ -426,7 +426,7 @@ Test count progression for round 4:
     round-3 review pass-2 bug + fix in `g8-review-feedback-unaddressed.md`).
 22. `89da0190` — G8 round 4: layout fidelity + remaining comment-fidelity
     slots (ast/parser/formatter + minimal test updates).
-22. `f8b0263d` — G8 round 4: +21 tests in `round4-layout-and-fidelity.spec.ts`
+22. `f8b0263d` — G8 round 4: +21 tests in `layoutFidelity.spec.ts`
     + tighter parser heuristic for `paramListMultiLine` /
     `ObjectType.multiLine` to avoid false positives when a nested type
     spans multiple lines.

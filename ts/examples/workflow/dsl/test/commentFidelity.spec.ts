@@ -1,3 +1,16 @@
+/**
+ * Tests for comment-fidelity slots that close known attachment gaps:
+ *   - Comments between parameters (paramInnerComments + per-ParamDecl
+ *     leading / trailing / endLine).
+ *   - Comments inside empty nested blocks (then / else / case body /
+ *     default body, and every built-in's body).
+ *   - Comments between `}` of the then block and the `else` keyword
+ *     (elseLeadingComments).
+ *
+ * Each test asserts AST-level attachment, exact rendering, and
+ * round-trip stability across several format/parse cycles.
+ */
+
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -56,7 +69,7 @@ function assertStable(source: string): string {
 }
 
 /**
- * Mirror of the stripper in pass2-coverage.spec.ts. Drops every comment
+ * Mirror of the stripper in commentNeutrality.spec.ts. Drops every comment
  * slot and every source-location field so two ASTs from "same source modulo
  * comments and formatting" compare equal.
  */
@@ -105,7 +118,7 @@ function assertStripEqual(a: string, b: string): void {
 //    add indent to the second line of a multi-line block comment.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps: multi-line block comments in new inner-comment slots", () => {
+describe("multi-line block comments in inner-comment slots", () => {
     test("paramInnerComments with multi-line block comment is stable", () => {
         const src = `workflow w(
     /* line one
@@ -174,7 +187,7 @@ describe("round 3 gaps: multi-line block comments in new inner-comment slots", (
 // 2. else-if chains with elseLeadingComments at every junction.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps: else-if chains with elseLeadingComments at every junction", () => {
+describe("else-if chains: elseLeadingComments at every junction", () => {
     test("block comment between every } and else-if/else is stable", () => {
         const src = `workflow w(x: number): string {
     if (x === 1) {
@@ -221,7 +234,7 @@ describe("round 3 gaps: else-if chains with elseLeadingComments at every junctio
 // 3. Surfaces previously only tested on the "primary" body.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps: bodyInnerComments on secondary built-in surfaces", () => {
+describe("bodyInnerComments on secondary built-in surfaces", () => {
     test("attempts fallback body inner comment round-trips", () => {
         const src = `workflow w(): string {
     const x = attempts(3, () => {
@@ -300,7 +313,7 @@ describe("round 3 gaps: bodyInnerComments on secondary built-in surfaces", () =>
 // 4. Parameter edge cases.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps: parameter edge cases", () => {
+describe("parameter comment edge cases", () => {
     test("single param with BOTH leading and inline trailing preserves source order", () => {
         const src = `workflow w(
     // before
@@ -358,7 +371,7 @@ describe("round 3 gaps: parameter edge cases", () => {
 //    structures; this widens that property to every round-3 comment slot.)
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps: stripTrivia(parse(format(parse(src)))) == stripTrivia(parse(src))", () => {
+describe("AST-equivalence: stripTrivia(parse(format(parse(src)))) == stripTrivia(parse(src))", () => {
     const cases: Record<string, string> = {
         "leading+trailing on params": `workflow w(
     // l

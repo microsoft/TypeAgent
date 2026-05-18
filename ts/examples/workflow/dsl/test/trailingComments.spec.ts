@@ -317,7 +317,7 @@ describe("compiler/IR: trailing/inner comments don't leak", () => {
     });
 });
 
-describe("round 3: comments inside empty nested blocks are preserved", () => {
+describe("comments inside empty nested blocks are preserved", () => {
     // These were previously documented as a "gap" (see implementation-decision.md
     // §D7 — superseded in round 3). The parser now captures *innerComments
     // on every block-bearing AST node, not just WorkflowDecl, and the
@@ -433,7 +433,7 @@ describe("round 3: comments inside empty nested blocks are preserved", () => {
     });
 });
 
-describe("round 3: comment between } and else", () => {
+describe("comment between } and else", () => {
     test("inline block comment between } and else round-trips", () => {
         const src = `workflow w(x: number): string {
     if (x === 1) {
@@ -481,7 +481,7 @@ describe("round 3: comment between } and else", () => {
     });
 });
 
-describe("round 3: comments around parameters", () => {
+describe("comments around parameters", () => {
     test("leading comment on parameter round-trips", () => {
         const src = `workflow w(
     // the first one

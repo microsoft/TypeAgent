@@ -1,3 +1,13 @@
+/**
+ * Layout-fidelity tests: the formatter preserves the source's choice
+ * of inline vs. multi-line layout for parameter lists, object types,
+ * and `else` placement (paramListMultiLine / multiLine /
+ * elseOnNewLine), falling back to a width-driven decision via
+ * `FormatOptions.printWidth` (default 100) when the AST does not
+ * pin the layout. Also covers the SwitchStatement / SwitchArm
+ * comment slots introduced alongside.
+ */
+
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -39,7 +49,7 @@ function assertStable(src: string, opts?: FormatOptions): string {
 // A. Layout preservation
 // ---------------------------------------------------------------------------
 
-describe("round 4: paramListMultiLine layout preservation", () => {
+describe("paramListMultiLine layout preservation", () => {
     test("inline param list stays inline (no comments, fits)", () => {
         const out = assertStable(
             `workflow w(a: number, b: string): string {\n    return b;\n}`,
@@ -82,7 +92,7 @@ describe("round 4: paramListMultiLine layout preservation", () => {
     });
 });
 
-describe("round 4: elseOnNewLine layout preservation", () => {
+describe("elseOnNewLine layout preservation", () => {
     test("inline `} else { ... }` stays inline", () => {
         const out = assertStable(
             `workflow w(a: boolean): string {\n    if (a) {\n        return "y";\n    } else {\n        return "n";\n    }\n}`,
@@ -129,7 +139,7 @@ describe("round 4: elseOnNewLine layout preservation", () => {
 // B. SwitchStatement.innerComments / SwitchArm.leadingComments
 // ---------------------------------------------------------------------------
 
-describe("round 4: SwitchStatement.innerComments", () => {
+describe("SwitchStatement.innerComments", () => {
     test("comment inside empty switch body lives on switch.innerComments", () => {
         const wf = parse(
             `workflow w(x: number): string {\n    switch (x) {\n        /* nothing */\n    }\n    return "x";\n}`,
@@ -162,7 +172,7 @@ describe("round 4: SwitchStatement.innerComments", () => {
     });
 });
 
-describe("round 4: SwitchArm.leadingComments (pre-case)", () => {
+describe("SwitchArm.leadingComments (pre-case)", () => {
     test("attaches to the next arm; round-trip stable", () => {
         const out = assertStable(
             `workflow w(x: number): string {\n    switch (x) {\n        case 1:\n            return "a";\n        // before case 2\n        case 2:\n            return "b";\n    }\n    return "x";\n}`,
@@ -186,7 +196,7 @@ describe("round 4: SwitchArm.leadingComments (pre-case)", () => {
 // C. ObjectType field comments
 // ---------------------------------------------------------------------------
 
-describe("round 4: ObjectType field comments", () => {
+describe("ObjectType field comments", () => {
     test("leading comment on a field round-trips", () => {
         const src = `workflow w(o: {\n    /* hi */\n    foo: number,\n    bar: string,\n}): string {\n    return bar;\n}`;
         const out = assertStable(src);
@@ -239,7 +249,7 @@ describe("round 4: ObjectType field comments", () => {
 // D. printWidth corner cases
 // ---------------------------------------------------------------------------
 
-describe("round 4: printWidth boundary", () => {
+describe("printWidth boundary", () => {
     test("exactly at printWidth: stays inline", () => {
         // Build a workflow whose first line is exactly 80 chars.
         const src = `workflow w(a: number): number { return a; }`;

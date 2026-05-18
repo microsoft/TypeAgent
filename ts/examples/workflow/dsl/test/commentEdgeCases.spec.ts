@@ -1,10 +1,25 @@
+/**
+ * Adversarial comment-attachment angles: same-param leading + trailing
+ * both multi-line, comments adjacent to the `workflow` keyword,
+ * mixed-comment param-list layout, stacked line comments in inner
+ * slots, degenerate comments in inner slots, template-literal `}`
+ * not triggering else scanning, multi-round convergence, comments
+ * attaching to the correct nesting level, constructed AST without
+ * endLine, and the (still-pinned) `;` field separator inside an
+ * ObjectType.
+ *
+ * Also includes the now-supported `SwitchStatement.innerComments` and
+ * `SwitchArm.leadingComments` (pre-`case`) slots — exercised here at
+ * the unit level, with broader coverage in `layoutFidelity.spec.ts`.
+ */
+
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 /**
  * G8 round-3 test-gap pass 2 — adversarial angles not covered by pass 1.
  *
- * Pass 1 (round3-gaps.spec.ts) targeted multi-line block comments in new
+ * Pass 1 (commentFidelity.spec.ts) targeted multi-line block comments in new
  * inner-comment slots, else-if chains, secondary built-in surfaces, basic
  * param edge cases, and stripTrivia structural equivalence.
  *
@@ -64,7 +79,7 @@ function assertStable(source: string): string {
 //    sides are multi-line block comments on a single param.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: same-param leading + trailing both multi-line", () => {
+describe("same-param leading + trailing both multi-line", () => {
     test("multi-line leading + multi-line trailing preserves order, sides, indent", () => {
         const src = `workflow w(
     /* lead1
@@ -96,7 +111,7 @@ describe("round 3 gaps pass 2: same-param leading + trailing both multi-line", (
 //    SwitchStatement.innerComments" change updates the test deliberately.
 // ---------------------------------------------------------------------------
 
-describe("round 4: empty switch with only inner comment", () => {
+describe("empty switch with only inner comment", () => {
     test("comment now stays INSIDE the switch body via SwitchStatement.innerComments", () => {
         const src = `workflow w(x: number): string {
     switch (x) {
@@ -121,7 +136,7 @@ describe("round 4: empty switch with only inner comment", () => {
 //    a block-end trailing of the previous arm's last statement. Pin this.
 // ---------------------------------------------------------------------------
 
-describe("round 4: comment before a `case` keyword attaches to that arm", () => {
+describe("comment before a `case` keyword attaches to that arm", () => {
     test("attaches as the next arm's leadingComments (round-trip stable)", () => {
         const src = `workflow w(x: number): string {
     switch (x) {
@@ -152,7 +167,7 @@ describe("round 4: comment before a `case` keyword attaches to that arm", () => 
 //    (currently surfaces in paramInnerComments). Pin both behaviors.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: comments adjacent to the `workflow` keyword", () => {
+describe("comments adjacent to the `workflow` keyword", () => {
     test("comment before `workflow` keyword round-trips as leading", () => {
         const src = `/* hello */ workflow w(): string {
     return "x";
@@ -182,7 +197,7 @@ describe("round 3 gaps pass 2: comments adjacent to the `workflow` keyword", () 
 //    their own line (no half-inline, half-block layout).
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: mixed-comment param list layout", () => {
+describe("mixed-comment param list layout", () => {
     test("param without comments still renders on its own line when list is multi-line", () => {
         const src = `workflow w(
     // doc for a
@@ -213,7 +228,7 @@ describe("round 3 gaps pass 2: mixed-comment param list layout", () => {
 //    preservation matters.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: stacked line comments in inner slots", () => {
+describe("stacked line comments in inner slots", () => {
     test("3 stacked // line comments as paramInnerComments preserve order", () => {
         const src = `workflow w(
     // alpha
@@ -258,7 +273,7 @@ describe("round 3 gaps pass 2: stacked line comments in inner slots", () => {
 //    in each new slot without crashing the formatter's comment renderer.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: degenerate comments in new round-3 slots", () => {
+describe("degenerate comments (empty `/**/`, empty `//`) in inner slots", () => {
     test("`/**/` as paramInnerComments round-trips", () => {
         const src = `workflow w(
     /**/
@@ -302,7 +317,7 @@ describe("round 3 gaps pass 2: degenerate comments in new round-3 slots", () => 
 //    verbatim AND the if/else still parses correctly).
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: template-literal `}` does not trigger else scanning", () => {
+describe("template-literal `}` does not trigger else scanning", () => {
     test("if-with-template-ending-in-} + real else round-trips cleanly", () => {
         const src = `workflow w(x: number): string {
     if (x === 1) {
@@ -324,8 +339,8 @@ describe("round 3 gaps pass 2: template-literal `}` does not trigger else scanni
 //    slot at once, which the per-slot tests don't.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: three-round convergence over union of round-3 surfaces", () => {
-    test("text2 === text3 on a document combining every round-3 slot", () => {
+describe("multi-round convergence over union of comment surfaces", () => {
+    test("text2 === text3 on a document combining every comment slot", () => {
         const src = `/* top */
 workflow w(
     // p-leading
@@ -381,7 +396,7 @@ workflow w(
 //    attach at the correct level.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: comments attach to the correct nesting level", () => {
+describe("comments attach to the correct nesting level", () => {
     test("empty inner attempts inside map keeps its comment inside, not in outer map body", () => {
         const src = `workflow w(xs: string[]): string[] {
     return map(xs, (item) => {
@@ -408,7 +423,7 @@ describe("round 3 gaps pass 2: comments attach to the correct nesting level", ()
 //    Pin both ParamDecl and a Statement (ConstStatement) variant.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: constructed AST without endLine", () => {
+describe("constructed AST without endLine", () => {
     function loc() {
         return { line: 1, col: 1, offset: 0 };
     }
@@ -489,7 +504,7 @@ describe("round 3 gaps pass 2: constructed AST without endLine", () => {
 //    multi-line layout; pin so future support is an opt-in change.
 // ---------------------------------------------------------------------------
 
-describe("round 3 gaps pass 2: multi-line ObjectType in a param (pinned non-support)", () => {
+describe("multi-line ObjectType in a param (`;` separator pinned non-support)", () => {
     test("multi-line object type with `;` field separator does not parse cleanly", () => {
         const src = `workflow w(
     obj: {
