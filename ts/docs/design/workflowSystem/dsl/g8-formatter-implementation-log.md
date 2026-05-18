@@ -234,4 +234,70 @@ Round 2:
 12. `d608e1ce` review pass 2: pin empty-block comment loss.
 13. `944696e3` test-gap pass 1: +19 tests + multi-line indent fix.
 14. `0758b69b` test-gap pass 2: +19 additional tests.
-15. `8baf8599` finalize log (this file's previous revision).
+15. `8baf8599` finalize log (round-2 revision).
+
+Round 3 (this revision):
+
+16. `cc635e58` ast/parser/formatter — full comment fidelity (params,
+    empty nested blocks, `}`/`else` gap).
+17. `1868764e` tests: replace 3 pinning tests with positive round-trip
+    tests, add new suites for round-3 surfaces. 351 → 364 tests.
+
+## Round 3 — closing the comment-fidelity gaps
+
+Round 2 shipped with three known gaps, all flagged in
+`g8-test-gaps-unaddressed.md` and pinned with negative tests:
+
+1. Comments between parameters.
+2. Comments inside empty nested blocks (then/else/case/default and
+   every built-in lambda body).
+3. Comments between `}` of the then block and the `else` keyword.
+
+Round 3 closes all three by extending the AST with per-position
+`*InnerComments` / `elseLeadingComments` buckets, threading the parser
+to capture them, and teaching the formatter to emit them.
+
+What changed:
+
+- **`src/ast.ts`** — added `WorkflowDecl.paramInnerComments`,
+  `ParamDecl.leadingComments` / `trailingComments` / `endLine`,
+  `IfStatement.thenInnerComments` / `elseInnerComments` /
+  `elseLeadingComments`, `SwitchStatement.defaultInnerComments`,
+  `SwitchArm.innerComments`, `AttemptsNode.bodyInnerComments` (and on
+  `fallback`), `MapNode` / `FilterNode` / `ParallelMapNode`
+  `bodyInnerComments`, `ParallelNode.bodies[i].bodyInnerComments`.
+- **`src/parser.ts`** — `parseParamList` rewritten to capture leading,
+  inline-trailing, and end-of-list comments and report
+  `paramInnerComments` separately for empty lists. `parseIfStmt`,
+  `parseSwitchStmt`/`parseSwitchArmBody`, and every built-in parser
+  now route through `parseStatementsCapturingInner` and an
+  `extractArrowBodyInner` helper. `parseIfStmt` snapshots `commentIdx`
+  before reading ahead for `else` and rolls back on a no-`else`
+  outcome so a trailing-`}` comment without `else` becomes the
+  IfStatement's own `trailingComments` rather than being stolen.
+- **`src/formatter.ts`** — `printParamList` switches to multi-line
+  layout (with unconditional trailing comma) whenever any parameter
+  carries comments or `paramInnerComments` is set. `writeElseLeading`
+  emits block comments inline (`} /* x */ else`) and forces a line
+  break for line comments. `printBlockBody` now accepts an optional
+  `innerComments` array and emits it inside an empty `{ }`. The
+  IfStatement / SwitchStatement / SwitchArm / built-in cases all
+  thread the new buckets through.
+- **`test/trailingComments.spec.ts`** — the 3 "documented gap"
+  pinning tests are inverted into positive round-trip tests, and 13
+  new tests cover the new surfaces (parameter leading/trailing/inner,
+  empty-block inner across every block-bearing AST node, and the
+  three `}`/`else` shapes). Total tests 351 → 364.
+- **`test/pass2-coverage.spec.ts`** — `stripTrivia` now also strips
+  `paramInnerComments`, `thenInnerComments`, `elseInnerComments`,
+  `elseLeadingComments`, `defaultInnerComments`, and
+  `bodyInnerComments`.
+- **`implementation-decision.md`** — §7 (the round-2
+  "innerComments lives only on WorkflowDecl" decision) is annotated
+  as superseded; new sections D13 (param-comment layout), D14
+  (`elseLeadingComments` rendering), and D15 (param-list capture
+  rolls over commas) document the round-3 decisions.
+
+Round 3 did not require a review pass or test-gap pass because the
+user-supplied test set already covers all three surfaces in both
+directions (positive round-trip + AST inspection + stability).

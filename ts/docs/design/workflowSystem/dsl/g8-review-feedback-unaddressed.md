@@ -9,6 +9,7 @@ of G8 work on `agents/can-you-address-g8-in-the-dsl-v0-f3fc165d`:
 | 1 | 2 | 1 minor observation about end-of-block comments — see "Acted upon" |
 | 2 | 1 | No significant bugs |
 | 2 | 2 | 1 documentation gap (empty nested blocks) — fixed by pinning tests + entry in `g8-test-gaps-unaddressed.md` |
+| 3 | — | Not run (user request was direct; gaps were enumerated explicitly) |
 
 This document records feedback that was *not* acted upon, with
 rationale. The current set is empty — every actionable item was
@@ -57,11 +58,16 @@ empty `else`, empty `case` arm, or empty built-in lambda bodies are
 silently dropped — by design (decision §7), but there was no test
 pinning the behavior and no entry in the unaddressed-gaps file.
 
-**Fix:** Three pinning tests added under
+**Round 2 fix:** Three pinning tests added under
 `"documented gap: comments inside empty nested blocks are dropped"`
 in `test/trailingComments.spec.ts`, and the limitation is now
 documented in `g8-test-gaps-unaddressed.md` along with a related
 between-brace attachment quirk (`} /* note */ else { ... }`).
+
+**Round 3 fix:** decision §7 is superseded — every block-bearing AST
+node now has an `*InnerComments` field, the `}`/`else` gap is
+captured via `IfStatement.elseLeadingComments`, and the three
+pinning tests are inverted into positive round-trip tests.
 
 ### Code duplication between `printLeadingComments` and `printOwnLineComments` (round 2 pass 2)
 

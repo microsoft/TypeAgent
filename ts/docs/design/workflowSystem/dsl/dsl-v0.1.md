@@ -898,7 +898,9 @@ The AST preserves comments. Comments come in three flavors based on
 where they are anchored:
 
 - `leadingComments` (on any AST node): comments that appear immediately
-  before the node, attached to the following node.
+  before the node, attached to the following node. `ParamDecl` also
+  carries `leadingComments` and `trailingComments` so comments
+  between, before, or after individual parameters round-trip.
 - `trailingComments` (on each `Statement`): comments that appear after a
   statement. A comment is considered _inline trailing_ if its source line
   equals the statement's `endLine` (e.g. `return x; // why`); otherwise it
@@ -907,13 +909,28 @@ where they are anchored:
   `default`). Inline and block-end trailing comments share the same
   `trailingComments` array — the renderer distinguishes them by
   comparing each comment's line against the statement's `endLine`.
-- `innerComments` (on `WorkflowDecl`): comments inside an otherwise
-  empty workflow body that have no statement to attach to.
+- Per-position **inner** comment buckets carry comments that appear
+  _inside_ an otherwise-empty block. Every block-bearing node has its
+  own field so the comment never silently drops:
+  - `WorkflowDecl.innerComments` — empty workflow body.
+  - `WorkflowDecl.paramInnerComments` — inside `(` … `)` when the
+    parameter list is empty.
+  - `IfStatement.thenInnerComments` / `elseInnerComments` — empty
+    `then` / `else` block.
+  - `IfStatement.elseLeadingComments` — between the `}` of the `then`
+    block and the `else` keyword (e.g. `} /* note */ else`).
+  - `SwitchStatement.defaultInnerComments` — empty `default:` arm.
+  - `SwitchArm.innerComments` — empty `case` arm body.
+  - `AttemptsNode.bodyInnerComments` / `fallback.bodyInnerComments`,
+    `MapNode.bodyInnerComments`, `FilterNode.bodyInnerComments`,
+    `ParallelMapNode.bodyInnerComments`, and
+    `ParallelNode.bodies[i].bodyInnerComments`.
 
 Each comment is a `Comment { text, pos }` where `text` includes the
-delimiters (`//…` or `/* … */`). Statements carry an additional
-`endLine` field — the source line of the statement's last token — used
-solely to drive inline-vs-own-line rendering of trailing comments.
+delimiters (`//…` or `/* … */`). Statements and `ParamDecl` carry an
+additional `endLine` field — the source line of the node's last token
+— used solely to drive inline-vs-own-line rendering of trailing
+comments.
 
 Supported comment forms:
 
@@ -922,9 +939,10 @@ Supported comment forms:
 
 The text serializer (AST → source) emits comments in their attached
 positions. Inline trailing comments are rendered on the same line as
-the statement (after the terminator), block-end trailing comments are
-rendered on their own indented line, and `innerComments` are emitted on
-their own indented lines inside the empty block. This ensures
+the host node (after the terminator), block-end trailing comments are
+rendered on their own indented line, and the per-position inner
+buckets are emitted on their own indented lines inside the empty
+block (or `(` `)` for `paramInnerComments`). This ensures
 round-tripping (source → AST → source → AST) preserves comment
 attachment. _(from principle 6: AST is canonical)_
 

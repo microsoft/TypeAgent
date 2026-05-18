@@ -2,11 +2,15 @@
 
 This document records design choices that are not obvious from the spec
 or the code itself, so reviewers can understand the rationale without
-re-deriving it. It covers both rounds of the G8 work:
+re-deriving it. It covers three rounds of the G8 work:
 
 - **Round 1** added `leadingComments` and a formatter (`format(decl)`).
 - **Round 2** extended the originally-incomplete spec to cover
-  `trailingComments` (inline and block-end) and `innerComments`.
+  `trailingComments` (inline and block-end) and `innerComments` on
+  `WorkflowDecl`.
+- **Round 3** closed the remaining comment-fidelity gaps: comments
+  between parameters, comments inside empty nested blocks, and
+  comments between `}` and `else`.
 
 The decisions are presented as a single ordered list. Each section
 header notes which round introduced it for traceability, but later
@@ -133,27 +137,106 @@ and increases AST surface area; (b) a `inline: boolean` flag on each
 from data we already store, and storing the flag opens the door to
 inconsistencies when the AST is mutated.
 
-## 7. `innerComments` lives only on `WorkflowDecl` (not on every block)
+## 7. `innerComments` lives on every block-bearing AST node ~~(only `WorkflowDecl`)~~
 
-_Introduced round 2._
+_Introduced round 2 as "WorkflowDecl-only"; **superseded in round 3**._
 
 When a block is empty (no statements) any comments inside it have
-nowhere to attach. We surface those only on `WorkflowDecl`. Inner
-blocks (then/else, switch arms, attempts/map/filter/parallel bodies)
-that happen to be empty still drop their orphan comments — documented
-in `g8-test-gaps-unaddressed.md` and pinned with three tests under
-`"documented gap: comments inside empty nested blocks are dropped"`.
-Rationale:
+nowhere to attach. Round 2 surfaced those only on `WorkflowDecl` and
+documented the loss on inner blocks as an intentional gap. Round 3
+retracts that limitation: per-block `*InnerComments` fields now exist on
+every block-bearing AST node, and the formatter emits them inside the
+otherwise-empty `{ }`:
 
-- An empty `then`/`else` is a clear smell — users add a placeholder
-  statement when they want such structure, and an empty switch arm
-  body is unusual.
-- An empty top-level workflow body, by contrast, is a common scaffold
-  ("I'm describing this workflow but the body is a TODO") and losing
-  the TODO comment would surprise users.
-- Adding `innerComments` to every block-holding node would touch the
-  AST surface of every built-in node (`AttemptsNode`, `MapNode`,
-  `ParallelNode`, etc.) for a feature that rarely matters in practice.
+| Node | Field |
+| --- | --- |
+| `IfStatement` | `thenInnerComments`, `elseInnerComments` |
+| `SwitchStatement` | `defaultInnerComments` |
+| `SwitchArm` | `innerComments` |
+| `AttemptsNode` | `bodyInnerComments` (body), `fallback.bodyInnerComments` |
+| `MapNode`, `FilterNode`, `ParallelMapNode` | `bodyInnerComments` |
+| `ParallelNode.bodies[i]` | `bodyInnerComments` |
+
+Rationale for the retraction:
+- "Empty `then` is a smell" turned out to be a wrong reason to drop a
+  user's comment — empty bodies frequently appear as `TODO` scaffolds.
+- The AST-surface cost was small and uniform once the parser had a
+  `parseStatementsCapturingInner()` helper (round 2 already had it).
+- Full comment fidelity is a cleaner contract than a per-position
+  feature matrix.
+
+The round-2 pinning tests under `"documented gap: comments inside empty
+nested blocks are dropped"` were inverted into positive round-trip
+tests in round 3.
+
+## 13. Parameter comments use multi-line layout only when needed
+
+_Introduced round 3._
+
+`ParamDecl` now carries `leadingComments` and `trailingComments`;
+`WorkflowDecl` carries `paramInnerComments` for the empty-list case.
+The formatter chooses between two layouts:
+
+- **Inline** (`workflow w(a: number, b: string): T { ... }`): used when
+  no param has comments and `paramInnerComments` is empty. Preserves the
+  compact look that 99% of workflows use.
+- **Multi-line** (one param per line, with trailing comma): used as
+  soon as any comment is present anywhere in the parameter list. The
+  trailing comma is unconditional in this mode so a `// trailing` on
+  the last param has a place to live (between the comma and the
+  newline), matching the placement of inline trailing comments on the
+  prior params.
+
+Rationale: a single binary switch is easier to predict than a
+per-param decision. The cost of formatting one rarely-commented param
+on its own line is acceptable; the benefit is that comment placement
+is unambiguous.
+
+## 14. `elseLeadingComments` renders inline OR forces a line break
+
+_Introduced round 3._
+
+Comments between the `}` of the then block and the `else` keyword
+(e.g. `} /* fallthrough */ else {` or `} // note\nelse {`) are
+captured as `IfStatement.elseLeadingComments`. Rendering rule:
+
+- If every captured comment is a block comment (`/* ... */`): emit
+  them on the same line as the `}`/`else` keyword (space-separated).
+- If any captured comment is a line comment (`//`): emit each on its
+  own line and place `else` on a fresh line at the current indent.
+
+Rationale: line comments inherently terminate at end-of-line; trying
+to keep `else` on the same line as a `//` would either swallow the
+comment or generate invalid output. Block comments do not have that
+problem, so for them we preserve the conventional `} <cmt> else`
+shape.
+
+To avoid stealing the IfStatement's own trailing comments
+(`if (...) { ... } // note-on-the-if` — no `else` keyword follows),
+the parser snapshots its `commentIdx` before reading ahead for `else`
+and rolls back on a no-`else` outcome so the outer `parseStatement`
+sees the comments and attaches them as the IfStatement's
+`trailingComments`.
+
+## 15. Parameter list rolls inline-trailing across commas
+
+_Introduced round 3._
+
+For multi-line parameter lists, an inline-trailing comment on a param
+must be captured _before_ the comma is consumed — otherwise the
+comma's `}` (next token) would push the comment forward and it would
+attach as the leading comment of the next param. The implementation:
+
+1. `parseParam` records `endLine` for the param (set from
+   `lastToken.line` after the type is parsed).
+2. The list loop calls `takeInlineTrailingComments(prev.endLine)` for
+   the previous param _then_ consumes the `,`.
+3. For the last param (no trailing comma), the loop calls
+   `takeLeadingComments()` after the param and treats those as the
+   param's trailing.
+
+The empty parameter list `workflow w()` has nowhere to hang
+intervening comments, so they go on `WorkflowDecl.paramInnerComments`.
 
 ## 8. `finalizeBlock` is called from every block parser, not just at EOF
 
