@@ -3,37 +3,6 @@
 Tracked items from the engine review against ir-v0.1.md and ir-v0.2.md
 that require design discussion before implementation.
 
-## R1: BranchNode missing `onError` field
-
-**Spec:** ir-v0.1.md §3.3 lists `onError` as a common node field on every
-node kind. §3.6 shows `onError` on the branch schema.
-
-**Current state:** The `BranchNode` interface in `ir.ts` defines only
-`kind`, `selector`, `selectorSchema`, `cases`, `default`. No `onError`
-field. The engine's `executeBranch` does not handle errors — if template
-resolution of the selector fails, the error propagates uncaught.
-
-**Discussion:** A branch has only two runtime failure modes:
-
-1. **Selector template resolution failure** — proven unreachable by the
-   static validator's dominator + path-projection passes
-   (§5.8.3 template-resolution checks).
-2. **`BranchSelectorUnmatched`** — runtime value not in `cases` and no
-   `default`. Following the exhaustiveness work, this is also proven
-   unreachable by static validation: a branch without `default` must be
-   statically exhaustive (§3.6 exhaustiveness contract), and a branch
-   with `default` routes unmatched values there.
-
-Both failure modes are unreachable when static validation passes, so
-adding `onError` provides no useful runtime behavior. The spec mention
-is now misleading.
-
-**Recommendation:** Remove `onError` from the spec's BranchNode schema
-(§3.6) and the common-fields list (§3.3) for branch. The current
-implementation is correct.
-
-**Impact:** Low — purely a spec-vs-implementation reconciliation.
-
 ## R2: Fork branch sub-scope structure diverges from spec
 
 **Spec:** ir-v0.2.md §2.1 defines each fork branch as a flat structure

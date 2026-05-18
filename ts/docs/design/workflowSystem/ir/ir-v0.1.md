@@ -617,7 +617,9 @@ Every node carries a discriminant `kind` (P5: self-describing).
 (section 3.4). The shape of `inputs` is part of the node's typed input
 schema (section 3.5). `onError`, when present, must point to a `task` node
 in the same scope; the engine dispatches that task with two injected input
-fields (`error` and `trigger`) per §3.8.
+fields (`error` and `trigger`) per §3.8. `onError` does not apply to
+`branch` nodes (see §3.6): branch is pure control flow and has no
+runtime failure mode after static validation.
 
 **Absent fields, no `null`.** Optional fields throughout the IR
 (`onError`, `bind`, `next` for terminals, `path` and `optional` on
@@ -858,7 +860,6 @@ validator, and analyzers in agreement on a single observable behavior
     "<caseValue>": "<nodeId>",
   },
   "default": "<nodeId>", // optional; see exhaustiveness rule below
-  "onError": "<nodeId>", // optional; see section 3.3
 }
 ```
 
@@ -867,6 +868,12 @@ validator, and analyzers in agreement on a single observable behavior
   with all-string members. Non-string discriminants (e.g., booleans from
   `int.lessThan`) require an explicit conversion task such as `bool.toLabel`
   ([decision 0008](decisions/0008-discriminant-key-encoding.md)).
+- **No `onError`.** Branch is pure control flow with no runtime failure
+  mode: selector template resolution is statically proven by the
+  validator's dominator + path-projection passes (§5.8.3), and
+  `BranchSelectorUnmatched` is also statically unreachable (see
+  exhaustiveness contract below and §5.8.3). The common `onError` field
+  from §3.3 therefore does not apply to branch nodes.
 - **Exhaustiveness contract.** Either `default` is present, **or** the
   branch is statically exhaustive. A branch is statically exhaustive when:
   1. `selectorSchema` declares an `enum` (or is `{ "type": "boolean" }`,
@@ -1743,7 +1750,7 @@ Note how `Url` is shared between the workflow `inputSchema` and the `fetch` task
 the workflow result. The compatibility pass collapses each ref-equal pair to
 an identity check.
 
-### 6.2 Branch with `onError` recovery
+### 6.2 Branch with task-level `onError` recovery
 
 ```jsonc
 {
