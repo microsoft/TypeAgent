@@ -46,6 +46,26 @@ import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+import { compile as compileDsl, TaskSchemaInfo } from "workflow-dsl";
+
+function compileWfFile(relPath: string): WorkflowIR {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const abs = resolve(__dirname, relPath);
+    const source = readFileSync(abs, "utf8");
+    const schemas: TaskSchemaInfo[] = allBuiltinTasks.map((t) => ({
+        name: t.name,
+        inputSchema: t.inputSchema,
+        outputSchema: t.outputSchema,
+    }));
+    const result = compileDsl(source, schemas, { validate: true });
+    if (result.errors.length > 0 || !result.ir) {
+        const msg = result.errors
+            .map((e) => `${e.line}:${e.col} [${e.phase}] ${e.message}`)
+            .join("\n");
+        throw new Error(`Failed to compile ${relPath}:\n${msg}`);
+    }
+    return result.ir as WorkflowIR;
+}
 
 // Policy that allows all tasks (for tests not specifically exercising policy).
 // Uses a Proxy so any task name returns "allow", matching secure-by-default.
@@ -1359,12 +1379,9 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D1 standup-prep workflow", () => {
         function loadD1(): WorkflowIR {
-            const __dirname = dirname(fileURLToPath(import.meta.url));
-            const path = resolve(
-                __dirname,
-                "../../../workflows/d1-standup-prep.json",
+            return compileWfFile(
+                "../../../workflows/dsl/d1-standup-prep.wf",
             );
-            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
 
         it("validates against all builtins", async () => {
@@ -1459,7 +1476,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path = resolve(
                 __dirname,
-                "../../../workflows/d4-commit-summary.json",
+                "../../../workflows/ir/d4-commit-summary.json",
             );
             return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
@@ -1651,7 +1668,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path = resolve(
                 __dirname,
-                "../../../workflows/d5-code-review-prep.json",
+                "../../../workflows/ir/d5-code-review-prep.json",
             );
             return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
@@ -1952,12 +1969,9 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D8 summarize-url workflow", () => {
         function loadD8(): WorkflowIR {
-            const __dirname = dirname(fileURLToPath(import.meta.url));
-            const path = resolve(
-                __dirname,
-                "../../../workflows/d8-summarize-url.json",
+            return compileWfFile(
+                "../../../workflows/dsl/d8-summarize-url.wf",
             );
-            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
 
         it("validates against all builtins", async () => {

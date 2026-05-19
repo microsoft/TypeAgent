@@ -17,40 +17,52 @@ export interface DiscoveryResult {
 }
 
 /**
- * Scan a directory for workflow JSON files, parse and validate each.
- * Invalid files are skipped and reported in the returned errors array.
- * Returns a map from workflow name to parsed IR, plus any errors.
+ * Scan one or more directories for workflow JSON files, parse and validate
+ * each. Invalid files are skipped and reported in the returned errors array.
+ * Returns a map from workflow name to parsed IR, plus any errors. When a
+ * workflow name appears in multiple directories, the first occurrence wins
+ * and subsequent ones are reported as an error.
  */
 export async function discoverWorkflows(
-    dir: string,
+    dirs: string | readonly string[],
     tasks: ReadonlyMap<string, TaskDefinition>,
 ): Promise<DiscoveryResult> {
     const workflows = new Map<string, WorkflowIR>();
     const errors: DiscoveryResult["errors"] = [];
-    let entries: string[];
-    try {
-        entries = await readdir(dir);
-    } catch {
-        // Directory doesn't exist or is unreadable.
-        return { workflows, errors };
-    }
-    for (const entry of entries) {
-        if (!entry.endsWith(".json")) {
+    const dirList = typeof dirs === "string" ? [dirs] : dirs;
+    for (const dir of dirList) {
+        let entries: string[];
+        try {
+            entries = await readdir(dir);
+        } catch {
+            // Directory doesn't exist or is unreadable; skip silently.
             continue;
         }
-        const filePath = join(dir, entry);
-        try {
-            const raw = await readFile(filePath, "utf-8");
-            const ir: WorkflowIR = JSON.parse(raw);
-            const result = validateWorkflowIR(ir, tasks);
-            if (!result.valid) {
-                errors.push({ file: entry, errors: result.errors });
+        for (const entry of entries) {
+            if (!entry.endsWith(".json")) {
                 continue;
             }
-            workflows.set(ir.name, ir);
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            errors.push({ file: entry, errors: msg });
+            const filePath = join(dir, entry);
+            try {
+                const raw = await readFile(filePath, "utf-8");
+                const ir: WorkflowIR = JSON.parse(raw);
+                const result = validateWorkflowIR(ir, tasks);
+                if (!result.valid) {
+                    errors.push({ file: entry, errors: result.errors });
+                    continue;
+                }
+                if (workflows.has(ir.name)) {
+                    errors.push({
+                        file: entry,
+                        errors: `Duplicate workflow name '${ir.name}'`,
+                    });
+                    continue;
+                }
+                workflows.set(ir.name, ir);
+            } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                errors.push({ file: entry, errors: msg });
+            }
         }
     }
     return { workflows, errors };
