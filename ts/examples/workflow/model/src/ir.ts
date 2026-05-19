@@ -4,7 +4,7 @@
 /**
  * IR v1 type definitions for the workflow intermediate representation.
  *
- * These types mirror the spec in ir-v1.md. The engine loads a WorkflowIR
+ * These types mirror the spec in ir-v0.1.md. The engine loads a WorkflowIR
  * document (parsed JSON), validates it structurally, then executes it.
  */
 
@@ -48,7 +48,16 @@ export interface BranchNode {
     selector: Template;
     selectorSchema: JSONSchema;
     cases: Record<string, string>;
-    default: string;
+    /**
+     * Target when selector matches no case.
+     *
+     * If omitted, the branch must be **exhaustive**: `selectorSchema` must
+     * declare an `enum` and every value in the enum must have a matching
+     * case key. Additionally the selector's resolved type must be provably
+     * narrowed to a subset of the enum. The static validator rejects
+     * non-exhaustive branches that omit `default`.
+     */
+    default?: string;
 }
 
 export interface LoopStateVar {
@@ -56,26 +65,80 @@ export interface LoopStateVar {
     initial: Template;
 }
 
+// ---- Scope: the common sub-workflow contract ----
+
+/**
+ * A self-contained execution scope: a sequence of nodes with declared
+ * inputs and a declared output. Used for loop bodies, fork branches,
+ * forkMap bodies, and the top-level workflow.
+ */
+export interface WorkflowScope {
+    /** Schema describing what this scope expects as input. */
+    inputSchema: JSONSchema;
+
+    /** First node to execute. */
+    entry: string;
+
+    /** The nodes in this scope. */
+    nodes: Record<string, WorkflowNode>;
+
+    /** Template that produces this scope's output value. Resolved in
+     *  the scope's own binding context after execution completes. */
+    output: Template;
+
+    /** Schema of the output value. */
+    outputSchema: JSONSchema;
+}
+
 export interface LoopNode {
     kind: "loop";
     inputs: Record<string, Template>;
-    inputSchema: JSONSchema;
+    body: WorkflowScope;
     state: Record<string, LoopStateVar>;
-    body: {
-        entry: string;
-        nodes: Record<string, WorkflowNode>;
-    };
     iterateState: Record<string, Template>;
-    output: Template;
-    outputSchema: JSONSchema;
-    maxIterations: number;
+    maxIterations?: number;
     next?: string;
     onError?: string;
     bind?: string;
     timeoutMs?: number;
 }
 
-export type WorkflowNode = TaskNode | BranchNode | LoopNode;
+export interface ForkBranch {
+    inputs: Record<string, Template>;
+    scope: WorkflowScope;
+}
+
+export interface ForkNode {
+    kind: "fork";
+    branches: Record<string, ForkBranch>;
+    outputSchema: JSONSchema;
+    maxConcurrency?: number;
+    next?: string;
+    onError?: string;
+    bind?: string;
+}
+
+export interface ForkMapNode {
+    kind: "forkMap";
+    collection: Template;
+    collectionSchema: JSONSchema;
+    elementParam: string;
+    inputs?: Record<string, Template>;
+    body: WorkflowScope;
+    outputSchema: JSONSchema;
+    maxIterations?: number;
+    maxConcurrency?: number;
+    next?: string;
+    onError?: string;
+    bind?: string;
+}
+
+export type WorkflowNode =
+    | TaskNode
+    | BranchNode
+    | LoopNode
+    | ForkNode
+    | ForkMapNode;
 
 // ---- Top-level IR ----
 
@@ -84,16 +147,11 @@ export interface ConstantDef {
     value: unknown;
 }
 
-export interface WorkflowIR {
+export interface WorkflowIR extends WorkflowScope {
     kind: "workflow";
     name: string;
     description?: string;
     version: string;
-    inputSchema: JSONSchema;
-    outputSchema: JSONSchema;
     types?: Record<string, JSONSchema>;
     constants?: Record<string, ConstantDef>;
-    nodes: Record<string, WorkflowNode>;
-    entry: string;
-    output: Template;
 }

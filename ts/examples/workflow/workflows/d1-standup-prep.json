@@ -9,7 +9,9 @@
     "properties": {
       "repos": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "minItems": 1,
         "description": "Absolute paths to git repos."
       },
@@ -19,7 +21,9 @@
       }
     }
   },
-  "outputSchema": { "type": "string" },
+  "outputSchema": {
+    "type": "string"
+  },
   "constants": {},
   "nodes": {
     "buildAuthorArg": {
@@ -29,19 +33,24 @@
         "type": "object",
         "required": ["template", "vars"],
         "properties": {
-          "template": { "type": "string" },
-          "vars": { "type": "object" }
+          "template": {
+            "type": "string"
+          },
+          "vars": {
+            "type": "object"
+          }
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": { "text": { "type": "string" } }
+        "type": "string"
       },
       "inputs": {
         "template": "--author={{author}}",
         "vars": {
-          "author": { "$from": "input", "name": "author" }
+          "author": {
+            "$from": "input",
+            "name": "author"
+          }
         }
       },
       "next": "repoLoop",
@@ -50,22 +59,58 @@
     "repoLoop": {
       "kind": "loop",
       "inputs": {
-        "repos": { "$from": "input", "name": "repos" },
-        "authorArg": { "$from": "scope", "name": "authorArg", "path": ["text"] }
-      },
-      "inputSchema": {
-        "type": "object",
-        "required": ["repos", "authorArg"],
-        "properties": {
-          "repos": { "type": "array", "items": { "type": "string" } },
-          "authorArg": { "type": "string" }
+        "repos": {
+          "$from": "input",
+          "name": "repos"
+        },
+        "authorArg": {
+          "$from": "scope",
+          "name": "authorArg"
         }
       },
       "state": {
-        "i": { "schema": { "type": "integer" }, "initial": 0 },
-        "sections": { "schema": { "type": "array" }, "initial": [] }
+        "i": {
+          "schema": {
+            "type": "integer"
+          },
+          "initial": 0
+        },
+        "sections": {
+          "schema": {
+            "type": "array"
+          },
+          "initial": []
+        }
       },
+      "iterateState": {
+        "i": {
+          "$from": "scope",
+          "name": "stepped"
+        },
+        "sections": {
+          "$from": "scope",
+          "name": "appended"
+        }
+      },
+      "maxIterations": 100,
+      "next": "joinSections",
+      "bind": "repoSections",
       "body": {
+        "inputSchema": {
+          "type": "object",
+          "required": ["repos", "authorArg"],
+          "properties": {
+            "repos": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "authorArg": {
+              "type": "string"
+            }
+          }
+        },
         "entry": "pickRepo",
         "nodes": {
           "pickRepo": {
@@ -75,18 +120,26 @@
               "type": "object",
               "required": ["list", "index"],
               "properties": {
-                "list": { "type": "array" },
-                "index": { "type": "integer" }
+                "list": {
+                  "type": "array"
+                },
+                "index": {
+                  "type": "integer"
+                }
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["element"],
-              "properties": { "element": {} }
+              "type": "string"
             },
             "inputs": {
-              "list": { "$from": "input", "name": "repos" },
-              "index": { "$from": "state", "name": "i" }
+              "list": {
+                "$from": "input",
+                "name": "repos"
+              },
+              "index": {
+                "$from": "state",
+                "name": "i"
+              }
             },
             "next": "gitLog",
             "bind": "picked"
@@ -98,18 +151,33 @@
               "type": "object",
               "required": ["command"],
               "properties": {
-                "command": { "type": "string" },
-                "args": { "type": "array", "items": { "type": "string" } },
-                "cwd": { "type": "string" }
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "cwd": {
+                  "type": "string"
+                }
               }
             },
             "outputSchema": {
               "type": "object",
               "required": ["stdout", "stderr", "exitCode"],
               "properties": {
-                "stdout": { "type": "string" },
-                "stderr": { "type": "string" },
-                "exitCode": { "type": "integer" }
+                "stdout": {
+                  "type": "string"
+                },
+                "stderr": {
+                  "type": "string"
+                },
+                "exitCode": {
+                  "type": "integer"
+                }
               }
             },
             "inputs": {
@@ -117,10 +185,16 @@
               "args": [
                 "log",
                 "--since=yesterday",
-                { "$from": "input", "name": "authorArg" },
+                {
+                  "$from": "input",
+                  "name": "authorArg"
+                },
                 "--oneline"
               ],
-              "cwd": { "$from": "scope", "name": "picked", "path": ["element"] }
+              "cwd": {
+                "$from": "scope",
+                "name": "picked"
+              }
             },
             "next": "formatSection",
             "bind": "gitResult"
@@ -132,22 +206,23 @@
               "type": "object",
               "required": ["template", "vars"],
               "properties": {
-                "template": { "type": "string" },
-                "vars": { "type": "object" }
+                "template": {
+                  "type": "string"
+                },
+                "vars": {
+                  "type": "object"
+                }
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["text"],
-              "properties": { "text": { "type": "string" } }
+              "type": "string"
             },
             "inputs": {
               "template": "## {{repo}}\n{{log}}",
               "vars": {
                 "repo": {
                   "$from": "scope",
-                  "name": "picked",
-                  "path": ["element"]
+                  "name": "picked"
                 },
                 "log": {
                   "$from": "scope",
@@ -166,41 +241,52 @@
               "type": "object",
               "required": ["list", "item"],
               "properties": {
-                "list": { "type": "array" },
+                "list": {
+                  "type": "array"
+                },
                 "item": {}
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["list"],
-              "properties": { "list": { "type": "array" } }
+              "type": "array"
             },
             "inputs": {
-              "list": { "$from": "state", "name": "sections" },
-              "item": { "$from": "scope", "name": "section", "path": ["text"] }
+              "list": {
+                "$from": "state",
+                "name": "sections"
+              },
+              "item": {
+                "$from": "scope",
+                "name": "section"
+              }
             },
             "next": "stepIndex",
             "bind": "appended"
           },
           "stepIndex": {
             "kind": "task",
-            "task": "int.add",
+            "task": "math.add",
             "inputSchema": {
               "type": "object",
-              "required": ["a", "b"],
+              "required": ["left", "right"],
               "properties": {
-                "a": { "type": "integer" },
-                "b": { "type": "integer" }
+                "left": {
+                  "type": "number"
+                },
+                "right": {
+                  "type": "number"
+                }
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["result"],
-              "properties": { "result": { "type": "integer" } }
+              "type": "number"
             },
             "inputs": {
-              "a": { "$from": "state", "name": "i" },
-              "b": 1
+              "left": {
+                "$from": "state",
+                "name": "i"
+              },
+              "right": 1
             },
             "next": "computeLength",
             "bind": "stepped"
@@ -211,38 +297,51 @@
             "inputSchema": {
               "type": "object",
               "required": ["list"],
-              "properties": { "list": { "type": "array" } }
+              "properties": {
+                "list": {
+                  "type": "array"
+                }
+              }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["length"],
-              "properties": { "length": { "type": "integer" } }
+              "type": "integer"
             },
             "inputs": {
-              "list": { "$from": "input", "name": "repos" }
+              "list": {
+                "$from": "input",
+                "name": "repos"
+              }
             },
             "next": "compareIndex",
             "bind": "repoCount"
           },
           "compareIndex": {
             "kind": "task",
-            "task": "int.lessThan",
+            "task": "compare.lessThan",
             "inputSchema": {
               "type": "object",
-              "required": ["a", "b"],
+              "required": ["left", "right"],
               "properties": {
-                "a": { "type": "integer" },
-                "b": { "type": "integer" }
+                "left": {
+                  "type": "number"
+                },
+                "right": {
+                  "type": "number"
+                }
               }
             },
             "outputSchema": {
-              "type": "object",
-              "required": ["result"],
-              "properties": { "result": { "type": "boolean" } }
+              "type": "boolean"
             },
             "inputs": {
-              "a": { "$from": "scope", "name": "stepped", "path": ["result"] },
-              "b": { "$from": "scope", "name": "repoCount", "path": ["length"] }
+              "left": {
+                "$from": "scope",
+                "name": "stepped"
+              },
+              "right": {
+                "$from": "scope",
+                "name": "repoCount"
+              }
             },
             "next": "checkDone",
             "bind": "hasMore"
@@ -251,24 +350,29 @@
             "kind": "branch",
             "selector": {
               "$from": "scope",
-              "name": "hasMore",
-              "path": ["result"]
+              "name": "hasMore"
             },
-            "selectorSchema": { "type": "boolean" },
-            "cases": { "true": "@iterate", "false": "@exit" },
+            "selectorSchema": {
+              "type": "boolean"
+            },
+            "cases": {
+              "true": "@iterate",
+              "false": "@exit"
+            },
             "default": "@exit"
           }
+        },
+        "output": {
+          "$from": "scope",
+          "name": "appended"
+        },
+        "outputSchema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
-      },
-      "iterateState": {
-        "i": { "$from": "scope", "name": "stepped", "path": ["result"] },
-        "sections": { "$from": "scope", "name": "appended", "path": ["list"] }
-      },
-      "output": { "$from": "scope", "name": "appended", "path": ["list"] },
-      "outputSchema": { "type": "array", "items": { "type": "string" } },
-      "maxIterations": 100,
-      "next": "joinSections",
-      "bind": "repoSections"
+      }
     },
     "joinSections": {
       "kind": "task",
@@ -277,22 +381,33 @@
         "type": "object",
         "required": ["list", "delimiter"],
         "properties": {
-          "list": { "type": "array", "items": { "type": "string" } },
-          "delimiter": { "type": "string" }
+          "list": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "delimiter": {
+            "type": "string"
+          }
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": { "text": { "type": "string" } }
+        "type": "string"
       },
       "inputs": {
-        "list": { "$from": "scope", "name": "repoSections" },
+        "list": {
+          "$from": "scope",
+          "name": "repoSections"
+        },
         "delimiter": "\n\n"
       },
       "bind": "joined"
     }
   },
   "entry": "buildAuthorArg",
-  "output": { "$from": "scope", "name": "joined", "path": ["text"] }
+  "output": {
+    "$from": "scope",
+    "name": "joined"
+  }
 }

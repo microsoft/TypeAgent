@@ -47,7 +47,7 @@ describe("CLI integration", () => {
             expect(stdout).toContain("file.read");
             expect(stdout).toContain("file.write");
             expect(stdout).toContain("text.template");
-            expect(stdout).toContain("int.add");
+            expect(stdout).toContain("math.add");
         });
     });
 

@@ -5,7 +5,7 @@ Status: **Adopted (v1).** `output` resolves in the full body scope at
 `iterateState` resolves in the full body scope at `@iterate`. Both
 sentinels resolve in the same scope; the difference is what happens
 _after_ resolution (state is carried forward vs. output is published).
-Folded into [../ir-v1.md](../ir-v1.md) §3.7. This document is the
+Folded into [../ir-v0.1.md](../ir-v0.1.md) §3.7. This document is the
 rationale.
 
 ## Purpose
@@ -20,7 +20,7 @@ A future reviewer should read this document when:
 
 Cross-references:
 
-- [../ir-v1.md](../ir-v1.md) §3.7 (loop node), §3.7.1 (iterate
+- [../ir-v0.1.md](../ir-v0.1.md) §3.7 (loop node), §3.7.1 (iterate
   state), §5.4 step 4 (execution semantics).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P2 (traceability), P5 (predictability).
@@ -51,7 +51,7 @@ null, copying `summary` into it at `@iterate`, and reading it from
 
 ## 2. What the spec already says
 
-Two passages in ir-v1.md bear on this:
+Two passages in ir-v0.1.md bear on this:
 
 - **§3.7:** "`output` is resolved when the body reaches `@exit`. It
   is a single reference object resolved in the body scope (typically
@@ -116,7 +116,7 @@ The full-scope rule wins on all three principles.
 
 ## 4. Spec changes
 
-One edit to ir-v1.md §3.7: replace the ambiguous parenthetical with
+One edit to ir-v0.1.md §3.7: replace the ambiguous parenthetical with
 explicit language:
 
 > `output` is resolved when the body reaches `@exit`. It is a single

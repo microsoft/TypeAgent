@@ -1,6 +1,6 @@
-# Workflow IR - v1
+# Workflow IR - v0.1
 
-Status: Adopted (v1). Authoritative.
+Status: Adopted (v0.1). Authoritative.
 
 **Terminology.** Throughout this document, the **workflow IR** (or just
 "the IR") is the JSON workflow artifact that the engine consumes. Earlier
@@ -359,8 +359,8 @@ inputs.
 | External-state side channels           | P2 scenarios 16-17: deliberately invisible to the IR in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Reusable recovery tasks across scopes  | P4 scenario 35: each scope owns its `onError` recovery tasks in v1. (Pre-revision drafts called these "handlers"; v1 collapsed the kind into `task` per §3.8 and §8.7.)                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                                                                                                                                                                                                                                                                                                                                           |
-| Edge-scoped `bind` reads               | A fifth `$from` namespace (`"edge"`) that resolves against the unique CFG predecessor, expressing one-step producer/consumer handoffs without widening visibility to the full scope. Read-side switch only; producer's `bind` is unchanged. Sketch in [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).                                                                                                                                                                                                                                                                                                 |
+| Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [future/block-scope.md](future/block-scope.md).                                                                                                                                                                                                                                                                                                                                                             |
+| Edge-scoped `bind` reads               | A fifth `$from` namespace (`"edge"`) that resolves against the unique CFG predecessor, expressing one-step producer/consumer handoffs without widening visibility to the full scope. Read-side switch only; producer's `bind` is unchanged. Sketch in [future/edge-scoped-bind.md](future/edge-scoped-bind.md).                                                                                                                                                                                                                                                                                                   |
 | Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Dynamic task registry                  | v1 assumes the registry is static across a single engine load (§5.7 MUST 7); the load-time drift check (§4.1 pass 3) rules out `TaskNotFound` and `TaskContractDrift` before execution begins. Allowing the registry to mutate under a running workflow opens a runtime failure class that v1 deliberately does not specify, since the failure-routing question (`onError`? whole-workflow abort? pinned task version?) is dangerous to get wrong and pulls in versioning and resume concerns also deferred from v1. Door is open: the static-registry decision is additive to revisit.                           |
@@ -617,7 +617,9 @@ Every node carries a discriminant `kind` (P5: self-describing).
 (section 3.4). The shape of `inputs` is part of the node's typed input
 schema (section 3.5). `onError`, when present, must point to a `task` node
 in the same scope; the engine dispatches that task with two injected input
-fields (`error` and `trigger`) per §3.8.
+fields (`error` and `trigger`) per §3.8. `onError` does not apply to
+`branch` nodes (see §3.6): branch is pure control flow and has no
+runtime failure mode after static validation.
 
 **Absent fields, no `null`.** Optional fields throughout the IR
 (`onError`, `bind`, `next` for terminals, `path` and `optional` on
@@ -831,6 +833,8 @@ validator, and analyzers in agreement on a single observable behavior
   `outputSchema`. A task whose `bind` is absent has no addressable output,
   but `outputSchema` is still required (it documents the contract and is
   used by the runtime to validate the task implementation's return value).
+  A special case: `outputSchema: { "not": {} }` declares that the task
+  always fails (see v2 §3.4, "Never-output convention").
 - An absent `next` (terminal node) is legal **only** in the top-level
   scope. In a loop body, every task must have `next` set to another body
   node, `@iterate`, or `@exit` (P5 scenario 39).
@@ -855,8 +859,7 @@ validator, and analyzers in agreement on a single observable behavior
   "cases": {
     "<caseValue>": "<nodeId>",
   },
-  "default": "<nodeId>",
-  "onError": "<nodeId>", // optional; see section 3.3
+  "default": "<nodeId>", // optional; see exhaustiveness rule below
 }
 ```
 
@@ -864,10 +867,24 @@ validator, and analyzers in agreement on a single observable behavior
   be string-typed: either `{ "type": "string" }` or `{ "enum": [...] }`
   with all-string members. Non-string discriminants (e.g., booleans from
   `int.lessThan`) require an explicit conversion task such as `bool.toLabel`
-  ([decision 0008](decisions/0008-discriminant-key-encoding.md)). The
-  validator requires `cases` to be exhaustive over the declared enum **or**
-  for `default` to be present. v1 requires both: `default` is mandatory
-  (P5: no implicit fall-through).
+  ([decision 0008](decisions/0008-discriminant-key-encoding.md)).
+- **No `onError`.** Branch is pure control flow with no runtime failure
+  mode: selector template resolution is statically proven by the
+  validator's dominator + path-projection passes (§5.8.3), and
+  `BranchSelectorUnmatched` is also statically unreachable (see
+  exhaustiveness contract below and §5.8.3). The common `onError` field
+  from §3.3 therefore does not apply to branch nodes.
+- **Exhaustiveness contract.** Either `default` is present, **or** the
+  branch is statically exhaustive. A branch is statically exhaustive when:
+  1. `selectorSchema` declares an `enum` (or is `{ "type": "boolean" }`,
+     which is treated as the implicit enum `[true, false]`), AND
+  2. `cases` contains a key for every enum member, AND
+  3. The discriminant's resolved producer type is provably narrowed to a
+     subset of the declared enum (the producer carries a matching `const`,
+     `enum`, or `boolean` type — see [§3.6.1](#361-discriminant-narrowing)).
+     When all three hold, omitting `default` is legal and
+     `BranchSelectorUnmatched` is statically unreachable. Otherwise `default`
+     is required (P5: no implicit fall-through).
 - A branch has no `inputs` other than `selector`, no `outputs`, and no
   `bind` (it produces no value). It is pure control flow. Data needed
   downstream of the branch must already be available via dominator
@@ -923,7 +940,7 @@ keeps the branch node a pure structural construct.
       /* reference object resolved in body scope at @iterate */
     },
   },
-  "maxIterations": 1000,
+  "maxIterations": 1000, // optional; engine default 10,000
   "next": "<nodeId>", // optional; see section 3.3
   "onError": "<nodeId>", // optional; see section 3.3
   "bind": "<scopeVarName>", // optional; loop output is the resolved `output` value
@@ -958,8 +975,9 @@ Key points:
   built by a tail body node and bound under one name; the loop's
   `output` then references that single name. This keeps every
   value-producing scope (workflow, loop) on one shape.
-- `maxIterations` is required and bounded; if exceeded, the loop fails with
-  a well-known error type (consumable by `onError`).
+- `maxIterations` is optional. If present, must be a positive integer; if
+  exceeded, the loop fails with a well-known error type (consumable by
+  `onError`). If omitted, the engine applies a default safety cap (10,000).
 - `bind` on the loop publishes the resolved `output` value as a scope
   variable in the **outer** scope, just like any other value-producing node.
 
@@ -1114,7 +1132,7 @@ is a JSON object with this fixed schema, available as the built-in
 
 ```jsonc
 {
-  "code":      "<string>",        // machine-readable error code
+  "kind":      "<string>",        // machine-readable error kind
   "message":   "<string>",        // human-readable summary
   "source":    "task" | "runtime", // where the failure originated
   "task":      "<string>",        // task type id from the failing node, optional
@@ -1132,22 +1150,37 @@ declare it. (Codegen cannot reasonably synthesize this shape from a
 workflow's own type catalog; making it built-in lets every recovery
 node opt into the canonical envelope by reference.)
 
-Required fields: `code`, `message`, `source`. The remaining fields are
+Required fields: `kind`, `message`, `source`. The remaining fields are
 optional and may be absent. An engine MAY include additional fields
 beyond those listed; consumers MUST treat unknown fields as opaque.
 
-**`source` discriminates the failure origin.**
+**`source` and `kind` discriminate the failure origin.**
 
-- `"task"` - the registered task implementation threw, returned a value
-  that violated `outputSchema` (§5.2), or otherwise signaled failure.
-  `task` and `node` SHOULD be populated.
-- `"runtime"` - the engine itself raised the failure (loop
-  `maxIterations` exceeded, branch selector value did not match any
-  `cases` or `default`, reference resolution failed at runtime, etc.).
-  `code` distinguishes the runtime case (well-known codes include
-  `LoopMaxIterationsExceeded`, `BranchSelectorUnmatched`,
-  `ReferenceUnresolved`; the full list is engine-defined and surfaced
-  through the validator's error-code table - see §4.3).
+- `"task"` — the registered task implementation returned `{ kind: "fail" }`
+  or threw. `kind` is `"TaskError"`. `task` and `node` SHOULD be
+  populated; `data` carries any additional payload the task returned.
+- `"runtime"` — the engine raised a **recoverable** runtime condition.
+  `kind` further discriminates the case:
+  - `"RuntimeError"` — general engine failure (task timeout, policy
+    denial, cancellation, etc.).
+  - `"LoopMaxIterationsExceeded"` — the loop hit its `maxIterations`
+    cap. Authors may want to catch this and return a partial result.
+  - `"OutputSchemaViolation"` — the task returned a value that failed
+    its declared `outputSchema`. This indicates a buggy or drifted task
+    implementation; authors may want to log or fall back.
+    All `"runtime"` errors are routed to `onError` handlers.
+- `"runtime"` with `kind: "UnrecoverableError"` — the engine raised a
+  condition that is **statically unreachable** after validation
+  (e.g., `ReferenceUnresolved`, `BranchSelectorUnmatched`, unknown `$from`
+  namespace, missing node). These indicate the IR bypassed the static
+  validator. They are **not** routed to `onError` handlers — the run
+  fails immediately regardless of any `onError` edge. Authors MUST NOT
+  write workflows that depend on catching these; they should instead
+  ensure the IR passes static validation.
+
+An engine MAY use additional `kind` values for finer-grained
+discrimination; consumers MUST treat unknown `kind` values as opaque
+and fall back to inspecting `source`.
 
 A recovery task that wants to be type-strict about the error it
 consumes can narrow the schema for its `error` input field below
@@ -1155,7 +1188,7 @@ consumes can narrow the schema for its `error` input field below
 a known task failure). One that only needs the message can declare just
 `{ "message": { "type": "string" } }` and rely on structural subtyping
 (§4.2). Path projection (§3.4.1) on the `error` input works the same
-as on any other input field, so a recovery can read just `error.code`
+as on any other input field, so a recovery can read just `error.kind`
 or `error.data.foo` without binding the whole object.
 
 The `trigger` field's schema mirrors the trigger T's `inputs` map: an
@@ -1165,7 +1198,7 @@ recovery node restates it (or a narrowing of it) the same way it
 restates `Error`, for IR self-containment.
 
 The shape is fixed in v1 to keep recoveries writable without needing to
-look up the failing task. Per-task or per-error-code typed payloads
+look up the failing task. Per-task or per-error-kind typed payloads
 belong in `data` and are out-of-band of v1's contract: a recovery that
 cares unpacks `data` with a runtime check, exactly as it would for any
 open-world JSON. A future error-taxonomy mechanism could lift `data`
@@ -1422,7 +1455,7 @@ output, and other nodes never reference a branch as a data source.
    outer scope), validating against the variable's schema.
 3. Set iteration counter `i = 0`.
 4. Begin iteration:
-   - If `i >= maxIterations`, fail with `LoopMaxIterationsExceeded`.
+   - If `i >= maxIterations` (or the engine default when omitted), fail with `LoopMaxIterationsExceeded`.
    - Execute body starting at `body.entry`. Inside the body:
      - `$from: "state"` reads see the values established at the start of
        this iteration. State does not change during a body iteration.
@@ -1552,6 +1585,120 @@ conforming engine runs on all of them. The SHOULD list is the quality
 bar - engines that skip these will produce correct results but with
 poor memory or latency profiles on realistic workflows.
 
+### 5.8 Runtime checks and defense-in-depth
+
+The engine performs two categories of runtime checks during execution.
+**Essential checks** catch errors that cannot be detected statically
+because they depend on runtime values. **Defense-in-depth checks**
+re-verify invariants already proven by the static validator (§4.1) and
+are redundant when static validation has run against the same IR and
+registry.
+
+A conforming engine MUST support a `defenseInDepth` flag (or
+equivalent) that controls whether the second category runs. The flag
+defaults to **on** when static validation is skipped, and **off** when
+static validation has run; callers MAY override explicitly.
+
+#### 5.8.1 Essential runtime checks
+
+These checks MUST always run because they validate runtime values that
+the static validator has no visibility into.
+
+**Schema validation (runtime values)**
+
+| Check                     | Trigger                                     | Rationale                                                                      |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Workflow input schema** | Caller provides `input`                     | Input is external to the IR; no static knowledge of actual values              |
+| **Task output schema**    | Task implementation returns                 | Catches buggy or drifted task implementations returning wrong types (§5.2)     |
+| **Never-output contract** | Task with `{ "not": {} }` output returns ok | Task declared it always fails; returning success means a broken implementation |
+
+**Security / policy**
+
+| Check                                | Trigger                                         | Rationale                            |
+| ------------------------------------ | ----------------------------------------------- | ------------------------------------ |
+| **Side-effect policy deny**          | Policy map says `"deny"`                        | Runtime configuration, not in the IR |
+| **Side-effect prompt / no callback** | Policy says `"prompt"` but no approval callback | Runtime configuration                |
+| **Approval rejected**                | Approval callback returns non-approved          | User decision at runtime             |
+
+**Execution control**
+
+| Check                           | Trigger                           | Rationale                                                           |
+| ------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| **Run cancelled**               | `AbortSignal` fires               | External cancellation at runtime                                    |
+| **Task timeout**                | Execution exceeds `timeoutMs`     | Runtime duration is unpredictable                                   |
+| **Loop maxIterations exceeded** | Iteration count ≥ `maxIterations` | Runtime convergence; static analysis cannot predict iteration count |
+
+**Task contract**
+
+| Check                     | Trigger                                   | Rationale                                                      |
+| ------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| **Task failure**          | Task throws or returns `{ kind: "fail" }` | External services fail; legitimate runtime error               |
+| **Unrecoverable failure** | Task fails with no `onError`              | Failure propagation; the task threw and no handler is declared |
+
+#### 5.8.2 Defense-in-depth runtime checks (gated)
+
+These checks MAY be skipped when static validation has passed. Each
+re-verifies an invariant that the static validator already proves
+(column "Static guarantee"). They are controlled by the
+`defenseInDepth` flag described above.
+
+**Structural (static IR properties)**
+
+| Check                     | Static guarantee                                               | Reasoning                                                                                   |
+| ------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Constant value schema** | `jsonValueToSchema` + `isStructuralSubtype` (§4.1 type compat) | Constant values are in the IR; static validator derives their type and checks compatibility |
+
+**Propagation (static type compat + essential task output check)**
+
+These are redundant because the essential **task output schema** check
+(§5.8.1) ensures every task implementation's actual return value
+conforms to its declared `outputSchema`, and the static validator
+proves every template's resolved type is structurally compatible with
+its target schema (§4.2). Together, types are proven compatible
+statically and values are proven conformant at each task boundary.
+
+| Check                         | Static guarantee                                           | Reasoning                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Workflow output schema**    | §4.1 type-compatibility pass + essential task output check | Static proves template type fits schema; task output check ensures upstream values match declared types     |
+| **Loop input schema**         | §4.1 type-compatibility pass + essential task output check | Static proves input template types match `inputSchema`; task output check validates actual upstream values  |
+| **Loop state initial schema** | §4.1 type-compatibility pass + essential task output check | Static proves initial-value template types match state schemas; task output check validates upstream values |
+| **Loop output schema**        | §4.1 type-compatibility pass + essential task output check | Static proves output template types match `outputSchema`; task output check validates body bindings         |
+| **Loop iterateState schema**  | §4.1 type-compatibility pass + essential task output check | Static proves iterateState template types match state schemas; task output check validates body bindings    |
+
+#### 5.8.3 Statically proven but unconditional checks
+
+The checks in this section are all proven unreachable after static
+validation, but are kept **unconditional** (not gated by
+`defenseInDepth`) because they are cheap and provide clear diagnostics
+if an IR somehow bypasses static validation.
+
+**Structural / integrity**
+
+| Check                            | Static guarantee                                           | Reasoning                                                                                                                                                                                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node not found**               | §4.1 name-resolution pass                                  | Null check; all node references are verified statically                                                                                                                                                                                                                                               |
+| **Unregistered task**            | §4.1 IR/task drift pass                                    | Null check; all task names are checked against the registry at validation time                                                                                                                                                                                                                        |
+| **Fork min-2 branches**          | §4.1 structural check                                      | Comparison; branch count is a static IR property                                                                                                                                                                                                                                                      |
+| **forkMap collection not array** | §4.1 type-compatibility pass + essential task output check | `Array.isArray` check; static proves collection resolves to array type                                                                                                                                                                                                                                |
+| **Branch selector unmatched**    | §3.6 exhaustiveness contract + §4.1 type-compatibility     | When `default` is absent the validator proves the branch is exhaustive (selectorSchema has enum, all enum values appear as cases, and selector producer is provably narrowed). When `default` is present, unmatched values route to it. Either way, raising `BranchSelectorUnmatched` is unreachable. |
+
+**Template resolution (dominator analysis + type checking)**
+
+The static validator's dominator analysis with onError-split awareness
+(§4.1 scope-closure and dominator passes) proves that every non-optional
+`$from: "scope"` reference is bound on all execution paths, including
+error-recovery paths. Path projections are verified by
+`checkSchemaCompat` which rejects paths into undeclared schema
+properties. Combined with the essential task output check (§5.8.1),
+which ensures actual values match declared schemas, path projection
+type errors at runtime are unreachable.
+
+| Check                                  | Static guarantee                                | Reasoning                                                                                                        |
+| -------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Unknown `$from` namespace**          | §4.1 schema-syntax pass                         | Only valid namespaces (`input`, `constant`, `scope`, `state`) are accepted                                       |
+| **Unresolved reference**               | §4.1 dominator pass with onError-split coverage | Binding coverage is proven on all paths including error-recovery paths; uncovered non-optional refs are rejected |
+| **Path projection on null/wrong type** | §4.1 type-compatibility + `resolveSchemaPath`   | Path segments are checked against declared schema structure; task output check ensures actual values match       |
+
 ---
 
 ## 6. Worked examples
@@ -1618,7 +1765,7 @@ Note how `Url` is shared between the workflow `inputSchema` and the `fetch` task
 the workflow result. The compatibility pass collapses each ref-equal pair to
 an identity check.
 
-### 6.2 Branch with `onError` recovery
+### 6.2 Branch with task-level `onError` recovery
 
 ```jsonc
 {
@@ -1872,7 +2019,7 @@ reference them.
 | P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                        |
 | P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                              |
 | P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                                                            |
-| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                |
+| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                            |
 
 ---
 
@@ -2008,7 +2155,7 @@ own design review against P5.
   carries different reference legality depending on which triggers
   point at it - one label, context-dependent rule. Most "same recovery
   over several nodes" scenarios are addressed post-v1 by **block
-  scope** ([post-v1/block-scope.md](post-v1/block-scope.md)).
+  scope** ([future/block-scope.md](future/block-scope.md)).
 - Alt C: handlers as fields on the failing task (no separate node).
   Rejected: loses the ability to give the recovery its own `next`
   chain, its own `bind`, its own loop-body retry, and its own
@@ -2046,7 +2193,7 @@ own design review against P5.
 - Alt B: no constants; require literal values inline. Rejected: makes
   state initial values awkward (every loop needs an inline literal).
 
-Interaction with post-v1 block scope ([post-v1/block-scope.md](post-v1/block-scope.md)):
+Interaction with post-v1 block scope ([future/block-scope.md](future/block-scope.md)):
 that sketch keeps constants workflow-global; blocks and loops both reach
 constants through the same root closure, so adding blocks does not require
 revisiting this decision. If block-scoped constants ever become motivated,
@@ -2138,7 +2285,7 @@ they land as the additive per-scope extension above.
   handoffs. Deferred to post-v1: the bind-vs-no-bind axis is settled
   for v1; this is an additive read-granularity refinement on the
   orthogonal axis. Sketch in
-  [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).
+  [future/edge-scoped-bind.md](future/edge-scoped-bind.md).
 - Recovery convenience: when a task is dispatched via an `onError` edge,
   the engine injects the trigger's resolved inputs as a `trigger` input
   field on the recovery (§3.8). This avoids forcing the trigger to bind
@@ -2339,19 +2486,19 @@ Three lenses close the items previously flagged here:
 The closures below are listed for traceability; full per-decision
 rationale lives in §8.
 
-| Topic                               | Status under the lens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Branch model (§8.3)                 | Closed: discriminant + total `default` is engine-cheap and codegen-neutral.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Type system surface (§8.1)          | Closed: JSON Schema is language-neutral and serves codegen, engine, and door-kept downstream consumers; TypeScript surfaces belong in the DSL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Default branch requirement (§8.3)   | Closed: engine wants total dispatch with no exhaustiveness analysis on the hot path; codegen can synthesize a `default`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Reference form (§8.2)               | Closed: object form is parser-free for engine and analyzers; codegen has no preference between forms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| State commit timing (§8.6)          | Closed by P4/P5 (lens-neutral): inter-iteration commit makes per-iteration reads independent of write order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Pure SSA per namespace (§8.17)      | Closed: every reader population is a net win (validator gets textbook dominance + phi; humans get one-value-per-name locality; analyzers get standard SSA tooling). Codegen pays verbosity (§3.7.1 no-implicit-carry-forward, §3.3 phi coverage) and gets back splice safety and validator precision. Engine latitude (re-execute / memoize / per-frame snapshot / future parallelism) is preserved without being IR-observable, which is why §2.2 can defer parallelism without prescribing.                                                                                                                                |
-| Recovery-task reuse (§8.7, §3.8)    | Closed for v1: one-trigger recovery tasks keep dominator analysis trivial. Most "same recovery over several nodes" scenarios are addressed post-v1 by **block scope** (a single `onError` over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared recoveries (same task reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical recovery into per-trigger copies if neither mechanism is available.                          |
-| Shared schemas (§8.13)              | Closed: validator identity-checks (§1.1 acceptable performance), codegen single emission, and reviewer locality (P4) all favor named `types`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| IR encoding (§8.14)                 | Closed: JSON serves engine parsing, the LLM-direct fallback, and the door-kept distribution role (§1.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Task schema source of truth (§8.16) | Closed for v1: IR self-containment serves both engine sufficiency and door-keeping; hybrid sugar (loader-filled omissions) belongs in the DSL. Reopening trigger in [revisit-triggers.md](revisit-triggers.md) row 6.                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Constants scoping (§8.9)            | Closed for v1 under the staging lens. Audience lens is neutral (codegen and engine handle either at equal cost; reviewers gain marginal P4 locality from per-scope, analyzers gain marginal "one place to look" from global). Staging lens is asymmetric: per-scope is an additive future extension (a global is a per-scope at the workflow root, visible by closure), while shipping per-scope first and retreating to global is breaking. v1 picks global on §1.3 minimalism + this asymmetry; per-scope can land later, possibly as part of [post-v1/block-scope.md](post-v1/block-scope.md), without disturbing v1 IRs. |
+| Topic                               | Status under the lens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch model (§8.3)                 | Closed: discriminant + total `default` is engine-cheap and codegen-neutral.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Type system surface (§8.1)          | Closed: JSON Schema is language-neutral and serves codegen, engine, and door-kept downstream consumers; TypeScript surfaces belong in the DSL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Default branch requirement (§8.3)   | Closed: engine wants total dispatch with no exhaustiveness analysis on the hot path; codegen can synthesize a `default`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Reference form (§8.2)               | Closed: object form is parser-free for engine and analyzers; codegen has no preference between forms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| State commit timing (§8.6)          | Closed by P4/P5 (lens-neutral): inter-iteration commit makes per-iteration reads independent of write order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Pure SSA per namespace (§8.17)      | Closed: every reader population is a net win (validator gets textbook dominance + phi; humans get one-value-per-name locality; analyzers get standard SSA tooling). Codegen pays verbosity (§3.7.1 no-implicit-carry-forward, §3.3 phi coverage) and gets back splice safety and validator precision. Engine latitude (re-execute / memoize / per-frame snapshot / future parallelism) is preserved without being IR-observable, which is why §2.2 can defer parallelism without prescribing.                                                                                                                              |
+| Recovery-task reuse (§8.7, §3.8)    | Closed for v1: one-trigger recovery tasks keep dominator analysis trivial. Most "same recovery over several nodes" scenarios are addressed post-v1 by **block scope** (a single `onError` over a region of nodes within one scope; sketch in [future/block-scope.md](future/block-scope.md)). Cross-scope shared recoveries (same task reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical recovery into per-trigger copies if neither mechanism is available.                          |
+| Shared schemas (§8.13)              | Closed: validator identity-checks (§1.1 acceptable performance), codegen single emission, and reviewer locality (P4) all favor named `types`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| IR encoding (§8.14)                 | Closed: JSON serves engine parsing, the LLM-direct fallback, and the door-kept distribution role (§1.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Task schema source of truth (§8.16) | Closed for v1: IR self-containment serves both engine sufficiency and door-keeping; hybrid sugar (loader-filled omissions) belongs in the DSL. Reopening trigger in [revisit-triggers.md](revisit-triggers.md) row 6.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Constants scoping (§8.9)            | Closed for v1 under the staging lens. Audience lens is neutral (codegen and engine handle either at equal cost; reviewers gain marginal P4 locality from per-scope, analyzers gain marginal "one place to look" from global). Staging lens is asymmetric: per-scope is an additive future extension (a global is a per-scope at the workflow root, visible by closure), while shipping per-scope first and retreating to global is breaking. v1 picks global on §1.3 minimalism + this asymmetry; per-scope can land later, possibly as part of [future/block-scope.md](future/block-scope.md), without disturbing v1 IRs. |
 
 All items above are closed under the combined lens (audience + staging).
 The constants-scoping closure is the only one that depended on the

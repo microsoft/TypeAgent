@@ -1,0 +1,418 @@
+# docs-autogen — Pipeline Setup Guide
+
+This guide walks an operator through provisioning the
+[`docs-generate`](../../../.github/workflows/docs-generate.yml) GitHub
+Action that regenerates `README.AUTOGEN.md` companion files daily.
+
+For the _why_ — architecture, format spec, and design rationale — see
+[`doc-autogen.md`](./doc-autogen.md). For the local CLI and operations
+runbook see
+[`ts/tools/docsAutogen/README.md`](../../tools/docsAutogen/README.md).
+
+## Prerequisites
+
+Before starting, confirm:
+
+- You have **Owner** or **Admin** access to the target GitHub
+  repository (needed to install the GitHub App, set Actions secrets
+  and variables, and grant `contents: write` / `pull-requests: write`
+  permissions).
+- You have access to an **Azure OpenAI** resource with at least one
+  chat deployment provisioned. The pipeline currently calls the
+  default model exposed by `@typeagent/aiclient`; a deployment of
+  `gpt-4o` (or an equivalent reasoning model) is sufficient.
+- You have permission to create a **GitHub App** in the same
+  organization (or in your personal account if running against a
+  personal fork). Installing the App into the target repo also
+  requires Owner/Admin on that repo.
+
+Estimated time to complete: 20–30 minutes for a first-time install
+once the prerequisites are in place.
+
+## Pipeline overview (one-paragraph version)
+
+A scheduled workflow runs daily at 08:00 UTC, diffs `ts/packages/**`
+against a watermark git tag (`docs-bot/last-run`), regenerates
+`README.AUTOGEN.md` for every changed package, validates each link
+resolves on disk, opens a single batched PR via a dedicated GitHub
+App, and closes any previously-open bot PRs so only one is live at a
+time. The hand-written `README.md` is never modified — `docs-autogen`
+writes to a parallel `README.AUTOGEN.md` file only.
+
+## Step 1 — Create the docs-bot GitHub App
+
+The pipeline pushes a branch and opens a PR using a dedicated GitHub
+App rather than `GITHUB_TOKEN`, so reviews and `CODEOWNERS` rules
+treat the PR as authored by an external bot identity (and the App's
+permissions can be scoped down to exactly what's needed).
+
+1. In the GitHub UI, navigate to **Settings → Developer settings →
+   GitHub Apps → New GitHub App** (organization-level if applicable;
+   user-level works for forks).
+2. Fill in:
+   - **Name:** something recognisable, e.g. `<org>-docs-bot`.
+   - **Homepage URL:** any valid URL (the App is not a web service).
+   - **Webhook:** uncheck **Active**. The App is invoked from
+     Actions, not via webhooks.
+3. **Repository permissions** (set the rest to "No access"):
+   - **Contents:** **Read & write** — needed to push the PR branch
+     and force-update the `docs-bot/last-run` tag.
+   - **Pull requests:** **Read & write** — needed to open the daily
+     PR and close superseded ones.
+   - **Metadata:** **Read-only** (auto-required).
+4. **Where can this GitHub App be installed?** "Only on this account"
+   is fine — there is no reason to expose it more broadly.
+5. **Create GitHub App.** On the post-create page:
+   - Note the **App ID** (you'll need this as a workflow variable).
+   - Click **Generate a private key** and download the `.pem` file.
+     Store it somewhere safe — you'll paste it into a repository
+     secret in Step 3 and there is no second download.
+6. From the App's left nav choose **Install App → Install** and pick
+   the target repository. **Only select repositories →
+   `<your-repo>`** is the safest choice; do not grant the App access
+   to anything it does not need to update.
+
+> **Why a GitHub App and not `GITHUB_TOKEN`?** Actions invoked by
+> `GITHUB_TOKEN` do not trigger downstream workflows on PRs they
+> open. That would prevent CI from running on the daily docs PR.
+> Using a dedicated App identity sidesteps that limitation, gives
+> the PRs a clearly attributed author, and lets you revoke App
+> credentials independently of any human PAT.
+
+## Step 2 — Azure OpenAI access (reuses existing build-pipeline credential)
+
+The AI-authored portion of each `README.AUTOGEN.md` is generated via
+[`@typeagent/aiclient`](../../packages/aiclient/README.md), which
+reads its endpoint + key from `ts/config.local.yaml` (loaded by
+[`@typeagent/config`](../../packages/config/README.md)).
+
+For CI, this workflow piggy-backs on the **existing federated
+credential** that `smoke-tests.yml` and `build-docker-container.yml`
+already use. The auth chain is:
+
+> GitHub OIDC token → existing Entra App registration → Key Vault
+> `build-pipeline-kv` → consolidated `typeagent-config` secret →
+> `ts/config.local.yaml` → `aiclient` reads endpoint + key normally.
+
+No new Azure resource, no new RBAC, no new secret to configure.
+Concretely, the workflow:
+
+1. Calls `azure/login@v2.2.0` with the existing repo secrets
+   `AZUREAPPSERVICE_CLIENTID_*`, `AZUREAPPSERVICE_TENANTID_*`,
+   `AZUREAPPSERVICE_SUBSCRIPTIONID_*` (auto-created when the build
+   pipeline was first wired through the Azure portal). This performs
+   the OIDC handshake and exports the standard Azure env vars.
+2. Runs `node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit`,
+   which uses `DefaultAzureCredential` to read the `typeagent-config`
+   secret from `build-pipeline-kv` and writes it as
+   `ts/config.local.yaml`.
+3. Subsequent `pnpm` invocations (the regen step) read the YAML
+   transparently — same code path that runs on a developer machine.
+
+If your fork or organization does **not** already have those
+secrets, you have two options:
+
+- **Mirror the build pipeline:** in the Azure portal, configure
+  GitHub Actions OIDC trust on an Entra App, and grant it Key Vault
+  read access on the vault you want to source secrets from. Then
+  copy `smoke-tests.yml`'s `Login to Azure` + `Get Keys` step
+  pattern (and update `--vault` to your vault name).
+- **API-key fallback:** drop the OIDC + Key Vault steps entirely
+  and add a literal `AZURE_OPENAI_API_KEY` secret. See the
+  [API-key fallback](#api-key-fallback-non-microsoft-installs)
+  subsection below for the exact workflow edits.
+
+### Local validation (optional)
+
+To smoke-test from a developer machine, populate
+`ts/config.local.yaml` either by running `getKeys.mjs` against the
+same vault (requires you to be `az login`-ed with Key Vault read
+permission) or by hand-editing per `ts/config.sample.yaml`:
+
+```powershell
+cd ts
+az login --tenant <your-tenant-id>
+node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+
+pnpm install
+pnpm --filter aiclient build
+pnpm --filter @typeagent/docs-autogen build
+
+# Single-package smoke test against the real LLM. Pick a small package.
+node tools/docsAutogen/bin/docs-autogen.cjs `
+  --package timer --render --write --llm
+```
+
+If the smoke test produces a sensible
+`ts/packages/agents/timer/README.AUTOGEN.md`, the auth chain works
+end-to-end.
+
+### API-key fallback (non-Microsoft installs)
+
+If you do not have a Microsoft tenant or cannot register an Entra
+App — e.g., a personal fork or an external organization — set
+`AZURE_OPENAI_API_KEY` to the actual key value as a repo secret
+and edit the workflow:
+
+- Remove the `Azure login (federated)` step.
+- Remove the `Pull config from Key Vault` step.
+- Drop the `id-token: write` permission.
+- Add an `env:` block to the regen step exposing
+  `AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}` and
+  `AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}`.
+
+`aiclient` reads those env vars when no `config.local.yaml` is
+present.
+
+## Step 3 — Configure repository secrets and variables
+
+In the target repository, navigate to **Settings → Secrets and
+variables → Actions** and add the following entries.
+
+### Variables (Repository **variables** tab)
+
+| Name              | Value                                      |
+| ----------------- | ------------------------------------------ |
+| `DOCS_BOT_APP_ID` | Numeric App ID from Step 1 (e.g. `123456`) |
+
+### Secrets (Repository **secrets** tab)
+
+| Name                                                              | Value                                                                                                                         |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `DOCS_BOT_APP_PRIVATE_KEY`                                        | Full contents of the `.pem` file from Step 1, including the `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----` lines |
+| `AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD`       | **Already present** — created when the build pipeline was wired                                                               |
+| `AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA`       | **Already present** — same source                                                                                             |
+| `AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30` | **Already present** — same source                                                                                             |
+
+When pasting the GitHub App private key, preserve newlines exactly —
+GitHub strips trailing whitespace but newlines inside the field are
+kept.
+
+> The three `AZUREAPPSERVICE_*` secrets only need provisioning if
+> this is a fresh fork without the existing build-pipeline wiring.
+> On `microsoft/TypeAgent` they are already configured. If you fell
+> back to the API-key path, add `AZURE_OPENAI_ENDPOINT` and
+> `AZURE_OPENAI_API_KEY` here instead.
+
+## Step 4 — Enable Actions to write to the repo
+
+The workflow itself declares the `contents: write` and
+`pull-requests: write` permissions it needs, but org-level policy
+can still block them. Confirm:
+
+1. **Settings → Actions → General → Workflow permissions.** Either
+   - **Read and write permissions** (simplest), or
+   - **Read repository contents permission**, with **Allow GitHub
+     Actions to create and approve pull requests** explicitly
+     enabled.
+2. **Settings → Actions → General → Fork pull request workflows.**
+   Leave at the default; the daily workflow only runs from the
+   default branch, never from forks.
+
+If the repo lives inside an organization, the same toggles must also
+be on at the **org level** (Org settings → Actions → General).
+Otherwise the per-repo setting is ignored.
+
+## Step 5 — Set the initial watermark (optional but recommended)
+
+`docs-autogen` diffs against a lightweight git tag
+(`docs-bot/last-run`) to decide which packages have changed since
+the last successful run. On the very first run no tag exists, and
+the tool falls back to "regenerate everything" — for a repo with
+~100 packages that's a 100-package PR.
+
+To keep the first scheduled PR small, push the tag at the current
+HEAD before the first scheduled run:
+
+```bash
+git fetch origin
+git tag -f docs-bot/last-run origin/main
+git push origin docs-bot/last-run
+```
+
+The first scheduled run will then see no changes and skip silently.
+Subsequent runs only touch packages whose source files changed after
+that tag. The workflow auto-advances the tag on every successful
+scheduled run with a non-empty PR.
+
+## Step 6 — First manual run
+
+Validate end-to-end before relying on the daily schedule:
+
+1. **Actions → docs-generate → Run workflow.**
+2. Pick a small input to bound the blast radius:
+   - **dry-run:** ✅ — analyse and render only, do not write or open
+     a PR.
+   - **packages:** a comma-separated list of one or two known
+     packages, e.g. `timer-agent,list-agent`.
+   - **llm:** ✅ — exercises the real Azure OpenAI call.
+   - **max-packages:** `5`.
+3. Click **Run workflow** and watch the job. Confirm:
+   - The **Generate GitHub App token** step succeeds (App
+     credentials valid).
+   - The **Regenerate package README.AUTOGEN.md files** step prints
+     per-package `verdict=…` lines and the LLM mode is logged.
+   - The **Job summary** at the bottom of the run shows the
+     truncated CLI log.
+
+If anything fails, see [Troubleshooting](#troubleshooting) below.
+Once the dry-run is clean, repeat without the `dry-run` checkbox and
+with a single safe package to verify the PR open / supersede /
+close-previous flow.
+
+## Step 7 — Let the schedule take over
+
+With Steps 1–6 complete, no further action is required. The daily
+cron at `0 8 * * *` UTC will:
+
+1. Diff `ts/packages/**` against the watermark tag.
+2. Regenerate the changed packages' `README.AUTOGEN.md` files.
+3. Open a single PR titled
+   `docs: regenerate package README.AUTOGEN.md files (YYYY-MM-DD)`
+   on a branch like `automated/docs-readmes-YYYYMMDD-<run>`.
+4. Close any prior open bot PR on a similar branch, with a
+   "superseded" comment, and delete the prior branch.
+5. Advance the `docs-bot/last-run` tag to the regenerated commit
+   only after the PR is opened successfully.
+
+Review checklist for each PR is included in the auto-generated PR
+body; the most important assertion is that no hand-written
+`README.md` has been modified.
+
+## Troubleshooting
+
+### "Generate GitHub App token" step fails with 401 / 404
+
+- Confirm `DOCS_BOT_APP_ID` is the numeric App ID (not the App name).
+- Confirm `DOCS_BOT_APP_PRIVATE_KEY` contains the full
+  `-----BEGIN PRIVATE KEY-----` … `-----END PRIVATE KEY-----` block
+  with original newlines.
+- Confirm the App is **installed** on the target repo
+  (App → Install App → check the target repo is listed).
+
+### Workflow runs but never opens a PR
+
+- Inspect the **Detect changes** step. If it prints
+  `No README.AUTOGEN.md changes after regeneration`, every package
+  either was up-to-date or hit the "footer-only" diff guard. This is
+  the correct behaviour when nothing has materially changed since
+  the watermark.
+- For a forced refresh, dispatch manually with
+  `since: main~50` (or any older ref) to diff against an older
+  point.
+
+### "Resource not accessible by integration" when opening the PR
+
+- The App's **Pull requests** permission is missing or set to
+  read-only. Re-edit the App, set it to **Read & write**, then go
+  to App → Install App → choose the repo → **Configure** and accept
+  the new permission scope. GitHub does not auto-grant new
+  permissions to existing installations.
+
+### "Validate dispatch inputs" rejects a manual dispatch
+
+The workflow allow-lists characters in `packages` / `since` /
+`max-packages` inputs to block shell-metachar injection. Stick to
+the patterns:
+
+- `packages`: comma-separated package names matching
+  `[A-Za-z0-9@/_.,-]+`.
+- `since`: a git ref matching `[A-Za-z0-9._/-]+`.
+- `max-packages`: digits only.
+
+### LLM run completes but generated docs look like placeholders
+
+The placeholder body fires when the LLM call short-circuits (no
+endpoint, auth failure, or `--llm` not set). Walk down the list:
+
+- **Federated login:** confirm the `Azure login (federated)` step
+  reports `Login successful`. If it fails with
+  `AADSTS70021: No matching federated identity record found`, the
+  subject the runner is presenting does not match the FIC
+  registered on the Entra App. (This is the same App that
+  smoke-tests uses, so if smoke-tests passes the FIC is fine —
+  most often the subject mismatch means you're running on a branch
+  the FIC subject claim doesn't cover.)
+- **Key Vault read:** confirm the `Pull config from Key Vault` step
+  reports `Written ts/config.local.yaml from vault secret`. If it
+  fails with `Forbidden`, the Entra App lost its read role on
+  `build-pipeline-kv`; cross-check Access Control (IAM) on the
+  vault. If it fails with `Secret 'typeagent-config' not found`,
+  the secret was renamed or deleted in the vault.
+- **Stale `config.local.yaml`:** the file is gitignored and freshly
+  written each run, but if the regen step somehow ran before the
+  `Get Keys` step (e.g., a step was reordered), there'd be no
+  endpoint to call. Inspect the step ordering in the workflow file.
+- **API-key fallback:** if you fell back to API-key auth, confirm
+  the secrets are named exactly `AZURE_OPENAI_API_KEY` and
+  `AZURE_OPENAI_ENDPOINT` and that the workflow was edited as
+  described in Step 2's "API-key fallback" section.
+
+### Daily PR contains hundreds of packages
+
+The watermark tag was reset or deleted. Push it back to a recent
+commit:
+
+```bash
+git tag -f docs-bot/last-run <sha>
+git push origin docs-bot/last-run --force
+```
+
+## Hardening
+
+Beyond the baseline setup above, the recommendations below tighten
+the trust surface:
+
+1. **Audit Key Vault access periodically.** The Entra App that
+   `AZUREAPPSERVICE_CLIENTID_*` refers to has Key Vault read access
+   on `build-pipeline-kv`. Verify in Azure Portal → vault → Access
+   Control (IAM) that the App's role is the minimum needed
+   (Key Vault Secrets User), and nothing more. Revoke any
+   Contributor / Owner roles that crept in.
+2. **Don't add `pull_request_target`.** The workflow only fires on
+   `schedule` and `workflow_dispatch` today — keep it that way. A
+   `pull_request_target` trigger lets fork PRs run with
+   write-permission tokens, which would let an attacker impersonate
+   the bot _and_ exfiltrate the Key Vault payload.
+3. **Optional — scope the FIC to a GitHub environment.** Create an
+   `azure-openai` environment under **Settings → Environments**,
+   optionally with required reviewers, and gate the `regenerate`
+   job on it via `environment: azure-openai`. Then add a second
+   FIC on the Entra App with subject
+   `repo:<org>/<repo>:environment:azure-openai` so even another
+   workflow file in the same repo can't mint tokens for the same
+   App without going through the environment gate. (Skip this if
+   you'd rather share the FIC config with the existing build
+   pipelines.)
+4. **Rotate the GitHub App private key annually.** The
+   `DOCS_BOT_APP_PRIVATE_KEY` secret is the one durable credential
+   in this workflow; everything else is short-lived. GitHub's App
+   settings page supports rotation in-place — generate a new key,
+   replace the repo secret, then delete the old key.
+
+## Tearing it down
+
+To pause the pipeline temporarily, **Actions → docs-generate →
+Disable workflow**. To remove it permanently:
+
+1. Disable / delete the workflow file.
+2. Uninstall the docs-bot GitHub App from the repository.
+3. Remove the `DOCS_BOT_APP_ID` variable and the
+   `DOCS_BOT_APP_PRIVATE_KEY` secret. The `AZUREAPPSERVICE_*`
+   secrets are shared with `smoke-tests.yml` /
+   `build-docker-container.yml` — **do not delete them**.
+4. (Optional) Delete the `docs-bot/last-run` tag: `git push origin
+:refs/tags/docs-bot/last-run`.
+
+The `README.AUTOGEN.md` files already in the repository remain
+useful documentation; nothing depends on the workflow to keep
+working after teardown.
+
+## Related docs
+
+- [`doc-autogen.md`](./doc-autogen.md) — architecture and design.
+- [`ts/tools/docsAutogen/README.md`](../../tools/docsAutogen/README.md)
+  — CLI reference and local operations.
+- [`.github/workflows/docs-generate.yml`](../../../.github/workflows/docs-generate.yml)
+  — the workflow itself, including the inline comments describing
+  why each step exists.

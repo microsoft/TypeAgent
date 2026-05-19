@@ -16,11 +16,17 @@
   "outputSchema": {
     "type": "object",
     "required": ["message"],
-    "properties": { "message": { "type": "string" } }
+    "properties": {
+      "message": {
+        "type": "string"
+      }
+    }
   },
   "constants": {
     "commitPromptPrefix": {
-      "schema": { "type": "string" },
+      "schema": {
+        "type": "string"
+      },
       "value": "You are an expert developer. Given the following git diff of staged changes, write a conventional commit message. Use the format: <type>(<scope>): <subject>\\n\\n<body>\\n\\nTypes: feat, fix, refactor, docs, test, chore, style, perf. Keep the subject under 72 characters. The body should explain what changed and why, not how. Be concise.\\n\\nDiff:\\n"
     }
   },
@@ -32,24 +38,42 @@
         "type": "object",
         "required": ["command"],
         "properties": {
-          "command": { "type": "string" },
-          "args": { "type": "array", "items": { "type": "string" } },
-          "cwd": { "type": "string" }
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          }
         }
       },
       "outputSchema": {
         "type": "object",
         "required": ["stdout", "stderr", "exitCode"],
         "properties": {
-          "stdout": { "type": "string" },
-          "stderr": { "type": "string" },
-          "exitCode": { "type": "integer" }
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "exitCode": {
+            "type": "integer"
+          }
         }
       },
       "inputs": {
         "command": "git",
         "args": ["diff", "--staged"],
-        "cwd": { "$from": "input", "name": "repoPath" }
+        "cwd": {
+          "$from": "input",
+          "name": "repoPath"
+        }
       },
       "next": "buildPrompt",
       "bind": "diffResult"
@@ -61,14 +85,16 @@
         "type": "object",
         "required": ["template", "vars"],
         "properties": {
-          "template": { "type": "string" },
-          "vars": { "type": "object" }
+          "template": {
+            "type": "string"
+          },
+          "vars": {
+            "type": "object"
+          }
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": { "text": { "type": "string" } }
+        "type": "string"
       },
       "inputs": {
         "template": "{{prefix}}{{diff}}",
@@ -95,19 +121,18 @@
         "type": "object",
         "required": ["prompt"],
         "properties": {
-          "prompt": { "type": "string" }
+          "prompt": {
+            "type": "string"
+          }
         }
       },
       "outputSchema": {
-        "type": "object",
-        "required": ["text"],
-        "properties": { "text": { "type": "string" } }
+        "type": "string"
       },
       "inputs": {
         "prompt": {
           "$from": "scope",
-          "name": "prompt",
-          "path": ["text"]
+          "name": "prompt"
         }
       },
       "bind": "llmResult"
@@ -117,8 +142,7 @@
   "output": {
     "message": {
       "$from": "scope",
-      "name": "llmResult",
-      "path": ["text"]
+      "name": "llmResult"
     }
   }
 }

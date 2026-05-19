@@ -4,6 +4,10 @@
 import {
     WorkflowIR,
     WorkflowNode,
+    TaskNode,
+    LoopNode,
+    ForkNode,
+    ForkMapNode,
     Template,
     JSONSchema,
     ConstantDef,
@@ -19,6 +23,24 @@ export interface ValidationError {
 export interface ValidationResult {
     valid: boolean;
     errors: ValidationError[];
+}
+
+/**
+ * A JSON Schema `{ "not": {} }` rejects every value (equivalent to `never`).
+ * Tasks with this outputSchema always fail and never produce output.
+ */
+export function isNeverSchema(schema: JSONSchema | undefined): boolean {
+    if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+        return false;
+    }
+    const keys = Object.keys(schema);
+    return (
+        keys.length === 1 &&
+        keys[0] === "not" &&
+        typeof (schema as Record<string, unknown>).not === "object" &&
+        Object.keys((schema as Record<string, unknown>).not as object)
+            .length === 0
+    );
 }
 
 /**
@@ -52,6 +74,24 @@ export function validateWorkflowIR(
             path: "entry",
             message: `Entry node "${ir.entry}" does not exist.`,
         });
+    }
+
+    // Validate constant values against their declared schemas.
+    if (ir.constants) {
+        for (const [name, def] of Object.entries(ir.constants)) {
+            if (def.schema) {
+                const valueSchema = jsonValueToSchema(def.value);
+                if (!isStructuralSubtype(valueSchema, def.schema)) {
+                    errors.push({
+                        path: `constants.${name}`,
+                        message:
+                            `Constant value type ${formatSchemaType(valueSchema)} ` +
+                            `is not compatible with declared schema ` +
+                            `${formatSchemaType(def.schema)}.`,
+                    });
+                }
+            }
+        }
     }
 
     validateScope(ir.nodes, "nodes", tasks, errors, false);
@@ -150,7 +190,7 @@ function buildScopeCFG(
 
         if (node.kind === "task") {
             if (node.next) {
-                if (node.next === "@iterate" || node.next === "@exit") {
+                if (isSentinel(node.next)) {
                     addSentinel(id, node.next);
                 } else {
                     succs.add(node.next);
@@ -161,18 +201,20 @@ function buildScopeCFG(
             }
         } else if (node.kind === "branch") {
             for (const target of Object.values(node.cases)) {
-                if (target === "@iterate" || target === "@exit") {
+                if (isSentinel(target)) {
                     addSentinel(id, target);
                 } else {
                     succs.add(target);
                 }
             }
-            if (node.default === "@iterate" || node.default === "@exit") {
-                addSentinel(id, node.default);
-            } else {
-                succs.add(node.default);
+            if (node.default !== undefined) {
+                if (isSentinel(node.default)) {
+                    addSentinel(id, node.default);
+                } else {
+                    succs.add(node.default);
+                }
             }
-        } else if (node.kind === "loop") {
+        } else if (isBindableNode(node)) {
             if (node.next) {
                 succs.add(node.next);
             }
@@ -484,18 +526,12 @@ function buildOnErrorSplits(
 ): OnErrorSplit[] {
     const splits: OnErrorSplit[] = [];
     for (const [id, node] of Object.entries(nodes)) {
-        if ((node.kind === "task" || node.kind === "loop") && node.onError) {
+        if (isBindableNode(node) && node.onError) {
             const errorTarget = node.onError;
             const errorSide = dominatedSet(errorTarget, idom);
-            // Success side: nodes dominated by the next target (if any),
-            // excluding nodes on the error side.
             let successSide = new Set<string>();
             const nextTarget = node.next;
-            if (
-                nextTarget &&
-                nextTarget !== "@iterate" &&
-                nextTarget !== "@exit"
-            ) {
+            if (nextTarget && !isSentinel(nextTarget)) {
                 successSide = dominatedSet(nextTarget, idom);
             }
             // The trigger node itself is on the success side: its binding
@@ -576,6 +612,48 @@ function isBindingCoveredAtNode(
         }
     }
 
+    // (c) Split-point phi coverage: for some node with multiple successors
+    // that dominates target, every arm has a binder that cuts all paths
+    // from that arm's entry to the target. This handles branch nodes where
+    // both arms bind the same name (e.g. ternary, short-circuit &&/||).
+    const binderSet = new Set(binderList);
+    for (const [nodeId, succs] of cfg.edges) {
+        if (succs.size < 2) continue;
+        if (!dominates(nodeId, targetId, idom, cfg.entry)) continue;
+
+        let allArmsCovered = true;
+        for (const armEntry of succs) {
+            if (binderSet.has(armEntry)) continue; // arm entry itself binds
+
+            // BFS from armEntry; can we reach target without hitting a binder?
+            const visited = new Set<string>();
+            const queue: string[] = [armEntry];
+            let reachesWithoutBinder = false;
+            while (queue.length > 0) {
+                const current = queue.shift()!;
+                if (visited.has(current)) continue;
+                visited.add(current);
+                if (current === targetId) {
+                    reachesWithoutBinder = true;
+                    break;
+                }
+                const nextSuccs = cfg.edges.get(current);
+                if (nextSuccs) {
+                    for (const s of nextSuccs) {
+                        if (!binderSet.has(s) && !visited.has(s)) {
+                            queue.push(s);
+                        }
+                    }
+                }
+            }
+            if (reachesWithoutBinder) {
+                allArmsCovered = false;
+                break;
+            }
+        }
+        if (allArmsCovered) return true;
+    }
+
     return false;
 }
 
@@ -598,7 +676,7 @@ function checkDominance(
     // Build binder sets: name -> list of nodeIds that bind that name
     const binders = new Map<string, string[]>();
     for (const [id, node] of Object.entries(nodes)) {
-        if ((node.kind === "task" || node.kind === "loop") && node.bind) {
+        if (isBindableNode(node) && node.bind) {
             let list = binders.get(node.bind);
             if (!list) {
                 list = [];
@@ -638,7 +716,7 @@ function checkDominance(
     // Coverage (6b): for each $from scope ref in node inputs, check that
     // at least one binder dominates the consumer on every path.
     for (const [id, node] of Object.entries(nodes)) {
-        if (node.kind !== "task" && node.kind !== "loop") continue;
+        if (!hasInputs(node)) continue;
 
         const refs = collectTemplateRefs(
             node.inputs,
@@ -806,10 +884,34 @@ function validateScopeCFG(
                 bodyPrefix,
                 errors,
                 true,
-                node.output,
-                `${prefix}.${id}.output`,
+                node.body.output,
+                `${prefix}.${id}.body.output`,
                 !!node.onError, // skip body termination check when loop has onError
             );
+        } else if (node.kind === "fork") {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                if (branch.scope.entry in branch.scope.nodes) {
+                    const branchPrefix = `${prefix}.${id}.branches.${bName}.scope.nodes`;
+                    validateScopeCFG(
+                        branch.scope.nodes,
+                        branch.scope.entry,
+                        branchPrefix,
+                        errors,
+                        false,
+                    );
+                }
+            }
+        } else if (node.kind === "forkMap") {
+            if (node.body.entry in node.body.nodes) {
+                const bodyPrefix = `${prefix}.${id}.body.nodes`;
+                validateScopeCFG(
+                    node.body.nodes,
+                    node.body.entry,
+                    bodyPrefix,
+                    errors,
+                    false,
+                );
+            }
         }
     }
 }
@@ -828,7 +930,7 @@ function validateOnErrorRules(
     normalTargets.add(entry);
 
     for (const [id, node] of Object.entries(nodes)) {
-        if (node.kind === "task" || node.kind === "loop") {
+        if (isBindableNode(node)) {
             if (node.next) normalTargets.add(node.next);
             if (node.onError) {
                 const existing = onErrorTargetToTrigger.get(node.onError);
@@ -846,11 +948,11 @@ function validateOnErrorRules(
             }
         } else if (node.kind === "branch") {
             for (const target of Object.values(node.cases)) {
-                if (target !== "@iterate" && target !== "@exit") {
+                if (!isSentinel(target)) {
                     normalTargets.add(target);
                 }
             }
-            if (node.default !== "@iterate" && node.default !== "@exit") {
+            if (node.default !== undefined && !isSentinel(node.default)) {
                 normalTargets.add(node.default);
             }
         }
@@ -932,7 +1034,7 @@ function checkScopeClosure(
     // (those are legal cross-scope references). We only check $from: "scope".
 
     for (const [id, node] of Object.entries(loopNode.body.nodes)) {
-        if (node.kind !== "task" && node.kind !== "loop") continue;
+        if (!hasInputs(node)) continue;
 
         const refs = collectTemplateRefs(
             node.inputs,
@@ -1000,7 +1102,7 @@ function checkStateSoundness(
     // and that the state variable's schema type is compatible with the
     // consumer's expected type at that input position.
     for (const [id, node] of Object.entries(loopNode.body.nodes)) {
-        if (node.kind !== "task" && node.kind !== "loop") continue;
+        if (!hasInputs(node)) continue;
 
         const stateRefs = collectTemplateRefs(
             node.inputs,
@@ -1017,33 +1119,26 @@ function checkStateSoundness(
                         `variable "${ref.name}" is declared on this loop.`,
                 });
             } else {
-                // Type-compatibility: check the state variable's schema
-                // type against the consumer's expected type at this position.
                 const stateSchema = loopNode.state[ref.name].schema;
                 const consumerPropSchema = resolveConsumerPropertySchema(
                     ref.templatePath,
                     inputsPrefix,
-                    node.inputSchema,
+                    nodeInputSchema(node),
                 );
-                if (stateSchema.type && consumerPropSchema?.type) {
-                    const stateTypes = normalizeTypeSet(stateSchema.type);
-                    const consumerTypes = normalizeTypeSet(
-                        consumerPropSchema.type,
-                    );
-                    const overlap = consumerTypes.some((ct) =>
-                        stateTypes.includes(ct),
-                    );
-                    if (!overlap) {
-                        errors.push({
-                            path: ref.templatePath,
-                            message:
-                                `$from "state", name "${ref.name}": type ` +
-                                `mismatch: state variable declares ` +
-                                `${JSON.stringify(stateSchema.type)} but ` +
-                                `consumer expects ` +
-                                `${JSON.stringify(consumerPropSchema.type)}.`,
-                        });
-                    }
+                if (
+                    stateSchema.type &&
+                    consumerPropSchema?.type &&
+                    !typeSetsOverlap(stateSchema.type, consumerPropSchema.type)
+                ) {
+                    errors.push({
+                        path: ref.templatePath,
+                        message:
+                            `$from "state", name "${ref.name}": type ` +
+                            `mismatch: state variable declares ` +
+                            `${JSON.stringify(stateSchema.type)} but ` +
+                            `consumer expects ` +
+                            `${JSON.stringify(consumerPropSchema.type)}.`,
+                    });
                 }
             }
         }
@@ -1084,27 +1179,44 @@ function validateScope(
                     checkNodeTaskSchemas(taskDef, node, path, errors);
                 }
             }
-            if (node.next) {
-                if (node.next === "@iterate" || node.next === "@exit") {
-                    if (!insideLoop) {
-                        errors.push({
-                            path: `${path}.next`,
-                            message: `Sentinel "${node.next}" is only valid inside a loop body.`,
-                        });
-                    }
-                } else if (!nodeIds.has(node.next)) {
+            // Never-output tasks always fail: next, bind, and onError
+            // are unreachable.
+            if (isNeverSchema(node.outputSchema)) {
+                if (node.next) {
                     errors.push({
                         path: `${path}.next`,
-                        message: `Target "${node.next}" does not exist.`,
+                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "next".`,
+                    });
+                }
+                if (node.bind) {
+                    errors.push({
+                        path: `${path}.bind`,
+                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "bind".`,
+                    });
+                }
+                if (node.onError) {
+                    errors.push({
+                        path: `${path}.onError`,
+                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "onError".`,
                     });
                 }
             }
-            if (node.onError && !nodeIds.has(node.onError)) {
-                errors.push({
-                    path: `${path}.onError`,
-                    message: `Error target "${node.onError}" does not exist.`,
-                });
-            }
+            checkTargetExists(
+                nodeIds,
+                node.next,
+                path,
+                "next",
+                insideLoop,
+                errors,
+            );
+            checkTargetExists(
+                nodeIds,
+                node.onError,
+                path,
+                "onError",
+                insideLoop,
+                errors,
+            );
         } else if (node.kind === "branch") {
             // §3.6: Branch nodes must not declare bind.
             if (
@@ -1138,7 +1250,7 @@ function validateScope(
                 }
             }
             for (const [label, target] of Object.entries(node.cases)) {
-                if (target === "@iterate" || target === "@exit") {
+                if (isSentinel(target)) {
                     if (!insideLoop) {
                         errors.push({
                             path: `${path}.cases.${label}`,
@@ -1152,18 +1264,20 @@ function validateScope(
                     });
                 }
             }
-            if (node.default === "@iterate" || node.default === "@exit") {
-                if (!insideLoop) {
+            if (node.default !== undefined) {
+                if (isSentinel(node.default)) {
+                    if (!insideLoop) {
+                        errors.push({
+                            path: `${path}.default`,
+                            message: `Sentinel "${node.default}" is only valid inside a loop body.`,
+                        });
+                    }
+                } else if (!nodeIds.has(node.default)) {
                     errors.push({
                         path: `${path}.default`,
-                        message: `Sentinel "${node.default}" is only valid inside a loop body.`,
+                        message: `Default target "${node.default}" does not exist.`,
                     });
                 }
-            } else if (!nodeIds.has(node.default)) {
-                errors.push({
-                    path: `${path}.default`,
-                    message: `Default target "${node.default}" does not exist.`,
-                });
             }
         } else if (node.kind === "loop") {
             if (!(node.body.entry in node.body.nodes)) {
@@ -1193,8 +1307,9 @@ function validateScope(
             }
 
             if (
-                !Number.isInteger(node.maxIterations) ||
-                node.maxIterations < 1
+                node.maxIterations !== undefined &&
+                (!Number.isInteger(node.maxIterations) ||
+                    node.maxIterations < 1)
             ) {
                 errors.push({
                     path: `${path}.maxIterations`,
@@ -1202,18 +1317,148 @@ function validateScope(
                 });
             }
 
-            if (node.next && !nodeIds.has(node.next)) {
+            checkTargetExists(
+                nodeIds,
+                node.next,
+                path,
+                "next",
+                insideLoop,
+                errors,
+            );
+            checkTargetExists(
+                nodeIds,
+                node.onError,
+                path,
+                "onError",
+                insideLoop,
+                errors,
+            );
+        } else if (node.kind === "fork") {
+            const branchNames = Object.keys(node.branches);
+            if (branchNames.length < 2) {
                 errors.push({
-                    path: `${path}.next`,
-                    message: `Target "${node.next}" does not exist.`,
+                    path: `${path}.branches`,
+                    message: `Fork must have at least 2 branches (got ${branchNames.length}).`,
                 });
             }
-            if (node.onError && !nodeIds.has(node.onError)) {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                if (!(branch.scope.entry in branch.scope.nodes)) {
+                    errors.push({
+                        path: `${path}.branches.${bName}.scope.entry`,
+                        message: `Branch entry "${branch.scope.entry}" does not exist.`,
+                    });
+                }
+                validateScope(
+                    branch.scope.nodes,
+                    `${path}.branches.${bName}.scope.nodes`,
+                    tasks,
+                    errors,
+                    false,
+                );
+                validateSchemaCompat(
+                    branch.scope.nodes,
+                    `${path}.branches.${bName}.scope.nodes`,
+                    errors,
+                );
+            }
+            if (
+                node.maxConcurrency !== undefined &&
+                (!Number.isInteger(node.maxConcurrency) ||
+                    node.maxConcurrency < 1)
+            ) {
                 errors.push({
-                    path: `${path}.onError`,
-                    message: `Error target "${node.onError}" does not exist.`,
+                    path: `${path}.maxConcurrency`,
+                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
                 });
             }
+            checkTargetExists(
+                nodeIds,
+                node.next,
+                path,
+                "next",
+                insideLoop,
+                errors,
+            );
+            checkTargetExists(
+                nodeIds,
+                node.onError,
+                path,
+                "onError",
+                insideLoop,
+                errors,
+            );
+        } else if (node.kind === "forkMap") {
+            if (
+                node.collectionSchema?.type !== "array" &&
+                !(
+                    Array.isArray(node.collectionSchema?.type) &&
+                    (node.collectionSchema.type as string[]).includes("array")
+                )
+            ) {
+                errors.push({
+                    path: `${path}.collectionSchema`,
+                    message: `forkMap collectionSchema must be type "array".`,
+                });
+            }
+            if (!(node.body.entry in node.body.nodes)) {
+                errors.push({
+                    path: `${path}.body.entry`,
+                    message: `Body entry "${node.body.entry}" does not exist.`,
+                });
+            }
+            validateScope(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                tasks,
+                errors,
+                false,
+            );
+            validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
+            // forkMap body must not use $from: "state"
+            for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
+                if (hasInputs(bNode) && templateRefersToState(bNode.inputs)) {
+                    errors.push({
+                        path: `${path}.body.nodes.${bNodeId}.inputs`,
+                        message: `forkMap body nodes must not use $from: "state".`,
+                    });
+                }
+            }
+            if (
+                node.maxConcurrency !== undefined &&
+                (!Number.isInteger(node.maxConcurrency) ||
+                    node.maxConcurrency < 1)
+            ) {
+                errors.push({
+                    path: `${path}.maxConcurrency`,
+                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
+                });
+            }
+            if (
+                node.maxIterations !== undefined &&
+                (!Number.isInteger(node.maxIterations) ||
+                    node.maxIterations < 1)
+            ) {
+                errors.push({
+                    path: `${path}.maxIterations`,
+                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
+                });
+            }
+            checkTargetExists(
+                nodeIds,
+                node.next,
+                path,
+                "next",
+                insideLoop,
+                errors,
+            );
+            checkTargetExists(
+                nodeIds,
+                node.onError,
+                path,
+                "onError",
+                insideLoop,
+                errors,
+            );
         }
     }
 }
@@ -1227,16 +1472,30 @@ function bodyScopeHasSentinel(nodes: Record<string, WorkflowNode>): boolean {
     for (const node of Object.values(nodes)) {
         if (node.kind === "branch") {
             for (const target of Object.values(node.cases)) {
-                if (target === "@iterate" || target === "@exit") return true;
+                if (isSentinel(target)) return true;
             }
-            if (node.default === "@iterate" || node.default === "@exit") {
+            if (node.default !== undefined && isSentinel(node.default)) {
                 return true;
             }
         } else if (node.kind === "task") {
-            if (node.next === "@iterate" || node.next === "@exit") return true;
+            if (node.next && isSentinel(node.next)) return true;
         }
     }
     return false;
+}
+
+/**
+ * Recursively check whether a template contains any $from: "state" reference.
+ */
+function templateRefersToState(template: Template): boolean {
+    if (template === null || template === undefined) return false;
+    if (typeof template !== "object") return false;
+    if (Array.isArray(template)) {
+        return template.some((t) => templateRefersToState(t));
+    }
+    const obj = template as Record<string, unknown>;
+    if ("$from" in obj && obj["$from"] === "state") return true;
+    return Object.values(obj).some((v) => templateRefersToState(v as Template));
 }
 
 // ---- Static schema compatibility ----
@@ -1249,8 +1508,8 @@ function buildBindingMap(
 ): Map<string, JSONSchema> {
     const map = new Map<string, JSONSchema>();
     for (const node of Object.values(nodes)) {
-        if ((node.kind === "task" || node.kind === "loop") && node.bind) {
-            map.set(node.bind, node.outputSchema);
+        if (isBindableNode(node) && node.bind) {
+            map.set(node.bind, nodeOutputSchema(node));
         }
     }
     return map;
@@ -1318,10 +1577,7 @@ function checkSchemaCompat(
     // Type compatibility check: if the consumer declares a type and the
     // producer declares a type, verify they overlap.
     if (consumerType && resolved.type) {
-        const producerTypes = normalizeTypeSet(resolved.type);
-        const consumerTypes = normalizeTypeSet(consumerType);
-        const overlap = consumerTypes.some((ct) => producerTypes.includes(ct));
-        if (!overlap) {
+        if (!typeSetsOverlap(resolved.type, consumerType)) {
             return (
                 `${refDesc}: type mismatch: producer declares ` +
                 `${JSON.stringify(resolved.type)} but consumer expects ${JSON.stringify(consumerType)}`
@@ -1336,6 +1592,86 @@ function normalizeTypeSet(type: unknown): string[] {
     if (Array.isArray(type)) return type as string[];
     if (typeof type === "string") return [type];
     return [];
+}
+
+/**
+ * True when JSON Schema type `a` is assignable to type `b`.
+ * Handles the `integer`-is-a-subtype-of-`number` rule.
+ */
+function typeAssignableTo(a: string, b: string): boolean {
+    return a === b || (a === "integer" && b === "number");
+}
+
+/**
+ * True when the type sets overlap: at least one type in `aTypes` is
+ * assignable to at least one type in `bTypes`.
+ */
+function typeSetsOverlap(aType: unknown, bType: unknown): boolean {
+    const aTypes = normalizeTypeSet(aType);
+    const bTypes = normalizeTypeSet(bType);
+    return aTypes.some((a) => bTypes.some((b) => typeAssignableTo(a, b)));
+}
+
+/** True when `target` is a loop sentinel. */
+function isSentinel(target: string): target is "@iterate" | "@exit" {
+    return target === "@iterate" || target === "@exit";
+}
+
+/** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
+function isBindableNode(
+    node: WorkflowNode,
+): node is TaskNode | LoopNode | ForkNode | ForkMapNode {
+    return node.kind !== "branch";
+}
+
+/** Type guard: node kinds that carry `inputs` (task and loop). */
+function hasInputs(node: WorkflowNode): node is TaskNode | LoopNode {
+    return node.kind === "task" || node.kind === "loop";
+}
+
+/** Get the effective input schema for a task or loop node. */
+function nodeInputSchema(node: TaskNode | LoopNode): JSONSchema {
+    return node.kind === "loop" ? node.body.inputSchema : node.inputSchema;
+}
+
+/** Get the effective output schema for a bindable node. */
+function nodeOutputSchema(
+    node: TaskNode | LoopNode | ForkNode | ForkMapNode,
+): JSONSchema {
+    return node.kind === "loop" ? node.body.outputSchema : node.outputSchema;
+}
+
+/**
+ * Check that a target reference exists in the scope; push an error if not.
+ * For `next` targets, also validates sentinel usage.
+ */
+function checkTargetExists(
+    nodeIds: Set<string>,
+    target: string | undefined,
+    path: string,
+    field: "next" | "onError",
+    insideLoop: boolean,
+    errors: ValidationError[],
+): void {
+    if (!target) return;
+    if (field === "next" && isSentinel(target)) {
+        if (!insideLoop) {
+            errors.push({
+                path: `${path}.next`,
+                message: `Sentinel "${target}" is only valid inside a loop body.`,
+            });
+        }
+        return;
+    }
+    if (!nodeIds.has(target)) {
+        errors.push({
+            path: `${path}.${field}`,
+            message:
+                field === "onError"
+                    ? `Error target "${target}" does not exist.`
+                    : `Target "${target}" does not exist.`,
+        });
+    }
 }
 
 /** True when a schema is the top type (empty object: no constraints). */
@@ -1404,13 +1740,13 @@ interface TypeResolutionContext {
 /** Derive a JSON Schema from a literal JSON value. */
 function jsonValueToSchema(value: unknown): JSONSchema {
     if (value === null) return { type: "null" };
-    if (typeof value === "string") return { type: "string" };
+    if (typeof value === "string") return { type: "string", const: value };
     if (typeof value === "number") {
         return Number.isInteger(value)
-            ? { type: "integer" }
-            : { type: "number" };
+            ? { type: "integer", const: value }
+            : { type: "number", const: value };
     }
-    if (typeof value === "boolean") return { type: "boolean" };
+    if (typeof value === "boolean") return { type: "boolean", const: value };
     if (Array.isArray(value)) {
         if (value.length === 0) return { type: "array" };
         const elemSchemas = value.map(jsonValueToSchema);
@@ -1447,13 +1783,15 @@ function resolveTemplateType(
     ctx: TypeResolutionContext,
 ): JSONSchema | undefined {
     if (template === null) return { type: "null" };
-    if (typeof template === "string") return { type: "string" };
+    if (typeof template === "string")
+        return { type: "string", const: template };
     if (typeof template === "number") {
         return Number.isInteger(template)
-            ? { type: "integer" }
-            : { type: "number" };
+            ? { type: "integer", const: template }
+            : { type: "number", const: template };
     }
-    if (typeof template === "boolean") return { type: "boolean" };
+    if (typeof template === "boolean")
+        return { type: "boolean", const: template };
     if (Array.isArray(template)) {
         const elemSchemas = template
             .map((e) => resolveTemplateType(e, ctx))
@@ -1564,6 +1902,30 @@ function isStructuralSubtype(
         );
     }
 
+    // Const / enum narrowing checks.
+    // Only applied when both sides have const/enum constraints. When the
+    // producer is wider (no const/enum), we stay lenient — narrowing is
+    // verified by runtime input/selectorSchema validation. Exhaustiveness
+    // checking uses isProvablyNarrowedTo (see below) for strict subset.
+    if (consumer.const !== undefined) {
+        if (producer.const !== undefined) {
+            return producer.const === consumer.const;
+        }
+        if (producer.enum) {
+            return producer.enum.every((v) => v === consumer.const);
+        }
+        // Producer is wider; stay lenient (defense-in-depth at runtime).
+    } else if (consumer.enum) {
+        const allowed = new Set(consumer.enum);
+        if (producer.const !== undefined) {
+            return allowed.has(producer.const);
+        }
+        if (producer.enum) {
+            return producer.enum.every((v) => allowed.has(v));
+        }
+        // Producer is wider; stay lenient (defense-in-depth at runtime).
+    }
+
     // Handle allOf: intersection semantics.
     if (producer.allOf) {
         // Producer satisfies every allOf member simultaneously (intersection).
@@ -1586,11 +1948,7 @@ function isStructuralSubtype(
         const pTypes = normalizeTypeSet(producer.type);
         const cTypes = normalizeTypeSet(consumer.type);
         for (const pt of pTypes) {
-            // "integer" is a subtype of "number"
-            const ok = cTypes.some(
-                (ct) => ct === pt || (pt === "integer" && ct === "number"),
-            );
-            if (!ok) return false;
+            if (!cTypes.some((ct) => typeAssignableTo(pt, ct))) return false;
         }
     } else if (consumer.type && !producer.type) {
         return true; // producer unconstrained, be lenient
@@ -1648,6 +2006,45 @@ function isStructuralSubtype(
 }
 
 /**
+ * Strict narrowing check used by exhaustive branch verification.
+ *
+ * Returns true iff `producer` is provably constrained to a subset of
+ * `allowedValues`. Unlike `isStructuralSubtype` which stays lenient when
+ * the producer is wider than a constraint, this function requires the
+ * producer to have an explicit `const` or `enum` whose values all fall
+ * within `allowedValues`.
+ *
+ * Used when `default` is absent on a branch: the selector's resolved
+ * type must be statically narrowed so the engine can prove every
+ * possible value has a matching case.
+ */
+function isProvablyNarrowedTo(
+    producer: JSONSchema,
+    allowedValues: ReadonlyArray<unknown>,
+): boolean {
+    const allowed = new Set(allowedValues);
+    if (producer.const !== undefined) return allowed.has(producer.const);
+    if (producer.enum) return producer.enum.every((v) => allowed.has(v));
+
+    // Boolean is inherently a closed set {true, false}; treat it as
+    // implicitly enum-typed.
+    if (producer.type === "boolean") {
+        return allowed.has(true) && allowed.has(false);
+    }
+
+    // Recurse into union variants — every variant must be narrowed.
+    const variants = producer.anyOf ?? producer.oneOf;
+    if (variants) {
+        return variants.every(
+            (v) =>
+                typeof v !== "boolean" &&
+                isProvablyNarrowedTo(v, allowedValues),
+        );
+    }
+    return false;
+}
+
+/**
  * Validate type compatibility (pass 7) within a scope.
  *
  * For each node:
@@ -1681,11 +2078,11 @@ function validateTypeCompatibility(
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
 
-        if (node.kind === "task" || node.kind === "loop") {
+        if (hasInputs(node)) {
             // Check each input template value against the corresponding
             // inputSchema property.
             const inputs = node.inputs;
-            const inputProps = node.inputSchema.properties ?? {};
+            const inputProps = nodeInputSchema(node).properties ?? {};
             for (const [fieldName, templateValue] of Object.entries(inputs)) {
                 const resolved = resolveTemplateType(templateValue, ctx);
                 if (!resolved) continue;
@@ -1763,51 +2160,139 @@ function validateTypeCompatibility(
                     }
                 }
             }
+
+            // Exhaustiveness: when `default` is omitted, the branch must
+            // be statically provable to cover every possible selector value.
+            if (node.default === undefined) {
+                // { type: "boolean" } is treated as an implicit enum [true, false].
+                const isBooleanSelector =
+                    node.selectorSchema.type === "boolean" &&
+                    !node.selectorSchema.enum;
+                const enumValues = isBooleanSelector
+                    ? [true, false]
+                    : node.selectorSchema.enum;
+                if (!enumValues || enumValues.length === 0) {
+                    errors.push({
+                        path: `${path}.default`,
+                        message:
+                            `Branch has no default but selectorSchema is ` +
+                            `not a closed enum (selectorSchema: ` +
+                            `${formatSchemaType(node.selectorSchema)}). ` +
+                            `Fix: add a default target, or declare ` +
+                            `selectorSchema with an "enum" constraint.`,
+                    });
+                } else {
+                    // Every enum value must have a matching case key.
+                    const caseKeys = new Set(Object.keys(node.cases));
+                    const missing = enumValues
+                        .map(String)
+                        .filter((v) => !caseKeys.has(v));
+                    if (missing.length > 0) {
+                        errors.push({
+                            path: `${path}.cases`,
+                            message:
+                                `Branch has no default and is not ` +
+                                `exhaustive. Missing case(s): ` +
+                                `${JSON.stringify(missing)}. ` +
+                                `Fix: add a case for each missing value, ` +
+                                `or add a default target.`,
+                        });
+                    }
+                    // Selector must be statically narrowed to the enum.
+                    if (selectorType) {
+                        if (!isProvablyNarrowedTo(selectorType, enumValues)) {
+                            errors.push({
+                                path: `${path}.selector`,
+                                message:
+                                    `Branch has no default but selector ` +
+                                    `resolved type ` +
+                                    `${formatSchemaType(selectorType)} is ` +
+                                    `not statically narrowed to the enum ` +
+                                    `${JSON.stringify(enumValues)}. ` +
+                                    `Fix: narrow the selector's upstream ` +
+                                    `type (declare an "enum" on the ` +
+                                    `producing task output / constant), ` +
+                                    `or add a default target.`,
+                            });
+                        }
+                    }
+                }
+            }
         }
 
         // Recurse into loop bodies
         if (node.kind === "loop" && node.body.entry in node.body.nodes) {
-            const bodyBindings = buildBindingMap(node.body.nodes);
-            const bodyCtx: TypeResolutionContext = {
-                bindings: bodyBindings,
-                inputSchema: node.inputSchema,
-                stateVars: node.state,
-                constants,
-            };
-
             validateTypeCompatibility(
                 node.body.nodes,
                 `${path}.body.nodes`,
                 errors,
-                node.inputSchema,
+                node.body.inputSchema,
                 node.state,
                 constants,
-                node.output,
-                `${path}.output`,
-                node.outputSchema,
+                node.body.output,
+                `${path}.body.output`,
+                node.body.outputSchema,
             );
 
             // Check loop output template type vs loop outputSchema
-            if (node.output && node.outputSchema) {
+            const bodyBindings = buildBindingMap(node.body.nodes);
+            const bodyCtx: TypeResolutionContext = {
+                bindings: bodyBindings,
+                inputSchema: node.body.inputSchema,
+                stateVars: node.state,
+                constants,
+            };
+            if (node.body.output && node.body.outputSchema) {
                 const outputResolved = resolveTemplateType(
-                    node.output,
+                    node.body.output,
                     bodyCtx,
                 );
-                if (outputResolved && !isTopSchema(node.outputSchema)) {
+                if (outputResolved && !isTopSchema(node.body.outputSchema)) {
                     if (
-                        !isStructuralSubtype(outputResolved, node.outputSchema)
+                        !isStructuralSubtype(
+                            outputResolved,
+                            node.body.outputSchema,
+                        )
                     ) {
                         errors.push({
-                            path: `${path}.output`,
+                            path: `${path}.body.output`,
                             message:
                                 `Loop output resolved type ` +
                                 `${formatSchemaType(outputResolved)} is not ` +
                                 `compatible with loop outputSchema ` +
-                                `${formatSchemaType(node.outputSchema)}.`,
+                                `${formatSchemaType(node.body.outputSchema)}.`,
                         });
                     }
                 }
             }
+        }
+
+        // Recurse into fork branches
+        if (node.kind === "fork") {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                if (branch.scope.entry in branch.scope.nodes) {
+                    validateTypeCompatibility(
+                        branch.scope.nodes,
+                        `${path}.branches.${bName}.scope.nodes`,
+                        errors,
+                        scopeInputSchema,
+                        undefined,
+                        constants,
+                    );
+                }
+            }
+        }
+
+        // Recurse into forkMap body
+        if (node.kind === "forkMap" && node.body.entry in node.body.nodes) {
+            validateTypeCompatibility(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                errors,
+                scopeInputSchema,
+                undefined,
+                constants,
+            );
         }
     }
 
@@ -1840,9 +2325,9 @@ function checkPhiMergeTypes(
     errors: ValidationError[],
 ): void {
     for (const [id, node] of Object.entries(nodes)) {
-        if (node.kind !== "task" && node.kind !== "loop") continue;
+        if (!hasInputs(node)) continue;
         const inputs = node.inputs;
-        const inputProps = node.inputSchema.properties ?? {};
+        const inputProps = nodeInputSchema(node).properties ?? {};
 
         for (const [fieldName, templateValue] of Object.entries(inputs)) {
             if (
@@ -1869,12 +2354,8 @@ function checkPhiMergeTypes(
 
             for (const binderId of binderList) {
                 const binderNode = nodes[binderId];
-                if (!binderNode) continue;
-                const binderSchema =
-                    binderNode.kind === "task" || binderNode.kind === "loop"
-                        ? binderNode.outputSchema
-                        : undefined;
-                if (!binderSchema) continue;
+                if (!binderNode || !isBindableNode(binderNode)) continue;
+                const binderSchema = nodeOutputSchema(binderNode);
 
                 // Apply path projection if present
                 const refPath = obj["path"] as (string | number)[] | undefined;
@@ -1953,10 +2434,7 @@ function checkNodeTaskSchemas(
         ) {
             continue;
         }
-        const taskTypes = normalizeTypeSet(taskPropDef.type);
-        const nodeTypes = normalizeTypeSet(nodePropDef.type);
-        const overlap = nodeTypes.some((nt) => taskTypes.includes(nt));
-        if (!overlap) {
+        if (!typeSetsOverlap(nodePropDef.type, taskPropDef.type)) {
             errors.push({
                 path: `${path}.inputSchema`,
                 message:
@@ -2015,9 +2493,8 @@ function checkNodeTaskSchemas(
         }
         const taskTypes = normalizeTypeSet(taskPropDef.type);
         const nodeTypes = normalizeTypeSet(nodePropDef.type);
-        // Node output types must be a subset of task types (narrowing).
         for (const nt of nodeTypes) {
-            if (!taskTypes.includes(nt)) {
+            if (!taskTypes.some((tt) => typeAssignableTo(nt, tt))) {
                 errors.push({
                     path: `${path}.outputSchema`,
                     message:
@@ -2070,7 +2547,25 @@ function checkReservedTemplateKeys(
         }
     }
     // Don't recurse into $from or $literal — they have their own semantics.
-    if ("$from" in obj || "$literal" in obj) return;
+    if ("$from" in obj) {
+        const VALID_NAMESPACES = new Set([
+            "input",
+            "constant",
+            "scope",
+            "state",
+        ]);
+        const from = obj["$from"];
+        if (typeof from !== "string" || !VALID_NAMESPACES.has(from)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $from namespace "${from}". ` +
+                    `Valid namespaces are: input, constant, scope, state.`,
+            });
+        }
+        return;
+    }
+    if ("$literal" in obj) return;
     for (const [, value] of Object.entries(obj)) {
         checkReservedTemplateKeys(value as Template, templatePath, errors);
     }
@@ -2110,7 +2605,11 @@ function validateScopeTemplates(
             );
         }
         if (node.kind === "loop") {
-            checkReservedTemplateKeys(node.output, `${path}.output`, errors);
+            checkReservedTemplateKeys(
+                node.body.output,
+                `${path}.body.output`,
+                errors,
+            );
             for (const [name, tmpl] of Object.entries(node.iterateState)) {
                 checkReservedTemplateKeys(
                     tmpl,
@@ -2244,14 +2743,14 @@ function validateSchemaCompat(
                 );
             }
             checkScopeRefsAgainstBindings(
-                node.output,
-                `${path}.output`,
+                node.body.output,
+                `${path}.body.output`,
                 bodyBindings,
                 errors,
             );
         }
 
-        if (node.kind !== "task" && node.kind !== "loop") continue;
+        if (!hasInputs(node)) continue;
 
         const inputsPrefix = `${path}.inputs.`;
         const refs = collectTemplateRefs(
@@ -2275,7 +2774,7 @@ function validateSchemaCompat(
             const consumerType = resolveConsumerPropertySchema(
                 ref.templatePath,
                 inputsPrefix,
-                node.inputSchema,
+                nodeInputSchema(node),
             )?.type;
             const err = checkSchemaCompat(
                 producerSchema,
