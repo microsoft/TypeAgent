@@ -169,6 +169,7 @@ if [[ $CLEAN_VOLUMES -eq 1 ]]; then
         "pnpm-global-store"
         "typeagent-node_modules-"
         "claude-code-config-"
+        "copilot-cli-config-"
     )
     for prefix in "${VOLUME_PREFIXES[@]}"; do
         for vol in $(docker volume ls -q --filter "name=^$prefix" 2>/dev/null); do
