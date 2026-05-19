@@ -192,6 +192,12 @@ By default agents runs out of proc in their own process. This is to ensure that 
 | `@config explanation on\|off` | Toggle LLM explanation (Turn off to stop updating construction store)          |
 | `@config log db on\|off`      | Toggle sending logging information to a remote database (default: on)          |
 
+### Diagnostics
+
+| Command  | Description                                                                                                                                                                                                                                                                                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@ports` | List every TCP port registered with the dispatcher's `PortRegistrar`, grouped by `(agent, role, port)`. Includes the agent-server's own listen port and the connected-client count for any agent that publishes one via `SessionContext.notifyClientCountChanged` (currently the browser and code agents). Rows from agents that don't publish a count render `N/A`. |
+
 ### User feedback
 
 When the user rates an agent message via the chat UI's thumbs-up/down buttons or moves a bubble to the trash, the dispatcher persists each event to the per-session `displayLog.json` (as `user-feedback` and `user-message-hidden` entries) and emits a `userFeedback` telemetry event through `Logger.logEvent`. The `@feedback` command group lets you inspect and export those entries.
