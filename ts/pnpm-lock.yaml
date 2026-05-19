@@ -15,7 +15,7 @@ overrides:
   router>path-to-regexp: '>=8.4.0 <9.0.0'
   serialize-javascript: '>=7.0.5 <8.0.0'
 
-pnpmfileChecksum: sha256-HplUxd/UQs83KFaH+N8siaFp49HRIa3jBSEBejhtSo0=
+pnpmfileChecksum: sha256-XN/N69W0uLJqsCRZH1rt+p23fdy7DJIT7V7z9EUTcoM=
 
 importers:
 
