@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    WebSocketMessageV2,
-    createWebSocket,
-    keepWebSocketAlive,
-} from "websocket-utils";
+import { WebSocketMessageV2, keepWebSocketAlive } from "websocket-utils";
 
 import WebSocket from "ws";
+import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import registerDebug from "debug";
 const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
+const debugBrowserIPCError = registerDebug("typeagent:browser:ipc:error");
+
+const AGENT_SERVER_DEFAULT_URL = "ws://localhost:8999/";
 
 export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
@@ -58,13 +58,7 @@ export class BrowserAgentIpc {
         //create a new promise to establish the websocket connection
         this.webSocketPromise = new Promise<WebSocket | undefined>(
             async (resolve) => {
-                this.webSocket = await createWebSocket(
-                    "browser",
-                    "client",
-                    "inlineBrowser",
-                    8081,
-                    "default",
-                );
+                this.webSocket = await createInlineBrowserWebSocket();
                 if (!this.webSocket) {
                     this.webSocketPromise = null;
                     resolve(undefined);
@@ -246,4 +240,76 @@ export class BrowserAgentIpc {
     public isConnected(): boolean {
         return this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
     }
+}
+
+/**
+ * Build the inline-browser → agent-server WebSocket URL by discovering the
+ * browser agent's port via the agent-server discovery channel, then opening
+ * the connection. Mirrors the chrome extension's resolveBrowserEndpoint /
+ * createWebSocket flow (see ts/packages/agents/browser/src/extension/
+ * serviceWorker/websocket.ts) so both clients of the browser agent reach
+ * the same dynamic port.
+ *
+ * The agent-server discovery URL defaults to ws://localhost:8999/ but can
+ * be overridden with WEBSOCKET_HOST for non-default deployments.
+ *
+ * NOTE on WEBSOCKET_HOST semantics: this caller treats it as a *base URL*
+ * (protocol + host + port) and builds its own path/query. The legacy
+ * `createWebSocket` helper in `packages/utils/webSocketUtils/src/webSockets.ts`
+ * treats the same env var as a *complete endpoint replacement*. Set
+ * WEBSOCKET_HOST to a base URL without a path (e.g. `ws://example.com:9000/`)
+ * for predictable behavior across both call sites.
+ */
+async function createInlineBrowserWebSocket(): Promise<WebSocket | undefined> {
+    const agentServerUrl =
+        process.env["WEBSOCKET_HOST"] || AGENT_SERVER_DEFAULT_URL;
+    const sessionId = "default";
+
+    const result = await discoverPort("browser", sessionId, {
+        url: agentServerUrl,
+    });
+    if (result.kind !== "found") {
+        if (result.kind === "not-registered") {
+            debugBrowserIPC(
+                "Browser agent not registered with agent-server at %s",
+                agentServerUrl,
+            );
+        } else {
+            debugBrowserIPCError(
+                "Agent-server discovery unreachable at %s: %s",
+                agentServerUrl,
+                result.error.message,
+            );
+        }
+        return undefined;
+    }
+
+    let endpoint: string;
+    try {
+        const u = new URL(agentServerUrl);
+        endpoint = `${u.protocol}//${u.hostname}:${result.port}/?channel=browser&role=client&clientId=inlineBrowser&sessionId=${sessionId}`;
+    } catch (e) {
+        debugBrowserIPCError("Invalid agent-server URL: %s", e);
+        return undefined;
+    }
+
+    debugBrowserIPC("Connecting inlineBrowser to: %s", endpoint);
+    return new Promise<WebSocket | undefined>((resolve) => {
+        const ws = new WebSocket(endpoint);
+        ws.onopen = () => {
+            debugBrowserIPC("inlineBrowser websocket open");
+            resolve(ws);
+        };
+        ws.onerror = (event: any) => {
+            debugBrowserIPCError(
+                "inlineBrowser websocket error: %s",
+                event?.message ?? "unknown",
+            );
+            resolve(undefined);
+        };
+        ws.onclose = () => {
+            debugBrowserIPC("inlineBrowser websocket closed");
+            resolve(undefined);
+        };
+    });
 }

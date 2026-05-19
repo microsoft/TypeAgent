@@ -148,8 +148,152 @@ const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 let _webFlowStore: any | undefined;
 let _webFlowStoreInitializing: Promise<void> | undefined;
 
-// Module-level singleton — one WebSocket server per agent process, shared across all session contexts.
-const _agentWebSocketServer = new AgentWebSocketServer(8081);
+// Shared WebSocket server that bridges this browser agent to the Chrome /
+// Edge extension and the Electron shell's inline browser. Created on first
+// session-enable, closed when the last session disables. Storing it
+// per-session caused issues when an action ran on a different session than
+// the one that originally created the server, and also masked EADDRINUSE
+// failures from a second bind attempt on the configured port.
+//
+// Port allocation: by default the OS picks a free ephemeral port (port=0).
+// Each session that uses the shared server registers it under its own
+// `sessionContextId`, so the PortRegistrar's `closeSessionContext` backstop
+// auto-releases per-session entries and `lookup("browser")` keeps returning
+// the shared port as long as ≥1 session has it enabled.
+// `BROWSER_WEBSOCKET_PORT` remains an explicit override (useful for pinning
+// the port when debugging or when an external client expects a known
+// address).
+let sharedBrowserServer: AgentWebSocketServer | undefined;
+let sharedStartingPromise: Promise<AgentWebSocketServer> | undefined;
+let sharedClosingPromise: Promise<void> | undefined;
+let sharedBrowserRefCount = 0;
+
+// Returns the explicit port override (BROWSER_WEBSOCKET_PORT) if set and
+// well-formed, else undefined. Useful for pinning the port when debugging
+// or when an external client expects a known address.
+function resolveBrowserPortOverride(
+    env: NodeJS.ProcessEnv,
+): number | undefined {
+    const raw = env.BROWSER_WEBSOCKET_PORT;
+    if (raw === undefined) return undefined;
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+    return undefined;
+}
+
+// Bind hint for the shared server. Returns the explicit override if
+// BROWSER_WEBSOCKET_PORT is set; otherwise 0 so the OS picks a free port
+// and the registrar/discovery channel publishes it.
+//
+// Note: we only validate the *shape* of the env var here (numeric, > 0).
+// If the caller asks for a specific port and the OS can't bind it
+// (EADDRINUSE), `AgentWebSocketServer.start()` rejects with that error
+// and the schema-enable fails loudly — we deliberately do NOT silently
+// fall back to an OS-assigned port, since the user explicitly asked for
+// a specific one.
+function getBrowserBindPort(): number {
+    const raw = process.env["BROWSER_WEBSOCKET_PORT"];
+    if (raw === undefined) return 0;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+        debug(
+            `Ignoring malformed BROWSER_WEBSOCKET_PORT=${raw}; using OS-assigned port instead`,
+        );
+        return 0;
+    }
+    return n;
+}
+
+// Returns the port the browser agent's WS server is/will be reachable on,
+// for display in readiness/setup messaging. Two phases:
+//   - After bind: `getSharedBrowserPort()` returns the actual bound port
+//     (OS-assigned by default, or `BROWSER_WEBSOCKET_PORT` if set).
+//   - Before bind: no live port exists, so we fall back to the static
+//     prediction from `BROWSER_WEBSOCKET_PORT` if set, else `undefined`.
+export function getKnownBrowserPort(): number | undefined {
+    return getSharedBrowserPort() ?? resolveBrowserPortOverride(process.env);
+}
+
+// Exposed for readiness/test introspection. Undefined when the shared
+// server isn't bound yet, otherwise the actual bound port.
+export function getSharedBrowserPort(): number | undefined {
+    return sharedBrowserServer?.port;
+}
+
+// Start (or attach to an in-flight start of) the shared WebSocket server.
+// Concurrent enables from different sessions can race; serialize via
+// sharedStartingPromise so only one bind attempt is in flight.
+async function ensureSharedBrowserServer(): Promise<AgentWebSocketServer> {
+    // If a previous teardown is still releasing the port (matters under
+    // BROWSER_WEBSOCKET_PORT override), await it before binding again.
+    if (sharedClosingPromise !== undefined) {
+        await sharedClosingPromise;
+    }
+    if (sharedBrowserServer !== undefined) {
+        return sharedBrowserServer;
+    }
+    if (sharedStartingPromise !== undefined) {
+        return sharedStartingPromise;
+    }
+    sharedStartingPromise = (async () => {
+        try {
+            const server =
+                await AgentWebSocketServer.start(getBrowserBindPort());
+            sharedBrowserServer = server;
+            return server;
+        } finally {
+            sharedStartingPromise = undefined;
+        }
+    })();
+    return sharedStartingPromise;
+}
+
+// Per-session cleanup, idempotent and safe to call from both the disable
+// path (updateBrowserContext(false, ...)) and closeBrowserContext. Releases
+// the per-session port registration, unregisters the session from the
+// shared server, decrements the shared refcount, and closes the server when
+// the last session disables.
+async function cleanupBrowserSession(
+    agentContext: BrowserActionContext,
+): Promise<void> {
+    if (!agentContext.browserSchemaEnabled) {
+        // Either never enabled or already cleaned up. Both paths are
+        // benign — bail without touching shared state.
+        return;
+    }
+    agentContext.browserSchemaEnabled = false;
+
+    const server = agentContext.agentWebSocketServer;
+    agentContext.agentWebSocketServer = undefined;
+    if (server) {
+        server.unregisterSession(agentContext.sessionId);
+    }
+
+    // Release this session's registration before potentially closing the
+    // server. Release is idempotent and a no-op if already released by
+    // the closeSessionContext backstop.
+    agentContext.portRegistration?.release();
+    agentContext.portRegistration = undefined;
+
+    // Drop any session-scoped clients that hold a server reference so
+    // they don't outlive the shared server.
+    if (agentContext.externalBrowserControl) {
+        agentContext.externalBrowserControl.dispose();
+        agentContext.externalBrowserControl = undefined;
+    }
+
+    sharedBrowserRefCount = Math.max(0, sharedBrowserRefCount - 1);
+    if (sharedBrowserRefCount === 0 && sharedBrowserServer) {
+        const sharedToClose = sharedBrowserServer;
+        sharedBrowserServer = undefined;
+        // Track the in-flight close so a rapid re-enable awaits port
+        // release under a fixed-port override.
+        sharedClosingPromise = sharedToClose.close().finally(() => {
+            sharedClosingPromise = undefined;
+        });
+        await sharedClosingPromise;
+    }
+}
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -373,7 +517,10 @@ async function initializeBrowserContext(
             clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
-        agentWebSocketServer: _agentWebSocketServer,
+        // Shared WebSocket server is created lazily on the first
+        // updateBrowserContext(true, ...) call so the bind happens with
+        // an active session in scope (required for registerPort) and so
+        // EADDRINUSE bubbles out of the schema-enable surface.
         choiceManager: new ChoiceManager(),
         resolverSettings: {
             searchResolver: true,
@@ -449,10 +596,39 @@ async function updateBrowserContext(
                 await createViewServiceHost(context);
         }
 
-        if (!context.agentContext.agentWebSocketServer) {
-            throw new Error(
-                "AgentWebSocketServer not initialized in browser context.",
+        if (context.agentContext.browserSchemaEnabled) {
+            // Already enabled for this session — nothing to do on the
+            // shared-server side. (Defensive: dispatcher should not
+            // re-fire enable for the same schema, but we want to be
+            // refcount-safe.)
+            debug(
+                "Browser schema already enabled; skipping shared-server bind",
             );
+            return;
+        }
+        try {
+            const server = await ensureSharedBrowserServer();
+            context.agentContext.agentWebSocketServer = server;
+            context.agentContext.browserSchemaEnabled = true;
+            // Per-session registration: the registrar allows multiple
+            // entries for `(browser, default)` across sessions and lookup
+            // returns the most recent, so each active session
+            // independently keeps the shared port discoverable. The
+            // backstop in closeSessionContext releases ours if disable
+            // is skipped.
+            context.agentContext.portRegistration = context.registerPort(
+                "default",
+                server.port,
+            );
+            sharedBrowserRefCount++;
+        } catch (e) {
+            // Roll back per-session bookkeeping so a subsequent retry
+            // sees a clean slate. Don't touch shared module state — the
+            // bind itself failed, so we never incremented the refcount
+            // or registered.
+            context.agentContext.browserSchemaEnabled = false;
+            context.agentContext.agentWebSocketServer = undefined;
+            throw e;
         }
 
         const sessionId = context.agentContext.sessionId;
@@ -481,11 +657,26 @@ async function updateBrowserContext(
                 // effort — see recordClientSeen for the swallow-on-fail
                 // contract.
                 void recordClientSeen(context.instanceStorage);
+                // Push a readiness refresh so the dispatcher's cached
+                // state flips from "setup-required" (cached at agent
+                // init time, before the extension was running) to
+                // "ready" without the user having to invoke
+                // `@config agent refresh browser` after launching the
+                // browser. notifyReadinessChanged is best-effort and
+                // swallows errors internally — safe to fire-and-forget.
+                void context.notifyReadinessChanged();
             },
             onClientDisconnected: (client: BrowserClient) => {
                 if (client.type === "extension") {
                     debug(`Extension client disconnected: ${client.id}`);
                 }
+                // Mirror onClientConnected: when the last client for
+                // this session goes away, the readiness state flips
+                // back to setup-required. Refresh the cache so the
+                // user gets the friendly "open your browser" message
+                // on the next action instead of a downstream RPC
+                // timeout from a stale "ready" cache.
+                void context.notifyReadinessChanged();
             },
             onWebAgentMessage: async (client: BrowserClient, data: any) => {
                 if (
@@ -581,22 +772,28 @@ async function updateBrowserContext(
         // shut down service
         if (context.agentContext.browserProcess) {
             context.agentContext.browserProcess.kill();
+            context.agentContext.browserProcess = undefined;
         }
 
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
+            context.agentContext.viewProcess = undefined;
+            // Reset to OS-assigned so a subsequent re-enable forks
+            // server.mjs with arg "0" instead of the stale port. The
+            // killed child may still hold the old port for a brief
+            // window (SIGTERM is async on Windows), so re-binding the
+            // same port races with EADDRINUSE.
+            context.agentContext.localHostPort = 0;
         }
+
+        await cleanupBrowserSession(context.agentContext);
     }
 }
 
 async function closeBrowserContext(
     context: SessionContext<BrowserActionContext>,
 ) {
-    if (context.agentContext.agentWebSocketServer) {
-        context.agentContext.agentWebSocketServer.unregisterSession(
-            context.agentContext.sessionId,
-        );
-    }
+    await cleanupBrowserSession(context.agentContext);
     if (context.agentContext.browserProcess) {
         context.agentContext.browserProcess.kill();
         context.agentContext.browserProcess = undefined;
@@ -604,6 +801,7 @@ async function closeBrowserContext(
     if (context.agentContext.viewProcess) {
         context.agentContext.viewProcess.kill();
         context.agentContext.viewProcess = undefined;
+        context.agentContext.localHostPort = 0;
     }
 }
 
@@ -2280,6 +2478,11 @@ async function createViewServiceHost(
                 });
             } catch (e: any) {
                 console.error(e);
+                // Synchronous fork failure (e.g. ENOENT for server.mjs,
+                // permissions error). Reset the cached port back to OS-
+                // assigned so a subsequent retry doesn't re-use a stale
+                // value — mirrors the disable/close paths.
+                context.agentContext.localHostPort = 0;
                 resolve(undefined);
             }
         },

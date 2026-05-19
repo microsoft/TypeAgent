@@ -39,15 +39,19 @@
           </div>
 
           <div class="mb-3">
-            <label for="websocketHost" class="form-label">WebSocket Host</label>
+            <label for="agentServerHost" class="form-label"
+              >Agent Server Host</label
+            >
             <input
               type="text"
               class="form-control"
-              id="websocketHost"
-              placeholder="ws://localhost:8081"
+              id="agentServerHost"
+              placeholder="ws://localhost:8999/ (blank = default)"
             />
             <div class="form-text">
-              Specify the WebSocket host address for TypeAgent connection
+              WebSocket URL of the TypeAgent agent server. Leave blank to use
+              the default (<code>ws://localhost:8999/</code>). The browser
+              agent's port is discovered automatically.
             </div>
           </div>
         </div>

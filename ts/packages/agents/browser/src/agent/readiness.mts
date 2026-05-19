@@ -4,8 +4,11 @@
 // Readiness wiring for the browser agent.
 //
 // Architecture note: like the code agent, the browser agent IS the
-// WebSocket server (port 8081, shared across sessions as a process
-// singleton). "Ready" can mean two distinct things:
+// WebSocket server (port assigned dynamically by the OS at bind time
+// and published via the PortRegistrar; can be pinned with the
+// BROWSER_WEBSOCKET_PORT env var for debugging). The server is a
+// process singleton shared across sessions. "Ready" can mean two
+// distinct things:
 //
 //   1. Electron-shell host mode — the host injects an in-process
 //      BrowserControl via AppAgentInitSettings.options. The agent talks

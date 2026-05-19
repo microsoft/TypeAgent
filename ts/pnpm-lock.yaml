@@ -1662,6 +1662,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../../agentServer/client
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../../agentServer/protocol
@@ -5154,6 +5157,9 @@ importers:
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../agentServer/protocol
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -5217,6 +5223,9 @@ importers:
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      websocket-channel-server:
+        specifier: workspace:*
+        version: link:../utils/webSocketChannelServer
       websocket-utils:
         specifier: workspace:*
         version: link:../utils/webSocketUtils
@@ -18313,7 +18322,7 @@ snapshots:
       async: 3.2.6
       cosmiconfig: 8.3.6(typescript@5.4.5)
       date-fns: 2.30.0
-      debug: 4.4.3(supports-color@8.1.1)
+      debug: 4.4.1
       detect-indent: 6.1.0
       find-up: 7.0.0
       fs-extra: 11.3.0

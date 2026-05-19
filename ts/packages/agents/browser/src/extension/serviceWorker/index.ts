@@ -276,15 +276,18 @@ function setupEventListeners(): void {
 
     // Storage changes
     chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === "sync" && changes.websocketHost) {
+        if (namespace === "sync" && changes.agentServerHost) {
             console.log(
-                "WebSocket host changed:",
-                changes.websocketHost.newValue,
+                "Agent-server host changed:",
+                changes.agentServerHost.newValue,
             );
 
             const webSocket = getWebSocket();
             if (webSocket) {
-                // close the socket to force reconnect
+                // close the socket to force reconnect against the new
+                // agent-server URL. settings are re-read on every
+                // createWebSocket() call so no cache invalidation is
+                // needed here.
                 try {
                     webSocket.close();
                 } catch (error) {
@@ -325,7 +328,17 @@ function setupEventListeners(): void {
         debugWebAgentProxy("Web page connected:", url);
         const handler = async (event: MessageEvent) => {
             const message = event.data;
-            const data = JSON.parse(message);
+            let data;
+            try {
+                data = JSON.parse(message);
+            } catch (err) {
+                // Non-JSON or non-string payload — not a webAgent message.
+                debugWebAgentProxy(
+                    `Ignoring non-JSON message on webAgent proxy (${url}):`,
+                    err,
+                );
+                return;
+            }
             if (isWebAgentMessageFromDispatcher(data)) {
                 debugWebAgentProxy(`Dispatcher -> WebAgent (${url})`, data);
                 port.postMessage(data);
