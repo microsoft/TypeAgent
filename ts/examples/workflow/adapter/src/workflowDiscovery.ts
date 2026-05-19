@@ -48,12 +48,12 @@ export async function discoverWorkflows(
                 const ir: WorkflowIR = JSON.parse(raw);
                 const result = validateWorkflowIR(ir, tasks);
                 if (!result.valid) {
-                    errors.push({ file: entry, errors: result.errors });
+                    errors.push({ file: filePath, errors: result.errors });
                     continue;
                 }
                 if (workflows.has(ir.name)) {
                     errors.push({
-                        file: entry,
+                        file: filePath,
                         errors: `Duplicate workflow name '${ir.name}'`,
                     });
                     continue;
@@ -61,7 +61,7 @@ export async function discoverWorkflows(
                 workflows.set(ir.name, ir);
             } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
-                errors.push({ file: entry, errors: msg });
+                errors.push({ file: filePath, errors: msg });
             }
         }
     }

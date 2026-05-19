@@ -69,8 +69,13 @@ const WORKFLOW_SOURCE: Record<string, "ir" | "built"> = {
     "d8-summarize-url.json": "built",
 };
 function workflowPath(name: string): string {
-    const dir =
-        WORKFLOW_SOURCE[name] === "built" ? WORKFLOWS_BUILT : WORKFLOWS_IR;
+    const source = WORKFLOW_SOURCE[name];
+    if (!source) {
+        throw new Error(
+            `Unknown workflow '${name}'. Add it to WORKFLOW_SOURCE.`,
+        );
+    }
+    const dir = source === "built" ? WORKFLOWS_BUILT : WORKFLOWS_IR;
     return join(dir, name);
 }
 
