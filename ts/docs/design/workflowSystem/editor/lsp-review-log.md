@@ -210,3 +210,20 @@ Deferred from Phase 5:
   as the primary follow-up.
 - **Manual smoke tests** documented in `lsp-manual-tests.md` are
   still pending a GUI VS Code session to walk through.
+
+---
+
+## 2026-05-19 — Subagent review post-mortem (closure)
+
+**Phase:** retrospective (all phases)
+**Origin:** background subagent reliability
+**Status:** Documented; pattern abandoned for this session.
+**Resolution:** After Phase 5 wrapped, completion notifications fired
+for `phase1-review-round1` (code-review) and `phase1-testgap-round1`
+(general-purpose, claude-haiku-4.5). Both agents reported
+`status: completed` after ~17,750 s of elapsed time but produced
+`total_turns: 0` and no usable response — they effectively no-op'd.
+This confirms the Phase 1 decision to switch to inline self-review
+across all subsequent phases. Future iterations should sanity-check
+subagent turn-1 progress with a short sync probe before launching
+long-running background reviews.
