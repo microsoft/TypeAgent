@@ -221,12 +221,7 @@ function resolveTestConfigPath(appPath: string): string {
  */
 export function getLaunchArgs(testGreetings: boolean): string[] {
     const appPath = getAppPath();
-    const args = [
-        appPath,
-        "--test",
-        "--env",
-        resolveTestConfigPath(appPath),
-    ];
+    const args = [appPath, "--test", "--env", resolveTestConfigPath(appPath)];
     if (os.platform() === "linux") {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");
