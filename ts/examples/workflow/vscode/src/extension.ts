@@ -11,7 +11,7 @@
  */
 
 import * as path from "node:path";
-import { ExtensionContext, workspace } from "vscode";
+import { commands, ExtensionContext, window, workspace, Uri } from "vscode";
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -20,6 +20,16 @@ import {
 } from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
+
+interface CompileIRResult {
+    ir?: unknown;
+    errors: {
+        phase: string;
+        message: string;
+        line: number;
+        col: number;
+    }[];
+}
 
 export function activate(context: ExtensionContext): void {
     const serverModule = context.asAbsolutePath(
@@ -50,7 +60,51 @@ export function activate(context: ExtensionContext): void {
         clientOptions,
     );
 
+    context.subscriptions.push(
+        commands.registerCommand("workflow.previewIR", previewIR),
+        commands.registerCommand("workflow.previewGraph", previewGraph),
+    );
+
     client.start();
+}
+
+async function previewIR(): Promise<void> {
+    const editor = window.activeTextEditor;
+    if (!editor || editor.document.languageId !== "workflow") {
+        window.showInformationMessage(
+            "Open a .wf file to preview its IR.",
+        );
+        return;
+    }
+    if (!client) return;
+    try {
+        const result = await client.sendRequest<CompileIRResult>(
+            "workflow/compileIR",
+            { uri: editor.document.uri.toString() },
+        );
+        const content = result.errors.length
+            ? JSON.stringify({ errors: result.errors }, null, 2)
+            : JSON.stringify(result.ir, null, 2);
+        const doc = await workspace.openTextDocument({
+            content,
+            language: "json",
+        });
+        await window.showTextDocument(doc, { preview: true });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        window.showErrorMessage(`Workflow IR preview failed: ${message}`);
+    }
+}
+
+function previewGraph(): void {
+    // Graph preview (extractGraph + elkjs) is planned but not yet
+    // implemented. Surface a friendly message so the command isn't a
+    // silent no-op.
+    window.showInformationMessage(
+        "Workflow graph preview is coming in a follow-up release.",
+    );
+    // Reference Uri to keep the import live for future use.
+    void Uri.parse;
 }
 
 export function deactivate(): Thenable<void> | undefined {

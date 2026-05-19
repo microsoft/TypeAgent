@@ -183,3 +183,30 @@ Deferred from Phase 4:
   pragmatic fix; a cleaner solution is to extend the DSL AST with a
   separate `nameLoc` field on Const / DestructuringConst (filed as a
   follow-up for the DSL team).
+
+---
+
+## 2026-05-19 — Phase 5: IR preview landed; graph preview deferred
+
+**Phase:** 5
+**Origin:** scope vs. plan table rows 14-15
+**Status:** Partial delivery
+**Resolution:**
+- **IR preview** is implemented via a custom LSP request
+  (`workflow/compileIR`) that runs `compile()` server-side using the
+  builtin task schemas. The extension command `workflow.previewIR`
+  opens the resulting IR JSON (or error list) in a side editor.
+  Keeping the compile work server-side preserves the bundle-cleanliness
+  guarantee for the extension. Unit tests in `compileIR.spec.ts`
+  cover the happy path, parse errors, and missing-URI handling.
+
+Deferred from Phase 5:
+- **Graph preview** (`workflow.previewGraph`) is registered as a
+  command but currently surfaces a "coming soon" message. Full
+  delivery needs (a) `elkjs` bundled into the extension or loaded as
+  a web worker, (b) a webview implementation with content-security
+  policy, (c) manual validation in a GUI VS Code host — none of
+  which can be exercised inside this restricted dev container. Filed
+  as the primary follow-up.
+- **Manual smoke tests** documented in `lsp-manual-tests.md` are
+  still pending a GUI VS Code session to walk through.

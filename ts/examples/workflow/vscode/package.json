@@ -52,6 +52,18 @@
         "path": "./snippets/workflow.code-snippets"
       }
     ],
+    "commands": [
+      {
+        "command": "workflow.previewIR",
+        "title": "Workflow: Preview IR",
+        "category": "Workflow"
+      },
+      {
+        "command": "workflow.previewGraph",
+        "title": "Workflow: Preview Graph",
+        "category": "Workflow"
+      }
+    ],
     "configuration": {
       "title": "Workflow DSL",
       "properties": {

@@ -46,6 +46,7 @@ import {
     computePrepareRename,
     computeRename,
 } from "./features/rename.js";
+import { compileIR, type CompileIRParams } from "./features/compileIR.js";
 import { invalidate } from "./parsedDocument.js";
 import { loadTaskSchemas } from "./taskSchemas.js";
 
@@ -212,6 +213,11 @@ export function createServer(
         if (!doc) return null;
         return computeRename(doc, params.position, params.newName);
     });
+
+    connection.onRequest(
+        "workflow/compileIR",
+        (params: CompileIRParams) => compileIR(documents, params, schemas),
+    );
 
     connection.languages.semanticTokens.on((params) => {
         const doc = documents.get(params.textDocument.uri);
