@@ -32,6 +32,15 @@ import type { Duplex } from "node:stream";
 import { computeDiagnostics } from "./features/diagnostics.js";
 import { formatDocument } from "./features/formatting.js";
 import { computeDocumentSymbols } from "./features/symbols.js";
+import { computeHover } from "./features/hover.js";
+import { computeDefinition } from "./features/definition.js";
+import { computeReferences } from "./features/references.js";
+import { computeCompletions } from "./features/completion.js";
+import {
+    computeSemanticTokens,
+    semanticTokensLegend,
+} from "./features/semanticTokens.js";
+import { invalidate } from "./parsedDocument.js";
 import { loadTaskSchemas } from "./taskSchemas.js";
 
 export interface ServerInstance {
@@ -80,6 +89,14 @@ export function createServer(
                 },
                 documentFormattingProvider: true,
                 documentSymbolProvider: true,
+                hoverProvider: true,
+                definitionProvider: true,
+                referencesProvider: true,
+                completionProvider: { triggerCharacters: ["."] },
+                semanticTokensProvider: {
+                    legend: semanticTokensLegend,
+                    full: true,
+                },
             },
             serverInfo: {
                 name: "workflow-lsp",
@@ -108,10 +125,12 @@ export function createServer(
     }
 
     documents.onDidChangeContent((change) => {
+        invalidate(change.document.uri);
         scheduleDiagnostics(change.document.uri);
     });
 
     documents.onDidClose((event) => {
+        invalidate(event.document.uri);
         const t = pendingDiagnostics.get(event.document.uri);
         if (t) clearTimeout(t);
         pendingDiagnostics.delete(event.document.uri);
@@ -131,6 +150,40 @@ export function createServer(
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return [];
         return computeDocumentSymbols(doc);
+    });
+
+    connection.onHover((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        return computeHover(doc, params.position, schemas);
+    });
+
+    connection.onDefinition((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        return computeDefinition(doc, params.position);
+    });
+
+    connection.onReferences((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        return computeReferences(
+            doc,
+            params.position,
+            params.context.includeDeclaration,
+        );
+    });
+
+    connection.onCompletion((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return [];
+        return computeCompletions(doc, schemas);
+    });
+
+    connection.languages.semanticTokens.on((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return { data: [] };
+        return computeSemanticTokens(doc);
     });
 
     documents.listen(connection);

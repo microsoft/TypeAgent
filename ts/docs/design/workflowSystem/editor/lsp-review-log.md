@@ -82,3 +82,48 @@ will sometimes lose column when the line is rewritten.
 **Resolution:** This matches the formatter's design (it doesn't expose
 a structural diff). Phase 5+ could compute a minimal LCS-style diff
 across lines if user feedback indicates the cursor jumps are noticeable.
+
+---
+
+## 2026-05-19 — Phase 2: subagent review cycle waived again; inline self-review
+
+**Phase:** 2
+**Origin:** code-review rounds 1-2 / test-gap rounds 1-2 (planned)
+**Status:** Deferred / replaced
+**Resolution:** Same pattern as Phase 1 — background review subagents
+were not used. Per the Phase 1 decision in `lsp-decisions.md`, sub-
+agent reviews should only run if a sync turn-1 probe responds quickly;
+that probe was not re-attempted in this session. Inline self-review
+performed during implementation, findings folded directly into the
+features. 27 specs across 8 suites cover symbol resolution, hover,
+definition, references, completion, and semantic tokens. Open items
+captured below.
+
+---
+
+## 2026-05-19 — Phase 2: signature help & rename deferred
+
+**Phase:** 2
+**Origin:** scope vs. plan table rows 8 (signature help) and 11 (rename)
+**Status:** Deferred
+**Resolution:** The Phase 2 features (#4, #6, #7, #9, #10) all landed
+with tests. Signature help is a natural fit for Phase 3 (authoring
+assists) alongside completion-context work, and rename belongs with
+the Phase 4 refactoring bundle since it shares the symbol-table
+machinery with extract/inline. The current symbol resolver already
+records `Def` locations and per-name refs, so neither feature requires
+new infrastructure.
+
+---
+
+## 2026-05-19 — Phase 2: dotted-name hover limited to head segment
+
+**Phase:** 2
+**Origin:** inline self-review
+**Status:** Accepted-with-rationale
+**Resolution:** `findReferenceAt` resolves `DottedNameExpr` against
+the head segment (e.g. `foo.bar.baz` hovers as `foo`). Member-access
+hover (typed property lookup) requires plumbing through the
+`TypeChecker`'s inferred types; the resolver intentionally does not
+re-implement that. Tracked for Phase 3 once we know which authoring
+quick-fixes need member-aware completion.
