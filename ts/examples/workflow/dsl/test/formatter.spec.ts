@@ -29,7 +29,7 @@ function assertStable(source: string): string {
     return once;
 }
 
-describe("formatter: comment preservation (G8)", () => {
+describe("formatter: comment preservation", () => {
     test("lexer collects line and block comments", () => {
         const { comments } = lex(`// hi
 /* block */ a`);
@@ -342,7 +342,7 @@ describe("formatter: expression edge cases", () => {
     });
 });
 
-describe("formatter: comment attachment edge cases (G8)", () => {
+describe("formatter: comment attachment edge cases", () => {
     test("comment before 'else' is preserved (attached inside else block)", () => {
         // Implementation detail: the parser attaches the trivia before
         // `else` as a leading comment of the first statement of the

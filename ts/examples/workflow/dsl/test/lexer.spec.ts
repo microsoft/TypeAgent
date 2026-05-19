@@ -352,7 +352,7 @@ describe("lexer", () => {
         ]);
     });
 
-    // ---- Comment collection (G8) ----
+    // ---- Comment collection ----
     //
     // These tests guard the LexComment collector: regressions here would
     // either drop comments from format() output or corrupt position

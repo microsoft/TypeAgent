@@ -17,13 +17,12 @@
 // Licensed under the MIT License.
 
 /**
- * G8 round-3 test-gap pass 2 — adversarial angles not covered by pass 1.
+ * Adversarial comment-attachment edge cases, complementing
+ * commentFidelity.spec.ts. That suite targets multi-line block comments in
+ * the inner-comment slots, else-if chains, secondary built-in surfaces,
+ * basic param edge cases, and stripTrivia structural equivalence.
  *
- * Pass 1 (commentFidelity.spec.ts) targeted multi-line block comments in new
- * inner-comment slots, else-if chains, secondary built-in surfaces, basic
- * param edge cases, and stripTrivia structural equivalence.
- *
- * This pass exercises different angles:
+ * This file exercises different angles:
  *   - Interaction of leading + trailing on the SAME param when BOTH are
  *     multi-line (order + indent invariant on both sides).
  *   - Containers that have NO inner-comment slot (SwitchStatement body,

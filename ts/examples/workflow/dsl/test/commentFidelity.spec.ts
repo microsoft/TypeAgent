@@ -15,9 +15,7 @@
 // Licensed under the MIT License.
 
 /**
- * G8 round-3 test-gap pass 1.
- *
- * Round 3 closed three full-comment-fidelity gaps:
+ * Comment-fidelity regression suite covering three attachment areas:
  *   (a) comments between/around parameters (ParamDecl.leading/trailingComments,
  *       WorkflowDecl.paramInnerComments)
  *   (b) comments inside empty nested blocks on every block-bearing AST node
@@ -28,7 +26,7 @@
  *
  * The existing `trailingComments.spec.ts` covers the basic shape of each
  * surface. This file targets the residual gaps:
- *   - multi-line block comments in each new comment slot (the round-2
+ *   - multi-line block comments in each new comment slot (the
  *     indent-accumulation bug must not regress in any of the new slots)
  *   - structural-equivalence (stripTrivia) of parse-format-parse for each
  *     new surface

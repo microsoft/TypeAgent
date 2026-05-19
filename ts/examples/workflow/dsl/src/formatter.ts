@@ -5,8 +5,9 @@
  * Workflow DSL formatter (AST -> source).
  *
  * Round-trips a parsed `WorkflowDecl` back to canonical DSL text. Preserves
- * `leadingComments` attached to AST nodes (see G8 in dsl-v0.1-gap.md and
- * dsl-v0.1.md section 6).
+ * `leadingComments` attached to AST nodes (see "Comments not preserved in
+ * AST" in docs/design/workflowSystem/dsl/dsl-v0.1-gap.md and dsl-v0.1.md
+ * section 6).
  *
  * Goals:
  * - Output is parseable: `parse(format(parse(src))) === parse(src)` for
@@ -238,7 +239,7 @@ class Printer {
      * is applied; subsequent lines are pushed verbatim (preserving the
      * comment's own internal alignment) without prepending another
      * indent. Failing to do this would accumulate `depth * indent`
-     * spaces on every reformat (see G8-round-2 bug).
+     * spaces on the comment's continuation lines on every reformat.
      */
     private writeMultilineCommentText(text: string): void {
         const lines = text.split("\n");

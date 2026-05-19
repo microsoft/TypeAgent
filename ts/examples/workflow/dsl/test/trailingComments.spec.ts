@@ -4,7 +4,7 @@
 /**
  * Trailing-comment support tests.
  *
- * Covers the trailing/inner comment extension to G8: comments that
+ * Covers the trailing/inner comment extension: comments that
  * appear after a statement on the same physical line (inline trailing),
  * comments that appear at the end of a block (attached as trailing on
  * the last statement), and comments inside an otherwise empty block

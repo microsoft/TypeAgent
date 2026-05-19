@@ -14,9 +14,9 @@
 // Licensed under the MIT License.
 
 /**
- * Test-gap pass 2 for G8 / formatter changeset.
+ * Comment-neutrality suite for the formatter changeset.
  *
- * Covers areas pass 1 missed:
+ * Covers areas the basic comment-fidelity suite does not:
  *  1. Interaction of comments with typeChecker, graphExtractor, emitter.
  *  2. Stronger formatter "parseable" property: parse(format(parse(src)))
  *     is structurally equal to parse(src) (ignoring leadingComments).
