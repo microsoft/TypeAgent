@@ -25,10 +25,12 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "debug": "^4.4.0",
     "ws": "^8.20.1"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
     "@types/ws": "^8.5.10",
     "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",

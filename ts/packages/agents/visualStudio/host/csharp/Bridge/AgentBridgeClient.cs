@@ -14,10 +14,18 @@ using Newtonsoft.Json.Linq;
 namespace Microsoft.TypeAgent.VisualStudio.Bridge
 {
     /// <summary>
-    /// WebSocket client that connects to the visualstudio-agent's bridge
-    /// (default ws://localhost:5680). Receives BridgeRequest messages,
-    /// dispatches them through DTEActionExecutor, and sends BridgeResponse
-    /// messages back.
+    /// WebSocket client that connects to the visualstudio-agent's bridge.
+    /// Receives BridgeRequest messages, dispatches them through
+    /// DTEActionExecutor, and sends BridgeResponse messages back.
+    ///
+    /// Port discovery:
+    ///   The bridge port is no longer hardcoded. On each connect attempt
+    ///   we ask the agent-server's discovery channel where the
+    ///   `(visualStudio, default)` allocation lives, falling back to the
+    ///   well-known port (5680) when discovery is disabled or fails.
+    ///   See <see cref="BridgeDiscovery"/> for the wire protocol and the
+    ///   env-var knobs (`AGENT_SERVER_PORT`,
+    ///   `TYPEAGENT_VS_USE_DISCOVERY`, `TYPEAGENT_VS_FALLBACK_PORT`).
     ///
     /// Wire format (matches packages/agents/visualStudio/src/visualStudioActionHandler.ts):
     ///   request:  { id, actionName, parameters }
@@ -25,9 +33,6 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
     /// </summary>
     internal sealed class AgentBridgeClient : IDisposable
     {
-        // Port 5678 + 5679 are taken by the Excel agent. Keep this in sync
-        // with BRIDGE_PORT in packages/agents/visualStudio/src/visualStudioActionHandler.ts.
-        private static readonly Uri DefaultUri = new Uri("ws://localhost:5680");
         private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(3);
 
         private readonly AsyncPackage _package;
@@ -46,9 +51,15 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellation);
             while (!linked.IsCancellationRequested)
             {
+                int port = 0;
                 try
                 {
-                    await ConnectAndReceiveAsync(linked.Token);
+                    // Resolve the port fresh on every attempt: the agent may
+                    // have restarted on a different ephemeral port since the
+                    // last loop iteration, and the standalone shell may have
+                    // come up while we were retrying.
+                    port = await BridgeDiscovery.ResolveBridgePortAsync(linked.Token).ConfigureAwait(false);
+                    await ConnectAndReceiveAsync(port, linked.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -56,11 +67,11 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[TypeAgent] Bridge error: {ex.Message}");
+                    Debug.WriteLine($"[TypeAgent] Bridge error (port {port}): {ex.Message}");
                 }
                 try
                 {
-                    await Task.Delay(ReconnectDelay, linked.Token);
+                    await Task.Delay(ReconnectDelay, linked.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -69,11 +80,12 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
             }
         }
 
-        private async Task ConnectAndReceiveAsync(CancellationToken cancellation)
+        private async Task ConnectAndReceiveAsync(int port, CancellationToken cancellation)
         {
+            var uri = new Uri($"ws://localhost:{port}");
             _ws = new ClientWebSocket();
-            await _ws.ConnectAsync(DefaultUri, cancellation);
-            Debug.WriteLine($"[TypeAgent] Bridge connected to {DefaultUri}");
+            await _ws.ConnectAsync(uri, cancellation).ConfigureAwait(false);
+            Debug.WriteLine($"[TypeAgent] Bridge connected to {uri}");
 
             var buffer = new ArraySegment<byte>(new byte[16 * 1024]);
             var assembly = new StringBuilder();
@@ -84,10 +96,10 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                 WebSocketReceiveResult result;
                 do
                 {
-                    result = await _ws.ReceiveAsync(buffer, cancellation);
+                    result = await _ws.ReceiveAsync(buffer, cancellation).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cancellation);
+                        await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cancellation).ConfigureAwait(false);
                         return;
                     }
                     assembly.Append(Encoding.UTF8.GetString(buffer.Array!, 0, result.Count));

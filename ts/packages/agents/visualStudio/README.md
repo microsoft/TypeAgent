@@ -17,28 +17,50 @@ for build and install instructions.
 +-------------------------------+        +--------------------+
 |  Visual Studio (VSIX)         |        |  TypeAgent         |
 |                               |        |  agent-server      |
-|  +------------------------+   |   WS   |                    |
-|  |  ChatToolWindow        |<--|------->|  +--------------+  |
+|  +------------------------+   |        |                    |
+|  |  ChatToolWindow        |<--|--WS--->|  +--------------+  |
 |  |   WebView2             |   |  8999  |  | dispatcher   |  |
 |  |     chat-ui            |   |        |  +------+-------+  |
 |  +------------------------+   |        |         |          |
 |                               |        |  +------v-------+  |
 |  +------------------------+   |        |  | visualstudio |  |
 |  |  AgentBridgeClient.cs  |<--|---WS---|->|    agent     |  |
-|  |   DTEActionExecutor.cs |   |  5680  |  +--------------+  |
+|  |   DTEActionExecutor.cs |   | ephem. |  +--------------+  |
 |  +-----------+------------+   |        +--------------------+
-|              |                |
-|              v EnvDTE         |
-|         (Solution, Build,     |
-|          Debugger, Editor)    |
+|              |  ^
+|              |  + port discovered via
+|              |    discovery channel on 8999
+|              v EnvDTE
+|         (Solution, Build,
+|          Debugger, Editor)
 +-------------------------------+
 ```
 
 Two WebSocket channels:
 
-- **Chat channel** (port 8999) — WebView2 inside the VSIX talks to the dispatcher.
-- **Action bridge** (port 5680) — this agent owns a `WebSocketServer`; the C#
-  host connects as a client and dispatches incoming actions through EnvDTE.
+- **Chat channel** (port 8999) — WebView2 inside the VSIX talks to the
+  dispatcher. The same port also hosts the dispatcher's read-only
+  **discovery channel** that the bridge uses to find the action port
+  (see below).
+- **Action bridge** (OS-assigned ephemeral port) — this agent owns a
+  `WebSocketServer`; the C# host connects as a client and dispatches
+  incoming actions through EnvDTE. The actual port is published to the
+  agent-server's `PortRegistrar` under `(visualStudio, default)` and
+  discovered by `AgentBridgeClient` on every connect attempt.
+
+### Port discovery
+
+`AgentBridgeClient` resolves the bridge port on each connect attempt by
+calling `lookupPort("visualStudio", "default")` against the
+agent-server's discovery channel (`ws://localhost:<AGENT_SERVER_PORT>/`,
+default 8999). Knobs:
+
+| Env var                                   | Default                 | Purpose                                                                     |
+| ----------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `AGENT_SERVER_PORT`                       | `8999`                  | Where the dispatcher's discovery channel is hosted.                         |
+| `TYPEAGENT_VS_USE_DISCOVERY`              | `true`                  | Set to `false`/`0` to skip discovery and use the hardcoded fallback (5680). |
+| `TYPEAGENT_VS_FALLBACK_PORT`              | `5680`                  | Port to fall back to when discovery is disabled or returns null / fails.    |
+| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_ | Pin the agent's bridge to a specific port when debugging.                   |
 
 ## Action Categories
 
@@ -77,7 +99,8 @@ The VSIX host has its own two-stage build (WebView2 bundle + MSBuild). See
 4. **View → Other Windows → TypeAgent Chat**.
 
 The chat panel connects to `ws://localhost:8999`. Once connected, the C# bridge
-auto-connects to `ws://localhost:5680`.
+discovers the agent's action port via that same WS (via the discovery channel)
+and auto-connects.
 
 ## Project Structure
 
@@ -126,8 +149,11 @@ Any use of third-party trademarks or logos are subject to those third-party's po
 - **Chat panel never connects.** The agent-server must be running before VS
   opens the tool window. Check that port 8999 is reachable.
 - **Actions hang or error with "Host plugin not connected".** The C# bridge
-  could not reach port 5680 — confirm the `visualstudio-agent` is enabled in
-  the dispatcher and that no other process is bound to 5680.
+  could not reach the agent's action port. Confirm `visualstudio-agent` is
+  enabled in the dispatcher. Check the VS **Output → Debug** pane for
+  `[TypeAgent] Bridge…` lines indicating whether discovery succeeded and
+  which port was used. Set `TYPEAGENT_VS_USE_DISCOVERY=false` to force the
+  hardcoded fallback (5680) if you suspect the discovery channel itself.
 - **Action ran but did nothing visible.** Check the Visual Studio **Output**
   window and the agent-server logs; EnvDTE silently no-ops on some commands
   when the relevant context (e.g. an active document, an active debug session)

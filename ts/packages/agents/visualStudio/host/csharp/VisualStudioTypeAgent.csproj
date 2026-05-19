@@ -73,6 +73,7 @@
       <DependentUpon>ChatToolWindowControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="Bridge\AgentBridgeClient.cs" />
+    <Compile Include="Bridge\BridgeDiscovery.cs" />
     <Compile Include="Bridge\DTEActionExecutor.cs" />
   </ItemGroup>
 
