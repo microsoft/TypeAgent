@@ -46,6 +46,12 @@
         "path": "./syntaxes/workflow.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "workflow",
+        "path": "./snippets/workflow.code-snippets"
+      }
+    ],
     "configuration": {
       "title": "Workflow DSL",
       "properties": {

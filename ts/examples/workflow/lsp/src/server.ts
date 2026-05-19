@@ -40,6 +40,8 @@ import {
     computeSemanticTokens,
     semanticTokensLegend,
 } from "./features/semanticTokens.js";
+import { computeSignatureHelp } from "./features/signatureHelp.js";
+import { computeInlayHints } from "./features/inlayHints.js";
 import { invalidate } from "./parsedDocument.js";
 import { loadTaskSchemas } from "./taskSchemas.js";
 
@@ -93,6 +95,8 @@ export function createServer(
                 definitionProvider: true,
                 referencesProvider: true,
                 completionProvider: { triggerCharacters: ["."] },
+                signatureHelpProvider: { triggerCharacters: ["(", ","] },
+                inlayHintProvider: true,
                 semanticTokensProvider: {
                     legend: semanticTokensLegend,
                     full: true,
@@ -178,6 +182,18 @@ export function createServer(
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return [];
         return computeCompletions(doc, schemas);
+    });
+
+    connection.onSignatureHelp((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        return computeSignatureHelp(doc, params.position, schemas);
+    });
+
+    connection.languages.inlayHint.on((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return [];
+        return computeInlayHints(doc, schemas, params.range);
     });
 
     connection.languages.semanticTokens.on((params) => {

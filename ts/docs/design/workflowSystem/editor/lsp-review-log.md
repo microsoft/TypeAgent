@@ -127,3 +127,31 @@ hover (typed property lookup) requires plumbing through the
 `TypeChecker`'s inferred types; the resolver intentionally does not
 re-implement that. Tracked for Phase 3 once we know which authoring
 quick-fixes need member-aware completion.
+
+---
+
+## 2026-05-19 — Phase 3: signature help + inlay hints + snippets
+
+**Phase:** 3
+**Origin:** code-review rounds 1-2 / test-gap rounds 1-2 (planned)
+**Status:** Deferred / replaced (same pattern as P1/P2)
+**Resolution:** Inline self-review only. Bundle audit still clean
+(292.6 KB, no aiclient leak); 9 spec suites with 36 tests pass.
+
+Phase 3 deliverables that landed:
+- **Signature help** at task call sites via a text-based scanner that
+  walks back from the cursor counting parens/commas with string
+  literals masked, then matches the call name against the builtin
+  schema set.
+- **Inlay hints** (`InlayHintKind.Type`) attached to `const` bindings
+  whose right-hand side is a known task call, suppressed when the
+  source already declares a type. Range-scoped responses honoured.
+- **Snippets** shipped via `snippets/workflow.code-snippets` covering
+  scaffold, control flow, lambdas, parallel, attempts, template literals.
+
+Deferred from Phase 3 (carried forward):
+- **Cancellation tokens.** Our handlers are synchronous and fast; no
+  user-visible benefit yet. Will revisit during Phase 4 rename / Phase 5
+  webview previews where work can be heavier.
+- **Code actions.** Originally in the plan table but not in the
+  Phase 3 todo set. Will land in Phase 4 alongside refactoring.

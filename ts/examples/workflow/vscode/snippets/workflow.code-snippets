@@ -1,0 +1,103 @@
+{
+    "Workflow scaffold": {
+        "prefix": "workflow",
+        "body": [
+            "workflow ${1:name}(${2:input}: ${3:string}): ${4:string} {",
+            "\t$0",
+            "\treturn ${2:input};",
+            "}"
+        ],
+        "description": "Define a new workflow."
+    },
+    "Const binding": {
+        "prefix": "const",
+        "body": ["const ${1:name} = ${2:value};$0"],
+        "description": "Bind a value to a name."
+    },
+    "Destructuring const": {
+        "prefix": "dconst",
+        "body": ["const [${1:first}, ${2:second}] = ${3:call()};$0"],
+        "description": "Destructure an array result."
+    },
+    "If / else": {
+        "prefix": "if",
+        "body": ["if (${1:condition}) {", "\t$0", "} else {", "\t", "}"],
+        "description": "Conditional branch."
+    },
+    "Switch": {
+        "prefix": "switch",
+        "body": [
+            "switch (${1:value}) {",
+            "\tcase ${2:\"a\"}: {",
+            "\t\t$0",
+            "\t}",
+            "\tdefault: {",
+            "\t\t",
+            "\t}",
+            "}"
+        ],
+        "description": "Switch over a value."
+    },
+    "Map": {
+        "prefix": "map",
+        "body": [
+            "map(${1:collection}, (${2:item}) => {",
+            "\treturn ${2:item};$0",
+            "})"
+        ],
+        "description": "Map each item in a collection."
+    },
+    "Filter": {
+        "prefix": "filter",
+        "body": [
+            "filter(${1:collection}, (${2:item}) => {",
+            "\treturn ${3:true};$0",
+            "})"
+        ],
+        "description": "Filter a collection."
+    },
+    "Parallel map": {
+        "prefix": "parallelMap",
+        "body": [
+            "parallelMap(${1:collection}, (${2:item}) => {",
+            "\treturn ${2:item};$0",
+            "}, ${3:4})"
+        ],
+        "description": "Parallel map with a concurrency limit."
+    },
+    "Parallel branches": {
+        "prefix": "parallel",
+        "body": [
+            "parallel {",
+            "\tbranch {",
+            "\t\t$0",
+            "\t}",
+            "\tbranch {",
+            "\t\t",
+            "\t}",
+            "}"
+        ],
+        "description": "Run branches in parallel."
+    },
+    "Attempts with fallback": {
+        "prefix": "attempts",
+        "body": [
+            "attempts(${1:3}) {",
+            "\t$0",
+            "} fallback (${2:err}) {",
+            "\tthrow ${2:err};",
+            "}"
+        ],
+        "description": "Retry a block N times with a fallback."
+    },
+    "Shell exec": {
+        "prefix": "shellExec",
+        "body": ["shell.exec(${1:\"echo hello\"})$0"],
+        "description": "Execute a shell command."
+    },
+    "Template string": {
+        "prefix": "tmpl",
+        "body": ["`${1:text} ${${2:name}}`$0"],
+        "description": "Template literal."
+    }
+}
