@@ -321,20 +321,46 @@ export function lex(source: string): {
             const quote = ch;
             advance();
             const innerStart = pos;
+            let unterminated = false;
             while (pos < source.length && source[pos] !== quote) {
-                if (source[pos] === "\\") {
+                const c = source[pos];
+                // Raw line terminators are forbidden inside string literals
+                // (strict-mode JS semantics). Use `\<newline>` for line
+                // continuation, or a template literal for multi-line text.
+                if (
+                    c === "\n" ||
+                    c === "\r" ||
+                    c === "\u2028" ||
+                    c === "\u2029"
+                ) {
+                    errors.push({
+                        message:
+                            "Unterminated string literal (raw newline not allowed)",
+                        line: startLine,
+                        col: startCol,
+                        offset: startOffset,
+                    });
+                    unterminated = true;
+                    break;
+                }
+                if (c === "\\") {
                     advance(); // backslash
                     if (pos < source.length) {
-                        advance(); // the escaped character (any char)
+                        // Consume one source character; if it is CR (with
+                        // optional LF) the decoder treats CRLF as a single
+                        // LineTerminatorSequence, but the lexer only needs
+                        // to consume one code unit here - the LF will be
+                        // consumed on the next iteration as a normal char.
+                        advance();
                     }
                 } else {
                     advance();
                 }
             }
             const raw = source.slice(innerStart, pos);
-            if (pos < source.length) {
+            if (!unterminated && pos < source.length) {
                 advance(); // closing quote
-            } else {
+            } else if (!unterminated) {
                 errors.push({
                     message: "Unterminated string literal",
                     line: startLine,
