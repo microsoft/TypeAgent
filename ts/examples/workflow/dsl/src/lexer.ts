@@ -129,18 +129,18 @@ const KEYWORDS = new Map<string, TokenKind>([
  * A comment captured by the lexer.
  *
  * `text` stores the FULL lexeme including the leading `//` (line) or
- * `/* ... *​/` (block) delimiters so that an AST-to-source serializer
- * can reproduce the original spelling without ambiguity. This is a
- * superset of the spec's `{ text, pos }` shape; the extra `block` flag
- * makes downstream serializers cheaper.
+ * the block delimiters (`/*` ... close marker) so that an AST-to-source
+ * serializer can reproduce the original spelling without ambiguity.
+ * This is a superset of the spec's `{ text, pos }` shape; the extra
+ * `block` flag makes downstream serializers cheaper.
  */
 export interface LexComment {
-    /** Full comment text, including `//` or `/* *​/` delimiters. */
+    /** Full comment text, including the `//` or block delimiters. */
     text: string;
     line: number;
     col: number;
     offset: number;
-    /** True for `/* *​/`, false for `//`. */
+    /** True for block comments, false for line comments. */
     block: boolean;
 }
 
