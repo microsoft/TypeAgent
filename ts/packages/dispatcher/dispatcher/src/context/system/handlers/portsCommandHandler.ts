@@ -112,7 +112,7 @@ export class PortsCommandHandler implements CommandHandler {
                 : r.agentName;
             const clients =
                 r.clientCount === undefined
-                    ? chalk.gray("?")
+                    ? chalk.gray("N/A")
                     : r.clientCount.toString();
             text.push([emoji, name, r.role, r.port.toString(), clients]);
         }
@@ -164,7 +164,7 @@ function buildPortsHtml(
                 : "";
             const clientCell =
                 r.clientCount === undefined
-                    ? `<span style="color:#94a3b8" title="No count reported (this agent does not publish client counts)" aria-label="No count reported">?</span>`
+                    ? `<span style="color:#94a3b8" title="This agent does not publish client counts" aria-label="Not available">N/A</span>`
                     : escapeHtml(r.clientCount.toString());
             return (
                 `<tr>` +
