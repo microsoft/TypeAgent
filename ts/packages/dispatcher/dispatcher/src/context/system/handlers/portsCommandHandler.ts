@@ -107,7 +107,12 @@ export class PortsCommandHandler implements CommandHandler {
         const text: string[][] = [["", "Agent", "Role", "Port", "Clients"]];
         for (const r of rows) {
             const emoji = safeEmoji(r.agentName);
-            const name = r.isSystem
+            // The agent-server row is always system-scoped and the name
+            // already makes that obvious, so the [system] tag would just
+            // be visual noise.
+            const showSystemTag =
+                r.isSystem && r.agentName !== AGENT_SERVER_REGISTRAR_NAME;
+            const name = showSystemTag
                 ? `${r.agentName} ${chalk.gray("[system]")}`
                 : r.agentName;
             const clients =
@@ -118,7 +123,10 @@ export class PortsCommandHandler implements CommandHandler {
         }
 
         // Rich HTML for the shell.
-        const html = buildPortsHtml(rows, { getAppAgentEmoji: safeEmoji });
+        const html = buildPortsHtml(rows, {
+            getAppAgentEmoji: safeEmoji,
+            shouldShowSystemTag: (name) => name !== AGENT_SERVER_REGISTRAR_NAME,
+        });
 
         context.actionIO.appendDisplay({
             type: "text",
@@ -145,7 +153,10 @@ function buildPortsHtml(
         isSystem: boolean;
         clientCount: number | undefined;
     }>,
-    agents: { getAppAgentEmoji(name: string): string },
+    agents: {
+        getAppAgentEmoji(name: string): string;
+        shouldShowSystemTag(name: string): boolean;
+    },
 ): string {
     const thStyle = `text-align:left;padding:4px 8px;font-weight:600;font-size:13px;color:#64748b;border-bottom:2px solid #e2e8f0`;
     const headerCols = [
@@ -159,9 +170,10 @@ function buildPortsHtml(
     const rowsHtml = rows
         .map((r) => {
             const emoji = agents.getAppAgentEmoji(r.agentName) ?? "";
-            const systemTag = r.isSystem
-                ? ` <span style="color:#64748b;font-size:12px;font-style:italic">[system]</span>`
-                : "";
+            const systemTag =
+                r.isSystem && agents.shouldShowSystemTag(r.agentName)
+                    ? ` <span style="color:#64748b;font-size:12px;font-style:italic">[system]</span>`
+                    : "";
             const clientCell =
                 r.clientCount === undefined
                     ? `<span style="color:#94a3b8" title="This agent does not publish client counts" aria-label="Not available">N/A</span>`
