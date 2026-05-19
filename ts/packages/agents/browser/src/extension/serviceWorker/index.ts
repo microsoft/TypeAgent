@@ -331,8 +331,12 @@ function setupEventListeners(): void {
             let data;
             try {
                 data = JSON.parse(message);
-            } catch {
+            } catch (err) {
                 // Non-JSON or non-string payload — not a webAgent message.
+                debugWebAgentProxy(
+                    `Ignoring non-JSON message on webAgent proxy (${url}):`,
+                    err,
+                );
                 return;
             }
             if (isWebAgentMessageFromDispatcher(data)) {

@@ -15,9 +15,9 @@
  *    binds to localhost, so this is loopback-restricted at the OS level.
  *
  * Anything else is rejected with HTTP 403 before the `connection` event
- * fires. Per design §4.2, every per-agent listener migrated to the
- * PortRegistrar must gate Origin to keep ephemeral ports from being
- * dialed by arbitrary web pages on the same host.
+ * fires. Every per-agent listener that binds to an ephemeral port via the
+ * PortRegistrar must gate Origin so those ports can't be dialed by
+ * arbitrary web pages on the same host.
  */
 export function isAllowedAgentOrigin(origin: string | undefined): boolean {
     if (origin === undefined || origin === "" || origin === "null") {

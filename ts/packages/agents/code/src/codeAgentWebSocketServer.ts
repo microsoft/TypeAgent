@@ -45,11 +45,11 @@ export class CodeAgentWebSocketServer {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({
                 port,
-                // Per design §4.2, gate every upgrade on Origin so a random
-                // web page on the same host can't dial the ephemeral port
-                // assigned by the OS. `verifyClient` is invoked
-                // synchronously before the `connection` event fires;
-                // rejected requests get HTTP 403.
+                // Gate every upgrade on Origin so a random web page on
+                // the same host can't dial the ephemeral port assigned
+                // by the OS. `verifyClient` is invoked synchronously
+                // before the `connection` event fires; rejected requests
+                // get HTTP 403.
                 verifyClient: (info, cb) => {
                     const origin = info.req.headers.origin as
                         | string
