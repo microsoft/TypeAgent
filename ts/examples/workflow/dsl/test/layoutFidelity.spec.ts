@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Layout-fidelity tests: the formatter preserves the source's choice
  * of inline vs. multi-line layout for parameter lists, object types,
@@ -63,7 +66,9 @@ describe("paramListMultiLine layout preservation", () => {
         );
         // Multi-line preserved: opening "(" followed by newline, each
         // param on its own line.
-        expect(out).toMatch(/workflow w\(\n {4}a: number,\n {4}b: string,\n\): string \{/);
+        expect(out).toMatch(
+            /workflow w\(\n {4}a: number,\n {4}b: string,\n\): string \{/,
+        );
     });
 
     test("printWidth override forces multi-line when single-line overflows", () => {
@@ -87,7 +92,9 @@ describe("paramListMultiLine layout preservation", () => {
     test("paramListMultiLine flag set by parser only when multi-line", () => {
         const inlineAst = parse(`workflow w(a: number): number { return a; }`);
         expect(inlineAst.paramListMultiLine).toBeUndefined();
-        const mlAst = parse(`workflow w(\n    a: number,\n): number {\n    return a;\n}`);
+        const mlAst = parse(
+            `workflow w(\n    a: number,\n): number {\n    return a;\n}`,
+        );
         expect(mlAst.paramListMultiLine).toBe(true);
     });
 });

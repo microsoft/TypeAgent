@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Cross-component neutrality tests for the comment-bearing AST:
  *   - Type checker, graph extractor, and emitter all behave the same

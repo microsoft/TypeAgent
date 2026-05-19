@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Input-contract tests for `FormatOptions`.
  *
@@ -127,7 +130,9 @@ describe("FormatOptions input validation", () => {
         });
 
         test("Infinity is allowed (means never wrap)", () => {
-            expect(() => format(SAMPLE, { printWidth: Infinity })).not.toThrow();
+            expect(() =>
+                format(SAMPLE, { printWidth: Infinity }),
+            ).not.toThrow();
         });
 
         test("negative is rejected", () => {

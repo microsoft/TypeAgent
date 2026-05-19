@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Tests for comment-fidelity slots that close known attachment gaps:
  *   - Comments between parameters (paramInnerComments + per-ParamDecl

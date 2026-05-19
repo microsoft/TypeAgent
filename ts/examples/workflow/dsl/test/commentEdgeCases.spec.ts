@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Adversarial comment-attachment angles: same-param leading + trailing
  * both multi-line, comments adjacent to the `workflow` keyword,

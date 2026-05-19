@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Content-fidelity tests for the formatter.
  *
@@ -356,7 +359,7 @@ workflow w(
 
 describe("content fidelity (data): examples/*.wf preserve all identifiers, literals, and comments", () => {
     if (!fs.existsSync(EXAMPLES_DIR)) {
-        test.skip("examples directory not available in this build", () => { });
+        test.skip("examples directory not available in this build", () => {});
         return;
     }
     const files = fs
@@ -364,7 +367,7 @@ describe("content fidelity (data): examples/*.wf preserve all identifiers, liter
         .filter((f) => f.endsWith(".wf"))
         .sort();
     if (files.length === 0) {
-        test.skip("no .wf example files found", () => { });
+        test.skip("no .wf example files found", () => {});
         return;
     }
     for (const f of files) {
@@ -638,7 +641,8 @@ describe("cross-product: comment shapes × slots are all preserved together", ()
             lineSafe: true,
         },
         "param-leading": {
-            build: (c) => `workflow w(${c}\n    a: number): number { return a; }\n`,
+            build: (c) =>
+                `workflow w(${c}\n    a: number): number { return a; }\n`,
             lineSafe: true,
         },
         "param-trailing-inline": {
@@ -647,7 +651,8 @@ describe("cross-product: comment shapes × slots are all preserved together", ()
             lineSafe: true,
         },
         "workflow-body-leading": {
-            build: (c) => `workflow w(): number {\n    ${c}\n    return 1;\n}\n`,
+            build: (c) =>
+                `workflow w(): number {\n    ${c}\n    return 1;\n}\n`,
             lineSafe: true,
         },
         "statement-trailing-inline": {

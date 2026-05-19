@@ -57,9 +57,9 @@ The formatter intentionally performs a small fixed set of rewrites:
 
 ```ts
 interface FormatOptions {
-    indent?: number;      // non-negative integer, default 4
-    eol?: string;         // "\n" | "\r\n" | "\r", default "\n"
-    printWidth?: number;  // non-negative integer | Infinity, default 100
+  indent?: number; // non-negative integer, default 4
+  eol?: string; // "\n" | "\r\n" | "\r", default "\n"
+  printWidth?: number; // non-negative integer | Infinity, default 100
 }
 ```
 
@@ -76,11 +76,11 @@ each statement it drains same-line trailing comments; before each
 block-closing token it drains whatever remains. Comments land in one
 of three slot kinds:
 
-| Slot kind          | Lives on                                | Captures                                                                  |
-| ------------------ | --------------------------------------- | ------------------------------------------------------------------------- |
-| `leadingComments`  | any AST node                            | comments immediately before the node                                      |
-| `trailingComments` | every `Statement`; `WorkflowDecl`       | inline (same line as statement's `endLine`) or block-end; on workflow: EOF |
-| `*InnerComments`   | every block-bearing or list-bearing node | comments inside an otherwise-empty block / list                          |
+| Slot kind          | Lives on                                 | Captures                                                                   |
+| ------------------ | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `leadingComments`  | any AST node                             | comments immediately before the node                                       |
+| `trailingComments` | every `Statement`; `WorkflowDecl`        | inline (same line as statement's `endLine`) or block-end; on workflow: EOF |
+| `*InnerComments`   | every block-bearing or list-bearing node | comments inside an otherwise-empty block / list                            |
 
 `Statement.endLine` is set to the source line of the statement's last
 token. The formatter uses `comment.pos.line === stmt.endLine` to choose
@@ -275,6 +275,7 @@ field-named message rather than letting downstream
 `eol: ""` silently collapse output onto one line.
 
 The contract is intentionally narrow:
+
 - `indent`: non-negative integer.
 - `eol`: exactly one of `"\n"`, `"\r\n"`, `"\r"`.
 - `printWidth`: non-negative integer or `Infinity`.
@@ -304,7 +305,7 @@ The following are documented losses, not bugs:
 
 - **Blank lines** between statements are not preserved. The AST has
   no slot for them. Could be added later via a `blankLinesBefore:
-  number` field on `Statement` if needed.
+number` field on `Statement` if needed.
 - **Comment columns** are recorded on `Comment.pos.col` but not used
   for layout — comments are emitted at the current indent.
 - **Original whitespace** is not preserved; the formatter chooses
