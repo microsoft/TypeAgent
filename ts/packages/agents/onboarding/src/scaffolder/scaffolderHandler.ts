@@ -874,7 +874,7 @@ const PLUGIN_TEMPLATES: Record<
             "WebSocket bridge (bidirectional RPC, used by Excel, VS Code agents)",
         defaultSubdir: "src",
         nextSteps:
-            "Start the bridge with `new WebSocketBridge(port).start()` and connect your plugin.",
+            'Bind on an OS-assigned port via `await ${PascalName}Bridge.start()`, then publish the bound `.port` from your handler with `context.registerPort("default", bridge.port)` so external clients can discover it.',
         files: (name) => ({
             [`${name}Bridge.ts`]: buildWebSocketBridgeTemplate(name),
         }),
@@ -917,14 +917,24 @@ export class ${toPascalCase(name)}Bridge {
 }
 
 function buildWebSocketBridgeTemplate(name: string): string {
+    const pascalName = toPascalCase(name);
     return `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 // WebSocket bridge for ${name}.
 // Manages a WebSocket connection to the host application plugin.
 // Pattern matches the Excel/VS Code agent bridge implementations.
+//
+// Port allocation: the bridge binds on an OS-assigned ephemeral port
+// (port=0) by default. Read the actual bound port from \`.port\` after
+// \`start()\` resolves and register it with the dispatcher via
+// \`context.registerPort("default", bridge.port)\` from your handler so
+// external clients can discover it through the agent-server's
+// discovery channel. Pass a fixed port to \`start(port)\` when debugging
+// or when a host plugin expects a known address.
 
 import { WebSocketServer, WebSocket } from "ws";
+import { AddressInfo } from "net";
 
 type BridgeCommand = {
     id: string;
@@ -939,34 +949,131 @@ type BridgeResponse = {
     error?: string;
 };
 
-export class ${toPascalCase(name)}Bridge {
-    private wss: WebSocketServer | undefined;
-    private client: WebSocket | undefined;
+export class ${pascalName}Bridge {
+    private clients = new Map<string, WebSocket>();
+    private nextClientId = 0;
     private pending = new Map<string, (response: BridgeResponse) => void>();
 
-    constructor(private readonly port: number) {}
-
-    start(): void {
-        this.wss = new WebSocketServer({ port: this.port });
-        this.wss.on("connection", (ws) => {
-            this.client = ws;
+    // Construction is private — use {@link ${pascalName}Bridge.start} so
+    // callers always get a bridge that is guaranteed to be bound before
+    // they read {@link port} or pass it to the registrar.
+    private constructor(
+        private readonly server: WebSocketServer,
+        public readonly port: number,
+    ) {
+        this.server.on("connection", (ws) => {
+            const id = \`c-\${++this.nextClientId}\`;
+            this.clients.set(id, ws);
             ws.on("message", (data) => {
-                const response = JSON.parse(data.toString()) as BridgeResponse;
-                this.pending.get(response.id)?.(response);
-                this.pending.delete(response.id);
+                try {
+                    const response = JSON.parse(data.toString()) as BridgeResponse;
+                    const cb = this.pending.get(response.id);
+                    if (cb) {
+                        cb(response);
+                        this.pending.delete(response.id);
+                    }
+                } catch {
+                    // Ignore malformed payloads.
+                }
             });
+            ws.on("close", () => this.clients.delete(id));
+            ws.on("error", () => this.clients.delete(id));
         });
     }
 
-    async sendCommand(actionName: string, parameters: Record<string, unknown>): Promise<unknown> {
-        if (!this.client) throw new Error("No client connected");
+    /**
+     * Bind a new bridge on \`port\`. Pass 0 (default) to let the OS pick
+     * a free ephemeral port; read the actual bound port from
+     * {@link port} after the returned promise resolves. Rejects on bind
+     * failure (EADDRINUSE under a fixed-port override) so callers see
+     * the problem instead of having it swallowed by a late error
+     * handler.
+     */
+    public static start(port: number = 0): Promise<${pascalName}Bridge> {
+        return new Promise((resolve, reject) => {
+            const server = new WebSocketServer({ port });
+            let settled = false;
+            const onError = (e: Error) => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("listening", onListening);
+                reject(e);
+            };
+            const onListening = () => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("error", onError);
+                const addr = server.address() as AddressInfo | null;
+                if (!addr || typeof addr === "string") {
+                    server.close();
+                    reject(
+                        new Error(
+                            "ws server.address() did not return AddressInfo",
+                        ),
+                    );
+                    return;
+                }
+                // Re-attach a permanent error handler so post-listen
+                // errors are logged rather than crashing the process.
+                server.on("error", () => {
+                    /* TODO: log */
+                });
+                resolve(new ${pascalName}Bridge(server, addr.port));
+            };
+            server.once("error", onError);
+            server.once("listening", onListening);
+        });
+    }
+
+    /**
+     * Close all client connections and the underlying server. Resolves
+     * when the server has fully released its port — important for a
+     * rapid restart cycle, where a synchronous return would race the
+     * new bind into EADDRINUSE.
+     */
+    public close(): Promise<void> {
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) c.close();
+        }
+        this.clients.clear();
+        return new Promise((resolve) =>
+            this.server.close(() => resolve()),
+        );
+    }
+
+    public get connected(): boolean {
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) return true;
+        }
+        return false;
+    }
+
+    public async sendCommand(
+        actionName: string,
+        parameters: Record<string, unknown>,
+    ): Promise<unknown> {
+        // Use the first OPEN client (single-plugin pattern). Adapt
+        // this selection if you need fan-out or per-session client
+        // targeting.
+        let target: WebSocket | undefined;
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) {
+                target = c;
+                break;
+            }
+        }
+        if (!target) {
+            throw new Error("No client connected to the ${name} bridge.");
+        }
         const id = \`cmd-\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
         return new Promise((resolve, reject) => {
             this.pending.set(id, (res) => {
                 if (res.success) resolve(res.result);
                 else reject(new Error(res.error));
             });
-            this.client!.send(JSON.stringify({ id, actionName, parameters } satisfies BridgeCommand));
+            target!.send(
+                JSON.stringify({ id, actionName, parameters } satisfies BridgeCommand),
+            );
         });
     }
 }
@@ -1255,12 +1362,28 @@ async function executeAction(
 }
 
 function buildWebSocketBridgeHandler(name: string, pascalName: string): string {
+    const portEnv = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_BRIDGE_PORT`;
     return `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 // Pattern: websocket-bridge — bidirectional RPC to a host-side plugin.
 // The agent owns a WebSocketServer; the host plugin connects as the client.
 // Commands flow TypeAgent → WebSocket → plugin → response.
+//
+// Port allocation: the bridge binds on an OS-assigned ephemeral port
+// (port=0) by default. The actual port is registered with the dispatcher
+// via context.registerPort("default", port) so external clients can
+// discover it through the agent-server's discovery channel
+// (discoverPort("${name}", "default")). Set ${portEnv} to pin the
+// bridge to a fixed port when debugging or when a host plugin expects
+// a known address.
+//
+// Lifecycle: one bridge per process, refcounted across enabled sessions.
+// Each enabled session registers the bridge under its own
+// sessionContextId; lookup("${name}", "default") keeps returning the
+// port as long as ≥1 session has the agent enabled. The dispatcher's
+// closeSessionContext backstop releases stale per-session registrations
+// if disable is skipped (e.g. crash).
 
 import {
     ActionContext,
@@ -1271,9 +1394,15 @@ import {
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { WebSocketServer, WebSocket } from "ws";
+import { AddressInfo } from "net";
 import { ${pascalName}Actions } from "./${name}Schema.js";
 
-const BRIDGE_PORT = 5678; // TODO: choose an unused port
+function getBridgeBindPort(): number {
+    const v = process.env["${portEnv}"];
+    if (!v) return 0;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+}
 
 // ---- WebSocket bridge --------------------------------------------------
 
@@ -1281,86 +1410,234 @@ type BridgeRequest = { id: string; actionName: string; parameters: unknown };
 type BridgeResponse = { id: string; success: boolean; result?: unknown; error?: string };
 
 class ${pascalName}Bridge {
-    private wss: WebSocketServer | undefined;
-    private client: WebSocket | undefined;
+    private clients = new Map<string, WebSocket>();
+    private nextClientId = 0;
     private pending = new Map<string, (r: BridgeResponse) => void>();
 
-    start(): void {
-        this.wss = new WebSocketServer({ port: BRIDGE_PORT });
-        this.wss.on("connection", (ws) => {
-            this.client = ws;
+    // Construction is private — use {@link ${pascalName}Bridge.start} so
+    // callers always get a bridge that is guaranteed to be bound before
+    // they read {@link port} or pass it to the registrar.
+    private constructor(
+        private readonly server: WebSocketServer,
+        public readonly port: number,
+    ) {
+        this.server.on("connection", (ws) => {
+            const id = \`c-\${++this.nextClientId}\`;
+            this.clients.set(id, ws);
             ws.on("message", (data) => {
-                const response = JSON.parse(data.toString()) as BridgeResponse;
-                this.pending.get(response.id)?.(response);
-                this.pending.delete(response.id);
+                try {
+                    const response = JSON.parse(data.toString()) as BridgeResponse;
+                    const cb = this.pending.get(response.id);
+                    if (cb) {
+                        cb(response);
+                        this.pending.delete(response.id);
+                    }
+                } catch {
+                    // Ignore malformed payloads.
+                }
             });
-            ws.on("close", () => { this.client = undefined; });
+            ws.on("close", () => this.clients.delete(id));
+            ws.on("error", () => this.clients.delete(id));
         });
     }
 
-    async stop(): Promise<void> {
-        return new Promise((resolve) => this.wss?.close(() => resolve()));
+    /**
+     * Bind a new bridge on \`port\`. Pass 0 (default) to let the OS pick a
+     * free ephemeral port; read the actual bound port from {@link port}
+     * after the returned promise resolves. Rejects on bind failure
+     * (EADDRINUSE under a fixed-port override) so callers see the
+     * problem instead of having it swallowed by a late error handler.
+     */
+    public static start(port: number = 0): Promise<${pascalName}Bridge> {
+        return new Promise((resolve, reject) => {
+            const server = new WebSocketServer({ port });
+            let settled = false;
+            const onError = (e: Error) => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("listening", onListening);
+                reject(e);
+            };
+            const onListening = () => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("error", onError);
+                const addr = server.address() as AddressInfo | null;
+                if (!addr || typeof addr === "string") {
+                    server.close();
+                    reject(new Error("ws server.address() did not return AddressInfo"));
+                    return;
+                }
+                // Re-attach a permanent error handler so post-listen errors
+                // are logged rather than crashing the process.
+                server.on("error", () => { /* TODO: log */ });
+                resolve(new ${pascalName}Bridge(server, addr.port));
+            };
+            server.once("error", onError);
+            server.once("listening", onListening);
+        });
     }
 
-    async send(actionName: string, parameters: unknown): Promise<unknown> {
-        if (!this.client) {
-            throw new Error("No host plugin connected on port " + BRIDGE_PORT);
+    /**
+     * Close all client connections and the underlying server. Resolves
+     * when the server has fully released its port — important for a
+     * rapid disable→enable cycle under a fixed-port override
+     * (\`${portEnv}\`), where a synchronous return would race the new
+     * bind into EADDRINUSE.
+     */
+    public close(): Promise<void> {
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) c.close();
+        }
+        this.clients.clear();
+        return new Promise((resolve) => this.server.close(() => resolve()));
+    }
+
+    public get connected(): boolean {
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) return true;
+        }
+        return false;
+    }
+
+    public async send(actionName: string, parameters: unknown): Promise<unknown> {
+        // Use the first OPEN client (single-plugin pattern). Adapt this
+        // selection if you need fan-out or per-session client targeting.
+        let target: WebSocket | undefined;
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) { target = c; break; }
+        }
+        if (!target) {
+            throw new Error("No host plugin connected to the ${name} bridge.");
         }
         const id = \`\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
         return new Promise((resolve, reject) => {
             this.pending.set(id, (res) =>
                 res.success ? resolve(res.result) : reject(new Error(res.error)),
             );
-            this.client!.send(
+            target!.send(
                 JSON.stringify({ id, actionName, parameters } satisfies BridgeRequest),
             );
         });
     }
+}
 
-    get connected(): boolean { return this.client !== undefined; }
+// ---- Shared module state -----------------------------------------------
+//
+// Storing the bridge per-session would cause "no connection" errors when
+// an action runs on a session different from the one that started the
+// server, and would mask EADDRINUSE failures from a second bind under a
+// fixed-port override. The shared-bridge + per-session-registration
+// pattern matches the code and browser agents.
+
+let sharedBridge: ${pascalName}Bridge | undefined;
+let sharedStartingPromise: Promise<${pascalName}Bridge> | undefined;
+let sharedClosingPromise: Promise<void> | undefined;
+let sharedRefCount = 0;
+
+// Serialize concurrent starts; await any in-flight close before binding
+// again so a rapid disable→enable doesn't race the port release.
+async function ensureSharedBridge(): Promise<${pascalName}Bridge> {
+    if (sharedClosingPromise !== undefined) {
+        await sharedClosingPromise;
+    }
+    if (sharedBridge !== undefined) return sharedBridge;
+    if (sharedStartingPromise !== undefined) return sharedStartingPromise;
+    sharedStartingPromise = (async () => {
+        try {
+            sharedBridge = await ${pascalName}Bridge.start(getBridgeBindPort());
+            return sharedBridge;
+        } finally {
+            sharedStartingPromise = undefined;
+        }
+    })();
+    return sharedStartingPromise;
 }
 
 // ---- Agent lifecycle ---------------------------------------------------
 
-type Context = { bridge: ${pascalName}Bridge };
+type ${pascalName}Context = {
+    enabledSchemas: Set<string>;
+    portRegistration?: { release: () => void };
+};
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext,
         updateAgentContext,
-        closeAgentContext,
         executeAction,
     };
 }
 
-async function initializeAgentContext(): Promise<Context> {
-    const bridge = new ${pascalName}Bridge();
-    bridge.start();
-    return { bridge };
+async function initializeAgentContext(): Promise<${pascalName}Context> {
+    return { enabledSchemas: new Set() };
 }
 
 async function updateAgentContext(
-    _enable: boolean,
-    _context: SessionContext<Context>,
-    _schemaName: string,
-): Promise<void> {}
-
-async function closeAgentContext(context: SessionContext<Context>): Promise<void> {
-    await context.agentContext.bridge.stop();
+    enable: boolean,
+    context: SessionContext<${pascalName}Context>,
+    schemaName: string,
+): Promise<void> {
+    const ctx = context.agentContext;
+    if (enable) {
+        if (ctx.enabledSchemas.has(schemaName)) return;
+        const isFirstForSession = ctx.enabledSchemas.size === 0;
+        ctx.enabledSchemas.add(schemaName);
+        try {
+            const bridge = await ensureSharedBridge();
+            if (isFirstForSession) {
+                // Per-session registration: the registrar allows multiple
+                // entries for ("${name}", "default") across sessions and
+                // lookup returns the most recent, so each active session
+                // independently keeps the shared port discoverable.
+                ctx.portRegistration = context.registerPort(
+                    "default",
+                    bridge.port,
+                );
+                sharedRefCount++;
+            }
+        } catch (e) {
+            // Roll back per-session bookkeeping so a subsequent retry sees
+            // a clean slate. Shared module state is untouched — the bind
+            // itself failed, so we never incremented the refcount or
+            // registered.
+            ctx.enabledSchemas.delete(schemaName);
+            throw e;
+        }
+    } else {
+        if (!ctx.enabledSchemas.has(schemaName)) return;
+        ctx.enabledSchemas.delete(schemaName);
+        if (ctx.enabledSchemas.size === 0) {
+            // Release this session's registration before potentially
+            // closing the server. Release is idempotent and a no-op if
+            // already released by the dispatcher's closeSessionContext
+            // backstop.
+            ctx.portRegistration?.release();
+            delete ctx.portRegistration;
+            sharedRefCount = Math.max(0, sharedRefCount - 1);
+            if (sharedRefCount === 0 && sharedBridge) {
+                const bridge = sharedBridge;
+                sharedBridge = undefined;
+                sharedClosingPromise = bridge.close().finally(() => {
+                    sharedClosingPromise = undefined;
+                });
+                await sharedClosingPromise;
+            }
+        }
+    }
 }
 
 async function executeAction(
     action: TypeAgentAction<${pascalName}Actions>,
-    context: ActionContext<Context>,
+    _context: ActionContext<${pascalName}Context>,
 ): Promise<ActionResult> {
-    const { bridge } = context.sessionContext.agentContext;
-    if (!bridge.connected) {
+    if (!sharedBridge?.connected) {
         return {
-            error: \`Host plugin not connected. Make sure the ${name} plugin is running on port \${BRIDGE_PORT}.\`,
+            error: "Host plugin not connected to the ${name} bridge. Start the plugin and ensure it is configured for the port reported by @system ports.",
         };
     }
     try {
-        const result = await bridge.send(action.actionName, action.parameters);
+        const result = await sharedBridge.send(action.actionName, action.parameters);
         return createActionResultFromTextDisplay(JSON.stringify(result, null, 2));
     } catch (err: any) {
         return { error: err?.message ?? String(err) };
@@ -1527,24 +1804,51 @@ async function executeCommand(
 }
 
 function buildViewUiHandler(name: string, pascalName: string): string {
+    const portEnv = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_VIEW_PORT`;
     return `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 // Pattern: view-ui — web view renderer with IPC handler.
-// Opens a local HTTP server serving site/ and communicates via display APIs.
-// The actual UX lives in the site/ directory.
+// Opens a local HTTP server serving site/ and surfaces it in the shell
+// via an ActivityContext with openLocalView=true.
+//
+// Port allocation: the view server binds on an OS-assigned ephemeral
+// port (port=0) by default. The actual port is registered with the
+// dispatcher via context.registerPort("view", port) so external
+// clients can discover it through the agent-server's discovery channel
+// (discoverPort("${name}", "view")). context.setLocalHostPort(port) is
+// also called so the embedding shell knows which port to load when an
+// action returns openLocalView=true. Set ${portEnv} to pin the view
+// to a fixed port when debugging.
 
 import {
     ActionContext,
+    ActionResult,
+    ActivityContext,
     AppAgent,
     SessionContext,
     TypeAgentAction,
-    ActionResult,
 } from "@typeagent/agent-sdk";
-import { createActionResultFromHtmlDisplay } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromHtmlDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
+import { createServer, Server } from "node:http";
+import { AddressInfo } from "node:net";
 import { ${pascalName}Actions } from "./${name}Schema.js";
 
-const VIEW_PORT = 3456; // TODO: choose an unused port
+type ${pascalName}AgentContext = {
+    server?: Server;
+    port?: number;
+    portRegistration?: { release: () => void };
+};
+
+function getViewBindPort(): number {
+    const v = process.env["${portEnv}"];
+    if (!v) return 0;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+}
 
 export function instantiate(): AppAgent {
     return {
@@ -1555,42 +1859,153 @@ export function instantiate(): AppAgent {
     };
 }
 
-async function initializeAgentContext(): Promise<unknown> {
-    // TODO: start the local HTTP server that serves site/
+async function initializeAgentContext(): Promise<${pascalName}AgentContext> {
     return {};
+}
+
+/**
+ * Bind the view server on \`port\` (0 = OS-assigned). Returns the actual
+ * bound port so it can be registered and surfaced to the shell.
+ * Rejects on bind failure (EADDRINUSE under a fixed-port override) so
+ * callers see the problem instead of having it swallowed by a late
+ * error handler.
+ */
+function startViewServer(port: number): Promise<{ server: Server; port: number }> {
+    return new Promise((resolve, reject) => {
+        const server = createServer((req, res) => {
+            // TODO: serve static assets from ./site/, plus any
+            // JSON/IPC endpoints the view needs. For now, a placeholder.
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end(\`<h1>${pascalName} view</h1><p>Path: \${req.url}</p>\`);
+        });
+        let settled = false;
+        const onError = (e: Error) => {
+            if (settled) return;
+            settled = true;
+            server.removeListener("listening", onListening);
+            reject(e);
+        };
+        const onListening = () => {
+            if (settled) return;
+            settled = true;
+            server.removeListener("error", onError);
+            const addr = server.address() as AddressInfo | null;
+            if (!addr || typeof addr === "string") {
+                server.close();
+                reject(new Error("http server.address() did not return AddressInfo"));
+                return;
+            }
+            // Re-attach a permanent error handler so post-listen errors
+            // are logged rather than crashing the process.
+            server.on("error", () => { /* TODO: log */ });
+            resolve({ server, port: addr.port });
+        };
+        server.once("error", onError);
+        server.once("listening", onListening);
+        server.listen(port);
+    });
 }
 
 async function updateAgentContext(
     enable: boolean,
-    context: SessionContext<unknown>,
+    context: SessionContext<${pascalName}AgentContext>,
     _schemaName: string,
 ): Promise<void> {
+    const agentContext = context.agentContext;
     if (enable) {
-        await context.agentIO.openLocalView(
-            context.requestId,
-            VIEW_PORT,
-        );
+        if (agentContext.server !== undefined) {
+            // Already bound for this session.
+            return;
+        }
+        const { server, port } = await startViewServer(getViewBindPort());
+        try {
+            agentContext.server = server;
+            agentContext.port = port;
+            agentContext.portRegistration = context.registerPort("view", port);
+            // Tell the embedding shell which port to load when an
+            // action returns openLocalView=true. Goes through the
+            // registrar with role="default", so the discovery-channel
+            // role "view" above keeps a stable contract for out-of-
+            // process clients regardless of this back-compat call.
+            context.setLocalHostPort(port);
+        } catch (e) {
+            // Roll back if registration/setLocalHostPort fails so a
+            // retry sees a clean slate.
+            agentContext.portRegistration?.release();
+            await new Promise<void>((resolve) => server.close(() => resolve()));
+            agentContext.server = undefined;
+            agentContext.port = undefined;
+            agentContext.portRegistration = undefined;
+            throw e;
+        }
     } else {
-        await context.agentIO.closeLocalView(
-            context.requestId,
-            VIEW_PORT,
-        );
+        if (agentContext.server === undefined) return;
+        agentContext.portRegistration?.release();
+        agentContext.portRegistration = undefined;
+        const server = agentContext.server;
+        agentContext.server = undefined;
+        agentContext.port = undefined;
+        // Resolve when the server has fully released its port —
+        // important for a rapid disable→enable cycle under a fixed-
+        // port override (\`${portEnv}\`), where a synchronous return
+        // would race the new bind into EADDRINUSE.
+        await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 }
 
-async function closeAgentContext(_context: SessionContext<unknown>): Promise<void> {
-    // TODO: stop the local HTTP server
+async function closeAgentContext(
+    context: SessionContext<${pascalName}AgentContext>,
+): Promise<void> {
+    // Backstop: if updateAgentContext(false) wasn't called (e.g. crash
+    // during shutdown), release the registration and close the server
+    // so the port doesn't leak.
+    const agentContext = context.agentContext;
+    agentContext.portRegistration?.release();
+    agentContext.portRegistration = undefined;
+    if (agentContext.server) {
+        const server = agentContext.server;
+        agentContext.server = undefined;
+        agentContext.port = undefined;
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
 }
 
 async function executeAction(
     action: TypeAgentAction<${pascalName}Actions>,
-    _context: ActionContext<unknown>,
+    context: ActionContext<${pascalName}AgentContext>,
 ): Promise<ActionResult> {
-    // Push state changes to the view via HTML display updates.
-    return createActionResultFromHtmlDisplay(
+    const port = context.sessionContext.agentContext.port;
+    // Returning an ActivityContext with openLocalView=true signals the
+    // shell to open the local view (it uses the port published via
+    // setLocalHostPort during enable). Drop the activityContext field
+    // if your action doesn't need to surface the view.
+    const activityContext: ActivityContext | undefined =
+        port !== undefined
+            ? {
+                  appAgentName: "${name}",
+                  activityName: action.actionName,
+                  description: \`${pascalName}: \${action.actionName}\`,
+                  state: {},
+                  openLocalView: true,
+              }
+            : undefined;
+    const result = createActionResultFromHtmlDisplay(
         \`<p>Executing \${action.actionName} — not yet implemented.</p>\`,
     );
+    if (activityContext) {
+        // ActivityContext is attached so the shell can open the view.
+        // The shape comes from the SDK; cast through unknown to keep
+        // the template free of internal-only ActionResult fields.
+        (result as unknown as { activityContext: ActivityContext }).activityContext =
+            activityContext;
+    }
+    return result;
 }
+
+// Silence unused-import warning when the action handler is stripped
+// down. \`createActionResult\` is provided alongside the HTML helper for
+// callers that want a richer entity-bearing result.
+void createActionResult;
 `;
 }
 

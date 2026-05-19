@@ -178,7 +178,18 @@ plugin/ (or extension/)
   <host-specific files>     ← connects to the bridge and calls host APIs
 ```
 
-**AppAgent lifecycle:** implements `closeAgentContext()` to stop the server.
+**Port allocation:** the bridge binds on an OS-assigned ephemeral port
+(`port: 0`) by default. The actual port is registered with the
+dispatcher via `context.registerPort("bridge", port)` and is
+discoverable by external clients through the agent-server's discovery
+channel (`discoverPort("<name>", "bridge")`). Set the
+`<NAME>_BRIDGE_PORT` environment variable to pin the bridge to a fixed
+port when debugging. The server uses a refcounted shared-instance
+pattern so multiple sessions reuse one listener.
+
+**AppAgent lifecycle:** `updateAgentContext` starts/stops the server
+per session; `closeAgentContext` is the backstop that releases the
+registration and closes the server if disable wasn't called.
 
 **Dependencies added:** `ws`
 
@@ -240,20 +251,31 @@ system service that exposes no REST API.
 ### 8. `view-ui` — Web View Renderer
 
 A minimal action handler that opens a local HTTP server serving a `site/`
-directory and signals the dispatcher to open the view via `openLocalView`.
-The actual UX lives in the `site/` directory; the handler communicates with
-it via display APIs and IPC types.
+directory and signals the shell to load it. The actual UX lives in the
+`site/` directory; the handler communicates with it via display APIs
+and IPC types.
 
 **File layout**
 
 ```
 src/
-  <name>ActionHandler.ts    ← opens/closes view, handles actions
+  <name>ActionHandler.ts    ← opens/closes view server, handles actions
   ipcTypes.ts               ← shared message types for handler ↔ view IPC
 site/
   index.html                ← web view entry point
   ...
 ```
+
+**Port allocation:** the view server binds on an OS-assigned ephemeral
+port (`port: 0`) by default during `updateAgentContext(true)`. The
+actual port is registered with the dispatcher via
+`context.registerPort("view", port)` for out-of-process discovery
+(`discoverPort("<name>", "view")`) and also passed to
+`context.setLocalHostPort(port)` so the embedding shell knows which URL
+to load. Set the `<NAME>_VIEW_PORT` environment variable to pin the
+view to a fixed port when debugging. The view is surfaced in the shell
+by returning an `ActivityContext` with `openLocalView: true` from
+`executeAction`.
 
 **Manifest flags:** `"localView": true`
 
