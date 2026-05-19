@@ -74,11 +74,18 @@ export class PortsCommandHandler implements CommandHandler {
                 // System tag is sticky: if any underlying allocation is
                 // system-owned, treat the group as system.
                 if (isSystem) existing.isSystem = true;
-                // Sum across sessions when ≥1 has reported a count.
-                // Leave undefined only if NO underlying allocation has
-                // ever reported a count.
+                // Within a (agent, role, port) group, every contributing
+                // session is registered to the SAME physical server, so
+                // each session's reported count is the same global
+                // number — not an independent value to add. Take the max
+                // (treating "never reported" as 0 only when comparing).
+                // For per-session servers each group has a single
+                // contributor and this collapses to that count anyway.
                 if (cc !== undefined) {
-                    existing.clientCount = (existing.clientCount ?? 0) + cc;
+                    existing.clientCount = Math.max(
+                        existing.clientCount ?? 0,
+                        cc,
+                    );
                 }
             }
         }
