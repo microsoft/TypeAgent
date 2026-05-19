@@ -1379,9 +1379,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D1 standup-prep workflow", () => {
         function loadD1(): WorkflowIR {
-            return compileWfFile(
-                "../../../workflows/dsl/d1-standup-prep.wf",
-            );
+            return compileWfFile("../../../workflows/dsl/d1-standup-prep.wf");
         }
 
         it("validates against all builtins", async () => {
@@ -1969,9 +1967,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D8 summarize-url workflow", () => {
         function loadD8(): WorkflowIR {
-            return compileWfFile(
-                "../../../workflows/dsl/d8-summarize-url.wf",
-            );
+            return compileWfFile("../../../workflows/dsl/d8-summarize-url.wf");
         }
 
         it("validates against all builtins", async () => {
