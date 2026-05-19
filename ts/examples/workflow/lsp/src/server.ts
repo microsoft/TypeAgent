@@ -47,6 +47,7 @@ import {
     computeRename,
 } from "./features/rename.js";
 import { compileIR, type CompileIRParams } from "./features/compileIR.js";
+import { computeCodeActions } from "./features/codeActions.js";
 import { invalidate } from "./parsedDocument.js";
 import { loadTaskSchemas } from "./taskSchemas.js";
 
@@ -103,6 +104,7 @@ export function createServer(
                 signatureHelpProvider: { triggerCharacters: ["(", ","] },
                 inlayHintProvider: true,
                 renameProvider: { prepareProvider: true },
+                codeActionProvider: { codeActionKinds: ["refactor.rewrite", "refactor.extract"] },
                 semanticTokensProvider: {
                     legend: semanticTokensLegend,
                     full: true,
@@ -212,6 +214,12 @@ export function createServer(
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return null;
         return computeRename(doc, params.position, params.newName);
+    });
+
+    connection.onCodeAction((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return [];
+        return computeCodeActions(doc, params.range);
     });
 
     connection.onRequest(
