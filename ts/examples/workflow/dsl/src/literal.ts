@@ -82,7 +82,7 @@ export function decodeStringLiteral(
     raw: string,
     quote: StringQuote,
 ): DecodeResult {
-    return decodeEscapes(raw, quote === "`", quote);
+    return decodeEscapes(raw, quote === "`");
 }
 
 /**
@@ -92,14 +92,10 @@ export function decodeStringLiteral(
  * passed through.
  */
 export function decodeTemplatePart(raw: string): DecodeResult {
-    return decodeEscapes(raw, true, "`");
+    return decodeEscapes(raw, true);
 }
 
-function decodeEscapes(
-    raw: string,
-    isTemplate: boolean,
-    quote: StringQuote,
-): DecodeResult {
+function decodeEscapes(raw: string, isTemplate: boolean): DecodeResult {
     const errors: DecodeError[] = [];
     let out = "";
     let i = 0;
@@ -278,9 +274,6 @@ function decodeEscapes(
         // and the cooked value is just the character itself.
         out += esc;
         i += 2;
-        // `quote` is currently informational; reserve it for future use
-        // (e.g. surfacing the right delimiter in error messages).
-        void quote;
     }
     return { value: out, errors };
 }
