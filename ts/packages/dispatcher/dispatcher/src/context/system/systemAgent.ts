@@ -59,6 +59,7 @@ import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
 import { getMemoryCommandHandlers } from "../memory.js";
 import { getSettingsCommandHandlers } from "./handlers/settingsCommandHandlers.js";
+import { PortsCommandHandler } from "./handlers/portsCommandHandler.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -106,6 +107,7 @@ export const systemHandlers: CommandHandlerTable = {
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),
+        ports: new PortsCommandHandler(),
     },
 };
 
