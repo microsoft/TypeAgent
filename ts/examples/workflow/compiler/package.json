@@ -13,7 +13,7 @@
   "author": "Microsoft",
   "type": "module",
   "bin": {
-    "wfc": "./dist/wfc.js"
+    "wfc": "./bin/run.js"
   },
   "scripts": {
     "build": "npm run tsc",
