@@ -74,6 +74,13 @@ Lifecycle flags:
 | `--clean`    | Recreate the container and remove its Docker volumes   |
 | `--reset`    | `--rebuild` plus `--clean` (full fresh start)          |
 
+For local-only workflows where you want SSH set up with host-key checks
+disabled, pass `--insecure-local` (implies `--ssh`):
+
+```bash
+.devcontainer/scripts/start-devcontainer.sh --insecure-local
+```
+
 ## Variants in detail
 
 ### `standard` - `.devcontainer/devcontainer.json`
