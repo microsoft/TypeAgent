@@ -50,7 +50,9 @@
  *                         on real `${...}` so the `$` and `{` are
  *                         re-emitted as plain characters here)
  *
- * Errors (decoder still returns a best-effort `value` for resiliency):
+ * Errors (decoder still returns a best-effort `value` so callers that
+ * invoke the helpers directly can keep going; the lexer promotes any
+ * of these to a hard `LexError` before they reach the parser):
  *
  *   - Trailing backslash with no following character.
  *   - `\1`-`\9` (LegacyOctalEscapeSequence forbidden in strict mode).
@@ -58,6 +60,20 @@
  *   - `\x` not followed by exactly two hex digits.
  *   - `\u` not followed by `HHHH` or `{H..H}` (well-formed and in
  *      range).
+ *
+ * Note on error recovery: ECMA-262 treats all of the above as fatal
+ * SyntaxErrors at parse time and aborts. This decoder deliberately
+ * differs: it reports the error and continues decoding so that ad-hoc
+ * callers (tests, REPL-style tools) can still obtain a best-effort
+ * cooked value from a partially broken raw slice.
+ *
+ * The standard DSL pipeline does NOT rely on that leniency: `lex()`
+ * runs the decoder eagerly on every string / template raw slice and
+ * promotes any `DecodeError` to a `LexError`, so by the time the
+ * parser / emitter see a token its raw is guaranteed to decode
+ * cleanly. As a result, the only callers that ever observe a non-
+ * empty `errors` array are the ones invoking these helpers directly
+ * on hand-built raw text.
  */
 
 export type StringQuote = '"' | "'" | "`";
@@ -201,8 +217,15 @@ function decodeEscapes(raw: string, isTemplate: boolean): DecodeResult {
                         "Invalid hex escape: expected '\\xHH' with two hex digits",
                     offsetInRaw: escStart,
                 });
-                // Recovery: skip past the \x and resume.
-                i += 2;
+                // JS spec recovery (NotEscapeSequence for `\x`):
+                //   x [lookahead ∉ HexDigit]                -> consume `\x`
+                //   x HexDigit [lookahead ∉ HexDigit]       -> consume `\xH`
+                // The bad escape's cooked value is undefined per spec;
+                // we elide it (emit nothing). Consuming the partially-
+                // matched hex digit prevents it from being re-scanned
+                // as ordinary text (or, worse, as the start of another
+                // escape if it happened to be `\`).
+                i += isHex(h1) ? 3 : 2;
                 continue;
             }
             out += String.fromCharCode(parseInt(h1 + h2, 16));
@@ -285,4 +308,80 @@ function isHex(ch: string | undefined): boolean {
         (ch >= "a" && ch <= "f") ||
         (ch >= "A" && ch <= "F")
     );
+}
+
+// ---- Encoding ---------------------------------------------------------
+
+/**
+ * Encode an arbitrary JavaScript string as a DSL string-literal body
+ * (the text that would sit between the surrounding `quote` delimiters,
+ * exclusive). The result, when wrapped in `quote`, parses back to the
+ * original value via `decodeStringLiteral`.
+ *
+ * Escapes the matching delimiter, `\`, and the standard
+ * SingleEscapeCharacter set (`\b`, `\f`, `\n`, `\r`, `\t`, `\v`).
+ * Other control characters (U+0000..U+001F, U+007F) are emitted as
+ * `\xHH`. Non-control characters are passed through verbatim, so
+ * arbitrary Unicode round-trips without surrogate juggling.
+ *
+ * For backtick quotes additionally escapes `\` and the `${` digraph
+ * so the result cannot accidentally introduce an interpolation.
+ */
+export function encodeStringLiteral(value: string, quote: StringQuote): string {
+    let out = "";
+    for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        const code = value.charCodeAt(i);
+        if (ch === "\\") {
+            out += "\\\\";
+            continue;
+        }
+        if (ch === quote) {
+            out += "\\" + quote;
+            continue;
+        }
+        // Suppress `${` interpolation introduction inside backtick strings.
+        if (quote === "`" && ch === "$" && value[i + 1] === "{") {
+            out += "\\$";
+            continue;
+        }
+        switch (ch) {
+            case "\b":
+                out += "\\b";
+                continue;
+            case "\f":
+                out += "\\f";
+                continue;
+            case "\n":
+                out += "\\n";
+                continue;
+            case "\r":
+                out += "\\r";
+                continue;
+            case "\t":
+                out += "\\t";
+                continue;
+            case "\v":
+                out += "\\v";
+                continue;
+        }
+        if (code < 0x20 || code === 0x7f) {
+            out += "\\x" + code.toString(16).padStart(2, "0").toUpperCase();
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+
+/**
+ * Encode a value as a complete DSL string literal, including the
+ * surrounding delimiters. Equivalent to
+ * `quote + encodeStringLiteral(value, quote) + quote`.
+ */
+export function quoteStringLiteral(
+    value: string,
+    quote: StringQuote = '"',
+): string {
+    return quote + encodeStringLiteral(value, quote) + quote;
 }

@@ -46,6 +46,7 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
 import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
 
@@ -1247,10 +1248,13 @@ export class Emitter {
         let onError: string | undefined;
         if (expr.fallback) {
             const fbScope = this.childScope(scope);
-            fbScope.bindings.set(expr.fallback.param ?? "err", {
-                kind: "loopInput",
-                nodeId: "error",
-            });
+            fbScope.bindings.set(
+                expr.fallback.param ?? DEFAULT_FALLBACK_PARAM,
+                {
+                    kind: "loopInput",
+                    nodeId: "error",
+                },
+            );
             for (const s of expr.fallback.body) {
                 this.emitStatement(s, fbScope);
             }

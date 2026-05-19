@@ -76,18 +76,20 @@ describe("lexer", () => {
 
     test("string literals with escapes (raw-only: escapes not decoded)", () => {
         const { tokens } = lex('"hello\\nworld"');
-        expect(tokens[0].kind).toBe(TokenKind.StringLiteral);
+        const t = tokens[0];
+        expect(t.kind).toBe(TokenKind.StringLiteral);
         // The lexer captures the raw source between the delimiters; escape
         // processing is the consumer's job (via decodeStringLiteral).
-        expect(tokens[0].value).toBe("hello\\nworld");
-        expect(tokens[0].quote).toBe('"');
+        expect(t.value).toBe("hello\\nworld");
+        if (t.kind === TokenKind.StringLiteral) expect(t.quote).toBe('"');
     });
 
     test("single-quoted strings", () => {
         const { tokens } = lex("'abc'");
-        expect(tokens[0].kind).toBe(TokenKind.StringLiteral);
-        expect(tokens[0].value).toBe("abc");
-        expect(tokens[0].quote).toBe("'");
+        const t = tokens[0];
+        expect(t.kind).toBe(TokenKind.StringLiteral);
+        expect(t.value).toBe("abc");
+        if (t.kind === TokenKind.StringLiteral) expect(t.quote).toBe("'");
     });
 
     test("string line continuation with CRLF after backslash is accepted", () => {
@@ -394,5 +396,50 @@ describe("lexer", () => {
         expect(comments).toHaveLength(1);
         expect(comments[0].text).toBe("/* unterminated");
         expect(comments[0].block).toBe(true);
+    });
+
+    describe("invalid escape sequences surface as lex errors", () => {
+        // JS strict mode rejects these at parse time; the lexer mirrors
+        // that so the emitter never has to silently substitute a
+        // default cooked value.
+        test("string: invalid \\x hex escape is a lex error", () => {
+            const { errors } = lex('const x = "\\xZZ";');
+            expect(errors).toHaveLength(1);
+            expect(errors[0].message).toMatch(/hex escape/i);
+            // Points at the offending `\` (column 12: after `const x = "`).
+            expect(errors[0].line).toBe(1);
+            expect(errors[0].col).toBe(12);
+        });
+
+        test("string: invalid \\u unicode escape is a lex error", () => {
+            const { errors } = lex('const x = "\\uZZZZ";');
+            expect(errors).toHaveLength(1);
+            expect(errors[0].message).toMatch(/unicode escape/i);
+        });
+
+        test("string: legacy octal escape is a lex error in strict mode", () => {
+            const { errors } = lex('const x = "\\7";');
+            expect(errors).toHaveLength(1);
+            expect(errors[0].message).toMatch(/octal/i);
+        });
+
+        test("template: invalid \\x hex escape is a lex error", () => {
+            const { errors } = lex("const x = `bad: \\xZZ`;");
+            expect(errors).toHaveLength(1);
+            expect(errors[0].message).toMatch(/hex escape/i);
+        });
+
+        test("template: error line tracks raw newlines in the span", () => {
+            const { errors } = lex("const x = `line1\nline2 \\xZZ`;");
+            expect(errors).toHaveLength(1);
+            expect(errors[0].line).toBe(2);
+        });
+
+        test("valid escapes still produce zero errors", () => {
+            const { errors } = lex(
+                'const x = "\\x41\\u00e9\\u{1F600}\\n\\t\\\\";',
+            );
+            expect(errors).toEqual([]);
+        });
     });
 });

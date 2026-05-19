@@ -37,7 +37,7 @@
  *                | "(" Expr ")" (parenthesized or arrow function start)
  */
 
-import { Token, TokenKind, LexComment } from "./lexer.js";
+import { Token, TokenKind, LexComment, StringToken } from "./lexer.js";
 import { decodeStringLiteral } from "./literal.js";
 import {
     WorkflowDecl,
@@ -94,8 +94,17 @@ export interface ParseError {
 
 /**
  * Translate a byte offset within a raw literal slice into a (line, col)
- * pair relative to the surrounding source. `startLine` / `startCol`
- * point at the first character of the raw slice in the source file.
+ * pair relative to the surrounding source.
+ *
+ * `startLine` / `startCol` point at the first character of the raw
+ * slice in the source file - that is, the character JUST INSIDE the
+ * opening delimiter. For ordinary string literals and `TemplateHead` /
+ * `TemplateNoSub` tokens, the lexer records the token at the opening
+ * quote / backtick, so callers must pass `tok.col + 1` to skip it.
+ * For `TemplateMiddle` / `TemplateTail` the token also begins one
+ * character before the raw slice (at the closing `}`), so the same
+ * `+1` adjustment applies.
+ *
  * Newlines inside template literals are the only multi-line case.
  */
 function offsetToLineCol(
@@ -129,12 +138,28 @@ export class Parser {
     private lastToken: Token | undefined;
     private singleWorkflowMode = false;
 
+    private tokens: Token[];
+
+    /**
+     * Construct a Parser from either:
+     *   - a positional `(tokens, comments?)` pair (legacy form), or
+     *   - a single `LexResult`-shaped object `{ tokens, comments? }`,
+     *     which lets callers pass `tokenize(src)` straight through
+     *     without destructuring.
+     */
+    constructor(tokens: Token[], comments?: LexComment[]);
+    constructor(lex: { tokens: Token[]; comments?: LexComment[] });
     constructor(
-        private tokens: Token[],
+        tokensOrLex: Token[] | { tokens: Token[]; comments?: LexComment[] },
         comments: LexComment[] = [],
     ) {
-        // Comments are kept sorted by offset (the lexer emits them in order).
-        this.comments = comments;
+        if (Array.isArray(tokensOrLex)) {
+            this.tokens = tokensOrLex;
+            this.comments = comments;
+        } else {
+            this.tokens = tokensOrLex.tokens;
+            this.comments = tokensOrLex.comments ?? [];
+        }
     }
 
     /**
@@ -594,10 +619,12 @@ export class Parser {
                 // as expression statements. The emitter handles them.
                 // Bare task calls are allowed for side effects
                 // (e.g., audit.log(data) in an if body). Wrap in a const
-                // with a synthetic name.
+                // with a synthetic name. The `__synthetic_` prefix is
+                // reserved (see `parseConstStatement`) so this name can
+                // never collide with a user-declared binding.
                 return {
                     kind: "ConstStatement",
-                    name: `_${expr.loc.line}_${expr.loc.col}`,
+                    name: `__synthetic_${expr.loc.line}_${expr.loc.col}`,
                     value: expr,
                     loc: expr.loc,
                     isSynthetic: true,
@@ -619,7 +646,18 @@ export class Parser {
             return this.parseDestructuringConst(l);
         }
 
-        const name = this.expect(TokenKind.Identifier).value;
+        const nameTok = this.expect(TokenKind.Identifier);
+        const name = nameTok.value;
+        // The `__synthetic_` prefix is reserved for the formatter's
+        // bare-expression wrappers (see parseStatement on Identifier).
+        // Reject user code that tries to shadow it so format -> parse
+        // -> format can never silently rewrite a real binding into a
+        // bare expression.
+        if (name.startsWith("__synthetic_")) {
+            this.error(
+                `const name \`${name}\` uses the reserved \`__synthetic_\` prefix`,
+            );
+        }
         let typeAnnotation: TypeExpr | undefined;
         if (this.peek().kind === TokenKind.Colon) {
             this.advance();
@@ -1062,13 +1100,12 @@ export class Parser {
 
         // String
         if (t.kind === TokenKind.StringLiteral) {
-            const v = this.advance();
-            const quote = (v.quote ?? '"') as '"' | "'";
-            this.checkLiteralEscapes(v.value, quote, v);
+            const v = this.advance() as StringToken;
+            this.checkLiteralEscapes(v.value, v.quote, v);
             return {
                 kind: "StringLiteralExpr",
                 raw: v.value,
-                quote,
+                quote: v.quote,
                 loc: l,
             };
         }

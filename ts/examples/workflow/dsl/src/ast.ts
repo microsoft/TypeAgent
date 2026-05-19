@@ -19,6 +19,13 @@ export interface Comment {
     pos: SourceLocation;
 }
 
+/**
+ * Default name bound for an `attempts(..., () => { ... }, () => { ... })`
+ * fallback arrow that omits its parameter. Centralized so the emitter,
+ * type checker, and formatter agree on the binding name.
+ */
+export const DEFAULT_FALLBACK_PARAM = "err";
+
 // ---- Top-level ----
 
 export interface WorkflowDecl {
@@ -139,8 +146,12 @@ export interface ConstStatement {
     /**
      * True when the parser wrapped a bare statement-position task/workflow
      * call (e.g. `audit.log(x);`) in a ConstStatement with a synthetic
-     * name. Round-trip serialization re-emits these as bare expression
-     * statements so format -> parse -> format is stable. See G9.
+     * name of the form `__synthetic_<line>_<col>`. That prefix is
+     * reserved (the parser rejects user `const` names that start with
+     * `__synthetic_`) so the formatter can safely re-emit these as bare
+     * expression statements without risk of round-tripping a real
+     * user binding into a bare expression. Format -> parse -> format is
+     * stable. See G9.
      */
     isSynthetic?: boolean;
 }

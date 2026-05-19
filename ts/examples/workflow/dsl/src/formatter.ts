@@ -37,6 +37,7 @@ import {
     ParallelNode,
     ParallelMapNode,
 } from "./ast.js";
+import { quoteStringLiteral } from "./literal.js";
 
 export interface FormatOptions {
     /** Number of spaces per indent level. Non-negative integer. Default 4. */
@@ -135,6 +136,10 @@ class Printer {
     private parts: string[] = [];
     private depth = 0;
     private atLineStart = true;
+    /** Tracked column position of the cursor (0-based). Maintained
+     *  incrementally by `write()` / `newline()` so `currentColumn()` is
+     *  O(1) and `measure()` doesn't pay an O(parts) scan per call. */
+    private col = 0;
 
     constructor(private opts: ResolvedOptions) {}
 
@@ -149,15 +154,26 @@ class Printer {
     private write(s: string): void {
         if (s.length === 0) return;
         if (this.atLineStart) {
-            this.parts.push(" ".repeat(this.depth * this.opts.indent));
+            const pad = this.depth * this.opts.indent;
+            this.parts.push(" ".repeat(pad));
+            this.col = pad;
             this.atLineStart = false;
         }
         this.parts.push(s);
+        // Update column to position after the last newline in `s`, if any.
+        const eol = this.opts.eol;
+        const idx = s.lastIndexOf(eol);
+        if (idx >= 0) {
+            this.col = s.length - idx - eol.length;
+        } else {
+            this.col += s.length;
+        }
     }
 
     private newline(): void {
         this.parts.push(this.opts.eol);
         this.atLineStart = true;
+        this.col = 0;
     }
 
     private line(s: string): void {
@@ -176,24 +192,12 @@ class Printer {
 
     /**
      * Return the current column position on the line being built (0-based).
-     * Walks the parts array backward to the last newline, summing lengths.
      * If we're at line start, returns the implicit indent that the next
-     * `write` would produce.
+     * `write` would produce. O(1): the column is tracked incrementally.
      */
     private currentColumn(): number {
         if (this.atLineStart) return this.depth * this.opts.indent;
-        let total = 0;
-        const eol = this.opts.eol;
-        for (let i = this.parts.length - 1; i >= 0; i--) {
-            const p = this.parts[i];
-            const idx = p.lastIndexOf(eol);
-            if (idx >= 0) {
-                total += p.length - idx - eol.length;
-                return total;
-            }
-            total += p.length;
-        }
-        return total;
+        return this.col;
     }
 
     /**
@@ -207,6 +211,7 @@ class Printer {
         const savedParts = this.parts;
         const savedDepth = this.depth;
         const savedAtLineStart = this.atLineStart;
+        const savedCol = this.col;
         const startCol = this.currentColumn();
         this.parts = [];
         try {
@@ -216,6 +221,7 @@ class Printer {
             this.parts = savedParts;
             this.depth = savedDepth;
             this.atLineStart = savedAtLineStart;
+            this.col = savedCol;
             const lines = out.split(this.opts.eol);
             let max = 0;
             for (let i = 0; i < lines.length; i++) {
@@ -239,36 +245,48 @@ class Printer {
         this.write(lines[0]);
         for (let i = 1; i < lines.length; i++) {
             this.parts.push(this.opts.eol);
-            this.atLineStart = false;
             this.parts.push(lines[i]);
-        }
-    }
-
-    private printLeadingComments(comments: Comment[] | undefined): void {
-        if (!comments) return;
-        for (const c of comments) {
-            // Comment text already includes its delimiters. Block comments
-            // may contain newlines; emit them so the original internal
-            // alignment is preserved.
-            if (c.text.includes("\n")) {
-                this.writeMultilineCommentText(c.text);
-                this.newline();
-            } else {
-                this.line(c.text);
-            }
+            this.atLineStart = false;
+            this.col = lines[i].length;
         }
     }
 
     /**
-     * End a statement: write the terminator (e.g. `;` or `}`), then any
-     * inline trailing comments on the same physical source line as the
-     * statement, then a newline, then any trailing comments that landed
-     * on subsequent lines (each on its own indented line).
+     * Emit a single comment, inline (one space gap, no surrounding
+     * newlines) or on its own line at the current indent. Multi-line
+     * block comments preserve their internal alignment.
      */
-    private endStmt(s: Statement, terminator: string): void {
-        this.write(terminator);
+    private writeCommentInline(c: Comment): void {
+        this.write(" ");
+        if (c.text.includes("\n")) {
+            this.writeMultilineCommentText(c.text);
+        } else {
+            this.write(c.text);
+        }
+    }
+
+    private writeCommentOwnLine(c: Comment): void {
+        if (c.text.includes("\n")) {
+            this.writeMultilineCommentText(c.text);
+            this.newline();
+        } else {
+            this.line(c.text);
+        }
+    }
+
+    private printLeadingComments(comments: Comment[] | undefined): void {
+        if (!comments?.length) return;
+        for (const c of comments) this.writeCommentOwnLine(c);
+    }
+
+    /**
+     * Emit any inline trailing comments for `s`, then a newline, then any
+     * subsequent-line trailing comments. Used after writing the
+     * statement's terminator text.
+     */
+    private endStmtTrailers(s: Statement): void {
         const trailing = s.trailingComments;
-        if (!trailing || trailing.length === 0) {
+        if (!trailing?.length) {
             this.newline();
             return;
         }
@@ -282,32 +300,33 @@ class Printer {
                 after.push(c);
             }
         }
-        for (const c of inline) {
-            this.write(" ");
-            this.write(c.text);
-        }
+        for (const c of inline) this.writeCommentInline(c);
         this.newline();
-        for (const c of after) {
-            if (c.text.includes("\n")) {
-                this.writeMultilineCommentText(c.text);
-                this.newline();
-            } else {
-                this.line(c.text);
-            }
-        }
+        for (const c of after) this.writeCommentOwnLine(c);
+    }
+
+    /**
+     * End a statement: write the terminator (e.g. `;` or `}`), then any
+     * trailing comments + closing newline via `endStmtTrailers`.
+     */
+    private endStmtWith(s: Statement, terminator: string): void {
+        this.write(terminator);
+        this.endStmtTrailers(s);
+    }
+
+    /**
+     * End a statement that has already emitted its own terminator (for
+     * example `break;` or an `if`-without-else). Just emits trailing
+     * comments + newline.
+     */
+    private endStmtAfter(s: Statement): void {
+        this.endStmtTrailers(s);
     }
 
     /** Emit a list of comments each on its own line at the current indent. */
     private printOwnLineComments(comments: Comment[] | undefined): void {
-        if (!comments) return;
-        for (const c of comments) {
-            if (c.text.includes("\n")) {
-                this.writeMultilineCommentText(c.text);
-                this.newline();
-            } else {
-                this.line(c.text);
-            }
-        }
+        if (!comments?.length) return;
+        for (const c of comments) this.writeCommentOwnLine(c);
     }
 
     /**
@@ -329,7 +348,7 @@ class Printer {
         comments: Comment[] | undefined,
         forceNewLine: boolean,
     ): void {
-        if (!comments || comments.length === 0) {
+        if (!comments?.length) {
             if (forceNewLine) {
                 this.newline();
             } else {
@@ -339,31 +358,16 @@ class Printer {
         }
         const hasLineComment = comments.some((c) => c.text.startsWith("//"));
         if (!hasLineComment && !forceNewLine) {
-            for (const c of comments) {
-                this.write(" ");
-                if (c.text.includes("\n")) {
-                    this.writeMultilineCommentText(c.text);
-                } else {
-                    this.write(c.text);
-                }
-            }
+            for (const c of comments) this.writeCommentInline(c);
             this.write(" ");
             return;
         }
         // Break before each comment, then drop `else` on a fresh line
         // at the current indent.
         for (const c of comments) {
-            this.write(" ");
-            if (c.text.includes("\n")) {
-                this.writeMultilineCommentText(c.text);
-            } else {
-                this.write(c.text);
-            }
+            this.writeCommentInline(c);
             this.newline();
         }
-        // If there were no comments at all (handled above) we wouldn't
-        // reach here; if there were comments + forceNewLine but only
-        // block comments, the final newline above already positions us.
     }
 
     // ---- Workflow ----
@@ -382,15 +386,8 @@ class Printer {
         });
         this.line("}");
         // Trailing comments after the closing `}` (between `}` and EOF).
-        if (decl.trailingComments && decl.trailingComments.length > 0) {
-            for (const c of decl.trailingComments) {
-                if (c.text.startsWith("//")) {
-                    this.line(c.text);
-                } else {
-                    // block comment may be multi-line; preserve its text.
-                    this.line(c.text);
-                }
-            }
+        if (decl.trailingComments?.length) {
+            for (const c of decl.trailingComments) this.writeCommentOwnLine(c);
         }
     }
 
@@ -413,11 +410,9 @@ class Printer {
         paramInner: Comment[] | undefined,
     ): void {
         const hasParamComments = params.some(
-            (p) =>
-                (p.leadingComments && p.leadingComments.length > 0) ||
-                (p.trailingComments && p.trailingComments.length > 0),
+            (p) => p.leadingComments?.length || p.trailingComments?.length,
         );
-        const hasInner = !!(paramInner && paramInner.length > 0);
+        const hasInner = !!paramInner?.length;
         const forcedMultiLine = hasParamComments || hasInner;
 
         // Measure the inline-projected width if we might choose inline.
@@ -481,11 +476,10 @@ class Printer {
         trailing: Comment[] | undefined,
         endLine: number | undefined,
     ): void {
-        if (!trailing) return;
+        if (!trailing?.length) return;
         for (const c of trailing) {
             if (endLine !== undefined && c.pos.line === endLine) {
-                this.write(" ");
-                this.write(c.text);
+                this.writeCommentInline(c);
             }
         }
     }
@@ -498,15 +492,10 @@ class Printer {
         trailing: Comment[] | undefined,
         endLine: number | undefined,
     ): void {
-        if (!trailing) return;
+        if (!trailing?.length) return;
         for (const c of trailing) {
             if (endLine === undefined || c.pos.line !== endLine) {
-                if (c.text.includes("\n")) {
-                    this.writeMultilineCommentText(c.text);
-                    this.newline();
-                } else {
-                    this.line(c.text);
-                }
+                this.writeCommentOwnLine(c);
             }
         }
     }
@@ -541,11 +530,9 @@ class Printer {
      */
     private printObjectType(t: import("./ast.js").ObjectType): void {
         const hasFieldComments = t.fields.some(
-            (f) =>
-                (f.leadingComments && f.leadingComments.length > 0) ||
-                (f.trailingComments && f.trailingComments.length > 0),
+            (f) => f.leadingComments?.length || f.trailingComments?.length,
         );
-        const hasInner = !!(t.innerComments && t.innerComments.length > 0);
+        const hasInner = !!t.innerComments?.length;
         const forcedMultiLine = hasFieldComments || hasInner;
 
         let inlineFits = true;
@@ -610,7 +597,7 @@ class Printer {
                 // pattern are not silently rewritten.
                 if (s.isSynthetic) {
                     this.printExpr(s.value);
-                    this.endStmt(s, ";");
+                    this.endStmtWith(s, ";");
                     return;
                 }
                 this.write(`const ${s.name}`);
@@ -620,13 +607,13 @@ class Printer {
                 }
                 this.write(" = ");
                 this.printExpr(s.value);
-                this.endStmt(s, ";");
+                this.endStmtWith(s, ";");
                 return;
             }
             case "DestructuringConst": {
                 this.write(`const [${s.names.join(", ")}] = `);
                 this.printExpr(s.value);
-                this.endStmt(s, ";");
+                this.endStmtWith(s, ";");
                 return;
             }
             case "IfStatement": {
@@ -686,9 +673,9 @@ class Printer {
                             this.printOwnLineComments(s.elseInnerComments);
                         }
                     });
-                    this.endStmt(s, "}");
+                    this.endStmtWith(s, "}");
                 } else {
-                    this.endStmt(s, "");
+                    this.endStmtAfter(s);
                 }
                 return;
             }
@@ -740,24 +727,24 @@ class Printer {
                         }
                     }
                 });
-                this.endStmt(s, "}");
+                this.endStmtWith(s, "}");
                 return;
             }
             case "ReturnStatement": {
                 this.write("return ");
                 this.printExpr(s.value);
-                this.endStmt(s, ";");
+                this.endStmtWith(s, ";");
                 return;
             }
             case "BreakStatement": {
                 this.write("break;");
-                this.endStmt(s, "");
+                this.endStmtAfter(s);
                 return;
             }
             case "ThrowStatement": {
                 this.write("throw ");
                 this.printExpr(s.value);
-                this.endStmt(s, ";");
+                this.endStmtWith(s, ";");
                 return;
             }
         }
@@ -923,6 +910,9 @@ class Printer {
         this.write(", () => ");
         this.printBlockBody(e.body, e.bodyInnerComments);
         if (e.fallback) {
+            // When the source omitted the fallback parameter, preserve
+            // that absence: emit `()` rather than introducing the
+            // emitter/typechecker default binding name.
             const fbParam = e.fallback.param ?? "";
             this.write(`, (${fbParam}) => `);
             this.printBlockBody(e.fallback.body, e.fallback.bodyInnerComments);
@@ -997,12 +987,7 @@ function needsKeyQuotes(key: string): boolean {
 }
 
 function quoteString(s: string): string {
-    // Prefer double quotes; escape \, ", newline, tab.
-    const escaped = s
-        .replace(/\\/g, "\\\\")
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, "\\n")
-        .replace(/\r/g, "\\r")
-        .replace(/\t/g, "\\t");
-    return `"${escaped}"`;
+    // Re-use the shared encoder so the formatter's escape set stays in
+    // lockstep with the lexer / decoder.
+    return quoteStringLiteral(s, '"');
 }

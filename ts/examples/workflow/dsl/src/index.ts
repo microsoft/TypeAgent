@@ -13,6 +13,15 @@ export { TypeChecker, TypeInfo, TypeError } from "./typeChecker.js";
 export { Emitter, TaskSchemaInfo, EmitError } from "./emitter.js";
 export { format, FormatOptions } from "./formatter.js";
 export {
+    decodeStringLiteral,
+    decodeTemplatePart,
+    encodeStringLiteral,
+    quoteStringLiteral,
+    StringQuote,
+    DecodeError,
+    DecodeResult,
+} from "./literal.js";
+export {
     extractGraph,
     GraphModel,
     GraphNode,
@@ -30,4 +39,5 @@ export {
     DottedNameExpr,
     SourceLocation,
     Comment,
+    DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";

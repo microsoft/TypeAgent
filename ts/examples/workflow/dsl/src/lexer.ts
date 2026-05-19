@@ -8,6 +8,8 @@
  * Tokens are position-tracked for source-map generation.
  */
 
+import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
+
 export enum TokenKind {
     // Keywords
     Workflow = "workflow",
@@ -75,19 +77,30 @@ export enum TokenKind {
     EOF = "EOF",
 }
 
-export interface Token {
-    kind: TokenKind;
+export interface BaseToken {
     value: string;
     line: number;
     col: number;
     offset: number;
-    /**
-     * For `StringLiteral` tokens only: the original delimiter character
-     * (`"` or `'`). Template tokens always use backticks and do not set
-     * this field. Other token kinds leave it `undefined`.
-     */
-    quote?: '"' | "'";
 }
+
+/**
+ * String-literal token. Carries the original delimiter character so a
+ * round-trip serializer can reproduce single-quoted vs. double-quoted
+ * sources without guessing. Template tokens always use backticks and
+ * are represented by separate `TemplateHead` / `TemplateMiddle` /
+ * `TemplateTail` / `TemplateNoSub` kinds.
+ */
+export interface StringToken extends BaseToken {
+    kind: TokenKind.StringLiteral;
+    quote: '"' | "'";
+}
+
+export interface OtherToken extends BaseToken {
+    kind: Exclude<TokenKind, TokenKind.StringLiteral>;
+}
+
+export type Token = StringToken | OtherToken;
 
 export interface LexError {
     message: string;
@@ -176,7 +189,90 @@ export function lex(source: string): {
             line: startLine,
             col: startCol,
             offset: startOffset,
-        };
+        } as Token;
+    }
+
+    /**
+     * Translate a raw-slice offset back to source line/col coordinates
+     * and push a LexError. `rawStartLine` / `rawStartCol` /
+     * `rawStartOffset` describe the source position of `raw[0]`. For
+     * string literals (no raw newlines allowed) `raw` is single-line so
+     * line stays constant; for template spans `raw` may contain `\n`
+     * and we walk it to recover the right line/col. This makes invalid
+     * escapes (e.g. `\xZZ`) surface as real lex errors at the offending
+     * character, matching JS strict-mode behavior where such literals
+     * are SyntaxErrors at parse time.
+     */
+    function reportDecodeError(
+        message: string,
+        raw: string,
+        offsetInRaw: number,
+        rawStartLine: number,
+        rawStartCol: number,
+        rawStartOffset: number,
+    ): void {
+        let l = rawStartLine;
+        let c = rawStartCol;
+        for (let i = 0; i < offsetInRaw && i < raw.length; i++) {
+            if (raw[i] === "\n") {
+                l++;
+                c = 1;
+            } else {
+                c++;
+            }
+        }
+        errors.push({
+            message,
+            line: l,
+            col: c,
+            offset: rawStartOffset + offsetInRaw,
+        });
+    }
+
+    /**
+     * Validate the cooked content of a template span (the slice between
+     * a backtick or `}` and the next `${` or backtick). Invalid escape
+     * sequences in template literals are SyntaxErrors in untagged JS;
+     * the formatter doesn't distinguish tagged vs untagged, so we
+     * report them unconditionally.
+     */
+    function validateTemplateRaw(
+        raw: string,
+        spanLine: number,
+        spanCol: number,
+        spanOffset: number,
+    ): void {
+        const decoded = decodeTemplatePart(raw);
+        for (const e of decoded.errors) {
+            reportDecodeError(
+                e.message,
+                raw,
+                e.offsetInRaw,
+                spanLine,
+                spanCol,
+                spanOffset,
+            );
+        }
+    }
+
+    /**
+     * Consume a `\` escape sequence's payload, leaving the cooked value
+     * unchanged on the output side (raw-text scanning). Handles the one
+     * special case that matters for raw scanning: a `\` immediately
+     * followed by CRLF is a single line-continuation escape and both
+     * the `\r` and the `\n` are consumed together. Caller must have
+     * already consumed the leading backslash.
+     */
+    function consumeEscapedCharRaw(): void {
+        if (pos >= source.length) return;
+        if (source[pos] === "\r") {
+            advance();
+            if (pos < source.length && source[pos] === "\n") {
+                advance();
+            }
+            return;
+        }
+        advance();
     }
 
     // Template literal depth: tracks nested `${}` so that `}` inside a
@@ -204,6 +300,7 @@ export function lex(source: string): {
                 source[pos + 1] === "{"
             ) {
                 const raw = source.slice(startOffset, pos);
+                validateTemplateRaw(raw, spanLine, spanCol, startOffset);
                 // Interpolation start: emit Head or Middle
                 advance(); // $
                 advance(); // {
@@ -223,6 +320,7 @@ export function lex(source: string): {
             }
             if (source[pos] === "`") {
                 const raw = source.slice(startOffset, pos);
+                validateTemplateRaw(raw, spanLine, spanCol, startOffset);
                 advance(); // closing backtick
                 tokens.push(
                     token(
@@ -239,17 +337,7 @@ export function lex(source: string): {
             }
             if (source[pos] === "\\") {
                 advance(); // backslash
-                if (pos < source.length) {
-                    if (source[pos] === "\r") {
-                        // Keep CRLF together for line-continuation escapes.
-                        advance();
-                        if (pos < source.length && source[pos] === "\n") {
-                            advance();
-                        }
-                    } else {
-                        advance(); // the escaped character (any char)
-                    }
-                }
+                consumeEscapedCharRaw();
             } else {
                 advance();
             }
@@ -353,17 +441,7 @@ export function lex(source: string): {
                 }
                 if (c === "\\") {
                     advance(); // backslash
-                    if (pos < source.length) {
-                        // Keep CRLF together for line-continuation escapes.
-                        if (source[pos] === "\r") {
-                            advance();
-                            if (pos < source.length && source[pos] === "\n") {
-                                advance();
-                            }
-                        } else {
-                            advance();
-                        }
-                    }
+                    consumeEscapedCharRaw();
                 } else {
                     advance();
                 }
@@ -379,14 +457,30 @@ export function lex(source: string): {
                     offset: startOffset,
                 });
             }
-            const tok = token(
-                TokenKind.StringLiteral,
-                raw,
-                startLine,
-                startCol,
-                startOffset,
-            );
-            tok.quote = quote as '"' | "'";
+            // Validate escapes inside the raw slice: invalid sequences
+            // (e.g. `\xZZ`, `\u{ABCDEFG}`, `\1`) become lex errors,
+            // matching JS strict-mode behavior. Without this check the
+            // emitter would silently substitute a default cooked value.
+            const decoded = decodeStringLiteral(raw, quote as '"' | "'");
+            for (const e of decoded.errors) {
+                reportDecodeError(
+                    e.message,
+                    raw,
+                    e.offsetInRaw,
+                    startLine,
+                    // +1 for the opening quote character
+                    startCol + 1,
+                    innerStart,
+                );
+            }
+            const tok: StringToken = {
+                kind: TokenKind.StringLiteral,
+                value: raw,
+                line: startLine,
+                col: startCol,
+                offset: startOffset,
+                quote: quote as '"' | "'",
+            };
             tokens.push(tok);
             continue;
         }

@@ -130,15 +130,19 @@ function writeOutput(
     target: string | undefined,
     body: string,
     inputAbs: string,
+    pretty: boolean,
 ): string {
     if (target === "-") {
         process.stdout.write(body);
-        if (!body.endsWith("\n")) process.stdout.write("\n");
+        // Only force a trailing newline in pretty mode; --compact promises
+        // "no whitespace" so we leave the stream as-is.
+        if (pretty && !body.endsWith("\n")) process.stdout.write("\n");
         return "<stdout>";
     }
     const outPath = resolve(target ?? defaultOutPath(inputAbs));
     mkdirSync(dirname(outPath), { recursive: true });
-    writeFileSync(outPath, body.endsWith("\n") ? body : body + "\n", "utf8");
+    const payload = pretty && !body.endsWith("\n") ? body + "\n" : body;
+    writeFileSync(outPath, payload, "utf8");
     return outPath;
 }
 
@@ -168,7 +172,7 @@ function main(): void {
     const body = args.pretty
         ? JSON.stringify(result.ir, null, 2)
         : JSON.stringify(result.ir);
-    const where = writeOutput(args.out, body, abs);
+    const where = writeOutput(args.out, body, abs, args.pretty);
     if (where !== "<stdout>") {
         console.error(`[wfc] wrote ${where}`);
     }

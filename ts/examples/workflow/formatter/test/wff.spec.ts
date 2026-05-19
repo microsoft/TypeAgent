@@ -93,7 +93,9 @@ describe("wff CLI", () => {
 
         const result = await runWff(["--check", file]);
         expect(result.code).toBe(1);
-        expect(result.stderr).toMatch(/ugly\.wf/);
+        // Changed file list goes to stdout (so it can be piped); the
+        // final summary line stays on stderr.
+        expect(result.stdout).toMatch(/ugly\.wf/);
         expect(result.stderr).toMatch(/need formatting/);
 
         // File must NOT be modified by --check.

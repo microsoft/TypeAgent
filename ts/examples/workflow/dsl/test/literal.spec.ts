@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { decodeStringLiteral, decodeTemplatePart } from "../src/literal.js";
+import {
+    decodeStringLiteral,
+    decodeTemplatePart,
+    encodeStringLiteral,
+} from "../src/literal.js";
 import { lex } from "../src/lexer.js";
 
 function dq(raw: string) {
@@ -65,6 +69,30 @@ describe("literal decoder: hex / unicode escapes", () => {
         const r = dq("\\xZZ");
         expect(r.errors).toHaveLength(1);
         expect(r.errors[0].message).toMatch(/hex escape/i);
+    });
+
+    // The next three tests pin the JS NotEscapeSequence recovery rule
+    // for `\x`: consume `\x` plus any partially-matched hex digit, drop
+    // the bad escape's cooked value, and re-enter the scanner so the
+    // remaining text is parsed normally.
+    test("\\x followed by non-hex consumes only `\\x` and continues", () => {
+        // `\xZA`: Z is non-hex -> consume `\x`, leave `ZA` as text.
+        const r = dq("\\xZA");
+        expect(r.errors).toHaveLength(1);
+        expect(r.value).toBe("ZA");
+    });
+
+    test("\\xH<non-hex> consumes `\\xH` (the matched hex digit too)", () => {
+        // `\x4Z`: 4 is hex, Z is non-hex -> consume `\x4`, leave `Z`.
+        const r = dq("\\x4Z");
+        expect(r.errors).toHaveLength(1);
+        expect(r.value).toBe("Z");
+    });
+
+    test("\\x at end of raw input is reported and consumes only `\\x`", () => {
+        const r = dq("\\x");
+        expect(r.errors).toHaveLength(1);
+        expect(r.value).toBe("");
     });
 
     test("\\uHHHH decodes a BMP code point", () => {
@@ -189,5 +217,77 @@ describe("decodeStringLiteral dispatches to template rules for backtick", () => 
         const r = bt("\\${x}");
         expect(r.errors).toEqual([]);
         expect(r.value).toBe("${x}");
+    });
+});
+
+describe("encodeStringLiteral / decodeStringLiteral round-trip", () => {
+    // Deterministic pseudo-random string generator. Avoids pulling in
+    // fast-check just for this property test, but still covers a wide
+    // surface: every Unicode escape edge case (controls, quotes,
+    // backslashes, surrogate pairs, dollar-brace inside backticks).
+    function mulberry32(seed: number): () => number {
+        let s = seed >>> 0;
+        return () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    const sample =
+        "abcXYZ012 \\\"'`${}\b\f\n\r\t\v\0\x01\x1f\x7f\u00ff\u2028\u{1f600}";
+
+    function makeString(rng: () => number, maxLen: number): string {
+        const len = Math.floor(rng() * maxLen);
+        const out: string[] = [];
+        for (let i = 0; i < len; i++) {
+            const idx = Math.floor(rng() * sample.length);
+            out.push(sample[idx]);
+        }
+        return out.join("");
+    }
+
+    const quotes: Array<"'" | '"' | "`"> = ["'", '"', "`"];
+
+    for (const q of quotes) {
+        test(`round-trip preserves arbitrary strings (quote=${q})`, () => {
+            const rng = mulberry32(0xc0ffee ^ q.charCodeAt(0));
+            for (let trial = 0; trial < 500; trial++) {
+                const input = makeString(rng, 24);
+                const encoded = encodeStringLiteral(input, q);
+                // Re-decode using the matching delimiter rules.
+                const { value, errors } = decodeStringLiteral(encoded, q);
+                expect(errors).toEqual([]);
+                expect(value).toBe(input);
+            }
+        });
+    }
+
+    test("handcrafted edge cases survive a round trip in all quote styles", () => {
+        const cases = [
+            "",
+            "\\",
+            '"',
+            "'",
+            "`",
+            "${x}",
+            "\\${",
+            "\n",
+            "\r\n",
+            "\t\v\f\b",
+            "\0\x01\x1f\x7f",
+            "mixed \\ ' \" ` ${ } end",
+            "\u{1f600}\u2028\u00ff",
+        ];
+        for (const q of quotes) {
+            for (const input of cases) {
+                const encoded = encodeStringLiteral(input, q);
+                const { value, errors } = decodeStringLiteral(encoded, q);
+                expect(errors).toEqual([]);
+                expect(value).toBe(input);
+            }
+        }
     });
 });

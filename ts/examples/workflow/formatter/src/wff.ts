@@ -55,7 +55,9 @@ Modes (mutually exclusive):
 Input:
   <files...>             One or more .wf source files. If none are given and
                          stdin is not a TTY, read source from stdin and write
-                         the result to stdout.
+                         the result to stdout. When reading stdin both the
+                         default \`write\` mode and \`--stdout\` emit the
+                         formatted source to stdout.
       --stdin-filepath <p>  Display name used in diagnostics for stdin input.
 
 Formatting options:
@@ -260,20 +262,161 @@ function reportErrors(display: string, errs: FormatErr[]): void {
     }
 }
 
-/** Minimal unified diff (line oriented). Good enough for human review. */
+/**
+ * Line-oriented unified diff with hunks and context lines, computed
+ * via an LCS table. Intentionally dependency-free (no `diff` package
+ * pulled in) since the formatter ships as a tiny standalone bin.
+ * Output mimics `diff -U3` closely enough for human review.
+ */
 function unifiedDiff(a: string, b: string, label: string): string {
     if (a === b) return "";
     const aLines = a.split("\n");
     const bLines = b.split("\n");
-    // Simple full-file diff: print all - and + lines with a single hunk header.
-    // (Not LCS-optimal but avoids pulling in a diff dependency.)
+    const ops = computeLineDiff(aLines, bLines);
+    if (ops.length === 0) return "";
+    const context = 3;
+    // Group ops into hunks separated by runs of `=` longer than 2*context.
+    interface Hunk {
+        ops: { kind: "=" | "-" | "+"; line: string }[];
+        aStart: number; // 1-based start in a
+        bStart: number; // 1-based start in b
+        aCount: number;
+        bCount: number;
+    }
+    const hunks: Hunk[] = [];
+    let aIdx = 0; // 0-based cursor into aLines
+    let bIdx = 0;
+    let i = 0;
+    while (i < ops.length) {
+        // Skip leading equal runs that are too far from any change.
+        if (ops[i].kind === "=") {
+            // Find next non-equal op.
+            let j = i;
+            while (j < ops.length && ops[j].kind === "=") j++;
+            const runLen = j - i;
+            if (j === ops.length) break; // trailing equals, nothing more.
+            // Keep the last `context` equal lines as leading context.
+            const skip = Math.max(0, runLen - context);
+            aIdx += skip;
+            bIdx += skip;
+            i += skip;
+        }
+        // Start a new hunk.
+        const hunkOps: Hunk["ops"] = [];
+        const aStart = aIdx;
+        const bStart = bIdx;
+        let trailingEq = 0;
+        while (i < ops.length) {
+            const op = ops[i];
+            hunkOps.push(op);
+            if (op.kind === "=") {
+                trailingEq++;
+                aIdx++;
+                bIdx++;
+                // If we've seen 2*context equal lines and there is a
+                // following change far enough away, end this hunk and
+                // let the outer loop drop the gap.
+                if (trailingEq > 2 * context) {
+                    // Look ahead: is there any non-equal op remaining?
+                    let k = i + 1;
+                    let moreChanges = false;
+                    while (k < ops.length) {
+                        if (ops[k].kind !== "=") {
+                            moreChanges = true;
+                            break;
+                        }
+                        k++;
+                    }
+                    if (moreChanges) {
+                        // Trim trailing equals beyond `context` from the hunk.
+                        const trim = trailingEq - context;
+                        hunkOps.splice(hunkOps.length - trim, trim);
+                        aIdx -= trim;
+                        bIdx -= trim;
+                        i++; // consume the current op already pushed
+                        break;
+                    }
+                }
+                i++;
+            } else {
+                trailingEq = 0;
+                if (op.kind === "-") aIdx++;
+                else bIdx++;
+                i++;
+            }
+        }
+        // Compute counts.
+        let aCount = 0;
+        let bCount = 0;
+        for (const op of hunkOps) {
+            if (op.kind === "=") {
+                aCount++;
+                bCount++;
+            } else if (op.kind === "-") aCount++;
+            else bCount++;
+        }
+        hunks.push({
+            ops: hunkOps,
+            aStart: aStart + 1,
+            bStart: bStart + 1,
+            aCount,
+            bCount,
+        });
+    }
+    if (hunks.length === 0) return "";
     const out: string[] = [];
     out.push(`--- ${label}`);
     out.push(`+++ ${label} (formatted)`);
-    out.push(`@@ -1,${aLines.length} +1,${bLines.length} @@`);
-    for (const line of aLines) out.push(`-${line}`);
-    for (const line of bLines) out.push(`+${line}`);
+    for (const h of hunks) {
+        out.push(`@@ -${h.aStart},${h.aCount} +${h.bStart},${h.bCount} @@`);
+        for (const op of h.ops) {
+            const prefix = op.kind === "=" ? " " : op.kind;
+            out.push(`${prefix}${op.line}`);
+        }
+    }
     return out.join("\n") + "\n";
+}
+
+/**
+ * Classic LCS-based line diff: O(n*m) time/space. Fine for the file
+ * sizes the formatter handles (typically << 10k lines).
+ */
+function computeLineDiff(
+    a: string[],
+    b: string[],
+): { kind: "=" | "-" | "+"; line: string }[] {
+    const n = a.length;
+    const m = b.length;
+    // Build LCS length table.
+    const lcs: number[][] = [];
+    for (let i = 0; i <= n; i++) lcs.push(new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            lcs[i][j] =
+                a[i] === b[j]
+                    ? lcs[i + 1][j + 1] + 1
+                    : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        }
+    }
+    const out: { kind: "=" | "-" | "+"; line: string }[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+        if (a[i] === b[j]) {
+            out.push({ kind: "=", line: a[i] });
+            i++;
+            j++;
+        } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+            out.push({ kind: "-", line: a[i] });
+            i++;
+        } else {
+            out.push({ kind: "+", line: b[j] });
+            j++;
+        }
+    }
+    while (i < n) out.push({ kind: "-", line: a[i++] });
+    while (j < m) out.push({ kind: "+", line: b[j++] });
+    return out;
 }
 
 /** Atomically write `content` to `path` via a sibling tmp file + rename. */
@@ -351,7 +494,10 @@ function processFile(
             }
             break;
         case "check":
-            process.stderr.write(`${file}\n`);
+            // Emit the changed file list on stdout so it can be piped
+            // into other tools (xargs, fzf, etc.) without parsing
+            // stderr. Final summary lines are still on stderr.
+            process.stdout.write(`${file}\n`);
             break;
         case "diff":
             process.stdout.write(unifiedDiff(source, output, file));
