@@ -6,7 +6,10 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displayWarn } from "@typeagent/agent-sdk/helpers/display";
 import chalk from "chalk";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { SYSTEM_SESSION_CONTEXT_ID } from "../../portRegistrar.js";
+import {
+    AGENT_SERVER_REGISTRAR_NAME,
+    SYSTEM_SESSION_CONTEXT_ID,
+} from "../../portRegistrar.js";
 
 export class PortsCommandHandler implements CommandHandler {
     public readonly description =
@@ -23,8 +26,11 @@ export class PortsCommandHandler implements CommandHandler {
         // pseudo-agents that aren't real app-agents (notably the
         // agent-server's own listening port registered under the
         // well-known "agent-server" name), in which case
-        // `getAppAgentEmoji` throws "Unknown app agent: ...".
+        // `getAppAgentEmoji` throws "Unknown app agent: ...". Render
+        // the agent-server's own row with 🤖 so it's not visually
+        // empty; everything else falls back to no emoji.
         const safeEmoji = (name: string): string => {
+            if (name === AGENT_SERVER_REGISTRAR_NAME) return "🤖";
             try {
                 return agents.getAppAgentEmoji(name) ?? "";
             } catch {
