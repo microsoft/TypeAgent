@@ -171,6 +171,35 @@ test.describe("Shell interface tests", () => {
             // hit escape to clear out the input box and get us to a known state
             await element.press("Escape");
 
+            // DIAGNOSTIC: dump the relevant DOM state up front so the CI
+            // failure log carries enough evidence to identify whether bubbles
+            // are missing, hidden, mis-classed, or have an innerHTML that
+            // doesn't round-trip through `textarea.innerHTML =`.
+            // TODO: remove after diagnosing the windows-only `command
+            // backstack` failure.
+            const domSnapshot = await mainWindow.evaluate(() => {
+                const nodes = Array.from(
+                    document.querySelectorAll(".chat-message-container-user"),
+                );
+                return nodes.map((n) => {
+                    const content = n.querySelector(".chat-message-content");
+                    const first =
+                        content?.firstElementChild as HTMLElement | null;
+                    return {
+                        classes: (n as HTMLElement).className,
+                        hasContent: !!content,
+                        firstTag: first?.tagName ?? null,
+                        firstClass: first?.className ?? null,
+                        firstInnerHTML: first?.innerHTML ?? null,
+                        firstInnerText: first?.innerText ?? null,
+                    };
+                });
+            });
+            console.log(
+                "DIAG user-bubble DOM snapshot:",
+                JSON.stringify(domSnapshot, null, 2),
+            );
+
             // go through the command back stack to the end and make sure we get the expected
             // results. (command and cursor location)
             for (let i = commands.length - 1; i >= -1; i--) {
@@ -179,6 +208,10 @@ test.describe("Shell interface tests", () => {
 
                 // make sure that the text box now has the proper command
                 const text = await element.innerText();
+                const innerHtml = await element.innerHTML();
+                console.log(
+                    `DIAG ArrowUp i=${i} innerText=${JSON.stringify(text)} innerHTML=${JSON.stringify(innerHtml)}`,
+                );
 
                 // when we get to the end and hit up again it should still have the last command
                 let cmd = commands[i];
@@ -189,6 +222,13 @@ test.describe("Shell interface tests", () => {
                 expect(text, "Wrong back stack command found!").toBe(cmd);
             }
 
+            // DIAGNOSTIC: ChatView is not currently exposed on window, so we
+            // can only observe its effects via the DOM and via what the input
+            // textarea shows after each key. The per-iteration log below is
+            // sufficient: if the rebuild branch fires inside the ArrowDown
+            // handler, the textarea content will not change (or will change in
+            // a way that exposes the innerHTML round-trip mismatch).
+
             // now reverse the process
             for (let i = 1; i <= commands.length; i++) {
                 // press the up arrow
@@ -196,6 +236,10 @@ test.describe("Shell interface tests", () => {
 
                 // make sure that the text box now has the proper command
                 const text = await element.innerText();
+                const innerHtml = await element.innerHTML();
+                console.log(
+                    `DIAG ArrowDown i=${i} innerText=${JSON.stringify(text)} innerHTML=${JSON.stringify(innerHtml)}`,
+                );
 
                 // when we get to the end and hit up again it should still have the last command
                 let cmd = commands[i];

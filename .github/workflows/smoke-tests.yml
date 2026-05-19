@@ -140,6 +140,21 @@ jobs:
           npm run shell:test
         working-directory: ts/packages/shell
 
+      # DIAGNOSTIC: upload Playwright test-results (traces, screenshots, videos)
+      # and the HTML report so we can grab them after a CI failure.
+      # TODO: remove after diagnosing the windows-only `command backstack`
+      # failure.
+      - name: Upload Playwright artifacts on failure (windows)
+        if: ${{ failure() && runner.os == 'windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-windows-${{ matrix.version }}
+          path: |
+            ts/packages/shell/test-results/**
+            ts/packages/shell/playwright-report/**
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Shell Tests - smoke (linux)
         if: ${{ steps.filter.outputs.ts != 'false' && runner.os == 'Linux' }}
         timeout-minutes: 60
