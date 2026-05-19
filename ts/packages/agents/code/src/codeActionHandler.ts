@@ -212,12 +212,19 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
             debug("Error parsing WebSocket message:", error);
         }
     };
-    // Fan out client-count updates to every active session so each
-    // session's `@system ports` row reflects the (global) count. The
-    // SDK method swallows errors internally.
+    // Fan out client-count updates to active sessions. To prevent the
+    // `@system ports` summing from double-counting (each session is
+    // registered to the SAME physical server), attribute the global
+    // count to a single "primary" session (the first one in insertion
+    // order) and report 0 from the rest. The SDK method swallows
+    // errors internally.
     server.onClientCountChanged = (count: number) => {
+        const primary = sharedActiveSessions.values().next().value;
         for (const sc of sharedActiveSessions) {
-            void sc.notifyClientCountChanged("default", count);
+            void sc.notifyClientCountChanged(
+                "default",
+                sc === primary ? count : 0,
+            );
         }
     };
 }
@@ -280,12 +287,17 @@ async function updateCodeContext(
                 );
                 sharedWebSocketRefCount++;
                 sharedActiveSessions.add(context);
-                // Publish the current (global) count to this session's
-                // newly-registered row so `@system ports` doesn't show
-                // "?" until the next connect/disconnect event.
+                // Publish the current (global) count to the primary
+                // session (first in insertion order) and 0 to others
+                // so `@system ports` summing doesn't double-count. If
+                // this session is now becoming the primary (i.e. it's
+                // the first to enable), it gets the real count;
+                // otherwise it reports 0 and any future
+                // onClientCountChanged fanout will keep it at 0.
+                const primary = sharedActiveSessions.values().next().value;
                 void context.notifyClientCountChanged(
                     "default",
-                    server.getConnectedCount(),
+                    context === primary ? server.getConnectedCount() : 0,
                 );
             }
         } catch (e) {
@@ -308,6 +320,8 @@ async function updateCodeContext(
             // released by the backstop.
             agentContext.portRegistration?.release();
             delete agentContext.portRegistration;
+            const wasPrimary =
+                sharedActiveSessions.values().next().value === context;
             sharedActiveSessions.delete(context);
 
             sharedWebSocketRefCount = Math.max(0, sharedWebSocketRefCount - 1);
@@ -321,6 +335,17 @@ async function updateCodeContext(
                     sharedClosingPromise = undefined;
                 });
                 await sharedClosingPromise;
+            } else if (wasPrimary && sharedWebSocketServer) {
+                // Primary session went away — transfer the (global) count
+                // to the new primary so `@system ports` keeps reporting
+                // the real number instead of 0.
+                const newPrimary = sharedActiveSessions.values().next().value;
+                if (newPrimary) {
+                    void newPrimary.notifyClientCountChanged(
+                        "default",
+                        sharedWebSocketServer.getConnectedCount(),
+                    );
+                }
             }
         }
     }

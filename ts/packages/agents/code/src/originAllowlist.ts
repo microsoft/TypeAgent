@@ -45,11 +45,16 @@ export function isAllowedAgentOrigin(origin: string | undefined): boolean {
         }
         // Node's URL parser preserves IPv6 brackets in `hostname`
         // (e.g. `new URL("http://[::1]:8080").hostname === "[::1]"`),
-        // so match the bracketed form.
+        // so match the bracketed form. Also accept the unbracketed
+        // `::1` for robustness against URL parser/serializer
+        // differences across runtimes (other SSRF guards in the repo,
+        // e.g. examples/workflow/engine/src/builtinTasks.ts, accept
+        // both).
         return (
             u.hostname === "localhost" ||
             u.hostname === "127.0.0.1" ||
-            u.hostname === "[::1]"
+            u.hostname === "[::1]" ||
+            u.hostname === "::1"
         );
     } catch {
         return false;

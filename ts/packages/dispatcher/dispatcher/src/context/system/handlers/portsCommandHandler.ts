@@ -74,18 +74,18 @@ export class PortsCommandHandler implements CommandHandler {
                 // System tag is sticky: if any underlying allocation is
                 // system-owned, treat the group as system.
                 if (isSystem) existing.isSystem = true;
-                // Within a (agent, role, port) group, every contributing
-                // session is registered to the SAME physical server, so
-                // each session's reported count is the same global
-                // number — not an independent value to add. Take the max
-                // (treating "never reported" as 0 only when comparing).
-                // For per-session servers each group has a single
-                // contributor and this collapses to that count anyway.
+                // Within a (agent, role, port) group, sum contributing
+                // counts. Some agents (e.g. browser) report genuine
+                // per-session counts that must be added to get the
+                // total. Agents that share a single physical server
+                // and would otherwise double-count (e.g. code) are
+                // expected to publish the global count from a single
+                // "owner" session and 0 from the rest — see the
+                // primary-session pattern in codeActionHandler. A
+                // group whose contributors all report `undefined`
+                // stays `undefined` (rendered as "N/A").
                 if (cc !== undefined) {
-                    existing.clientCount = Math.max(
-                        existing.clientCount ?? 0,
-                        cc,
-                    );
+                    existing.clientCount = (existing.clientCount ?? 0) + cc;
                 }
             }
         }

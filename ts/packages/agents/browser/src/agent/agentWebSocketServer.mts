@@ -96,7 +96,14 @@ export class AgentWebSocketServer {
             const server = new WebSocketServer({
                 port,
                 verifyClient: (info, cb) => {
-                    const origin = info.origin || info.req.headers.origin;
+                    // `info.req.headers.origin` is `string | string[] |
+                    // undefined`; coerce arrays to the first element so
+                    // `isAllowedAgentOrigin` (which calls `startsWith` /
+                    // `new URL`) only ever sees a string.
+                    const rawOrigin = info.origin || info.req.headers.origin;
+                    const origin = Array.isArray(rawOrigin)
+                        ? rawOrigin[0]
+                        : rawOrigin;
                     if (isAllowedAgentOrigin(origin)) {
                         cb(true);
                     } else {

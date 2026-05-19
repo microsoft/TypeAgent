@@ -287,7 +287,11 @@ async function createInlineBrowserWebSocket(): Promise<WebSocket | undefined> {
     let endpoint: string;
     try {
         const u = new URL(agentServerUrl);
-        endpoint = `${u.protocol}//${u.hostname}:${result.port}/?channel=browser&role=client&clientId=inlineBrowser&sessionId=${sessionId}`;
+        // Use `host` (which preserves IPv6 brackets, e.g. `[::1]`) and
+        // strip the existing port — `u.host` includes it. `u.hostname`
+        // would round-trip IPv6 literals without brackets, producing an
+        // invalid URL like `ws://::1:8999/...`.
+        endpoint = `${u.protocol}//${u.hostname.includes(":") && !u.hostname.startsWith("[") ? `[${u.hostname}]` : u.hostname}:${result.port}/?channel=browser&role=client&clientId=inlineBrowser&sessionId=${sessionId}`;
     } catch (e) {
         debugBrowserIPCError("Invalid agent-server URL: %s", e);
         return undefined;
