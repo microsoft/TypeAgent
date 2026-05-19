@@ -26,7 +26,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.wf",
-                    "match": "\\b(workflow|param|const|let|if|else|for|in|return|true|false|null)\\b"
+                    "match": "\\b(workflow|const|if|else|switch|case|default|return|break|throw|true|false|null)\\b"
                 },
                 {
                     "name": "storage.type.wf",

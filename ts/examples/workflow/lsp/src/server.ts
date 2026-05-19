@@ -29,6 +29,10 @@ import {
 } from "vscode-languageserver/node.js";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import type { Duplex } from "node:stream";
+import { computeDiagnostics } from "./features/diagnostics.js";
+import { formatDocument } from "./features/formatting.js";
+import { computeDocumentSymbols } from "./features/symbols.js";
+import { loadTaskSchemas } from "./taskSchemas.js";
 
 export interface ServerInstance {
     connection: Connection;
@@ -42,7 +46,19 @@ export interface ServerTransport {
     output: Duplex;
 }
 
-export function createServer(transport?: ServerTransport): ServerInstance {
+export interface ServerOptions {
+    /** Debounce window for diagnostics, in ms. Default 100ms. */
+    diagnosticsDebounceMs?: number;
+}
+
+const DEFAULT_DEBOUNCE_MS = 100;
+
+export function createServer(
+    transport?: ServerTransport,
+    options: ServerOptions = {},
+): ServerInstance {
+    const debounceMs = options.diagnosticsDebounceMs ?? DEFAULT_DEBOUNCE_MS;
+
     const connection = transport
         ? createConnection(
               ProposedFeatures.all,
@@ -52,6 +68,8 @@ export function createServer(transport?: ServerTransport): ServerInstance {
         : createConnection(ProposedFeatures.all);
 
     const documents = new TextDocuments<TextDocument>(TextDocument);
+    const schemas = loadTaskSchemas();
+    const pendingDiagnostics = new Map<string, NodeJS.Timeout>();
 
     connection.onInitialize((_params: InitializeParams): InitializeResult => {
         return {
@@ -60,6 +78,8 @@ export function createServer(transport?: ServerTransport): ServerInstance {
                     openClose: true,
                     change: TextDocumentSyncKind.Incremental,
                 },
+                documentFormattingProvider: true,
+                documentSymbolProvider: true,
             },
             serverInfo: {
                 name: "workflow-lsp",
@@ -72,12 +92,57 @@ export function createServer(transport?: ServerTransport): ServerInstance {
         connection.console.info("workflow-lsp initialized");
     });
 
+    function scheduleDiagnostics(uri: string) {
+        const existing = pendingDiagnostics.get(uri);
+        if (existing) clearTimeout(existing);
+        const handle = setTimeout(() => {
+            pendingDiagnostics.delete(uri);
+            const doc = documents.get(uri);
+            if (!doc) return;
+            const diagnostics = computeDiagnostics(doc.getText(), schemas);
+            void connection.sendDiagnostics({ uri, diagnostics });
+        }, debounceMs);
+        // Don't keep the event loop alive just for diagnostics.
+        if (typeof handle.unref === "function") handle.unref();
+        pendingDiagnostics.set(uri, handle);
+    }
+
+    documents.onDidChangeContent((change) => {
+        scheduleDiagnostics(change.document.uri);
+    });
+
+    documents.onDidClose((event) => {
+        const t = pendingDiagnostics.get(event.document.uri);
+        if (t) clearTimeout(t);
+        pendingDiagnostics.delete(event.document.uri);
+        void connection.sendDiagnostics({
+            uri: event.document.uri,
+            diagnostics: [],
+        });
+    });
+
+    connection.onDocumentFormatting((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return [];
+        return formatDocument(doc, { indent: params.options.tabSize });
+    });
+
+    connection.onDocumentSymbol((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return [];
+        return computeDocumentSymbols(doc);
+    });
+
     documents.listen(connection);
 
     return {
         connection,
         documents,
         listen: () => connection.listen(),
-        dispose: () => connection.dispose(),
+        dispose: () => {
+            for (const t of pendingDiagnostics.values()) clearTimeout(t);
+            pendingDiagnostics.clear();
+            connection.dispose();
+        },
     };
 }
