@@ -3,6 +3,67 @@
 Tracked items where the DSL spec (dsl-v0.1.md) describes features that are
 not yet fully wired end-to-end.
 
+## Recommended implementation sequence
+
+Address the gaps in dependency order, with correctness and validation before
+new surface area:
+
+1. **G5: Decide/document `identity` and `noop` as intentional lowering
+   primitives.** This stabilizes the interpretation of branch convergence and
+   literal materialization before changing validator or emitter behavior.
+2. **G6: Fix validator branch-return convergence.** This restores validation
+   coverage for workflows the emitter already produces and lets the skipped DSL
+   integration validation paths come back online.
+3. **G14: Fix switch lowering always taking first case.** This is a core
+   control-flow runtime correctness bug and should be fixed before richer switch
+   typing or exhaustiveness work.
+4. **G15: Fix branch/ternary inside loop body runtime failure.** This exercises
+   nested scopes, branch lowering, and `$from` resolution after the validator can
+   recognize the normal convergence shapes.
+5. **G16: Fix `throw` message propagation.** This is a direct user-visible
+   correctness issue in already-supported error semantics.
+6. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
+   into the full sub-scope contract before improving fork runtime behavior.
+7. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
+   structurally valid, align fork execution with the spec's failure and cleanup
+   semantics.
+8. **G13: Fix structural type comparison for objects and arrays.** Type-system
+   expansions should build on sound object and array compatibility checks.
+9. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
+   one-way before adding more type-system expressiveness.
+10. **G3: Add TypeScript-style named type aliases.** Once structural
+    assignability is sound, add named type declarations and a type environment.
+11. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
+    parsing and checking, and becomes more ergonomic once named aliases exist.
+12. **G18: Add union/literal types.** This is the broadest type-system expansion
+    and should come after type soundness, named types, and switch runtime
+    correctness.
+13. **G1: Implement sub-workflow calls and compile-time inlining.** This is
+    strategically important, but touches compiler architecture and emitter
+    lowering, so it should follow the core correctness and type-system
+    foundations.
+14. **G11: Decide/document bind stripping for explicit user names.** This is
+    primarily debuggability and spec clarity.
+15. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+    AST honesty and visual-editor clarity, but current behavior works.
+16. **G12: Decide `list.append` naming/semantics.** This is naming/API
+    consistency with coordinated emitter, engine, and snapshot churn.
+17. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+    These patterns push against the visual-node discipline and should stay out
+    of scope until justified.
+18. **G8: No action.** Comments are already preserved and formatted.
+
+Dependency spine:
+
+- `G5 -> G6` restores confidence in validation for existing branch lowering.
+- `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
+- `G13 + G10 -> G3 -> G4 -> G18` builds type-system features on sound
+  assignability.
+- `G14 -> G18` ensures switch runtime behavior is correct before adding
+  exhaustive union-typed switch support.
+- `G6 + G14 + G15 + G16` makes implemented control-flow and error features
+  trustworthy before adding major new DSL surface area.
+
 ## G1: Sub-workflow calls
 
 **Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
