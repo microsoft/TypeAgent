@@ -16,7 +16,10 @@ Start the TypeAgent devcontainer. Optionally configure host SSH access.
 
 Options:
   --workspace-folder PATH        Workspace folder to open (default: repo root)
-  --config PATH                  Devcontainer config file (optional)
+  --config PATH|NAME             Devcontainer config file. Accepts a path or
+                                 a short name resolved against .devcontainer/:
+                                   vnc    -> .devcontainer/vnc/devcontainer.json
+                                   agent  -> .devcontainer/agent/devcontainer.json
   --recreate                     Recreate container before startup
   --rebuild                      Rebuild image and recreate container before startup
   --clean                        Remove container and associated Docker volumes
@@ -30,7 +33,8 @@ Examples:
   $(basename "$0") --ssh
   $(basename "$0") --recreate --ssh
   $(basename "$0") --rebuild
-  $(basename "$0") --config .devcontainer/vnc/devcontainer.json
+  $(basename "$0") --config vnc
+  $(basename "$0") --config agent
 EOF
 }
 
@@ -65,7 +69,19 @@ while [[ $# -gt 0 ]]; do
             ;;
         --config)
             [[ $# -ge 2 ]] || fail "Missing value for $1"
-            CONFIG_PATH=$(cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
+            # Allow short names (e.g. `vnc`, `agent`) that resolve to
+            # .devcontainer/<name>/devcontainer.json. Anything containing a
+            # slash or ending in .json is treated as a literal path.
+            _cfg_arg=$2
+            if [[ "$_cfg_arg" != */* && "$_cfg_arg" != *.json ]]; then
+                _short="$REPO_ROOT/.devcontainer/$_cfg_arg/devcontainer.json"
+                if [[ -f "$_short" ]]; then
+                    _cfg_arg="$_short"
+                else
+                    fail "Unknown config short name '$_cfg_arg' (expected $_short)"
+                fi
+            fi
+            CONFIG_PATH=$(cd -- "$(dirname -- "$_cfg_arg")" && pwd)/$(basename -- "$_cfg_arg")
             shift 2
             ;;
         --recreate|--remove-existing-container)
@@ -152,8 +168,8 @@ if [[ $CLEAN_VOLUMES -eq 1 ]]; then
     VOLUME_PREFIXES=(
         "pnpm-global-store"
         "typeagent-node_modules-"
-        "typeagent-agent-worktrees-"
         "claude-code-config-"
+        "copilot-cli-config-"
     )
     for prefix in "${VOLUME_PREFIXES[@]}"; do
         for vol in $(docker volume ls -q --filter "name=^$prefix" 2>/dev/null); do
