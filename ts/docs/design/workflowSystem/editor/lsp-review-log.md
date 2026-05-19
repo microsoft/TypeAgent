@@ -155,3 +155,31 @@ Deferred from Phase 3 (carried forward):
   webview previews where work can be heavier.
 - **Code actions.** Originally in the plan table but not in the
   Phase 3 todo set. Will land in Phase 4 alongside refactoring.
+
+---
+
+## 2026-05-19 — Phase 4: rename landed; code actions deferred
+
+**Phase:** 4
+**Origin:** scope vs. plan table rows 11 (rename) and 12 (code actions)
+**Status:** Partial delivery
+**Resolution:** Rename + prepareRename are wired and tested (10 specs
+total now, 44 tests). Implementing rename also surfaced a real bug in
+the symbol resolver: const / destructured-const defs were recorded at
+the **statement** location (the `const` keyword) instead of the
+binding name. Fixed by threading the document text into
+`buildSymbolTable` and computing a precise name location via a forward
+scan from `stmt.loc.offset`. This fix also tightens find-references
+ranges for const bindings.
+
+Deferred from Phase 4:
+- **Code actions / quick fixes.** Not implemented — would benefit
+  from a richer diagnostic catalog (currently we just surface
+  `compile()` errors). Suggested first quick-fix candidates for a
+  follow-up: "rename to closest builtin" when a task name typo is
+  reported, "extract literal to const", "convert template to
+  concat".
+- **Symbol-resolver decoupling from text.** The new `locateName` is a
+  pragmatic fix; a cleaner solution is to extend the DSL AST with a
+  separate `nameLoc` field on Const / DestructuringConst (filed as a
+  follow-up for the DSL team).

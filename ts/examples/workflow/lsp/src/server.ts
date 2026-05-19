@@ -42,6 +42,10 @@ import {
 } from "./features/semanticTokens.js";
 import { computeSignatureHelp } from "./features/signatureHelp.js";
 import { computeInlayHints } from "./features/inlayHints.js";
+import {
+    computePrepareRename,
+    computeRename,
+} from "./features/rename.js";
 import { invalidate } from "./parsedDocument.js";
 import { loadTaskSchemas } from "./taskSchemas.js";
 
@@ -97,6 +101,7 @@ export function createServer(
                 completionProvider: { triggerCharacters: ["."] },
                 signatureHelpProvider: { triggerCharacters: ["(", ","] },
                 inlayHintProvider: true,
+                renameProvider: { prepareProvider: true },
                 semanticTokensProvider: {
                     legend: semanticTokensLegend,
                     full: true,
@@ -194,6 +199,18 @@ export function createServer(
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return [];
         return computeInlayHints(doc, schemas, params.range);
+    });
+
+    connection.onPrepareRename((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        return computePrepareRename(doc, params.position);
+    });
+
+    connection.onRenameRequest((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        return computeRename(doc, params.position, params.newName);
     });
 
     connection.languages.semanticTokens.on((params) => {

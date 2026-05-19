@@ -70,6 +70,7 @@ class Resolver {
     readonly defs: SymbolDef[] = [];
     readonly refs: SymbolReference[] = [];
     readonly taskRefs: TaskReference[] = [];
+    constructor(private readonly text?: string) {}
 
     visit(wf: WorkflowDecl): void {
         const root = new Scope();
@@ -93,6 +94,36 @@ class Resolver {
         this.defs.push(def);
     }
 
+    /**
+     * Returns a SourceLocation for `name` near `stmtLoc`. When source
+     * text is unavailable falls back to the statement's loc so callers
+     * still get something usable (the formatter / hover only need a
+     * point, not a precise span). Used so rename and find-references
+     * can target the identifier itself rather than the surrounding
+     * `const` / `[` token.
+     */
+    private locateName(
+        stmtLoc: SourceLocation,
+        name: string,
+    ): SourceLocation {
+        const text = this.text;
+        if (!text || stmtLoc.offset === undefined) return stmtLoc;
+        const search = text.indexOf(name, stmtLoc.offset);
+        if (search < 0) return stmtLoc;
+        // Walk from stmtLoc forward to compute line/col for `search`.
+        let line = stmtLoc.line;
+        let col = stmtLoc.col;
+        for (let i = stmtLoc.offset; i < search; i++) {
+            if (text[i] === "\n") {
+                line++;
+                col = 1;
+            } else {
+                col++;
+            }
+        }
+        return { line, col, offset: search };
+    }
+
     private visitStatements(stmts: Statement[], scope: Scope): void {
         for (const s of stmts) this.visitStatement(s, scope);
     }
@@ -102,10 +133,11 @@ class Resolver {
             case "ConstStatement": {
                 this.visitExpr(stmt.value, scope);
                 if (!stmt.isSynthetic) {
+                    const nameLoc = this.locateName(stmt.loc, stmt.name);
                     const def: SymbolDef = {
                         name: stmt.name,
                         kind: "const",
-                        loc: stmt.loc,
+                        loc: nameLoc,
                     };
                     scope.define(def);
                     this.defs.push(def);
@@ -115,10 +147,11 @@ class Resolver {
             case "DestructuringConst": {
                 this.visitExpr(stmt.value, scope);
                 for (const name of stmt.names) {
+                    const nameLoc = this.locateName(stmt.loc, name);
                     const def: SymbolDef = {
                         name,
                         kind: "const",
-                        loc: stmt.loc,
+                        loc: nameLoc,
                     };
                     scope.define(def);
                     this.defs.push(def);
@@ -246,8 +279,11 @@ class Resolver {
     }
 }
 
-export function buildSymbolTable(wf: WorkflowDecl): SymbolTable {
-    const r = new Resolver();
+export function buildSymbolTable(
+    wf: WorkflowDecl,
+    text?: string,
+): SymbolTable {
+    const r = new Resolver(text);
     r.visit(wf);
     return { defs: r.defs, refs: r.refs, taskRefs: r.taskRefs };
 }
