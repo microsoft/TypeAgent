@@ -19,6 +19,19 @@ export class PortsCommandHandler implements CommandHandler {
         const registrar = cmdContext.portRegistrar;
         const agents = cmdContext.agents;
 
+        // Best-effort emoji lookup: the registrar may contain entries for
+        // pseudo-agents that aren't real app-agents (notably the
+        // agent-server's own listening port registered under the
+        // well-known "agent-server" name), in which case
+        // `getAppAgentEmoji` throws "Unknown app agent: ...".
+        const safeEmoji = (name: string): string => {
+            try {
+                return agents.getAppAgentEmoji(name) ?? "";
+            } catch {
+                return "";
+            }
+        };
+
         // Group registrar entries by (agentName, role, port). Code's
         // shared WS server has no per-session client identity, so its
         // count is global and the same number is reported across every
@@ -80,7 +93,7 @@ export class PortsCommandHandler implements CommandHandler {
         // Plain-text (CLI / console) — fixed-width via chalk for alignment.
         const text: string[][] = [["", "Agent", "Role", "Port", "Clients"]];
         for (const r of rows) {
-            const emoji = agents.getAppAgentEmoji(r.agentName) ?? "";
+            const emoji = safeEmoji(r.agentName);
             const name = r.isSystem
                 ? `${r.agentName} ${chalk.gray("[system]")}`
                 : r.agentName;
@@ -92,7 +105,7 @@ export class PortsCommandHandler implements CommandHandler {
         }
 
         // Rich HTML for the shell.
-        const html = buildPortsHtml(rows, agents);
+        const html = buildPortsHtml(rows, { getAppAgentEmoji: safeEmoji });
 
         context.actionIO.appendDisplay({
             type: "text",
