@@ -62,6 +62,7 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/completion-ui": "workspace:*",
     "@typeagent/config": "workspace:*",
@@ -83,6 +84,7 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
+    "websocket-channel-server": "workspace:*",
     "websocket-utils": "workspace:*",
     "ws": "^8.17.1"
   },

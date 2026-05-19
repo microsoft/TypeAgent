@@ -298,7 +298,10 @@ describe("parser", () => {
     test("string literal", () => {
         const e = parseExpr('"hello"');
         expect(e.kind).toBe("StringLiteralExpr");
-        if (e.kind === "StringLiteralExpr") expect(e.value).toBe("hello");
+        if (e.kind === "StringLiteralExpr") {
+            expect(e.raw).toBe("hello");
+            expect(e.quote).toBe('"');
+        }
     });
 
     test("number literal", () => {
@@ -347,7 +350,7 @@ describe("parser", () => {
         const e = parseExpr("`hello ${name}!`");
         expect(e.kind).toBe("TemplateLiteralExpr");
         if (e.kind === "TemplateLiteralExpr") {
-            expect(e.parts).toEqual(["hello ", "!"]);
+            expect(e.rawParts).toEqual(["hello ", "!"]);
             expect(e.expressions).toHaveLength(1);
         }
     });
@@ -598,6 +601,21 @@ describe("parser", () => {
         expect(workflows[1].name).toBe("b");
     });
 
+    test("comments between workflows attach to the next workflow", () => {
+        const source = `
+            workflow a(): string { return "a"; }
+            // between
+            workflow b(): string { return "b"; }
+        `;
+        const { tokens, comments } = lex(source);
+        const parser = new Parser(tokens, comments);
+        const { workflows, errors } = parser.parse();
+        expect(errors).toEqual([]);
+        expect(workflows).toHaveLength(2);
+        expect(workflows[0].trailingComments).toBeUndefined();
+        expect(workflows[1].leadingComments?.[0].text).toBe("// between");
+    });
+
     // ---- Error cases ----
 
     test("error on unexpected token", () => {
@@ -661,5 +679,37 @@ describe("parser", () => {
         expect(errors).toEqual([]);
         expect(ast).toBeDefined();
         expect(ast!.name).toBe("processData");
+    });
+
+    describe("trailing-tokens-after-workflow", () => {
+        test("stray `}` after workflow is a parse error", () => {
+            const { errors } = parse(`workflow w(): number { return 1; }\n}\n`);
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0].message).toMatch(
+                /Unexpected token after workflow/,
+            );
+        });
+
+        test("a second `workflow` keyword is a parse error", () => {
+            const { errors } = parse(
+                `workflow a(): number { return 1; }\nworkflow b(): number { return 2; }\n`,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0].message).toMatch(
+                /Unexpected token after workflow/,
+            );
+        });
+
+        test("trailing whitespace and comments only are NOT a parse error", () => {
+            // Comments after the workflow are not currently attached
+            // anywhere — that's a separate fidelity gap pinned in
+            // contentFidelity.spec.ts. They should not, however, trigger
+            // a parse error (the lexer reports them as comments, not
+            // tokens).
+            const { errors } = parse(
+                `workflow w(): number { return 1; }\n   \n// trailing comment\n`,
+            );
+            expect(errors).toEqual([]);
+        });
     });
 });

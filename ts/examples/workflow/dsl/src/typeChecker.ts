@@ -13,7 +13,14 @@
  * unknown (from untyped JSON Schema `{}` properties).
  */
 
-import { WorkflowDecl, Statement, Expr, TypeExpr, TaskArg } from "./ast.js";
+import {
+    WorkflowDecl,
+    Statement,
+    Expr,
+    TypeExpr,
+    TaskArg,
+    DEFAULT_FALLBACK_PARAM,
+} from "./ast.js";
 import { TaskSchemaInfo } from "./emitter.js";
 
 // ---- Type representation ----
@@ -574,7 +581,10 @@ export class TypeChecker {
                 );
                 if (e.fallback) {
                     const fbScope = scope.child();
-                    fbScope.set(e.fallback.param, UNKNOWN);
+                    fbScope.set(
+                        e.fallback.param ?? DEFAULT_FALLBACK_PARAM,
+                        UNKNOWN,
+                    );
                     this.checkStatements(e.fallback.body, fbScope);
                 }
                 return bodyReturnType;

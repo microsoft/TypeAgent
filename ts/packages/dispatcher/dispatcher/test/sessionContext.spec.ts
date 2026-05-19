@@ -196,6 +196,59 @@ describe("beginAgentThread", () => {
     });
 });
 
+describe("notifyReadinessChanged", () => {
+    function makeContextWithAgents(
+        refreshImpl: (name: string) => Promise<any>,
+    ) {
+        const refreshCalls: string[] = [];
+        const ctx = {
+            session: {
+                getSessionDirPath: () => undefined,
+                getConfig: () => ({}),
+            },
+            storageProvider: { getStorage: () => ({}) as any },
+            persistDir: undefined,
+            instanceDir: undefined,
+            commandLock: async (fn: any) => fn(),
+            agents: {
+                getTransientState: () => undefined,
+                getSharedLocalHostPort: async () => undefined,
+                setLocalHostPort: () => {},
+                refreshReadiness: async (name: string) => {
+                    refreshCalls.push(name);
+                    return refreshImpl(name);
+                },
+            },
+            clientIO: {
+                notify: () => {},
+                question: async () => 0,
+            },
+            translatorCache: { clear: () => {} },
+            lastActionSchemaName: undefined,
+            conversationManager: undefined,
+        } as any;
+        return { ctx, refreshCalls };
+    }
+
+    test("delegates to agents.refreshReadiness with the agent's own name", async () => {
+        const { ctx, refreshCalls } = makeContextWithAgents(async () => ({
+            kind: "ready",
+        }));
+        const sc = createSessionContext("myAgent", {}, ctx, false, "nrc-1");
+        await sc.notifyReadinessChanged!();
+        expect(refreshCalls).toEqual(["myAgent"]);
+    });
+
+    test("swallows errors from refreshReadiness so event-driven callers do not throw", async () => {
+        const { ctx, refreshCalls } = makeContextWithAgents(async () => {
+            throw new Error("boom");
+        });
+        const sc = createSessionContext("myAgent", {}, ctx, false, "nrc-2");
+        await expect(sc.notifyReadinessChanged!()).resolves.toBeUndefined();
+        expect(refreshCalls).toEqual(["myAgent"]);
+    });
+});
+
 describe("initializeCommandHandlerContext option validation", () => {
     test("instanceDir without storageProvider throws", async () => {
         await expect(

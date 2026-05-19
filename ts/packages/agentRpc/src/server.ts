@@ -636,6 +636,11 @@ export function createAgentRpcServer(
                     contextId,
                 });
             },
+            notifyReadinessChanged: async (): Promise<void> => {
+                return rpc.invoke("notifyReadinessChanged", {
+                    contextId,
+                });
+            },
         };
     }
 

@@ -15,7 +15,7 @@ overrides:
   router>path-to-regexp: '>=8.4.0 <9.0.0'
   serialize-javascript: '>=7.0.5 <8.0.0'
 
-pnpmfileChecksum: sha256-HplUxd/UQs83KFaH+N8siaFp49HRIa3jBSEBejhtSo0=
+pnpmfileChecksum: sha256-XN/N69W0uLJqsCRZH1rt+p23fdy7DJIT7V7z9EUTcoM=
 
 importers:
 
@@ -994,6 +994,37 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  examples/workflow/compiler:
+    dependencies:
+      workflow-dsl:
+        specifier: workspace:*
+        version: link:../dsl
+      workflow-engine:
+        specifier: workspace:*
+        version: link:../engine
+      workflow-model:
+        specifier: workspace:*
+        version: link:../model
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.15.18
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/workflow/dsl:
     dependencies:
       workflow-model:
@@ -1052,6 +1083,31 @@ importers:
       workflow-dsl:
         specifier: workspace:*
         version: link:../dsl
+
+  examples/workflow/formatter:
+    dependencies:
+      workflow-dsl:
+        specifier: workspace:*
+        version: link:../dsl
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.15.18
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   examples/workflow/model:
     devDependencies:
@@ -1606,6 +1662,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../../agentServer/client
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../../agentServer/protocol
@@ -3197,6 +3256,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@github/copilot-sdk':
+        specifier: 0.2.0
+        version: 0.2.0
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -5095,6 +5157,9 @@ importers:
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../agentServer/protocol
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -5158,6 +5223,9 @@ importers:
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      websocket-channel-server:
+        specifier: workspace:*
+        version: link:../utils/webSocketChannelServer
       websocket-utils:
         specifier: workspace:*
         version: link:../utils/webSocketUtils
@@ -18254,7 +18322,7 @@ snapshots:
       async: 3.2.6
       cosmiconfig: 8.3.6(typescript@5.4.5)
       date-fns: 2.30.0
-      debug: 4.4.3(supports-color@8.1.1)
+      debug: 4.4.1
       detect-indent: 6.1.0
       find-up: 7.0.0
       fs-extra: 11.3.0

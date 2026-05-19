@@ -8,6 +8,8 @@ import {
     type ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { discoverPort } from "@typeagent/agent-server-client/discovery";
+import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
 import type {
     BrowserAgentInvokeFunctions,
@@ -20,10 +22,14 @@ const debugWebSocket = registerDebug("typeagent:browser:ws");
 const debugWebSocketError = registerDebug("typeagent:browser:ws:error");
 
 let webSocket: WebSocket | undefined;
-let settings: Record<string, any>;
 let connectionInProgress: boolean = false;
 let channelProvider: ChannelProviderAdapter | undefined;
 let agentRpc: any | undefined;
+// Module-level guard so concurrent reconnect requests share a single
+// retry interval. Without this each `webSocket.onclose` triggers a
+// fresh `setInterval`, leaking timers and causing exponential retry
+// pressure under sustained connectivity loss.
+let reconnectTimer: ReturnType<typeof setInterval> | undefined;
 
 /**
  * Gets the agentRpc client for invoking agent-side operations.
@@ -70,31 +76,81 @@ async function parseWebSocketData(data: any): Promise<string> {
 }
 
 /**
+ * Resolves the URL of the browser agent's WebSocket server by asking
+ * the agent-server's discovery channel for the live port.
+ *
+ * The agent-server URL itself is configurable via the `agentServerHost`
+ * extension setting (default `ws://localhost:8999/`). Returns
+ * `undefined` if the agent-server is unreachable or the browser agent
+ * isn't currently registered — caller treats both as "retry on the
+ * reconnect loop".
+ */
+async function resolveBrowserEndpoint(
+    sessionId: string,
+): Promise<string | undefined> {
+    // Always re-read settings here (no module-level cache). The previous
+    // implementation cached settings on first connect and never
+    // invalidated, so a user changing `agentServerHost` would still see
+    // the old endpoint until the service worker restarted.
+    const settings = await getSettings();
+    const agentServerUrl =
+        (settings.agentServerHost && settings.agentServerHost.trim()) ||
+        AGENT_SERVER_DEFAULT_URL;
+
+    const result = await discoverPort("browser", "default", {
+        url: agentServerUrl,
+    });
+    if (result.kind === "found") {
+        // Browser agent's WS server binds to the same host as the
+        // agent-server (single-process), so we reuse the host portion of
+        // agentServerUrl and swap in the discovered port.
+        try {
+            const u = new URL(agentServerUrl);
+            return `${u.protocol}//${u.hostname}:${result.port}/?channel=browser&role=client&clientId=${chrome.runtime.id}&sessionId=${sessionId}`;
+        } catch (e) {
+            debugWebSocketError("Invalid agentServerHost URL: %s", e);
+            return undefined;
+        }
+    }
+    if (result.kind === "not-registered") {
+        debugWebSocket(
+            "Browser agent not registered with agent-server at %s",
+            agentServerUrl,
+        );
+    } else {
+        debugWebSocketError(
+            "Agent-server discovery unreachable at %s: %s",
+            agentServerUrl,
+            result.error.message,
+        );
+    }
+    return undefined;
+}
+
+/**
  * Creates a new WebSocket connection
  */
 export async function createWebSocket(): Promise<WebSocket | undefined> {
-    if (!settings) {
-        settings = await getSettings();
+    const settings = await getSettings();
+    const sessionId = (settings.sessionId as string) ?? "default";
+    const socketEndpoint = await resolveBrowserEndpoint(sessionId);
+    if (!socketEndpoint) {
+        return undefined;
     }
-
-    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8081/";
-
-    const sessionId = settings.sessionId ?? "default";
-    socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}&sessionId=${sessionId}`;
-    return new Promise<WebSocket | undefined>((resolve, reject) => {
+    return new Promise<WebSocket | undefined>((resolve) => {
         const webSocket = new WebSocket(socketEndpoint);
-        debugWebSocket("Connected to: " + socketEndpoint);
+        debugWebSocket("Connecting to: " + socketEndpoint);
 
-        webSocket.onopen = (event: Event) => {
+        webSocket.onopen = (_event: Event) => {
             debugWebSocket("websocket open");
             resolve(webSocket);
         };
-        webSocket.onmessage = (event: MessageEvent) => {};
-        webSocket.onclose = (event: CloseEvent) => {
+        webSocket.onmessage = (_event: MessageEvent) => {};
+        webSocket.onclose = (_event: CloseEvent) => {
             debugWebSocket("websocket connection closed");
             resolve(undefined);
         };
-        webSocket.onerror = (event: Event) => {
+        webSocket.onerror = (_event: Event) => {
             debugWebSocketError("websocket error");
             resolve(undefined);
         };
@@ -107,7 +163,7 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
 export async function ensureWebsocketConnected(): Promise<
     WebSocket | undefined
 > {
-    return new Promise<WebSocket | undefined>(async (resolve, reject) => {
+    return new Promise<WebSocket | undefined>(async (resolve, _reject) => {
         if (connectionInProgress) {
             debugWebSocket("Connection attempt already in progress, skipping");
             resolve(webSocket);
@@ -249,13 +305,23 @@ export function keepWebSocketAlive(webSocket: WebSocket): void {
 }
 
 /**
- * Attempts to reconnect the WebSocket periodically
+ * Attempts to reconnect the WebSocket periodically. Singleton — repeated
+ * calls (e.g., from successive `onclose` handlers under flapping
+ * connectivity) reuse the same retry interval rather than each
+ * scheduling a fresh one.
  */
 export function reconnectWebSocket(): void {
-    const connectionCheckIntervalId = setInterval(async () => {
+    if (reconnectTimer !== undefined) {
+        debugWebSocket("Reconnect interval already running");
+        return;
+    }
+    reconnectTimer = setInterval(async () => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             debugWebSocket("Clearing reconnect retry interval");
-            clearInterval(connectionCheckIntervalId);
+            if (reconnectTimer !== undefined) {
+                clearInterval(reconnectTimer);
+                reconnectTimer = undefined;
+            }
             showBadgeHealthy();
             broadcastConnectionStatus(true);
         } else {
@@ -292,18 +358,4 @@ export function getWebSocket(): WebSocket | undefined {
  */
 export function setWebSocket(socket: WebSocket | undefined): void {
     webSocket = socket;
-}
-
-/**
- * Gets the current settings
- */
-export function getCurrentSettings(): Record<string, any> {
-    return settings;
-}
-
-/**
- * Sets the current settings
- */
-export function setCurrentSettings(newSettings: Record<string, any>): void {
-    settings = newSettings;
 }

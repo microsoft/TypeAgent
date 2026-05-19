@@ -16,13 +16,13 @@ import { extractGraph, GraphModel } from "./graphExtractor.js";
 
 function parseWf(filePath: string): GraphModel {
     const source = fs.readFileSync(filePath, "utf-8");
-    const { tokens, errors: lexErrors } = lex(source);
+    const { tokens, errors: lexErrors, comments } = lex(source);
     if (lexErrors.length > 0) {
         throw new Error(
             `Lex errors: ${lexErrors.map((e) => e.message).join(", ")}`,
         );
     }
-    const parser = new Parser(tokens);
+    const parser = new Parser(tokens, comments);
     const { ast, errors: parseErrors } = parser.parseSingle();
     if (!ast || parseErrors.length > 0) {
         throw new Error(

@@ -32,6 +32,7 @@ import {
     ParallelNode,
     ParallelMapNode,
 } from "./ast.js";
+import { decodeStringLiteral } from "./literal.js";
 
 // ---- Graph model types ----
 
@@ -710,7 +711,7 @@ class GraphExtractor {
             case "DottedNameExpr":
                 return expr.segments.join(".");
             case "StringLiteralExpr": {
-                const s = expr.value;
+                const s = decodeStringLiteral(expr.raw, expr.quote).value;
                 return s.length > 30 ? `"${s.slice(0, 27)}..."` : `"${s}"`;
             }
             case "TemplateLiteralExpr":

@@ -305,27 +305,19 @@ Each node has an optional `leadingComments` array of `Comment { text, pos }`
 attached to the following AST node." It also claims round-trip fidelity
 between source and AST.
 
-**Current state:**
+**Status: Resolved.**
 
-- The `leadingComments` field exists on most AST node interfaces (ast.ts),
-  and the `Comment` type with `{ text, pos }` is defined.
-- The lexer recognizes `//` and `/* */` comments but skips them entirely.
-  They do not produce tokens.
-- The parser never receives comment tokens and never populates
-  `leadingComments` on any AST node.
-- Comments are lost during parsing. Round-trip (source -> AST -> source)
-  does not preserve them.
-
-**What needs to happen:**
-
-1. The lexer should collect comments (either as tokens or in a side
-   channel) instead of discarding them.
-2. The parser should attach collected comments to the following AST node's
-   `leadingComments` array.
-3. Any AST-to-source serializer should emit `leadingComments` in their
-   original positions.
-4. Until this is implemented, dsl-v0.1.md section 6 overstates the
-   current behavior.
+- The lexer (`lexer.ts`) now collects `//` and `/* */` comments into a
+  `comments: LexComment[]` side channel returned alongside tokens. The
+  full comment lexeme (including delimiters) is preserved.
+- The parser (`parser.ts`) accepts the comments list and attaches any
+  comment whose offset precedes a statement's (or workflow's) first
+  token as a `leadingComments` entry on that AST node.
+- A new formatter (`formatter.ts`, exported as `format`) lowers a
+  `WorkflowDecl` back to DSL source and emits `leadingComments` in
+  attached positions, completing the round trip.
+- See `formatter-design.md` for design notes (e.g., the full-text
+  comment representation, trailing-comment handling).
 
 ## G9: Bare task calls wrapped as synthetic ConstStatement
 

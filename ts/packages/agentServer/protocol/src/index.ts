@@ -10,6 +10,7 @@ export {
     AGENT_SERVER_DISCOVERY_NAME,
     DiscoveryChannelName,
     DiscoveryInvokeFunctions,
+    createDiscoveryHandlers,
     ConversationInfo,
     JoinConversationResult,
     UserIdentity,

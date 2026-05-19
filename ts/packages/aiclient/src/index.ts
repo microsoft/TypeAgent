@@ -8,6 +8,19 @@ export * as bing from "./bing.js";
 export * from "./restClient.js";
 export * from "./auth.js";
 export * from "./tokenCounter.js";
+export { getCopilotClient } from "./copilotModels.js";
+export {
+    copilotApiSettingsFromConfig,
+    type CopilotApiSettings,
+    type CopilotReasoningEffort,
+} from "./copilotSettings.js";
+export {
+    getActiveModelProvider,
+    setActiveModelProvider,
+    resolveTarget,
+    PROVIDER_MODES,
+    type ProviderMode,
+} from "./providerMode.js";
 export {
     getChatModelNames,
     getChatModelMaxConcurrency,

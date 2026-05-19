@@ -37,7 +37,8 @@
  *                | "(" Expr ")" (parenthesized or arrow function start)
  */
 
-import { Token, TokenKind } from "./lexer.js";
+import { Token, TokenKind, LexComment, StringToken } from "./lexer.js";
+import { decodeStringLiteral } from "./literal.js";
 import {
     WorkflowDecl,
     ParamDecl,
@@ -57,8 +58,11 @@ import {
     SourceLocation,
     BinaryOp,
     AttemptsNode,
+    MapNode,
+    FilterNode,
     ParallelNode,
     ParallelMapNode,
+    Comment,
 } from "./ast.js";
 
 /** Names recognized as compiler built-in functions. */
@@ -79,6 +83,7 @@ interface ArrowPlaceholder {
     _isArrow: true;
     params: string[];
     body: Statement[];
+    bodyInnerComments?: Comment[];
 }
 
 export interface ParseError {
@@ -87,14 +92,237 @@ export interface ParseError {
     col: number;
 }
 
+/**
+ * Translate a byte offset within a raw literal slice into a (line, col)
+ * pair relative to the surrounding source.
+ *
+ * `startLine` / `startCol` point at the first character of the raw
+ * slice in the source file - that is, the character JUST INSIDE the
+ * opening delimiter. For ordinary string literals and `TemplateHead` /
+ * `TemplateNoSub` tokens, the lexer records the token at the opening
+ * quote / backtick, so callers must pass `tok.col + 1` to skip it.
+ * For `TemplateMiddle` / `TemplateTail` the token also begins one
+ * character before the raw slice (at the closing `}`), so the same
+ * `+1` adjustment applies.
+ *
+ * Newlines inside template literals are the only multi-line case.
+ */
+function offsetToLineCol(
+    raw: string,
+    offset: number,
+    startLine: number,
+    startCol: number,
+): { line: number; col: number } {
+    let line = startLine;
+    let col = startCol;
+    const limit = Math.min(offset, raw.length);
+    for (let i = 0; i < limit; i++) {
+        if (raw[i] === "\n") {
+            line++;
+            col = 1;
+        } else {
+            col++;
+        }
+    }
+    return { line, col };
+}
+
 export class Parser {
     private pos = 0;
     private errors: ParseError[] = [];
     private inSwitchDepth = 0;
+    private comments: LexComment[];
+    private commentIdx = 0;
+    /** Last token consumed by `advance()`. Used to compute statement end
+     *  position for trailing-comment same-line detection. */
+    private lastToken: Token | undefined;
+    private singleWorkflowMode = false;
 
-    constructor(private tokens: Token[]) {}
+    private tokens: Token[];
+
+    /**
+     * Construct a Parser from either:
+     *   - a positional `(tokens, comments?)` pair (legacy form), or
+     *   - a single `LexResult`-shaped object `{ tokens, comments? }`,
+     *     which lets callers pass `tokenize(src)` straight through
+     *     without destructuring.
+     */
+    constructor(tokens: Token[], comments?: LexComment[]);
+    constructor(lex: { tokens: Token[]; comments?: LexComment[] });
+    constructor(
+        tokensOrLex: Token[] | { tokens: Token[]; comments?: LexComment[] },
+        comments: LexComment[] = [],
+    ) {
+        if (Array.isArray(tokensOrLex)) {
+            this.tokens = tokensOrLex;
+            this.comments = comments;
+        } else {
+            this.tokens = tokensOrLex.tokens;
+            this.comments = tokensOrLex.comments ?? [];
+        }
+    }
+
+    /**
+     * Collect any unconsumed comments that appear before the current
+     * parsing position. Returns undefined when there are none so callers
+     * can omit the optional `leadingComments` field entirely.
+     */
+    private takeLeadingComments(): Comment[] | undefined {
+        if (this.commentIdx >= this.comments.length) return undefined;
+        const tokOffset = this.peek().offset;
+        const out: Comment[] = [];
+        while (this.commentIdx < this.comments.length) {
+            const c = this.comments[this.commentIdx];
+            if (c.offset >= tokOffset) break;
+            out.push({
+                text: c.text,
+                pos: { line: c.line, col: c.col, offset: c.offset },
+            });
+            this.commentIdx++;
+        }
+        return out.length > 0 ? out : undefined;
+    }
+
+    /**
+     * Take any unconsumed comments that appear on `line` (the line of the
+     * just-parsed statement's last token). These are inline trailing
+     * comments. Returns undefined when there are none.
+     */
+    private takeInlineTrailingComments(line: number): Comment[] | undefined {
+        if (this.commentIdx >= this.comments.length) return undefined;
+        const tokOffset = this.peek().offset;
+        const out: Comment[] = [];
+        while (this.commentIdx < this.comments.length) {
+            const c = this.comments[this.commentIdx];
+            if (c.offset >= tokOffset) break;
+            if (c.line !== line) break;
+            out.push({
+                text: c.text,
+                pos: { line: c.line, col: c.col, offset: c.offset },
+            });
+            this.commentIdx++;
+        }
+        return out.length > 0 ? out : undefined;
+    }
+
+    /**
+     * Called at the end of a block (just before the closing `}`, `case`,
+     * `default`, or EOF). Drains any remaining comments before the next
+     * token and either appends them to the last statement's
+     * `trailingComments` or returns them so the caller can surface them
+     * as `innerComments` on its container node.
+     */
+    private finalizeBlock(stmts: Statement[]): Comment[] | undefined {
+        const remaining = this.takeLeadingComments();
+        if (!remaining) return undefined;
+        if (stmts.length === 0) {
+            return remaining;
+        }
+        const last = stmts[stmts.length - 1];
+        last.trailingComments = [
+            ...(last.trailingComments ?? []),
+            ...remaining,
+        ];
+        return undefined;
+    }
+
+    /**
+     * Parse a comma-separated list of items terminated by `terminator`,
+     * threading leading / trailing / inner comments onto the items in
+     * the same way the formatter expects them. Used for both parameter
+     * lists (`( ... )`) and object-type field lists (`{ ... }`); the
+     * comment-attachment policy is identical for both:
+     *
+     *   - Comments that sit before an item (in leading-position) attach
+     *     to that item's `leadingComments`.
+     *   - Comments on the same line as the item's last token, BEFORE the
+     *     comma, attach to that item's `trailingComments`.
+     *   - Comments on the same line as the item's last token, AFTER the
+     *     comma, also attach to that item's `trailingComments` (so the
+     *     formatter can emit them right after `,`).
+     *   - Comments that follow the final item with no further items
+     *     attach to that item's trailing (so they live next to the
+     *     code they annotate).
+     *   - Comments in an otherwise-empty list (`()` or `{}` with only
+     *     comments inside) are returned via `innerComments`.
+     */
+    private parseCommaListWithComments<
+        T extends {
+            leadingComments?: Comment[];
+            trailingComments?: Comment[];
+            endLine?: number;
+        },
+    >(
+        terminator: TokenKind,
+        parseItem: (leading: Comment[] | undefined) => T,
+    ): { items: T[]; innerComments: Comment[] | undefined } {
+        const items: T[] = [];
+        let innerComments: Comment[] | undefined;
+        while (
+            this.peek().kind !== terminator &&
+            this.peek().kind !== TokenKind.EOF
+        ) {
+            const leading = this.takeLeadingComments();
+            if (this.peek().kind === terminator) {
+                // Comments were the last things before the terminator:
+                // empty-list case keeps them as innerComments; otherwise
+                // they go on the last item's trailing slot.
+                if (leading) {
+                    if (items.length > 0) {
+                        const last = items[items.length - 1];
+                        last.trailingComments = [
+                            ...(last.trailingComments ?? []),
+                            ...leading,
+                        ];
+                    } else {
+                        innerComments = [...(innerComments ?? []), ...leading];
+                    }
+                }
+                break;
+            }
+            const item = parseItem(leading);
+            if (item.endLine !== undefined) {
+                const t = this.takeInlineTrailingComments(item.endLine);
+                if (t) {
+                    item.trailingComments = [
+                        ...(item.trailingComments ?? []),
+                        ...t,
+                    ];
+                }
+            }
+            if (this.peek().kind === TokenKind.Comma) {
+                this.advance();
+                if (item.endLine !== undefined) {
+                    const t = this.takeInlineTrailingComments(item.endLine);
+                    if (t) {
+                        item.trailingComments = [
+                            ...(item.trailingComments ?? []),
+                            ...t,
+                        ];
+                    }
+                }
+            }
+            items.push(item);
+        }
+        // Drain any straggling leading-position comments that sit
+        // between the last item (or the opener) and the terminator.
+        const remaining = this.takeLeadingComments();
+        if (remaining) {
+            if (items.length > 0) {
+                const last = items[items.length - 1];
+                last.trailingComments = [
+                    ...(last.trailingComments ?? []),
+                    ...remaining,
+                ];
+            } else {
+                innerComments = [...(innerComments ?? []), ...remaining];
+            }
+        }
+        return { items, innerComments };
+    }
 
     parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
+        this.singleWorkflowMode = false;
         const workflows: WorkflowDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
             const wf = this.parseWorkflow();
@@ -105,7 +333,19 @@ export class Parser {
 
     /** Parse a single workflow (backward compat). */
     parseSingle(): { ast: WorkflowDecl | undefined; errors: ParseError[] } {
+        this.singleWorkflowMode = true;
         const ast = this.parseWorkflow();
+        // Trailing tokens past the workflow are a parse error — without
+        // this check, stray punctuation (e.g. an extra `}`) or a second
+        // unintentional `workflow` would be silently dropped on emit.
+        const next = this.peek();
+        if (next.kind !== TokenKind.EOF) {
+            this.error(
+                `Unexpected token after workflow: ${next.kind} (${JSON.stringify(
+                    next.value,
+                )})`,
+            );
+        }
         return { ast, errors: this.errors };
     }
 
@@ -120,6 +360,7 @@ export class Parser {
 
     private advance(): Token {
         const t = this.tokens[this.pos];
+        this.lastToken = t;
         if (this.pos < this.tokens.length - 1) {
             this.pos++;
         }
@@ -146,6 +387,37 @@ export class Parser {
         this.errors.push({ message: msg, line: t.line, col: t.col });
     }
 
+    /**
+     * Validate escape sequences inside a string or template-part token
+     * by running the decoder and reporting any errors against the
+     * source position of the offending escape. The decoded value is
+     * discarded; the formatter and emitter consume the raw text
+     * directly.
+     */
+    private checkLiteralEscapes(
+        raw: string,
+        quote: '"' | "'" | "`",
+        tok: Token,
+    ): void {
+        const { errors } = decodeStringLiteral(raw, quote);
+        if (errors.length === 0) return;
+        // The token's line/col point at the opening delimiter (or at the
+        // `}` that begins a template middle/tail). Skip the one-character
+        // delimiter when computing the escape position. Raw text never
+        // contains escape *expansions*, but template parts can contain
+        // literal newlines, so walk the raw to translate offsetInRaw to
+        // (line, col).
+        for (const e of errors) {
+            const { line, col } = offsetToLineCol(
+                raw,
+                e.offsetInRaw,
+                tok.line,
+                tok.col + 1,
+            );
+            this.errors.push({ message: e.message, line, col });
+        }
+    }
+
     private loc(): SourceLocation {
         const t = this.peek();
         return { line: t.line, col: t.col, offset: t.offset };
@@ -159,6 +431,7 @@ export class Parser {
     // ---- Workflow ----
 
     private parseWorkflow(): WorkflowDecl | undefined {
+        const leadingComments = this.takeLeadingComments();
         const l = this.loc();
         if (this.peek().kind !== TokenKind.Workflow) {
             this.error(`Expected 'workflow', got ${this.peek().kind}`);
@@ -167,35 +440,63 @@ export class Parser {
         }
         this.advance();
         const name = this.expect(TokenKind.Identifier).value;
-        this.expect(TokenKind.LParen);
-        const params = this.parseParamList();
-        this.expect(TokenKind.RParen);
+        const lparen = this.expect(TokenKind.LParen);
+        const { params, innerComments: paramInnerComments } =
+            this.parseParamList();
+        const rparen = this.expect(TokenKind.RParen);
+        const paramListMultiLine =
+            (params.length > 0 && params[0].loc.line !== lparen.line) ||
+            params.some(
+                (p, i) => i > 0 && p.loc.line !== params[i - 1].loc.line,
+            ) ||
+            (params.length === 0 && rparen.line !== lparen.line);
         this.expect(TokenKind.Colon);
         const returnType = this.parseTypeExpr();
         this.expect(TokenKind.LBrace);
-        const body = this.parseStatements();
+        const { stmts: body, innerComments } =
+            this.parseStatementsCapturingInner();
         this.expect(TokenKind.RBrace);
-        return { kind: "WorkflowDecl", name, params, returnType, body, loc: l };
+        // Capture any comments that appear AFTER the closing `}` (and
+        // before EOF). They have no statement to attach to, so they go
+        // on the workflow's trailingComments.
+        const trailingComments =
+            this.singleWorkflowMode || this.peek().kind === TokenKind.EOF
+                ? this.takeLeadingComments()
+                : undefined;
+        const decl: WorkflowDecl = {
+            kind: "WorkflowDecl",
+            name,
+            params,
+            returnType,
+            body,
+            loc: l,
+        };
+        if (leadingComments) decl.leadingComments = leadingComments;
+        if (innerComments) decl.innerComments = innerComments;
+        if (paramInnerComments) decl.paramInnerComments = paramInnerComments;
+        if (paramListMultiLine) decl.paramListMultiLine = true;
+        if (trailingComments) decl.trailingComments = trailingComments;
+        return decl;
     }
 
-    private parseParamList(): ParamDecl[] {
-        const params: ParamDecl[] = [];
-        if (this.peek().kind === TokenKind.RParen) return params;
-        params.push(this.parseParam());
-        while (this.peek().kind === TokenKind.Comma) {
-            this.advance();
-            if (this.peek().kind === TokenKind.RParen) break;
-            params.push(this.parseParam());
-        }
-        return params;
-    }
-
-    private parseParam(): ParamDecl {
-        const l = this.loc();
-        const name = this.expect(TokenKind.Identifier).value;
-        this.expect(TokenKind.Colon);
-        const type = this.parseTypeExpr();
-        return { name, type, loc: l };
+    private parseParamList(): {
+        params: ParamDecl[];
+        innerComments: Comment[] | undefined;
+    } {
+        const { items, innerComments } = this.parseCommaListWithComments(
+            TokenKind.RParen,
+            (leading) => {
+                const l = this.loc();
+                const name = this.expect(TokenKind.Identifier).value;
+                this.expect(TokenKind.Colon);
+                const type = this.parseTypeExpr();
+                const decl: ParamDecl = { name, type, loc: l };
+                if (leading) decl.leadingComments = leading;
+                if (this.lastToken) decl.endLine = this.lastToken.line;
+                return decl;
+            },
+        );
+        return { params: items, innerComments };
     }
 
     // ---- Types ----
@@ -222,38 +523,59 @@ export class Parser {
 
     private parseObjectType(): TypeExpr {
         const l = this.loc();
-        this.expect(TokenKind.LBrace);
-        const fields: {
-            name: string;
-            type: TypeExpr;
-            optional: boolean;
-            loc: SourceLocation;
-        }[] = [];
-        while (
-            this.peek().kind !== TokenKind.RBrace &&
-            this.peek().kind !== TokenKind.EOF
-        ) {
-            const fl = this.loc();
-            const fname = this.expect(TokenKind.Identifier).value;
-            let optional = false;
-            if (this.peek().kind === TokenKind.QuestionMark) {
-                this.advance();
-                optional = true;
-            }
-            this.expect(TokenKind.Colon);
-            const ftype = this.parseTypeExpr();
-            fields.push({ name: fname, type: ftype, optional, loc: fl });
-            if (this.peek().kind === TokenKind.Comma) {
-                this.advance();
-            }
-        }
-        this.expect(TokenKind.RBrace);
-        return { kind: "ObjectType", fields, loc: l };
+        const lbrace = this.expect(TokenKind.LBrace);
+        const { items: fields, innerComments } =
+            this.parseCommaListWithComments<import("./ast.js").ObjectTypeField>(
+                TokenKind.RBrace,
+                (leading) => {
+                    const fl = this.loc();
+                    const fname = this.expect(TokenKind.Identifier).value;
+                    let optional = false;
+                    if (this.peek().kind === TokenKind.QuestionMark) {
+                        this.advance();
+                        optional = true;
+                    }
+                    this.expect(TokenKind.Colon);
+                    const ftype = this.parseTypeExpr();
+                    const field: import("./ast.js").ObjectTypeField = {
+                        name: fname,
+                        type: ftype,
+                        optional,
+                        loc: fl,
+                    };
+                    if (leading) field.leadingComments = leading;
+                    if (this.lastToken) field.endLine = this.lastToken.line;
+                    return field;
+                },
+            );
+        const rbrace = this.expect(TokenKind.RBrace);
+        const multiLine =
+            (fields.length > 0 && fields[0].loc.line !== lbrace.line) ||
+            fields.some(
+                (f, i) => i > 0 && f.loc.line !== fields[i - 1].loc.line,
+            ) ||
+            (fields.length === 0 && rbrace.line !== lbrace.line);
+        const t: import("./ast.js").ObjectType = {
+            kind: "ObjectType",
+            fields,
+            loc: l,
+        };
+        if (multiLine) t.multiLine = true;
+        if (innerComments) t.innerComments = innerComments;
+        return t;
     }
 
     // ---- Statements ----
 
-    private parseStatements(): Statement[] {
+    /**
+     * Like `parseStatements()` but returns any trailing comments that
+     * could not be attached to a statement (because the block is empty)
+     * so the caller can surface them on its container node.
+     */
+    private parseStatementsCapturingInner(): {
+        stmts: Statement[];
+        innerComments: Comment[] | undefined;
+    } {
         const stmts: Statement[] = [];
         while (
             this.peek().kind !== TokenKind.RBrace &&
@@ -262,10 +584,26 @@ export class Parser {
             const s = this.parseStatement();
             if (s) stmts.push(s);
         }
-        return stmts;
+        const innerComments = this.finalizeBlock(stmts);
+        return { stmts, innerComments };
     }
 
     private parseStatement(): Statement | undefined {
+        const leadingComments = this.takeLeadingComments();
+        const stmt = this.parseStatementInner();
+        if (stmt) {
+            if (leadingComments) stmt.leadingComments = leadingComments;
+            const endLine = this.lastToken?.line;
+            if (endLine !== undefined) {
+                stmt.endLine = endLine;
+                const trailing = this.takeInlineTrailingComments(endLine);
+                if (trailing) stmt.trailingComments = trailing;
+            }
+        }
+        return stmt;
+    }
+
+    private parseStatementInner(): Statement | undefined {
         switch (this.peek().kind) {
             case TokenKind.Const:
                 return this.parseConstOrDestructuring();
@@ -288,12 +626,15 @@ export class Parser {
                 // as expression statements. The emitter handles them.
                 // Bare task calls are allowed for side effects
                 // (e.g., audit.log(data) in an if body). Wrap in a const
-                // with a synthetic name.
+                // with a synthetic name. The `__synthetic_` prefix is
+                // reserved (see `parseConstStatement`) so this name can
+                // never collide with a user-declared binding.
                 return {
                     kind: "ConstStatement",
-                    name: `_${expr.loc.line}_${expr.loc.col}`,
+                    name: `__synthetic_${expr.loc.line}_${expr.loc.col}`,
                     value: expr,
                     loc: expr.loc,
+                    isSynthetic: true,
                 };
             }
             default:
@@ -312,7 +653,18 @@ export class Parser {
             return this.parseDestructuringConst(l);
         }
 
-        const name = this.expect(TokenKind.Identifier).value;
+        const nameTok = this.expect(TokenKind.Identifier);
+        const name = nameTok.value;
+        // The `__synthetic_` prefix is reserved for the formatter's
+        // bare-expression wrappers (see parseStatement on Identifier).
+        // Reject user code that tries to shadow it so format -> parse
+        // -> format can never silently rewrite a real binding into a
+        // bare expression.
+        if (name.startsWith("__synthetic_")) {
+            this.error(
+                `const name \`${name}\` uses the reserved \`__synthetic_\` prefix`,
+            );
+        }
         let typeAnnotation: TypeExpr | undefined;
         if (this.peek().kind === TokenKind.Colon) {
             this.advance();
@@ -349,22 +701,55 @@ export class Parser {
         const condition = this.parseExpression();
         this.expect(TokenKind.RParen);
         this.expect(TokenKind.LBrace);
-        const then = this.parseStatements();
-        this.expect(TokenKind.RBrace);
+        const { stmts: then, innerComments: thenInner } =
+            this.parseStatementsCapturingInner();
+        const thenRBrace = this.expect(TokenKind.RBrace);
         let else_: Statement[] | undefined;
+        let elseInner: Comment[] | undefined;
+        let elseLeading: Comment[] | undefined;
+        let elseOnNewLine: boolean | undefined;
+        // Capture any comments that appear between the `}` of the then
+        // block and the `else` keyword. We have to peek through comments
+        // first to know whether an `else` is actually present; if not,
+        // we roll back so the outer parseStatement can pick them up as
+        // the IfStatement's own inline/trailing comments.
+        const snapshot = this.commentIdx;
+        const beforeElse = this.takeLeadingComments();
         if (this.peek().kind === TokenKind.Else) {
-            this.advance();
+            if (beforeElse) elseLeading = beforeElse;
+            const elseTok = this.advance();
+            // Track original layout: was `else` on the same line as `}`?
+            if (elseTok.line !== thenRBrace.line) elseOnNewLine = true;
             if (this.peek().kind === TokenKind.If) {
                 // else if: wrap in single-element array
                 const elseIf = this.parseIfStmt();
                 else_ = [elseIf];
             } else {
                 this.expect(TokenKind.LBrace);
-                else_ = this.parseStatements();
+                const r = this.parseStatementsCapturingInner();
+                else_ = r.stmts;
+                elseInner = r.innerComments;
                 this.expect(TokenKind.RBrace);
             }
+        } else if (beforeElse) {
+            // No else keyword. Roll back so the outer parseStatement
+            // can re-take these comments as the IfStatement's own
+            // inline-trailing / leading-of-next-stmt comments,
+            // preserving prior round-2 behavior.
+            this.commentIdx = snapshot;
         }
-        return { kind: "IfStatement", condition, then, else_, loc: l };
+        const result: IfStatement = {
+            kind: "IfStatement",
+            condition,
+            then,
+            else_,
+            loc: l,
+        };
+        if (thenInner) result.thenInnerComments = thenInner;
+        if (elseInner) result.elseInnerComments = elseInner;
+        if (elseLeading) result.elseLeadingComments = elseLeading;
+        if (elseOnNewLine) result.elseOnNewLine = true;
+        return result;
     }
 
     private parseSwitchStmt(): SwitchStatement {
@@ -377,27 +762,89 @@ export class Parser {
 
         const arms: SwitchArm[] = [];
         let default_: Statement[] | undefined;
+        let defaultIndex: number | undefined;
+        let defaultInnerComments: Comment[] | undefined;
+        let defaultLeadingComments: Comment[] | undefined;
+        let innerComments: Comment[] | undefined;
 
         while (
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
+            // Drain any comments that appear before the next `case`/`default`
+            // keyword. They attach as leadingComments on that arm.
+            const beforeKeyword = this.takeLeadingComments();
             if (this.peek().kind === TokenKind.Case) {
                 const armLoc = this.loc();
                 this.advance(); // case
                 const value = this.parsePrimaryExpr();
                 this.expect(TokenKind.Colon);
-                const body = this.parseSwitchArmBody();
-                arms.push({ value, body, loc: armLoc });
+                const { stmts: body, innerComments: armInner } =
+                    this.parseSwitchArmBody();
+                const arm: SwitchArm = { value, body, loc: armLoc };
+                if (beforeKeyword) arm.leadingComments = beforeKeyword;
+                if (armInner) arm.innerComments = armInner;
+                arms.push(arm);
             } else if (this.peek().kind === TokenKind.Default) {
                 this.advance(); // default
                 this.expect(TokenKind.Colon);
-                default_ = this.parseSwitchArmBody();
+                if (beforeKeyword) defaultLeadingComments = beforeKeyword;
+                // Record the position relative to the case arms parsed so
+                // far so the formatter can reconstruct the original source
+                // order (fallthrough makes this semantically meaningful).
+                defaultIndex = arms.length;
+                const { stmts, innerComments: defInner } =
+                    this.parseSwitchArmBody();
+                default_ = stmts;
+                if (defInner) defaultInnerComments = defInner;
             } else {
+                // No arm to attach the comments to and no recognisable
+                // keyword — surface as switch-level innerComments. This
+                // also covers the fully empty `switch (x) { /* note */ }`
+                // case, where the while-loop body never enters the
+                // case/default branches.
+                if (beforeKeyword) {
+                    innerComments = [
+                        ...(innerComments ?? []),
+                        ...beforeKeyword,
+                    ];
+                }
                 this.error(
                     `Expected 'case' or 'default' in switch, got ${this.peek().kind}`,
                 );
                 this.advance();
+            }
+        }
+        // Capture any remaining comments before `}` that didn't get attached
+        // to an arm (empty switch body, or trailing comments after the last
+        // arm's body that finalizeBlock didn't already pick up).
+        const trailingBeforeRBrace = this.takeLeadingComments();
+        if (trailingBeforeRBrace) {
+            if (arms.length === 0 && default_ === undefined) {
+                innerComments = [
+                    ...(innerComments ?? []),
+                    ...trailingBeforeRBrace,
+                ];
+            } else {
+                // After the last arm, route to that arm's innerComments
+                // when its body is empty, otherwise into switch-level
+                // innerComments as a safety net.
+                const lastArm =
+                    default_ !== undefined &&
+                    (defaultIndex ?? arms.length) >= arms.length
+                        ? null
+                        : arms[arms.length - 1];
+                if (lastArm && lastArm.body.length === 0) {
+                    lastArm.innerComments = [
+                        ...(lastArm.innerComments ?? []),
+                        ...trailingBeforeRBrace,
+                    ];
+                } else {
+                    innerComments = [
+                        ...(innerComments ?? []),
+                        ...trailingBeforeRBrace,
+                    ];
+                }
             }
         }
 
@@ -408,12 +855,27 @@ export class Parser {
             arms,
             loc: l,
         };
-        if (default_) result.default_ = default_;
+        if (default_) {
+            result.default_ = default_;
+            if (defaultIndex !== undefined) {
+                result.defaultIndex = defaultIndex;
+            }
+        }
+        if (defaultInnerComments) {
+            result.defaultInnerComments = defaultInnerComments;
+        }
+        if (defaultLeadingComments) {
+            result.defaultLeadingComments = defaultLeadingComments;
+        }
+        if (innerComments) result.innerComments = innerComments;
         return result;
     }
 
     /** Parse statements until we hit another case/default/} */
-    private parseSwitchArmBody(): Statement[] {
+    private parseSwitchArmBody(): {
+        stmts: Statement[];
+        innerComments: Comment[] | undefined;
+    } {
         this.inSwitchDepth++;
         const stmts: Statement[] = [];
         while (
@@ -425,8 +887,39 @@ export class Parser {
             const s = this.parseStatement();
             if (s) stmts.push(s);
         }
+        // For switch arms we differ from generic finalizeBlock: only
+        // capture inline-trailing comments (same source line as the last
+        // statement's endLine) for the last stmt. Own-line comments that
+        // sit between the last stmt and the next `case`/`default`/`}`
+        // are LEFT for parseSwitchStmt's outer loop to take as the next
+        // arm's `leadingComments`. This is the convention used in TS/JS
+        // and what the user expects per the round-3-pass-2 invariant.
+        let innerComments: Comment[] | undefined;
+        if (stmts.length === 0) {
+            // Empty arm: capture EVERYTHING here so the comment lives
+            // on the arm itself (no other arm to attach to). But: only
+            // do so if the next token is the arm-terminating `}` of the
+            // switch body. If the next token is `case` or `default`,
+            // those comments belong as leadingComments of the NEXT arm,
+            // not as innerComments of the empty current arm.
+            const next = this.peek().kind;
+            if (next === TokenKind.RBrace || next === TokenKind.EOF) {
+                innerComments = this.takeLeadingComments();
+            }
+        } else {
+            const last = stmts[stmts.length - 1];
+            if (last.endLine !== undefined) {
+                const inline = this.takeInlineTrailingComments(last.endLine);
+                if (inline) {
+                    last.trailingComments = [
+                        ...(last.trailingComments ?? []),
+                        ...inline,
+                    ];
+                }
+            }
+        }
         this.inSwitchDepth--;
-        return stmts;
+        return { stmts, innerComments };
     }
 
     private parseReturnStmt(): ReturnStatement {
@@ -614,14 +1107,26 @@ export class Parser {
 
         // String
         if (t.kind === TokenKind.StringLiteral) {
-            const v = this.advance();
-            return { kind: "StringLiteralExpr", value: v.value, loc: l };
+            const v = this.advance() as StringToken;
+            this.checkLiteralEscapes(v.value, v.quote, v);
+            return {
+                kind: "StringLiteralExpr",
+                raw: v.value,
+                quote: v.quote,
+                loc: l,
+            };
         }
 
         // Template literal (no interpolation): `text`
         if (t.kind === TokenKind.TemplateNoSub) {
             const v = this.advance();
-            return { kind: "StringLiteralExpr", value: v.value, loc: l };
+            this.checkLiteralEscapes(v.value, "`", v);
+            return {
+                kind: "StringLiteralExpr",
+                raw: v.value,
+                quote: "`",
+                loc: l,
+            };
         }
 
         // Template literal (with interpolation): `text${expr}...`
@@ -750,9 +1255,12 @@ export class Parser {
     ): ArrowPlaceholder {
         if (this.peek().kind === TokenKind.LBrace) {
             this.advance(); // {
-            const body = this.parseStatements();
+            const { stmts: body, innerComments } =
+                this.parseStatementsCapturingInner();
             this.expect(TokenKind.RBrace);
-            return { _isArrow: true, params, body };
+            const ph: ArrowPlaceholder = { _isArrow: true, params, body };
+            if (innerComments) ph.bodyInnerComments = innerComments;
+            return ph;
         }
         // Single expression body: wrap in return statement
         const expr = this.parseExpression();
@@ -834,17 +1342,26 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
 
-        let fallback: { param: string; body: Statement[] } | undefined;
+        let fallback:
+            | {
+                  param: string | undefined;
+                  body: Statement[];
+                  bodyInnerComments?: Comment[];
+              }
+            | undefined;
         if (this.peek().kind === TokenKind.Comma) {
             this.advance();
             if (this.peek().kind !== TokenKind.RParen) {
                 const fbArrow = this.parseArrowArg();
                 const fbParams = this.extractArrowParams(fbArrow);
                 fallback = {
-                    param: fbParams[0] ?? "err",
+                    param: fbParams[0],
                     body: this.extractArrowBody(fbArrow),
                 };
+                const fbInner = this.extractArrowBodyInner(fbArrow);
+                if (fbInner) fallback.bodyInnerComments = fbInner;
             }
         }
 
@@ -856,6 +1373,7 @@ export class Parser {
             loc: l,
         };
         if (fallback) result.fallback = fallback;
+        if (bodyInner) result.bodyInnerComments = bodyInner;
         return result;
     }
 
@@ -866,14 +1384,17 @@ export class Parser {
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
-        return {
+        const result: MapNode = {
             kind: "MapNode",
             collection,
             param: params[0] ?? "item",
             body,
             loc: l,
         };
+        if (bodyInner) result.bodyInnerComments = bodyInner;
+        return result;
     }
 
     /** filter(collection, (item) => { body }) */
@@ -883,19 +1404,25 @@ export class Parser {
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
-        return {
+        const result: FilterNode = {
             kind: "FilterNode",
             collection,
             param: params[0] ?? "item",
             body,
             loc: l,
         };
+        if (bodyInner) result.bodyInnerComments = bodyInner;
+        return result;
     }
 
     /** parallel(() => expr1, () => expr2, ..., { maxConcurrency: n }?) */
     private parseParallelBuiltin(l: SourceLocation): Expr {
-        const bodies: { body: Statement[] }[] = [];
+        const bodies: {
+            body: Statement[];
+            bodyInnerComments?: Comment[];
+        }[] = [];
         let maxConcurrency: Expr | undefined;
 
         while (
@@ -916,7 +1443,13 @@ export class Parser {
             }
 
             const arrow = this.parseArrowArg();
-            bodies.push({ body: this.extractArrowBody(arrow) });
+            const branch: { body: Statement[]; bodyInnerComments?: Comment[] } =
+                {
+                    body: this.extractArrowBody(arrow),
+                };
+            const inner = this.extractArrowBodyInner(arrow);
+            if (inner) branch.bodyInnerComments = inner;
+            bodies.push(branch);
             if (this.peek().kind === TokenKind.Comma) {
                 this.advance();
             }
@@ -934,6 +1467,7 @@ export class Parser {
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
+        const bodyInner = this.extractArrowBodyInner(bodyArrow);
 
         let maxConcurrency: Expr | undefined;
         if (this.peek().kind === TokenKind.Comma) {
@@ -958,6 +1492,7 @@ export class Parser {
             loc: l,
         };
         if (maxConcurrency) result.maxConcurrency = maxConcurrency;
+        if (bodyInner) result.bodyInnerComments = bodyInner;
         return result;
     }
 
@@ -967,6 +1502,14 @@ export class Parser {
             return arg.body;
         }
         return [{ kind: "ReturnStatement", value: arg, loc: arg.loc }];
+    }
+
+    /** Extract body inner comments (if any) from a parsed arrow. */
+    private extractArrowBodyInner(
+        arg: Expr | ArrowPlaceholder,
+    ): Comment[] | undefined {
+        if (this.isArrow(arg)) return arg.bodyInnerComments;
+        return undefined;
     }
 
     /** Extract parameter names from a parsed arrow. */
@@ -985,22 +1528,25 @@ export class Parser {
 
     private parseTemplateLiteral(): Expr {
         const l = this.loc();
-        const parts: string[] = [];
+        const rawParts: string[] = [];
         const expressions: Expr[] = [];
 
         const head = this.expect(TokenKind.TemplateHead);
-        parts.push(head.value);
+        rawParts.push(head.value);
+        this.checkLiteralEscapes(head.value, "`", head);
 
         while (true) {
             expressions.push(this.parseExpression());
 
             if (this.peek().kind === TokenKind.TemplateTail) {
                 const tail = this.advance();
-                parts.push(tail.value);
+                rawParts.push(tail.value);
+                this.checkLiteralEscapes(tail.value, "`", tail);
                 break;
             } else if (this.peek().kind === TokenKind.TemplateMiddle) {
                 const mid = this.advance();
-                parts.push(mid.value);
+                rawParts.push(mid.value);
+                this.checkLiteralEscapes(mid.value, "`", mid);
             } else {
                 this.error(
                     "Expected template continuation or closing backtick",
@@ -1011,7 +1557,7 @@ export class Parser {
 
         return {
             kind: "TemplateLiteralExpr",
-            parts,
+            rawParts,
             expressions,
             loc: l,
         };

@@ -15,7 +15,16 @@ import { getActionContext } from "../../../execute/actionContext.js";
 import { emitActionResult } from "../../../execute/actionHandlers.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
-import { openai as ai, getChatModelNames } from "aiclient";
+import {
+    openai as ai,
+    getChatModelNames,
+    getCopilotClient,
+    getActiveModelProvider,
+    setActiveModelProvider,
+    getRuntimeConfig,
+    PROVIDER_MODES,
+    type ProviderMode,
+} from "aiclient";
 import { SessionOptions } from "../../session.js";
 import chalk from "chalk";
 import {
@@ -1847,6 +1856,172 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
     },
 };
 
+function isProviderMode(s: string): s is ProviderMode {
+    return (PROVIDER_MODES as readonly string[]).includes(s);
+}
+
+function effectiveProvider(): ProviderMode {
+    return getActiveModelProvider() ?? "azure";
+}
+
+async function listModelsForProvider(
+    provider: ProviderMode,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<void> {
+    const names = await getChatModelNames();
+    const matched: string[] = [];
+    switch (provider) {
+        case "azure":
+            // Azure entries in getChatModelNames have no prefix.
+            for (const n of names) {
+                if (
+                    !n.startsWith("openai:") &&
+                    !n.startsWith("ollama:") &&
+                    !n.startsWith("copilot:")
+                ) {
+                    matched.push(n);
+                }
+            }
+            break;
+        case "openai":
+            for (const n of names) if (n.startsWith("openai:")) matched.push(n);
+            break;
+        case "ollama":
+            for (const n of names) if (n.startsWith("ollama:")) matched.push(n);
+            break;
+        case "copilot":
+            for (const n of names)
+                if (n.startsWith("copilot:")) matched.push(n);
+            break;
+    }
+
+    const lines = [`Models available under '${provider}':`];
+    if (matched.length === 0) {
+        lines.push("  (none configured)");
+    } else {
+        for (const m of matched) lines.push(`  ${m}`);
+    }
+
+    // For copilot, also surface auth status so users can debug "why
+    // does the list look short?" without a second command.
+    if (provider === "copilot") {
+        try {
+            const client = await getCopilotClient();
+            const status = await client.getAuthStatus();
+            lines.push("");
+            lines.push(
+                `Copilot CLI: ${status.isAuthenticated ? "authenticated" : "NOT authenticated"}` +
+                    (status.login ? ` (${status.login})` : ""),
+            );
+            if (!status.isAuthenticated) {
+                lines.push(
+                    "Run 'copilot auth login' or 'gh auth login --scopes copilot' to sign in.",
+                );
+            }
+        } catch (e) {
+            lines.push("");
+            lines.push(
+                `Copilot CLI unavailable: ${e instanceof Error ? e.message : String(e)}`,
+            );
+        }
+    }
+    displayResult(lines.join("\n"), context);
+}
+
+class ConfigModelProviderCommandHandler implements CommandHandler {
+    public readonly description =
+        "Show or set the active model provider (azure | openai | ollama | copilot)";
+    public readonly parameters = {
+        args: {
+            name: {
+                description:
+                    "Provider to activate (azure | openai | ollama | copilot)",
+                optional: true,
+            },
+            action: {
+                description: "Optional 'list' to list provider's models",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const name = params.args.name;
+        const action = params.args.action;
+
+        // Bare: show available providers, mark current.
+        if (name === undefined) {
+            const current = effectiveProvider();
+            const yamlConfigured = getRuntimeConfig().modelProvider;
+            const lines = ["Available model providers:"];
+            for (const m of PROVIDER_MODES) {
+                const marker = m === current ? " (current)" : "";
+                lines.push(`  ${m}${marker}`);
+            }
+            if (yamlConfigured === undefined) {
+                lines.push("");
+                lines.push(
+                    "No override is active by default — resolution falls back to Azure.",
+                );
+            }
+            displayResult(lines.join("\n"), context);
+            return;
+        }
+
+        if (!isProviderMode(name)) {
+            throw new Error(
+                `Invalid provider '${name}'. Valid providers: ${PROVIDER_MODES.join(", ")}`,
+            );
+        }
+
+        // <name> list: list provider's models.
+        if (action !== undefined) {
+            if (action !== "list") {
+                throw new Error(
+                    `Invalid action '${action}'. Only 'list' is supported.`,
+                );
+            }
+            await listModelsForProvider(name, context);
+            return;
+        }
+
+        // <name>: set active provider.
+        const previous = getActiveModelProvider();
+        setActiveModelProvider(name);
+        // Clear cached translators so the next translation picks up the
+        // new provider mapping.
+        context.sessionContext.agentContext.translatorCache.clear();
+
+        const previousLabel = previous ?? "azure (default)";
+        displayResult(`Model provider: ${previousLabel} → ${name}`, context);
+    }
+
+    public async getCompletion(
+        _context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        const completions: CompletionGroup[] = [];
+        for (const n of names) {
+            if (n === "name") {
+                completions.push({
+                    name: n,
+                    completions: [...PROVIDER_MODES],
+                });
+            } else if (n === "action") {
+                completions.push({
+                    name: n,
+                    completions: ["list"],
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -1889,6 +2064,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             translation: configTranslationCommandHandlers,
             explainer: configExplainerCommandHandlers,
             execution: configExecutionCommandHandlers,
+            modelProvider: new ConfigModelProviderCommandHandler(),
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {

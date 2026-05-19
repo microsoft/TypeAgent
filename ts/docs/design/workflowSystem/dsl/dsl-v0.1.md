@@ -894,19 +894,94 @@ offset }`). This enables:
 
 ### Comments
 
-The AST preserves comments. Each node has an optional `leadingComments` array
-of `Comment { text, pos }` attached to the following AST node. Comments are:
+The AST preserves comments. Comments come in three flavors based on
+where they are anchored:
+
+- `leadingComments` (on any AST node): comments that appear immediately
+  before the node, attached to the following node. `ParamDecl` also
+  carries `leadingComments` and `trailingComments` so comments
+  between, before, or after individual parameters round-trip.
+- `trailingComments` (on each `Statement`): comments that appear after a
+  statement. A comment is considered _inline trailing_ if its source line
+  equals the statement's `endLine` (e.g. `return x; // why`); otherwise it
+  is a _block-end trailing_ comment (a comment that appears between the
+  last statement of a block and the block's closing `}`, `case`, or
+  `default`). Inline and block-end trailing comments share the same
+  `trailingComments` array — the renderer distinguishes them by
+  comparing each comment's line against the statement's `endLine`.
+- Per-position **inner** comment buckets carry comments that appear
+  _inside_ an otherwise-empty block. Every block-bearing node has its
+  own field so the comment never silently drops:
+  - `WorkflowDecl.innerComments` — empty workflow body.
+  - `WorkflowDecl.paramInnerComments` — inside `(` … `)` when the
+    parameter list is empty.
+  - `IfStatement.thenInnerComments` / `elseInnerComments` — empty
+    `then` / `else` block.
+  - `IfStatement.elseLeadingComments` — between the `}` of the `then`
+    block and the `else` keyword (e.g. `} /* note */ else`).
+  - `SwitchStatement.defaultInnerComments` — empty `default:` arm.
+  - `SwitchStatement.innerComments` — comments inside an empty
+    `switch (x) { }` body, and any pre-first-arm comments.
+  - `SwitchStatement.defaultLeadingComments` — comments immediately
+    before the `default` keyword.
+  - `SwitchArm.innerComments` — empty `case` arm body.
+  - `SwitchArm.leadingComments` — comments immediately before the
+    `case` keyword (e.g. a `// before case 2` line).
+  - `ObjectType.innerComments` — comments inside an empty object
+    type body (`{ /* shape: empty */ }`).
+  - `ObjectTypeField.leadingComments` / `trailingComments` —
+    comments on each side of an object-type field's `,`. The field
+    also carries an `endLine` used for inline-vs-own-line trailing
+    placement.
+  - `AttemptsNode.bodyInnerComments` / `fallback.bodyInnerComments`,
+    `MapNode.bodyInnerComments`, `FilterNode.bodyInnerComments`,
+    `ParallelMapNode.bodyInnerComments`, and
+    `ParallelNode.bodies[i].bodyInnerComments`.
+  - `WorkflowDecl.trailingComments` — comments that appear AFTER the
+    workflow's closing `}` (between the brace and EOF). No statement
+    can carry them, so they hang off the declaration itself.
+
+Each comment is a `Comment { text, pos }` where `text` includes the
+delimiters (`//…` or `/* … */`). Statements and `ParamDecl` carry an
+additional `endLine` field — the source line of the node's last token
+— used solely to drive inline-vs-own-line rendering of trailing
+comments.
+
+Supported comment forms:
 
 - `//` line comments
 - `/* */` block comments
 
-The text serializer (AST to source) emits comments in their original positions.
-The visual editor can display comments as annotations or tooltips on the
-associated visual element. This ensures round-tripping (source to AST to source)
-preserves comments. _(from principle 6: AST is canonical)_
+The text serializer (AST → source) emits comments in their attached
+positions. Inline trailing comments are rendered on the same line as
+the host node (after the terminator), block-end trailing comments are
+rendered on their own indented line, and the per-position inner
+buckets are emitted on their own indented lines inside the empty
+block (or `(` `)` for `paramInnerComments`). This ensures
+round-tripping (source → AST → source → AST) preserves comment
+attachment. _(from principle 6: AST is canonical)_
 
 No ArrowFunction in the AST: the parser dissolves arrow function syntax into
 the parent built-in node's `body` field directly.
+
+### Layout-preservation flags
+
+Three AST flags let the text serializer preserve the source's
+choice of inline vs. multi-line layout for constructs that have
+both:
+
+- `WorkflowDecl.paramListMultiLine` — `true` when the source put
+  the parameter list across multiple lines.
+- `ObjectType.multiLine` — same for object-type literals.
+- `IfStatement.elseOnNewLine` — `true` when the source put the
+  `else` keyword on a different line from the preceding `}`.
+
+The serializer respects these flags unconditionally and otherwise
+falls back to a `printWidth`-driven decision (`FormatOptions.printWidth`,
+default 100): inline if the projected single-line emission fits,
+multi-line otherwise. Comments that cannot live in the inline
+layout (e.g. a `//` line comment between parameters) always force
+multi-line regardless of the flags.
 
 ---
 
