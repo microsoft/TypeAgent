@@ -195,13 +195,10 @@ export function getAppPath(): string {
 }
 
 /**
- * Resolve the config file to pass via --env.
- *
- * After PR #2342 the canonical key-config format is `config.local.yaml`
- * (written by `tools/scripts/getKeys.mjs`), and the legacy `.env` is only
- * produced when `--dotenv` is explicitly passed to getKeys. Prefer the YAML
- * file when present so smoke tests work in both CI (YAML-only) and local
- * developer environments that may still have a `.env`.
+ * Resolve the config file to pass via --env. Prefers `config.local.yaml`
+ * (the canonical key-config format) and falls back to a legacy `.env` so
+ * smoke tests work in both YAML-only and legacy developer environments.
+ * Throws if neither file is present.
  */
 function resolveTestConfigPath(appPath: string): string {
     const yamlPath = path.resolve(appPath, "../../config.local.yaml");
