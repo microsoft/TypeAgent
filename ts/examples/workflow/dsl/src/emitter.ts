@@ -46,7 +46,9 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
+import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
 
 export interface TaskSchemaInfo {
     name: string;
@@ -648,7 +650,7 @@ export class Emitter {
     private emitExpr(expr: Expr, scope: ScopeContext): Template {
         switch (expr.kind) {
             case "StringLiteralExpr":
-                return expr.value;
+                return decodeStringLiteral(expr.raw, expr.quote).value;
             case "NumberLiteralExpr":
                 return expr.value;
             case "BooleanLiteralExpr":
@@ -833,13 +835,13 @@ export class Emitter {
             return undefined;
         }
 
-        let templateStr = expr.parts[0];
+        let templateStr = decodeTemplatePart(expr.rawParts[0]).value;
         const vars: Record<string, Template> = {};
         for (let i = 0; i < expr.expressions.length; i++) {
             const innerExpr = expr.expressions[i];
             const varName = this.templateVarName(innerExpr, i);
             templateStr += `{{${varName}}}`;
-            templateStr += expr.parts[i + 1];
+            templateStr += decodeTemplatePart(expr.rawParts[i + 1]).value;
             vars[varName] = this.emitExpr(innerExpr, scope);
         }
 
@@ -1294,10 +1296,13 @@ export class Emitter {
         let onError: string | undefined;
         if (expr.fallback) {
             const fbScope = this.childScope(scope);
-            fbScope.bindings.set(expr.fallback.param, {
-                kind: "loopInput",
-                nodeId: "error",
-            });
+            fbScope.bindings.set(
+                expr.fallback.param ?? DEFAULT_FALLBACK_PARAM,
+                {
+                    kind: "loopInput",
+                    nodeId: "error",
+                },
+            );
             for (const s of expr.fallback.body) {
                 this.emitStatement(s, fbScope);
             }
@@ -2359,7 +2364,7 @@ export class Emitter {
     private constExprToValue(expr: Expr): unknown {
         switch (expr.kind) {
             case "StringLiteralExpr":
-                return expr.value;
+                return decodeStringLiteral(expr.raw, expr.quote).value;
             case "NumberLiteralExpr":
                 return expr.value;
             case "BooleanLiteralExpr":

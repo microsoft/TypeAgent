@@ -994,6 +994,37 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  examples/workflow/compiler:
+    dependencies:
+      workflow-dsl:
+        specifier: workspace:*
+        version: link:../dsl
+      workflow-engine:
+        specifier: workspace:*
+        version: link:../engine
+      workflow-model:
+        specifier: workspace:*
+        version: link:../model
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.15.18
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/workflow/dsl:
     dependencies:
       workflow-model:
@@ -1052,6 +1083,31 @@ importers:
       workflow-dsl:
         specifier: workspace:*
         version: link:../dsl
+
+  examples/workflow/formatter:
+    dependencies:
+      workflow-dsl:
+        specifier: workspace:*
+        version: link:../dsl
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.15.18
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   examples/workflow/model:
     devDependencies:
