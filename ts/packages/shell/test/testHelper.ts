@@ -195,6 +195,30 @@ export function getAppPath(): string {
 }
 
 /**
+ * Resolve the config file to pass via --env.
+ *
+ * After PR #2342 the canonical key-config format is `config.local.yaml`
+ * (written by `tools/scripts/getKeys.mjs`), and the legacy `.env` is only
+ * produced when `--dotenv` is explicitly passed to getKeys. Prefer the YAML
+ * file when present so smoke tests work in both CI (YAML-only) and local
+ * developer environments that may still have a `.env`.
+ */
+function resolveTestConfigPath(appPath: string): string {
+    const yamlPath = path.resolve(appPath, "../../config.local.yaml");
+    if (fs.existsSync(yamlPath)) {
+        return yamlPath;
+    }
+    const dotenvPath = path.resolve(appPath, "../../.env");
+    if (fs.existsSync(dotenvPath)) {
+        return dotenvPath;
+    }
+    throw new Error(
+        `No test config file found. Expected either ${yamlPath} or ${dotenvPath}. ` +
+            `Run 'node tools/scripts/getKeys.mjs --vault <name> --commit' to generate one.`,
+    );
+}
+
+/**
  * Get electron launch arguments
  * @returns The arguments to pass to the electron application
  */
@@ -204,7 +228,7 @@ export function getLaunchArgs(testGreetings: boolean): string[] {
         appPath,
         "--test",
         "--env",
-        path.resolve(appPath, "../../.env"),
+        resolveTestConfigPath(appPath),
     ];
     if (os.platform() === "linux") {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
