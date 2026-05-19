@@ -3253,6 +3253,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@github/copilot-sdk':
+        specifier: 0.2.0
+        version: 0.2.0
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config

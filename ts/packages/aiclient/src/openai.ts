@@ -51,6 +51,12 @@ import {
     openAIApiSettingsFromEnv,
 } from "./openaiSettings.js";
 import { AzureApiSettings, azureApiSettingsFromEnv } from "./azureSettings.js";
+import {
+    CopilotApiSettings,
+    copilotApiSettingsFromConfig,
+} from "./copilotSettings.js";
+import { createCopilotChatModel } from "./copilotModels.js";
+import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
@@ -70,7 +76,7 @@ export type ModelInfo<T> = {
     maxTokens: number;
 };
 
-export type ModelProviders = "openai" | "azure" | "ollama";
+export type ModelProviders = "openai" | "azure" | "ollama" | "copilot";
 
 export type CommonApiSettings = {
     provider: ModelProviders;
@@ -89,7 +95,8 @@ export type CommonApiSettings = {
 export type ApiSettings =
     | OllamaApiSettings
     | AzureApiSettings
-    | OpenAIApiSettings;
+    | OpenAIApiSettings
+    | CopilotApiSettings;
 
 /**
  * Environment variables used to configure OpenAI clients
@@ -161,6 +168,25 @@ export function apiSettingsFromEnv(
     env?: Record<string, string | undefined>,
     endpointName?: string,
 ): ApiSettings {
+    // Provider-mode override applies to chat only. Embeddings, images,
+    // and video stay on whatever the legacy resolver picks (Azure/OpenAI).
+    const mode = getActiveModelProvider();
+    if (mode !== undefined && modelType === ModelType.Chat) {
+        const target = resolveTarget(mode, endpointName ?? "DEFAULT");
+        if (mode === "copilot") {
+            return copilotApiSettingsFromConfig(target);
+        }
+        if (mode === "ollama") {
+            return ollamaApiSettingsFromEnv(modelType, env, target);
+        }
+        if (mode === "openai") {
+            return openAIApiSettingsFromEnv(modelType, env, target);
+        }
+        // mode === "azure" falls through to legacy logic with the (identity-
+        // mapped) target — preserves the historical resolution path.
+        return azureApiSettingsFromEnv(modelType, env, target);
+    }
+
     env ??= process.env;
     if (EnvVars.OPENAI_API_KEY in env) {
         return openAIApiSettingsFromEnv(modelType, env, endpointName);
@@ -239,6 +265,10 @@ function parseEndPointName(endpoint?: string): {
     name?: string;
 } {
     if (endpoint === undefined || endpoint === "") {
+        const mode = getActiveModelProvider();
+        if (mode !== undefined) {
+            return { provider: mode, name: resolveTarget(mode, "DEFAULT") };
+        }
         return {
             provider:
                 EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
@@ -247,7 +277,8 @@ function parseEndPointName(endpoint?: string): {
     if (
         endpoint === "openai" ||
         endpoint === "azure" ||
-        endpoint === "ollama"
+        endpoint === "ollama" ||
+        endpoint === "copilot"
     ) {
         return { provider: endpoint };
     }
@@ -259,6 +290,16 @@ function parseEndPointName(endpoint?: string): {
     }
     if (endpoint.startsWith("azure:")) {
         return { provider: "azure", name: endpoint.substring(6) };
+    }
+    if (endpoint.startsWith("copilot:")) {
+        return { provider: "copilot", name: endpoint.substring(8) };
+    }
+    // Provider-mode override: route an unprefixed canonical name through
+    // the active mode's mapping. Explicit prefixes above always win.
+    const mode = getActiveModelProvider();
+    if (mode !== undefined) {
+        const target = resolveTarget(mode, endpoint);
+        return { provider: mode, name: target };
     }
     if (EnvVars.OPENAI_ENDPOINT in process.env) {
         return { provider: "openai", name: endpoint };
@@ -297,7 +338,7 @@ function buildModelPool(
     modelType: ModelType,
     endpointName?: string,
 ): EndpointPool {
-    if (provider !== "ollama") {
+    if (provider !== "ollama" && provider !== "copilot") {
         try {
             const typedName = endpointName?.toLowerCase();
             return discoverEndpointPoolFromConfig(
@@ -329,6 +370,18 @@ export function getChatModelPool(endpoint?: string): EndpointPool {
             undefined,
             endpointName.name,
         );
+        if (settings.maxConcurrency !== undefined) {
+            const q = priorityQueue<() => Promise<any>>(
+                async (task) => task(),
+                settings.maxConcurrency,
+            );
+            settings.throttler = (fn: () => Promise<any>, priority?: number) =>
+                q.push<any>(fn, priority);
+        }
+        pool = makeSingleMemberPool(settings, key);
+    } else if (endpointName.provider === "copilot") {
+        // Copilot is single-endpoint (the spawned CLI); no HTTP pool.
+        const settings = copilotApiSettingsFromConfig(endpointName.name);
         if (settings.maxConcurrency !== undefined) {
             const q = priorityQueue<() => Promise<any>>(
                 async (task) => task(),
@@ -478,6 +531,14 @@ export function createChatModel(
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
+    // Tag calls with the active mode so TokenCounter rollups can slice
+    // by provider. Pre-resolved ApiSettings bypass mode override, so
+    // only tag when the override is in effect AND the caller went
+    // through name-based resolution.
+    const activeMode = getActiveModelProvider();
+    if (activeMode !== undefined && typeof endpoint !== "object") {
+        tags = [...(tags ?? []), `mode:${activeMode}`];
+    }
     const pool =
         typeof endpoint === "object"
             ? makeSingleMemberPool(endpoint, `custom:${endpoint.provider}`)
@@ -492,6 +553,14 @@ export function createChatModel(
 
     if (settings.provider === "ollama") {
         return createOllamaChatModel(
+            settings,
+            completionSettings,
+            completionCallback,
+            tags,
+        );
+    }
+    if (settings.provider === "copilot") {
+        return createCopilotChatModel(
             settings,
             completionSettings,
             completionCallback,
