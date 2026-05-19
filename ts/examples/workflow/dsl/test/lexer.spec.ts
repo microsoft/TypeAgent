@@ -90,6 +90,17 @@ describe("lexer", () => {
         expect(tokens[0].quote).toBe("'");
     });
 
+    test("string line continuation with CRLF after backslash is accepted", () => {
+        const src = 'workflow w(): string { const s = "a\\\r\nb"; return s; }';
+        const { errors, tokens } = lex(src);
+        expect(errors).toEqual([]);
+        const stringTok = tokens.find(
+            (t) => t.kind === TokenKind.StringLiteral,
+        );
+        expect(stringTok).toBeDefined();
+        expect(stringTok!.value).toBe("a\\\r\nb");
+    });
+
     // ---- Template literals ----
 
     test("template literal with no interpolation", () => {

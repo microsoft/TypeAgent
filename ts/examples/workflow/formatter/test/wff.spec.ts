@@ -197,6 +197,13 @@ describe("wff CLI", () => {
         expect(readFileSync(file, "utf8")).toBe(broken);
     });
 
+    test("file I/O errors exit 2", async () => {
+        const missing = join(tmp, "missing.wf");
+        const result = await runWff([missing]);
+        expect(result.code).toBe(2);
+        expect(result.stderr).toMatch(/Cannot read file:/);
+    });
+
     test("--check + --diff are mutually exclusive", async () => {
         const result = await runWff(["--check", "--diff", "x.wf"]);
         expect(result.code).toBe(2);

@@ -240,7 +240,15 @@ export function lex(source: string): {
             if (source[pos] === "\\") {
                 advance(); // backslash
                 if (pos < source.length) {
-                    advance(); // the escaped character (any char)
+                    if (source[pos] === "\r") {
+                        // Keep CRLF together for line-continuation escapes.
+                        advance();
+                        if (pos < source.length && source[pos] === "\n") {
+                            advance();
+                        }
+                    } else {
+                        advance(); // the escaped character (any char)
+                    }
                 }
             } else {
                 advance();
@@ -346,12 +354,15 @@ export function lex(source: string): {
                 if (c === "\\") {
                     advance(); // backslash
                     if (pos < source.length) {
-                        // Consume one source character; if it is CR (with
-                        // optional LF) the decoder treats CRLF as a single
-                        // LineTerminatorSequence, but the lexer only needs
-                        // to consume one code unit here - the LF will be
-                        // consumed on the next iteration as a normal char.
-                        advance();
+                        // Keep CRLF together for line-continuation escapes.
+                        if (source[pos] === "\r") {
+                            advance();
+                            if (pos < source.length && source[pos] === "\n") {
+                                advance();
+                            }
+                        } else {
+                            advance();
+                        }
                     }
                 } else {
                     advance();

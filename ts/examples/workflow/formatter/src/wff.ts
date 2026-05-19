@@ -302,7 +302,8 @@ function processFile(
     mode: Mode,
     out: {
         anyChanged: boolean;
-        anyError: boolean;
+        anyParseError: boolean;
+        anyIoError: boolean;
         changedFiles: string[];
     },
 ): void {
@@ -314,14 +315,14 @@ function processFile(
         process.stderr.write(
             `Cannot read file: ${abs}: ${(e as Error).message}\n`,
         );
-        out.anyError = true;
+        out.anyIoError = true;
         return;
     }
 
     const { output, errors } = formatSource(source, options);
     if (errors.length > 0 || output === undefined) {
         reportErrors(file, errors);
-        out.anyError = true;
+        out.anyParseError = true;
         return;
     }
 
@@ -346,7 +347,7 @@ function processFile(
                 process.stderr.write(
                     `Cannot write file: ${abs}: ${(e as Error).message}\n`,
                 );
-                out.anyError = true;
+                out.anyIoError = true;
             }
             break;
         case "check":
@@ -394,14 +395,16 @@ function main(): void {
 
     const out = {
         anyChanged: false,
-        anyError: false,
+        anyParseError: false,
+        anyIoError: false,
         changedFiles: [] as string[],
     };
     for (const file of args.files) {
         processFile(file, args.format, args.mode, out);
     }
 
-    if (out.anyError) process.exit(1);
+    if (out.anyIoError) process.exit(2);
+    if (out.anyParseError) process.exit(1);
 
     if (args.mode === "check") {
         if (out.anyChanged) {

@@ -601,6 +601,21 @@ describe("parser", () => {
         expect(workflows[1].name).toBe("b");
     });
 
+    test("comments between workflows attach to the next workflow", () => {
+        const source = `
+            workflow a(): string { return "a"; }
+            // between
+            workflow b(): string { return "b"; }
+        `;
+        const { tokens, comments } = lex(source);
+        const parser = new Parser(tokens, comments);
+        const { workflows, errors } = parser.parse();
+        expect(errors).toEqual([]);
+        expect(workflows).toHaveLength(2);
+        expect(workflows[0].trailingComments).toBeUndefined();
+        expect(workflows[1].leadingComments?.[0].text).toBe("// between");
+    });
+
     // ---- Error cases ----
 
     test("error on unexpected token", () => {

@@ -127,6 +127,7 @@ export class Parser {
     /** Last token consumed by `advance()`. Used to compute statement end
      *  position for trailing-comment same-line detection. */
     private lastToken: Token | undefined;
+    private singleWorkflowMode = false;
 
     constructor(
         private tokens: Token[],
@@ -201,6 +202,7 @@ export class Parser {
     }
 
     parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
+        this.singleWorkflowMode = false;
         const workflows: WorkflowDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
             const wf = this.parseWorkflow();
@@ -211,6 +213,7 @@ export class Parser {
 
     /** Parse a single workflow (backward compat). */
     parseSingle(): { ast: WorkflowDecl | undefined; errors: ParseError[] } {
+        this.singleWorkflowMode = true;
         const ast = this.parseWorkflow();
         // Trailing tokens past the workflow are a parse error — without
         // this check, stray punctuation (e.g. an extra `}`) or a second
@@ -336,7 +339,10 @@ export class Parser {
         // Capture any comments that appear AFTER the closing `}` (and
         // before EOF). They have no statement to attach to, so they go
         // on the workflow's trailingComments.
-        const trailingComments = this.takeLeadingComments();
+        const trailingComments =
+            this.singleWorkflowMode || this.peek().kind === TokenKind.EOF
+                ? this.takeLeadingComments()
+                : undefined;
         const decl: WorkflowDecl = {
             kind: "WorkflowDecl",
             name,
