@@ -388,6 +388,62 @@ workflow w(): string { return "x"; }`;
     });
 });
 
+describe("formatter: raw literal round-trip (A2)", () => {
+    test("preserves all escape kinds in double-quoted strings", () => {
+        // Source has the 6 char sequence: \\ \n \t \r \" inside "..."
+        const src = 'workflow w(): string { return "a\\\\b\\nc\\td\\re\\"f"; }';
+        const out = assertStable(src);
+        expect(out).toContain('"a\\\\b\\nc\\td\\re\\"f"');
+    });
+
+    test("preserves escapes in single-quoted strings", () => {
+        const src = "workflow w(): string { return 'a\\\\b\\nc\\'d'; }";
+        const out = assertStable(src);
+        expect(out).toContain("'a\\\\b\\nc\\'d'");
+    });
+
+    test("preserves \\${ and backtick escapes in NoSub templates", () => {
+        // Source: workflow w(): string { return `\${not} and \` end`; }
+        const src = "workflow w(): string { return `\\${not} and \\` end`; }";
+        const out = assertStable(src);
+        expect(out).toContain("\\${not}");
+        expect(out).toContain("\\`");
+    });
+
+    test("preserves \\${ inside interpolated template", () => {
+        // Source: workflow w(x: string): string { return `pre\${nope}${x}post`; }
+        const src =
+            "workflow w(x: string): string { return `pre\\${nope}${x}post`; }";
+        const out = assertStable(src);
+        expect(out).toContain("\\${nope}");
+        expect(out).toContain("${x}");
+    });
+
+    test("preserves empty string and empty template", () => {
+        const src =
+            'workflow w(): string { const a = ""; const b = ``; return a; }';
+        const out = assertStable(src);
+        expect(out).toContain('""');
+        expect(out).toContain("``");
+    });
+
+    test("trailing backslash inside a string is reported as a parse error", () => {
+        // Source: workflow w(): string { return "\"; }
+        // (a lone backslash before the closing quote)
+        const source = 'workflow w(): string { return "\\"; }';
+        const { tokens, errors: lexErrors, comments } = lex(source);
+        if (lexErrors.length > 0) {
+            // Lexer caught it - acceptable.
+            return;
+        }
+        const { errors } = new Parser(tokens, comments).parseSingle();
+        const hasBackslashErr = errors.some((e) =>
+            /backslash/i.test(e.message),
+        );
+        expect(hasBackslashErr).toBe(true);
+    });
+});
+
 describe("compiler: comments don't perturb IR", () => {
     test("source with comments yields identical IR to comment-free source", () => {
         const bare = `workflow w(a: string): string {

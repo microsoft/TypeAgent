@@ -113,6 +113,12 @@ describe("wfc CLI", () => {
         expect(result.stdout).toMatch(/Usage:/);
     });
 
+    test("--version prints version and exits 0", async () => {
+        const result = await runWfc(["--version"]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toMatch(/^wfc \d+\.\d+\.\d+/);
+    });
+
     test("--compact emits minified JSON", async () => {
         const src = resolve(DSL_EXAMPLES, "d1-standup-prep.wf");
         const out = join(tmp, "min.json");

@@ -220,6 +220,12 @@ describe("wff CLI", () => {
         expect(result.stdout).toMatch(/Usage:/);
     });
 
+    test("--version prints version and exits 0", async () => {
+        const result = await runWff(["--version"]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toMatch(/^wff \d+\.\d+\.\d+/);
+    });
+
     test("--indent 2 produces a different result than --indent 4", async () => {
         const src = "workflow id(x: string): string {\n  return x;\n}\n";
         const r2 = await runWff(["--indent", "2"], src);

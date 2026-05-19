@@ -25,6 +25,7 @@ import {
     readSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 import {
     lex,
     Parser,
@@ -34,6 +35,9 @@ import {
     ParseError,
 } from "workflow-dsl";
 
+const require = createRequire(import.meta.url);
+const pkgVersion: string = require("../package.json").version;
+
 const usage = `Usage:
   wff <files...> [options]    Format one or more .wf files in place
 
@@ -41,9 +45,12 @@ Modes (mutually exclusive):
   (default)              Rewrite each file in place.
   -c, --check            Exit 1 if any file would be changed; print the list.
                          Don't modify anything. (CI / pre-commit gate.)
+                         With stdin input the display name is <stdin> (or the
+                         value of --stdin-filepath).
       --stdout           Print formatted output to stdout. Requires exactly
                          one file argument, or stdin input.
       --diff             Print a unified diff per changed file; exit 1 if any.
+                         Works with stdin too.
 
 Input:
   <files...>             One or more .wf source files. If none are given and
@@ -58,7 +65,8 @@ Formatting options:
                          integer or 'infinity'.
 
 Misc:
-  -h, --help             Show this help.`;
+  -h, --help             Show this help.
+  -V, --version          Show version and exit.`;
 
 type Mode = "write" | "check" | "stdout" | "diff";
 
@@ -133,6 +141,11 @@ function parseArgs(argv: string[]): ParsedArgs {
             case "-h":
             case "--help":
                 process.stdout.write(`${usage}\n`);
+                process.exit(0);
+                break;
+            case "-V":
+            case "--version":
+                process.stdout.write(`wff ${pkgVersion}\n`);
                 process.exit(0);
                 break;
             case "-c":
@@ -266,7 +279,10 @@ function unifiedDiff(a: string, b: string, label: string): string {
 /** Atomically write `content` to `path` via a sibling tmp file + rename. */
 function atomicWrite(path: string, content: string): void {
     mkdirSync(dirname(path), { recursive: true });
-    const tmp = `${path}.wff-${process.pid}-${Date.now()}.tmp`;
+    // Random suffix avoids same-millisecond collisions when multiple wff
+    // processes (or workers within one process) target the same file.
+    const rand = Math.random().toString(36).slice(2, 10);
+    const tmp = `${path}.wff-${process.pid}-${Date.now()}-${rand}.tmp`;
     writeFileSync(tmp, content, "utf8");
     try {
         renameSync(tmp, path);

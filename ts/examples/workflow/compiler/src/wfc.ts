@@ -12,8 +12,12 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname, basename, extname, join } from "node:path";
+import { createRequire } from "node:module";
 import { compile, CompileError, TaskSchemaInfo } from "workflow-dsl";
 import { allBuiltinTasks } from "workflow-engine";
+
+const require = createRequire(import.meta.url);
+const pkgVersion: string = require("../package.json").version;
 
 const usage = `Usage:
   wfc <file.wf> [options]    Compile a .wf source file to workflow IR JSON
@@ -26,7 +30,8 @@ Options:
   --pretty             Pretty-print the JSON output with 2-space indent
                        (default).
   --compact            Emit minified JSON (no whitespace).
-  -h, --help           Show this help.`;
+  -h, --help           Show this help.
+  -V, --version        Show version and exit.`;
 
 function fail(msg: string): never {
     console.error(msg);
@@ -80,6 +85,11 @@ function parseArgs(argv: string[]): ParsedArgs {
             case "-h":
             case "--help":
                 console.log(usage);
+                process.exit(0);
+                break;
+            case "-V":
+            case "--version":
+                console.log(`wfc ${pkgVersion}`);
                 process.exit(0);
                 break;
             case "-o":

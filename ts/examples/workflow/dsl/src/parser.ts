@@ -38,6 +38,7 @@
  */
 
 import { Token, TokenKind, LexComment } from "./lexer.js";
+import { decodeStringLiteral } from "./literal.js";
 import {
     WorkflowDecl,
     ParamDecl,
@@ -89,6 +90,32 @@ export interface ParseError {
     message: string;
     line: number;
     col: number;
+}
+
+/**
+ * Translate a byte offset within a raw literal slice into a (line, col)
+ * pair relative to the surrounding source. `startLine` / `startCol`
+ * point at the first character of the raw slice in the source file.
+ * Newlines inside template literals are the only multi-line case.
+ */
+function offsetToLineCol(
+    raw: string,
+    offset: number,
+    startLine: number,
+    startCol: number,
+): { line: number; col: number } {
+    let line = startLine;
+    let col = startCol;
+    const limit = Math.min(offset, raw.length);
+    for (let i = 0; i < limit; i++) {
+        if (raw[i] === "\n") {
+            line++;
+            col = 1;
+        } else {
+            col++;
+        }
+    }
+    return { line, col };
 }
 
 export class Parser {
@@ -235,6 +262,37 @@ export class Parser {
     private error(msg: string): void {
         const t = this.peek();
         this.errors.push({ message: msg, line: t.line, col: t.col });
+    }
+
+    /**
+     * Validate escape sequences inside a string or template-part token
+     * by running the decoder and reporting any errors against the
+     * source position of the offending escape. The decoded value is
+     * discarded; the formatter and emitter consume the raw text
+     * directly.
+     */
+    private checkLiteralEscapes(
+        raw: string,
+        quote: '"' | "'" | "`",
+        tok: Token,
+    ): void {
+        const { errors } = decodeStringLiteral(raw, quote);
+        if (errors.length === 0) return;
+        // The token's line/col point at the opening delimiter (or at the
+        // `}` that begins a template middle/tail). Skip the one-character
+        // delimiter when computing the escape position. Raw text never
+        // contains escape *expansions*, but template parts can contain
+        // literal newlines, so walk the raw to translate offsetInRaw to
+        // (line, col).
+        for (const e of errors) {
+            const { line, col } = offsetToLineCol(
+                raw,
+                e.offsetInRaw,
+                tok.line,
+                tok.col + 1,
+            );
+            this.errors.push({ message: e.message, line, col });
+        }
     }
 
     private loc(): SourceLocation {
@@ -999,10 +1057,12 @@ export class Parser {
         // String
         if (t.kind === TokenKind.StringLiteral) {
             const v = this.advance();
+            const quote = (v.quote ?? '"') as '"' | "'";
+            this.checkLiteralEscapes(v.value, quote, v);
             return {
                 kind: "StringLiteralExpr",
                 raw: v.value,
-                quote: (v.quote ?? '"') as '"' | "'",
+                quote,
                 loc: l,
             };
         }
@@ -1010,6 +1070,7 @@ export class Parser {
         // Template literal (no interpolation): `text`
         if (t.kind === TokenKind.TemplateNoSub) {
             const v = this.advance();
+            this.checkLiteralEscapes(v.value, "`", v);
             return {
                 kind: "StringLiteralExpr",
                 raw: v.value,
@@ -1422,6 +1483,7 @@ export class Parser {
 
         const head = this.expect(TokenKind.TemplateHead);
         rawParts.push(head.value);
+        this.checkLiteralEscapes(head.value, "`", head);
 
         while (true) {
             expressions.push(this.parseExpression());
@@ -1429,10 +1491,12 @@ export class Parser {
             if (this.peek().kind === TokenKind.TemplateTail) {
                 const tail = this.advance();
                 rawParts.push(tail.value);
+                this.checkLiteralEscapes(tail.value, "`", tail);
                 break;
             } else if (this.peek().kind === TokenKind.TemplateMiddle) {
                 const mid = this.advance();
                 rawParts.push(mid.value);
+                this.checkLiteralEscapes(mid.value, "`", mid);
             } else {
                 this.error(
                     "Expected template continuation or closing backtick",

@@ -310,8 +310,12 @@ export interface StringLiteralExpr {
      */
     raw: string;
     /**
-     * Original delimiter character. Backticks are produced for
-     * NoSubstitution templates so that the formatter can preserve them.
+     * Original delimiter character. Double-quote and single-quote are
+     * produced for ordinary string literals. Backtick is produced for
+     * NoSubstitution templates (e.g. `` `text` ``) which the parser
+     * lowers to a StringLiteralExpr so the formatter can re-emit them
+     * verbatim; templates that contain `${...}` interpolations parse
+     * to TemplateLiteralExpr instead.
      */
     quote: '"' | "'" | "`";
     loc: SourceLocation;

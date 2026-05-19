@@ -16,12 +16,15 @@
  *   \t        -> tab     (U+0009)
  *   \r        -> CR      (U+000D)
  *   \\        -> backslash
- *   \<delim>  -> the literal delimiter character
- *   \<other>  -> <other>  (lenient: unknown escapes pass through)
+ *   \"        -> double-quote   (only when the literal is double-quoted)
+ *   \'        -> single-quote   (only when the literal is single-quoted)
+ *   \`        -> backtick       (templates only)
+ *   \<other>  -> <other>        (lenient: unknown escapes pass through)
  *
  * For templates the delimiter set also includes `$`, so `\${` is
  * preserved as a literal `${` in the cooked value without triggering
- * interpolation. Backslash followed by EOF is reported as an error.
+ * interpolation. Backslash followed by EOF is reported as an error
+ * (the lone backslash is still emitted to keep decoding lenient).
  */
 
 export type StringQuote = '"' | "'" | "`";
