@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

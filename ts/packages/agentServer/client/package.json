@@ -45,6 +45,6 @@
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5",
     "websocket-channel-server": "workspace:*",
-    "ws": "^8.17.1"
+    "ws": "^8.20.1"
   }
 }
