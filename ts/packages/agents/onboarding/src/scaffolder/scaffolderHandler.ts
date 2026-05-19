@@ -874,7 +874,7 @@ const PLUGIN_TEMPLATES: Record<
             "WebSocket bridge (bidirectional RPC, used by Excel, VS Code agents)",
         defaultSubdir: "src",
         nextSteps:
-            'Bind on an OS-assigned port via `await ${PascalName}Bridge.start()`, then publish the bound `.port` from your handler with `context.registerPort("default", bridge.port)` so external clients can discover it.',
+            'Bind on an OS-assigned port via `await <PascalName>Bridge.start()` (replace `<PascalName>` with your agent name), then publish the bound `.port` from your handler with `context.registerPort("default", bridge.port)` so external clients can discover it.',
         files: (name) => ({
             [`${name}Bridge.ts`]: buildWebSocketBridgeTemplate(name),
         }),
@@ -952,7 +952,13 @@ type BridgeResponse = {
 export class ${pascalName}Bridge {
     private clients = new Map<string, WebSocket>();
     private nextClientId = 0;
-    private pending = new Map<string, (response: BridgeResponse) => void>();
+    private pending = new Map<
+        string,
+        {
+            resolve: (result: unknown) => void;
+            reject: (err: Error) => void;
+        }
+    >();
 
     // Construction is private — use {@link ${pascalName}Bridge.start} so
     // callers always get a bridge that is guaranteed to be bound before
@@ -967,10 +973,11 @@ export class ${pascalName}Bridge {
             ws.on("message", (data) => {
                 try {
                     const response = JSON.parse(data.toString()) as BridgeResponse;
-                    const cb = this.pending.get(response.id);
-                    if (cb) {
-                        cb(response);
+                    const entry = this.pending.get(response.id);
+                    if (entry) {
                         this.pending.delete(response.id);
+                        if (response.success) entry.resolve(response.result);
+                        else entry.reject(new Error(response.error));
                     }
                 } catch {
                     // Ignore malformed payloads.
@@ -1014,9 +1021,11 @@ export class ${pascalName}Bridge {
                     return;
                 }
                 // Re-attach a permanent error handler so post-listen
-                // errors are logged rather than crashing the process.
-                server.on("error", () => {
-                    /* TODO: log */
+                // errors are surfaced rather than crashing the process.
+                server.on("error", (err) => {
+                    console.error(
+                        \`[${name}Bridge] post-listen server error: \${err.message}\`,
+                    );
                 });
                 resolve(new ${pascalName}Bridge(server, addr.port));
             };
@@ -1026,12 +1035,20 @@ export class ${pascalName}Bridge {
     }
 
     /**
-     * Close all client connections and the underlying server. Resolves
-     * when the server has fully released its port — important for a
-     * rapid restart cycle, where a synchronous return would race the
-     * new bind into EADDRINUSE.
+     * Close all client connections and the underlying server. Pending
+     * \`sendCommand\` promises are rejected so callers never hang on a
+     * closed bridge. Resolves when the server has fully released its
+     * port — important for a rapid restart cycle, where a synchronous
+     * return would race the new bind into EADDRINUSE.
      */
     public close(): Promise<void> {
+        const closedError = new Error(
+            "${pascalName}Bridge closed before response was received.",
+        );
+        for (const entry of this.pending.values()) {
+            entry.reject(closedError);
+        }
+        this.pending.clear();
         for (const c of this.clients.values()) {
             if (c.readyState === WebSocket.OPEN) c.close();
         }
@@ -1067,10 +1084,7 @@ export class ${pascalName}Bridge {
         }
         const id = \`cmd-\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
         return new Promise((resolve, reject) => {
-            this.pending.set(id, (res) => {
-                if (res.success) resolve(res.result);
-                else reject(new Error(res.error));
-            });
+            this.pending.set(id, { resolve, reject });
             target!.send(
                 JSON.stringify({ id, actionName, parameters } satisfies BridgeCommand),
             );
@@ -1412,7 +1426,13 @@ type BridgeResponse = { id: string; success: boolean; result?: unknown; error?: 
 class ${pascalName}Bridge {
     private clients = new Map<string, WebSocket>();
     private nextClientId = 0;
-    private pending = new Map<string, (r: BridgeResponse) => void>();
+    private pending = new Map<
+        string,
+        {
+            resolve: (result: unknown) => void;
+            reject: (err: Error) => void;
+        }
+    >();
 
     // Construction is private — use {@link ${pascalName}Bridge.start} so
     // callers always get a bridge that is guaranteed to be bound before
@@ -1427,10 +1447,11 @@ class ${pascalName}Bridge {
             ws.on("message", (data) => {
                 try {
                     const response = JSON.parse(data.toString()) as BridgeResponse;
-                    const cb = this.pending.get(response.id);
-                    if (cb) {
-                        cb(response);
+                    const entry = this.pending.get(response.id);
+                    if (entry) {
                         this.pending.delete(response.id);
+                        if (response.success) entry.resolve(response.result);
+                        else entry.reject(new Error(response.error));
                     }
                 } catch {
                     // Ignore malformed payloads.
@@ -1469,8 +1490,12 @@ class ${pascalName}Bridge {
                     return;
                 }
                 // Re-attach a permanent error handler so post-listen errors
-                // are logged rather than crashing the process.
-                server.on("error", () => { /* TODO: log */ });
+                // are surfaced rather than crashing the process.
+                server.on("error", (err) => {
+                    console.error(
+                        \`[${name}Bridge] post-listen server error: \${err.message}\`,
+                    );
+                });
                 resolve(new ${pascalName}Bridge(server, addr.port));
             };
             server.once("error", onError);
@@ -1479,13 +1504,21 @@ class ${pascalName}Bridge {
     }
 
     /**
-     * Close all client connections and the underlying server. Resolves
-     * when the server has fully released its port — important for a
-     * rapid disable→enable cycle under a fixed-port override
-     * (\`${portEnv}\`), where a synchronous return would race the new
-     * bind into EADDRINUSE.
+     * Close all client connections and the underlying server. Pending
+     * \`send\` promises are rejected so callers never hang on a closed
+     * bridge. Resolves when the server has fully released its port —
+     * important for a rapid disable→enable cycle under a fixed-port
+     * override (\`${portEnv}\`), where a synchronous return would race
+     * the new bind into EADDRINUSE.
      */
     public close(): Promise<void> {
+        const closedError = new Error(
+            "${pascalName}Bridge closed before response was received.",
+        );
+        for (const entry of this.pending.values()) {
+            entry.reject(closedError);
+        }
+        this.pending.clear();
         for (const c of this.clients.values()) {
             if (c.readyState === WebSocket.OPEN) c.close();
         }
@@ -1512,9 +1545,7 @@ class ${pascalName}Bridge {
         }
         const id = \`\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
         return new Promise((resolve, reject) => {
-            this.pending.set(id, (res) =>
-                res.success ? resolve(res.result) : reject(new Error(res.error)),
-            );
+            this.pending.set(id, { resolve, reject });
             target!.send(
                 JSON.stringify({ id, actionName, parameters } satisfies BridgeRequest),
             );
@@ -1565,12 +1596,41 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext,
         updateAgentContext,
+        closeAgentContext,
         executeAction,
     };
 }
 
 async function initializeAgentContext(): Promise<${pascalName}Context> {
     return { enabledSchemas: new Set() };
+}
+
+/**
+ * Backstop cleanup invoked by the dispatcher when a session closes
+ * without an explicit per-schema disable (crash, client disconnect,
+ * shell shutdown). Releases this session's port registration and
+ * decrements the shared refcount once, even if multiple schemas were
+ * enabled. Idempotent — a subsequent \`updateAgentContext(false, …)\`
+ * will see an empty \`enabledSchemas\` and no-op.
+ */
+async function closeAgentContext(
+    context: SessionContext<${pascalName}Context>,
+): Promise<void> {
+    const ctx = context.agentContext;
+    const wasActive = ctx.enabledSchemas.size > 0;
+    ctx.enabledSchemas.clear();
+    ctx.portRegistration?.release();
+    delete ctx.portRegistration;
+    if (!wasActive) return;
+    sharedRefCount = Math.max(0, sharedRefCount - 1);
+    if (sharedRefCount === 0 && sharedBridge) {
+        const bridge = sharedBridge;
+        sharedBridge = undefined;
+        sharedClosingPromise = bridge.close().finally(() => {
+            sharedClosingPromise = undefined;
+        });
+        await sharedClosingPromise;
+    }
 }
 
 async function updateAgentContext(
