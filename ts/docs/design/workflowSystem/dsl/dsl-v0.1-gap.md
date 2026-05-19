@@ -594,3 +594,64 @@ case-literal check should land at the same time:
 5. Add tests for: union type parsing, case-literal type mismatch error,
    mixed-arm ternary returning a union, exhaustive non-boolean switch
    compiling without `default:`.
+
+## G19: IR features the emitter does not produce
+
+Surfaced when the hand-written IR for `d1-standup-prep` and
+`d8-summarize-url` was retired in favor of compiling the corresponding
+`.wf` sources. The DSL-compiled IR is functionally equivalent for the
+existing test cases, but several IR-level features the hand-written
+JSON exercised are no longer emitted by the DSL compiler.
+
+**Items the emitter does not produce today:**
+
+1. **`workflow.description`** &mdash; The IR allows a top-level
+   `description` string on a workflow. There is no DSL surface for it
+   (e.g. a doc-comment or attribute) and the emitter never sets it.
+2. **`loop.maxIterations`** &mdash; The IR loop node supports a
+   `maxIterations` safety cap (the hand-written d1 used `100`, d8 used
+   `3`). The DSL has no syntax for it and the emitter never sets it,
+   so DSL-authored loops run with no compile-time-declared cap.
+3. **Named numeric constants &rarr; `constants` + `$from: "constant"`**
+   &mdash; String `const` bindings round-trip through the
+   `constants` block as `$from constant` references, but numeric
+   literals (e.g. the `2` in `attempts(2, ...)`) are inlined into the
+   loop input rather than lifted to `constants.<name>` with a
+   `$from constant` reference. This loses the named-constant indirection
+   the hand-written d8 used for `maxRetries`.
+4. **Tight inner `outputSchema`s** &mdash; The emitter often produces
+   `{}` or generic `array` for task and loop-body output schemas where
+   the hand-written IR declared `{type: "string"}`, `{type: "integer"}`,
+   or typed `items`. The DSL has the type information at compile time
+   (since type-checking succeeds); the emitter could carry it through
+   to the emitted JSON Schema.
+
+**Behavioral divergence worth flagging (not strictly an emitter gap):**
+
+When a `attempts(N, ...)` loop in the DSL exhausts its retries, the
+emitter inserts an explicit `error.fail` task ("Attempts exhausted")
+that aborts the workflow. The hand-written d8 instead exited the loop
+silently and continued downstream with `undefined` along the optional
+path. The DSL behavior is arguably more correct, but it is a real
+semantic change &mdash; current tests do not exercise the exhaustion
+path either way.
+
+**Why this matters:** these are the only IR features no longer
+exercised end-to-end now that the hand-written d1/d8 are gone. d4, d5,
+and branch-reorganize still exercise some of them (verify which), but
+addressing items 1&ndash;4 would close the gap between what the IR
+model supports and what the DSL can actually produce.
+
+**What needs to happen:**
+
+1. Decide a DSL surface for `description` (doc-comment attaching to a
+   `workflow` declaration is the natural fit) and emit it.
+2. Decide a DSL surface for `loop.maxIterations` (e.g. an attribute on
+   `loop`/`for`/`attempts`, or a builtin parameter) and emit it.
+3. Lift numeric literals used as named `const` bindings into the
+   `constants` block, mirroring the existing string-constant path.
+4. Carry compile-time inferred types into emitted `outputSchema` /
+   `items` schemas for tasks and loop bodies.
+5. Decide and document the canonical retry-exhaustion semantics for
+   `attempts(...)` (silent exit vs. explicit fail) and add a test that
+   pins it down.

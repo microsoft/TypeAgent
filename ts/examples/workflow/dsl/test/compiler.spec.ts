@@ -369,7 +369,9 @@ describe("DSL d1-standup-prep", () => {
             __dirname,
             "..",
             "..",
-            "examples",
+            "..",
+            "workflows",
+            "dsl",
             "d1-standup-prep.wf",
         );
         const source = fs.readFileSync(wfPath, "utf-8");
@@ -411,7 +413,9 @@ describe("DSL d8-summarize-url", () => {
             __dirname,
             "..",
             "..",
-            "examples",
+            "..",
+            "workflows",
+            "dsl",
             "d8-summarize-url.wf",
         );
         const source = fs.readFileSync(wfPath, "utf-8");

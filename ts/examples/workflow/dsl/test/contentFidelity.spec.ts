@@ -46,7 +46,7 @@ import { format } from "../src/formatter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const EXAMPLES_DIR = path.resolve(__dirname, "../../examples");
+const EXAMPLES_DIR = path.resolve(__dirname, "../../../workflows/dsl");
 
 // ---------------------------------------------------------------------------
 // Helpers
