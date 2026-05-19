@@ -445,25 +445,9 @@ class Printer {
         }
         this.newline();
         this.indent(() => {
-            params.forEach((p) => {
-                this.printOwnLineComments(p.leadingComments);
-                this.printParam(p);
-                // Emit inline trailing comments AFTER the comma (and
-                // separated by a space). Two reasons:
-                //   1. Line comments (`// ...`) extend to end-of-line,
-                //      so they can never legally precede the comma on
-                //      the same line — they must come after it.
-                //   2. The parser scoops same-line comments both
-                //      before AND after the comma into the prev param's
-                //      trailingComments, so either side round-trips,
-                //      but emitting after the comma is the only form
-                //      that works uniformly for // and /* */ kinds.
-                this.write(",");
-                this.emitInlineTrailing(p.trailingComments, p.endLine);
-                this.newline();
-                this.emitAfterLineTrailing(p.trailingComments, p.endLine);
-            });
-            this.printOwnLineComments(paramInner);
+            this.printCommentedCommaList(params, paramInner, (p) =>
+                this.printParam(p),
+            );
         });
     }
 
@@ -498,6 +482,45 @@ class Printer {
                 this.writeCommentOwnLine(c);
             }
         }
+    }
+
+    /**
+     * Print a multi-line, comma-terminated list (params, object-type
+     * fields, ...) with the standard comment placement policy: leading
+     * comments on their own line at the current indent, trailing
+     * comments inline after the comma (or on subsequent lines for
+     * comments that originated below the item), and any container-level
+     * `innerComments` flushed at the end.
+     *
+     * Caller is responsible for emitting the opening delimiter +
+     * newline + `indent(() => ...)` wrapper and the closing delimiter;
+     * this helper just owns the per-item lines.
+     */
+    private printCommentedCommaList<
+        T extends {
+            leadingComments?: Comment[];
+            trailingComments?: Comment[];
+            endLine?: number;
+        },
+    >(
+        items: T[],
+        innerComments: Comment[] | undefined,
+        printItem: (item: T) => void,
+    ): void {
+        // Comma placement is consistent with `printParamList`'s old
+        // body: comma immediately after the item, THEN inline trailing
+        // comments, THEN newline, THEN any after-line trailings. This
+        // matches what the parser scoops into `trailingComments` for
+        // both pre-comma and post-comma same-line comments.
+        items.forEach((it) => {
+            this.printOwnLineComments(it.leadingComments);
+            printItem(it);
+            this.write(",");
+            this.emitInlineTrailing(it.trailingComments, it.endLine);
+            this.newline();
+            this.emitAfterLineTrailing(it.trailingComments, it.endLine);
+        });
+        this.printOwnLineComments(innerComments);
     }
 
     private printParam(p: ParamDecl): void {
@@ -551,18 +574,12 @@ class Printer {
         this.write("{");
         this.newline();
         this.indent(() => {
-            t.fields.forEach((f) => {
-                this.printOwnLineComments(f.leadingComments);
+            this.printCommentedCommaList(t.fields, t.innerComments, (f) => {
                 this.write(f.name);
                 if (f.optional) this.write("?");
                 this.write(": ");
                 this.printType(f.type);
-                this.write(",");
-                this.emitInlineTrailing(f.trailingComments, f.endLine);
-                this.newline();
-                this.emitAfterLineTrailing(f.trailingComments, f.endLine);
             });
-            this.printOwnLineComments(t.innerComments);
         });
         this.write("}");
     }

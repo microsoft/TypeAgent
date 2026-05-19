@@ -226,6 +226,101 @@ export class Parser {
         return undefined;
     }
 
+    /**
+     * Parse a comma-separated list of items terminated by `terminator`,
+     * threading leading / trailing / inner comments onto the items in
+     * the same way the formatter expects them. Used for both parameter
+     * lists (`( ... )`) and object-type field lists (`{ ... }`); the
+     * comment-attachment policy is identical for both:
+     *
+     *   - Comments that sit before an item (in leading-position) attach
+     *     to that item's `leadingComments`.
+     *   - Comments on the same line as the item's last token, BEFORE the
+     *     comma, attach to that item's `trailingComments`.
+     *   - Comments on the same line as the item's last token, AFTER the
+     *     comma, also attach to that item's `trailingComments` (so the
+     *     formatter can emit them right after `,`).
+     *   - Comments that follow the final item with no further items
+     *     attach to that item's trailing (so they live next to the
+     *     code they annotate).
+     *   - Comments in an otherwise-empty list (`()` or `{}` with only
+     *     comments inside) are returned via `innerComments`.
+     */
+    private parseCommaListWithComments<
+        T extends {
+            leadingComments?: Comment[];
+            trailingComments?: Comment[];
+            endLine?: number;
+        },
+    >(
+        terminator: TokenKind,
+        parseItem: (leading: Comment[] | undefined) => T,
+    ): { items: T[]; innerComments: Comment[] | undefined } {
+        const items: T[] = [];
+        let innerComments: Comment[] | undefined;
+        while (
+            this.peek().kind !== terminator &&
+            this.peek().kind !== TokenKind.EOF
+        ) {
+            const leading = this.takeLeadingComments();
+            if (this.peek().kind === terminator) {
+                // Comments were the last things before the terminator:
+                // empty-list case keeps them as innerComments; otherwise
+                // they go on the last item's trailing slot.
+                if (leading) {
+                    if (items.length > 0) {
+                        const last = items[items.length - 1];
+                        last.trailingComments = [
+                            ...(last.trailingComments ?? []),
+                            ...leading,
+                        ];
+                    } else {
+                        innerComments = [...(innerComments ?? []), ...leading];
+                    }
+                }
+                break;
+            }
+            const item = parseItem(leading);
+            if (item.endLine !== undefined) {
+                const t = this.takeInlineTrailingComments(item.endLine);
+                if (t) {
+                    item.trailingComments = [
+                        ...(item.trailingComments ?? []),
+                        ...t,
+                    ];
+                }
+            }
+            if (this.peek().kind === TokenKind.Comma) {
+                this.advance();
+                if (item.endLine !== undefined) {
+                    const t = this.takeInlineTrailingComments(item.endLine);
+                    if (t) {
+                        item.trailingComments = [
+                            ...(item.trailingComments ?? []),
+                            ...t,
+                        ];
+                    }
+                }
+            }
+            items.push(item);
+        }
+        // Drain any straggling leading-position comments that sit
+        // between the last item (or the opener) and the terminator.
+        const remaining = this.takeLeadingComments();
+        if (remaining) {
+            if (items.length > 0) {
+                const last = items[items.length - 1];
+                last.trailingComments = [
+                    ...(last.trailingComments ?? []),
+                    ...remaining,
+                ];
+            } else {
+                innerComments = [...(innerComments ?? []), ...remaining];
+            }
+        }
+        return { items, innerComments };
+    }
+
     parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
         this.singleWorkflowMode = false;
         const workflows: WorkflowDecl[] = [];
@@ -388,66 +483,20 @@ export class Parser {
         params: ParamDecl[];
         innerComments: Comment[] | undefined;
     } {
-        const params: ParamDecl[] = [];
-        if (this.peek().kind === TokenKind.RParen) {
-            // Empty parameter list: any comments inside `()` have no
-            // param to attach to. Surface them via the workflow's
-            // `paramInnerComments` slot.
-            const inner = this.takeLeadingComments();
-            return { params, innerComments: inner };
-        }
-        params.push(this.parseParam());
-        while (this.peek().kind === TokenKind.Comma) {
-            // Capture inline trailing comments on the just-parsed param
-            // BEFORE consuming the comma (e.g. `a: string /* note */, b: ...`).
-            // We allow same-line OR same-line-as-comma matching by line.
-            const prev = params[params.length - 1];
-            if (prev.endLine !== undefined) {
-                const t = this.takeInlineTrailingComments(prev.endLine);
-                if (t) prev.trailingComments = t;
-            }
-            this.advance(); // consume comma
-            // After the comma, also scoop any line/block comments that
-            // sit on the SAME source line as the param's last token
-            // (e.g. `a: int, // note`). Without this they would migrate
-            // to the next param's leading on round-trip — which is wrong
-            // because the formatter emits param trailings in this slot.
-            if (prev.endLine !== undefined) {
-                const t = this.takeInlineTrailingComments(prev.endLine);
-                if (t) {
-                    prev.trailingComments = [
-                        ...(prev.trailingComments ?? []),
-                        ...t,
-                    ];
-                }
-            }
-            if (this.peek().kind === TokenKind.RParen) break;
-            params.push(this.parseParam());
-        }
-        // Trailing comments before the closing `)`: attach to last param.
-        if (params.length > 0) {
-            const last = params[params.length - 1];
-            const remaining = this.takeLeadingComments();
-            if (remaining) {
-                last.trailingComments = [
-                    ...(last.trailingComments ?? []),
-                    ...remaining,
-                ];
-            }
-        }
-        return { params, innerComments: undefined };
-    }
-
-    private parseParam(): ParamDecl {
-        const leading = this.takeLeadingComments();
-        const l = this.loc();
-        const name = this.expect(TokenKind.Identifier).value;
-        this.expect(TokenKind.Colon);
-        const type = this.parseTypeExpr();
-        const decl: ParamDecl = { name, type, loc: l };
-        if (leading) decl.leadingComments = leading;
-        if (this.lastToken) decl.endLine = this.lastToken.line;
-        return decl;
+        const { items, innerComments } = this.parseCommaListWithComments(
+            TokenKind.RParen,
+            (leading) => {
+                const l = this.loc();
+                const name = this.expect(TokenKind.Identifier).value;
+                this.expect(TokenKind.Colon);
+                const type = this.parseTypeExpr();
+                const decl: ParamDecl = { name, type, loc: l };
+                if (leading) decl.leadingComments = leading;
+                if (this.lastToken) decl.endLine = this.lastToken.line;
+                return decl;
+            },
+        );
+        return { params: items, innerComments };
     }
 
     // ---- Types ----
@@ -475,72 +524,30 @@ export class Parser {
     private parseObjectType(): TypeExpr {
         const l = this.loc();
         const lbrace = this.expect(TokenKind.LBrace);
-        const fields: import("./ast.js").ObjectTypeField[] = [];
-        let innerComments: Comment[] | undefined;
-        while (
-            this.peek().kind !== TokenKind.RBrace &&
-            this.peek().kind !== TokenKind.EOF
-        ) {
-            const leading = this.takeLeadingComments();
-            if (this.peek().kind === TokenKind.RBrace) {
-                // Comments were the last things before `}`: empty-body
-                // case → record as innerComments.
-                if (leading) {
-                    innerComments = [...(innerComments ?? []), ...leading];
-                }
-                break;
-            }
-            const fl = this.loc();
-            const fname = this.expect(TokenKind.Identifier).value;
-            let optional = false;
-            if (this.peek().kind === TokenKind.QuestionMark) {
-                this.advance();
-                optional = true;
-            }
-            this.expect(TokenKind.Colon);
-            const ftype = this.parseTypeExpr();
-            const field: import("./ast.js").ObjectTypeField = {
-                name: fname,
-                type: ftype,
-                optional,
-                loc: fl,
-            };
-            if (leading) field.leadingComments = leading;
-            if (this.lastToken) field.endLine = this.lastToken.line;
-            // Inline trailing on this field (before the comma).
-            if (field.endLine !== undefined) {
-                const t = this.takeInlineTrailingComments(field.endLine);
-                if (t) field.trailingComments = t;
-            }
-            if (this.peek().kind === TokenKind.Comma) {
-                this.advance();
-                // Also scoop same-line comments AFTER the comma.
-                if (field.endLine !== undefined) {
-                    const t = this.takeInlineTrailingComments(field.endLine);
-                    if (t) {
-                        field.trailingComments = [
-                            ...(field.trailingComments ?? []),
-                            ...t,
-                        ];
+        const { items: fields, innerComments } =
+            this.parseCommaListWithComments<import("./ast.js").ObjectTypeField>(
+                TokenKind.RBrace,
+                (leading) => {
+                    const fl = this.loc();
+                    const fname = this.expect(TokenKind.Identifier).value;
+                    let optional = false;
+                    if (this.peek().kind === TokenKind.QuestionMark) {
+                        this.advance();
+                        optional = true;
                     }
-                }
-            }
-            fields.push(field);
-        }
-        // Drain any remaining comments before `}` and attach them as the
-        // trailing of the last field (if any) or as innerComments otherwise.
-        const remaining = this.takeLeadingComments();
-        if (remaining) {
-            if (fields.length > 0) {
-                const last = fields[fields.length - 1];
-                last.trailingComments = [
-                    ...(last.trailingComments ?? []),
-                    ...remaining,
-                ];
-            } else {
-                innerComments = [...(innerComments ?? []), ...remaining];
-            }
-        }
+                    this.expect(TokenKind.Colon);
+                    const ftype = this.parseTypeExpr();
+                    const field: import("./ast.js").ObjectTypeField = {
+                        name: fname,
+                        type: ftype,
+                        optional,
+                        loc: fl,
+                    };
+                    if (leading) field.leadingComments = leading;
+                    if (this.lastToken) field.endLine = this.lastToken.line;
+                    return field;
+                },
+            );
         const rbrace = this.expect(TokenKind.RBrace);
         const multiLine =
             (fields.length > 0 && fields[0].loc.line !== lbrace.line) ||
