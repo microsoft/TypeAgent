@@ -437,6 +437,32 @@ export function configToTree(config: Config): ConfigTree {
         if (Object.keys(r).length > 0) tree.reasoning = r;
     }
 
+    if (config.modelProvider !== undefined) {
+        tree.modelProvider = config.modelProvider;
+    }
+
+    if (config.copilot) {
+        const c: ConfigTree = {};
+        if (config.copilot.defaultModel !== undefined)
+            c.defaultModel = config.copilot.defaultModel;
+        if (config.copilot.cliPath !== undefined)
+            c.cliPath = config.copilot.cliPath;
+        if (config.copilot.reasoningEffort !== undefined)
+            c.reasoningEffort = config.copilot.reasoningEffort;
+        if (config.copilot.disableInfiniteSessions !== undefined)
+            c.disableInfiniteSessions = config.copilot.disableInfiniteSessions;
+        if (config.copilot.maxConcurrency !== undefined)
+            c.maxConcurrency = config.copilot.maxConcurrency;
+        if (config.copilot.maxTimeoutMs !== undefined)
+            c.maxTimeoutMs = config.copilot.maxTimeoutMs;
+        if (config.copilot.maxRetryAttempts !== undefined)
+            c.maxRetryAttempts = config.copilot.maxRetryAttempts;
+        if (config.copilot.enableModelRequestLogging !== undefined)
+            c.enableModelRequestLogging =
+                config.copilot.enableModelRequestLogging;
+        if (Object.keys(c).length > 0) tree.copilot = c;
+    }
+
     return tree;
 }
 
@@ -457,6 +483,8 @@ const TYPED_SECTION_KEYS = new Set([
     "vault",
     "azureFoundry",
     "reasoning",
+    "copilot",
+    "modelProvider",
 ]);
 
 export function isTypedSectionKey(key: string): boolean {
@@ -948,6 +976,49 @@ function emitAzureFoundry(node: unknown, out: FlatEnv): void {
     }
 }
 
+function emitModelProvider(node: unknown, out: FlatEnv): void {
+    if (typeof node !== "string") {
+        throw new Error(
+            `Expected a string at 'modelProvider', got ${typeof node}.`,
+        );
+    }
+    out.TYPEAGENT_MODEL_PROVIDER = node;
+}
+
+function emitCopilot(node: unknown, out: FlatEnv): void {
+    const c = asObject(node, "copilot");
+    if (c.defaultModel !== undefined)
+        out.COPILOT_DEFAULT_MODEL = asString(
+            c.defaultModel,
+            "copilot.defaultModel",
+        );
+    if (c.cliPath !== undefined)
+        out.COPILOT_CLI_PATH = asString(c.cliPath, "copilot.cliPath");
+    if (c.reasoningEffort !== undefined)
+        out.COPILOT_REASONING_EFFORT = asString(
+            c.reasoningEffort,
+            "copilot.reasoningEffort",
+        );
+    if (c.disableInfiniteSessions !== undefined)
+        out.COPILOT_DISABLE_INFINITE_SESSIONS = c.disableInfiniteSessions
+            ? "1"
+            : "0";
+    if (c.maxConcurrency !== undefined)
+        out.COPILOT_MAX_CONCURRENCY = String(
+            asNumber(c.maxConcurrency, "copilot.maxConcurrency"),
+        );
+    if (c.maxTimeoutMs !== undefined)
+        out.COPILOT_MAX_TIMEOUT = String(
+            asNumber(c.maxTimeoutMs, "copilot.maxTimeoutMs"),
+        );
+    if (c.maxRetryAttempts !== undefined)
+        out.COPILOT_MAX_RETRYATTEMPTS = String(
+            asNumber(c.maxRetryAttempts, "copilot.maxRetryAttempts"),
+        );
+    if (c.enableModelRequestLogging !== undefined)
+        out.COPILOT_ENABLE_LOGGING = c.enableModelRequestLogging ? "1" : "0";
+}
+
 function emitReasoning(node: unknown, out: FlatEnv): void {
     const r = asObject(node, "reasoning");
     if (r.timeoutMs !== undefined)
@@ -1005,6 +1076,12 @@ export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
             break;
         case "reasoning":
             emitReasoning(node, out);
+            break;
+        case "copilot":
+            emitCopilot(node, out);
+            break;
+        case "modelProvider":
+            emitModelProvider(node, out);
             break;
         default:
             throw new Error(`Not a typed section: '${key}'.`);

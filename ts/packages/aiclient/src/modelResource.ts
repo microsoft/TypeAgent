@@ -4,6 +4,34 @@
 import { openai as ai } from "aiclient";
 import { getOllamaModelNames } from "./ollamaModels.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
+import { getCopilotClient } from "./copilotModels.js";
+import registerDebug from "debug";
+
+const debugModelResource = registerDebug("typeagent:aiclient:modelresource");
+
+let copilotModelNamesCache: string[] | undefined;
+async function getCopilotModelNames(): Promise<string[]> {
+    if (copilotModelNamesCache !== undefined) return copilotModelNamesCache;
+    const config = getRuntimeConfig();
+    if (config.copilot === undefined) {
+        copilotModelNamesCache = [];
+        return copilotModelNamesCache;
+    }
+    try {
+        const client = await getCopilotClient(config.copilot.cliPath);
+        const models = await client.listModels();
+        copilotModelNamesCache = models
+            .filter((m) => m.policy?.state !== "disabled")
+            .map((m) => `copilot:${m.id}`);
+    } catch (err) {
+        debugModelResource(
+            "Failed to list Copilot models: %s",
+            err instanceof Error ? err.message : String(err),
+        );
+        copilotModelNamesCache = [];
+    }
+    return copilotModelNamesCache;
+}
 
 export function getChatModelMaxConcurrency(
     userMaxConcurrency?: number,
@@ -45,7 +73,12 @@ export async function getChatModelNames() {
         openaiNames.push("openai:LOCAL");
     }
 
-    return [...azureNames, ...openaiNames, ...(await getOllamaModelNames())];
+    return [
+        ...azureNames,
+        ...openaiNames,
+        ...(await getOllamaModelNames()),
+        ...(await getCopilotModelNames()),
+    ];
 }
 
 export function isMultiModalContentSupported(modelName: string | undefined) {

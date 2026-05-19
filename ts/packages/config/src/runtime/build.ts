@@ -156,6 +156,8 @@ export function buildConfig(flat: FlatEnv): Config {
     const vault = buildVault(remaining);
     const azureFoundry = buildAzureFoundry(remaining);
     const reasoning = buildReasoning(remaining);
+    const copilot = buildCopilot(remaining);
+    const modelProvider = buildModelProvider(remaining);
 
     return {
         azureOpenAI,
@@ -170,6 +172,8 @@ export function buildConfig(flat: FlatEnv): Config {
         vault,
         ...(azureFoundry ? { azureFoundry } : {}),
         ...(reasoning ? { reasoning } : {}),
+        ...(copilot ? { copilot } : {}),
+        ...(modelProvider !== undefined ? { modelProvider } : {}),
         extra: new Map(remaining),
     };
 }
@@ -780,6 +784,80 @@ function buildAzureFoundry(flat: Map<string, string>) {
             : {}),
         ...(httpEndpointLogicAppConnectionId !== undefined
             ? { httpEndpointLogicAppConnectionId }
+            : {}),
+    };
+}
+
+function buildModelProvider(
+    flat: Map<string, string>,
+): "azure" | "openai" | "ollama" | "copilot" | undefined {
+    const raw = popString(flat, "TYPEAGENT_MODEL_PROVIDER");
+    if (raw === undefined) return undefined;
+    const v = raw.toLowerCase();
+    if (v === "azure" || v === "openai" || v === "ollama" || v === "copilot") {
+        return v;
+    }
+    // Unknown value — leave it in extra rather than emitting a malformed
+    // typed field.
+    flat.set("TYPEAGENT_MODEL_PROVIDER", raw);
+    return undefined;
+}
+
+function buildCopilot(flat: Map<string, string>) {
+    const defaultModel = popString(flat, "COPILOT_DEFAULT_MODEL");
+    const cliPath = popString(flat, "COPILOT_CLI_PATH");
+    const reasoningEffortRaw = popString(flat, "COPILOT_REASONING_EFFORT");
+    const disableInfiniteRaw = popString(
+        flat,
+        "COPILOT_DISABLE_INFINITE_SESSIONS",
+    );
+    const maxConcurrency = popInt(flat, "COPILOT_MAX_CONCURRENCY");
+    const maxTimeoutMs = popInt(flat, "COPILOT_MAX_TIMEOUT");
+    const maxRetryAttempts = popInt(flat, "COPILOT_MAX_RETRYATTEMPTS");
+    const enableLogging = popString(flat, "COPILOT_ENABLE_LOGGING");
+
+    if (
+        defaultModel === undefined &&
+        cliPath === undefined &&
+        reasoningEffortRaw === undefined &&
+        disableInfiniteRaw === undefined &&
+        maxConcurrency === undefined &&
+        maxTimeoutMs === undefined &&
+        maxRetryAttempts === undefined &&
+        enableLogging === undefined
+    ) {
+        return undefined;
+    }
+
+    const reasoningEffort: "low" | "medium" | "high" | "xhigh" | undefined =
+        reasoningEffortRaw === "low" ||
+        reasoningEffortRaw === "medium" ||
+        reasoningEffortRaw === "high" ||
+        reasoningEffortRaw === "xhigh"
+            ? reasoningEffortRaw
+            : undefined;
+    const disableInfiniteSessions =
+        disableInfiniteRaw === undefined
+            ? undefined
+            : disableInfiniteRaw === "1" ||
+              disableInfiniteRaw.toLowerCase() === "true";
+    const enableModelRequestLogging =
+        enableLogging === undefined
+            ? undefined
+            : enableLogging === "1" || enableLogging.toLowerCase() === "true";
+
+    return {
+        ...(defaultModel !== undefined ? { defaultModel } : {}),
+        ...(cliPath !== undefined ? { cliPath } : {}),
+        ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
+        ...(disableInfiniteSessions !== undefined
+            ? { disableInfiniteSessions }
+            : {}),
+        ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+        ...(maxTimeoutMs !== undefined ? { maxTimeoutMs } : {}),
+        ...(maxRetryAttempts !== undefined ? { maxRetryAttempts } : {}),
+        ...(enableModelRequestLogging !== undefined
+            ? { enableModelRequestLogging }
             : {}),
     };
 }

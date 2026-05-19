@@ -18,6 +18,7 @@
  */
 
 import { buildConfig, type Config } from "@typeagent/config";
+import { setActiveModelProvider } from "./providerMode.js";
 
 let cached: Config | undefined;
 
@@ -27,6 +28,9 @@ let cached: Config | undefined;
  */
 export function setRuntimeConfig(config: Config): void {
     cached = config;
+    if (config.modelProvider !== undefined) {
+        setActiveModelProvider(config.modelProvider);
+    }
 }
 
 /**
@@ -39,6 +43,9 @@ export function initRuntimeConfigFromProcessEnv(): Config {
         if (typeof v === "string") flat[k] = v;
     }
     cached = buildConfig(flat);
+    if (cached.modelProvider !== undefined) {
+        setActiveModelProvider(cached.modelProvider);
+    }
     return cached;
 }
 
