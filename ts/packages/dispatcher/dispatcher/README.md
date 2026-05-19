@@ -194,9 +194,9 @@ By default agents runs out of proc in their own process. This is to ensure that 
 
 ### Diagnostics
 
-| Command  | Description                                                                                                                                                                                                                                                                                                                                                          |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@ports` | List every TCP port registered with the dispatcher's `PortRegistrar`, grouped by `(agent, role, port)`. Includes the agent-server's own listen port and the connected-client count for any agent that publishes one via `SessionContext.notifyClientCountChanged` (currently the browser and code agents). Rows from agents that don't publish a count render `N/A`. |
+| Command         | Description                                                                                                                                                                                                                                                                                                                                                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@system ports` | List every TCP port registered with the dispatcher's `PortRegistrar`, grouped by `(agent, role, port)`. Includes the agent-server's own listen port and the connected-client count for any agent that publishes one via `SessionContext.notifyClientCountChanged` (currently the browser and code agents). Rows from agents that don't publish a count render `N/A`. |
 
 ### User feedback
 

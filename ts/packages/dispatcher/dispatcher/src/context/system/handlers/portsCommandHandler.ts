@@ -180,7 +180,7 @@ function buildPortsHtml(
                     : escapeHtml(r.clientCount.toString());
             return (
                 `<tr>` +
-                `<td style="${tdBase};font-weight:600;color:#1e293b">${emoji ? emoji + " " : ""}${escapeHtml(r.agentName)}${systemTag}</td>` +
+                `<td style="${tdBase};font-weight:600;color:#1e293b">${emoji ? escapeHtml(emoji) + " " : ""}${escapeHtml(r.agentName)}${systemTag}</td>` +
                 `<td style="${tdBase};color:#475569">${escapeHtml(r.role)}</td>` +
                 `<td style="${tdBase};text-align:right;font-family:'Cascadia Code',Consolas,monospace">${r.port}</td>` +
                 `<td style="${tdBase};text-align:right">${clientCell}</td>` +
