@@ -1,0 +1,177 @@
+{
+  "name": "TypeAgent Development (Agent Worktrees)",
+  "build": { "dockerfile": "../Dockerfile" },
+
+  // Variant of the standard devcontainer where the container sees the
+  // workspace at the SAME absolute path as the host. This lets VS Code's
+  // Copilot CLI agent worktree feature work end-to-end:
+  //
+  //   src/vs/platform/agentHost/node/copilot/copilotAgent.ts
+  //   getCopilotWorktreesRoot() -> <parent>/<basename>.worktrees
+  //
+  // is hardcoded, so the only way to have host VS Code open an agent-
+  // created worktree at the same path the container created it is to
+  // make the parent directory a single bind mount with matching paths.
+  //
+  // This config is LOCAL-ONLY (Linux/macOS host with Docker). It will not
+  // work in Codespaces - there is no `localWorkspaceFolder` on the cloud
+  // host. Use ../devcontainer.json (the default config) for Codespaces.
+  //
+  // Prerequisites on the host:
+  //   - Your host user's UID matches the `codespace` user inside the
+  //     container. `updateRemoteUserUID` below handles the common case
+  //     by re-chowning `codespace` to your host UID on first start.
+  //   - The sibling `<repo>.worktrees` directory must exist on the host
+  //     before container start (Docker bind-mount requirement). The
+  //     `initializeCommand` below creates it automatically.
+
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/git-lfs:1": {
+      "autoPull": false
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22",
+      "nodeGypDependencies": true
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": true
+    },
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "8.0"
+    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
+      "username": "codespace",
+      "userUid": "1001",
+      "userGid": "1001"
+    }
+  },
+
+  // Re-chown the `codespace` user to the host user's UID/GID on container
+  // start so the bind-mounted source tree (owned by the host user) is
+  // writable from inside the container.
+  "updateRemoteUserUID": true,
+
+  // Hardening for agent use:
+  // - userEnvProbe "none" stops the Dev Containers CLI from sourcing your
+  //   host login shell and copying its environment (including any tokens
+  //   or agent-friendly env vars) into the container.
+  // - runArgs apply Docker-level constraints: drop all capabilities then
+  //   add back only those the post-create script needs (chown/dac_override
+  //   /fowner for volume ownership fixes; setuid/setgid because sudo and
+  //   the common-utils feature need them), and cap the process table to
+  //   limit fork-bomb blast radius.
+  //
+  // Note: `--security-opt=no-new-privileges` is intentionally NOT set,
+  // because it blocks setuid binaries (including sudo), which
+  // post-create.sh needs to chown the named-volume mountpoints Docker
+  // creates as root:root on first start.
+  "userEnvProbe": "none",
+  "runArgs": [
+    "--cap-drop=ALL",
+    // Needed by post-create.sh (chown volume mountpoints, sudo, common-utils)
+    "--cap-add=CHOWN",
+    "--cap-add=DAC_OVERRIDE",
+    "--cap-add=FOWNER",
+    "--cap-add=SETUID",
+    "--cap-add=SETGID",
+    // Needed by sudo to manipulate the capability bounding set, and by
+    // sshd's privilege separation (chroot, dropping caps on the child).
+    "--cap-add=SETPCAP",
+    "--cap-add=SYS_CHROOT",
+    "--cap-add=KILL",
+    // Needed if sshd binds a privileged port; harmless if it doesn't.
+    "--cap-add=NET_BIND_SERVICE",
+    // Silences `sudo: unable to send audit message` warnings; also used
+    // by sshd when logging auth events to the kernel audit subsystem.
+    "--cap-add=AUDIT_WRITE",
+    "--pids-limit=4096"
+  ],
+
+  "appPort": ["127.0.0.1:2222:2222"],
+
+  "forwardPorts": [8999, 8081, 8082, 3000, 3443],
+  "portsAttributes": {
+    "8999": { "label": "Agent Server (WebSocket)", "onAutoForward": "notify" },
+    "8081": { "label": "Browser Agent (WebSocket)", "onAutoForward": "notify" },
+    "8082": { "label": "Code Agent (WebSocket)", "onAutoForward": "notify" },
+    "3000": { "label": "API Server (HTTP)", "onAutoForward": "notify" },
+    "3443": { "label": "API Server (HTTPS)", "onAutoForward": "notify" }
+  },
+
+  // Ensure the sibling worktrees directory exists on the host before the
+  // container starts; Docker bind mounts fail if the source path is
+  // missing. Runs on the host, so we can use POSIX `mkdir -p` safely.
+  "initializeCommand": "mkdir -p '${localWorkspaceFolder}.worktrees'",
+
+  // Mirror the host path INSIDE the container by bind-mounting the repo
+  // at its host absolute path. A second bind mount exposes the sibling
+  // `<repo>.worktrees` directory at the matching host path so that
+  // VS Code's Copilot CLI agent (which writes worktrees to a hardcoded
+  // `<dirname(repo)>/<basename(repo)>.worktrees`) resolves to the same
+  // location on host and container.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+  "workspaceFolder": "${localWorkspaceFolder}",
+
+  "mounts": [
+    // Sibling worktrees directory bound at the same host path so the
+    // Copilot CLI agent worktree feature resolves identically on both
+    // sides.
+    "source=${localWorkspaceFolder}.worktrees,target=${localWorkspaceFolder}.worktrees,type=bind,consistency=cached",
+    // Global pnpm store - shared across containers for fast installs.
+    "source=pnpm-global-store,target=/home/codespace/.local/share/pnpm/store,type=volume",
+    // Per-container node_modules stays on a named volume. We deliberately
+    // do NOT bind-mount this to the host: native modules (better-sqlite3,
+    // etc.) are compiled for the container's libc/arch and would clash
+    // with anything the host has built.
+    "source=typeagent-node_modules-${devcontainerId},target=${containerWorkspaceFolder}/ts/node_modules,type=volume",
+    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume",
+    "source=copilot-cli-config-${devcontainerId},target=/home/codespace/.copilot,type=volume"
+  ],
+
+  "containerEnv": {
+    "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
+    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
+  },
+
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-dotnettools.csharp",
+        "ms-azuretools.vscode-azurefunctions",
+        "github.copilot",
+        "humao.rest-client"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+
+  "remoteUser": "codespace",
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  }
+}
