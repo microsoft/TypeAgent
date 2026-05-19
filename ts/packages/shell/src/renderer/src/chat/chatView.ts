@@ -1616,6 +1616,17 @@ export class ChatView {
                     const currentContent: string =
                         this.chatInput?.textarea.getTextEntry().innerHTML ?? "";
 
+                    // DIAGNOSTIC: log pre-rebuild state for windows command
+                    // backstack investigation. TODO: remove after diagnosing.
+                    const __diagPreLen = this.commandBackStack.length;
+                    const __diagPreIdx = this.commandBackStackIndex;
+                    const __diagPreAtIdx =
+                        this.commandBackStack[this.commandBackStackIndex];
+                    const __diagRebuild =
+                        this.commandBackStack.length === 0 ||
+                        this.commandBackStack[this.commandBackStackIndex] !==
+                            currentContent;
+
                     if (
                         this.commandBackStack.length === 0 ||
                         this.commandBackStack[this.commandBackStackIndex] !==
@@ -1661,6 +1672,16 @@ export class ChatView {
                     }
 
                     this.chatInput?.textarea.moveCursorToEnd();
+
+                    // DIAGNOSTIC: log post-state. TODO: remove after diagnosing.
+                    console.log(
+                        `DIAG[chatView] key=${ev.key} preLen=${__diagPreLen} preIdx=${__diagPreIdx} ` +
+                            `preAtIdx=${JSON.stringify(__diagPreAtIdx)} ` +
+                            `currentContent=${JSON.stringify(currentContent)} ` +
+                            `rebuild=${__diagRebuild} ` +
+                            `postLen=${this.commandBackStack.length} postIdx=${this.commandBackStackIndex} ` +
+                            `stack=${JSON.stringify(this.commandBackStack)}`,
+                    );
 
                     return false;
                 }
