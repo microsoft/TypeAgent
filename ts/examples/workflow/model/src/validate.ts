@@ -1163,8 +1163,7 @@ function validateBranchArm(
         });
     }
     // Recurse: validate the arm's nodes as a scope.
-    validateScope(armNodes, `${armPath}.scope.nodes`, tasks, errors);
-    validateSchemaCompat(armNodes, `${armPath}.scope.nodes`, errors);
+    validateSubScope(armNodes, `${armPath}.scope.nodes`, tasks, errors);
 
     // Branch arms are isolated sub-scopes: $from:"state" is not available
     // (no state namespace in arm ScopeContext). State values must cross the
@@ -1243,8 +1242,7 @@ function validateScope(
                     });
                 }
             }
-            checkTargetExists(nodeIds, node.next, path, "next", errors);
-            checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+            checkBindableTargets(nodeIds, node, path, errors);
         } else if (node.kind === "branch") {
             // Validate selectorSchema type: String() coercion at runtime
             // only produces useful results for string, number, and boolean.
@@ -1336,8 +1334,7 @@ function validateScope(
                 }
             }
             // Branch carries its own next / onError.
-            checkTargetExists(nodeIds, node.next, path, "next", errors);
-            checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+            checkBindableTargets(nodeIds, node, path, errors);
         } else if (node.kind === "loop") {
             if (!(node.body.entry in node.body.nodes)) {
                 errors.push({
@@ -1345,8 +1342,12 @@ function validateScope(
                     message: `Body entry "${node.body.entry}" does not exist.`,
                 });
             }
-            validateScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
-            validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
+            validateSubScope(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                tasks,
+                errors,
+            );
 
             // continueWhen is required; loop body natural completion triggers evaluation.
             if (node.continueWhen === undefined) {
@@ -1396,19 +1397,14 @@ function validateScope(
                 }
             }
 
-            if (
-                node.maxIterations !== undefined &&
-                (!Number.isInteger(node.maxIterations) ||
-                    node.maxIterations < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxIterations`,
-                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
-                });
-            }
+            checkPositiveIntegerField(
+                node.maxIterations,
+                path,
+                "maxIterations",
+                errors,
+            );
 
-            checkTargetExists(nodeIds, node.next, path, "next", errors);
-            checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+            checkBindableTargets(nodeIds, node, path, errors);
         } else if (node.kind === "fork") {
             const branchNames = Object.keys(node.branches);
             if (branchNames.length < 2) {
@@ -1424,30 +1420,20 @@ function validateScope(
                         message: `Branch entry "${branch.scope.entry}" does not exist.`,
                     });
                 }
-                validateScope(
+                validateSubScope(
                     branch.scope.nodes,
                     `${path}.branches.${bName}.scope.nodes`,
                     tasks,
                     errors,
                 );
-                validateSchemaCompat(
-                    branch.scope.nodes,
-                    `${path}.branches.${bName}.scope.nodes`,
-                    errors,
-                );
             }
-            if (
-                node.maxConcurrency !== undefined &&
-                (!Number.isInteger(node.maxConcurrency) ||
-                    node.maxConcurrency < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxConcurrency`,
-                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
-                });
-            }
-            checkTargetExists(nodeIds, node.next, path, "next", errors);
-            checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+            checkPositiveIntegerField(
+                node.maxConcurrency,
+                path,
+                "maxConcurrency",
+                errors,
+            );
+            checkBindableTargets(nodeIds, node, path, errors);
         } else if (node.kind === "forkMap") {
             if (
                 node.collectionSchema?.type !== "array" &&
@@ -1467,8 +1453,12 @@ function validateScope(
                     message: `Body entry "${node.body.entry}" does not exist.`,
                 });
             }
-            validateScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
-            validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
+            validateSubScope(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                tasks,
+                errors,
+            );
             // forkMap body must not use $from: "state"
             for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
                 if (hasInputs(bNode) && templateRefersToState(bNode.inputs)) {
@@ -1478,28 +1468,19 @@ function validateScope(
                     });
                 }
             }
-            if (
-                node.maxConcurrency !== undefined &&
-                (!Number.isInteger(node.maxConcurrency) ||
-                    node.maxConcurrency < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxConcurrency`,
-                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
-                });
-            }
-            if (
-                node.maxIterations !== undefined &&
-                (!Number.isInteger(node.maxIterations) ||
-                    node.maxIterations < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxIterations`,
-                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
-                });
-            }
-            checkTargetExists(nodeIds, node.next, path, "next", errors);
-            checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+            checkPositiveIntegerField(
+                node.maxConcurrency,
+                path,
+                "maxConcurrency",
+                errors,
+            );
+            checkPositiveIntegerField(
+                node.maxIterations,
+                path,
+                "maxIterations",
+                errors,
+            );
+            checkBindableTargets(nodeIds, node, path, errors);
         }
     }
 }
@@ -1678,6 +1659,55 @@ function checkTargetExists(
                 field === "onError"
                     ? `Error target "${target}" does not exist.`
                     : `Target "${target}" does not exist.`,
+        });
+    }
+}
+
+/**
+ * Validate that both `next` and `onError` (when present) point to existing
+ * nodes in the enclosing scope. All bindable node kinds (task/branch/loop/
+ * fork/forkMap) carry the same pair of fields.
+ */
+function checkBindableTargets(
+    nodeIds: Set<string>,
+    node: { next?: string; onError?: string },
+    path: string,
+    errors: ValidationError[],
+): void {
+    checkTargetExists(nodeIds, node.next, path, "next", errors);
+    checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+}
+
+/**
+ * Validate a sub-scope's nodes: structural validation followed by static
+ * schema compatibility. Used for loop bodies, fork branches, forkMap
+ * bodies, and branch arms.
+ */
+function validateSubScope(
+    nodes: Record<string, WorkflowNode>,
+    prefix: string,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    validateScope(nodes, prefix, tasks, errors);
+    validateSchemaCompat(nodes, prefix, errors);
+}
+
+/**
+ * Validate that a numeric field (when present) is a positive integer.
+ * Used for `maxConcurrency` and `maxIterations` on loop/fork/forkMap.
+ */
+function checkPositiveIntegerField(
+    value: number | undefined,
+    path: string,
+    field: string,
+    errors: ValidationError[],
+): void {
+    if (value === undefined) return;
+    if (!Number.isInteger(value) || value < 1) {
+        errors.push({
+            path: `${path}.${field}`,
+            message: `${field} must be a positive integer (got ${value}).`,
         });
     }
 }
@@ -2611,6 +2641,20 @@ function validateScopeTemplates(
                 `${path}.selector`,
                 errors,
             );
+            for (const [label, arm] of Object.entries(node.cases)) {
+                validateBranchArmTemplates(
+                    arm,
+                    `${path}.cases.${label}`,
+                    errors,
+                );
+            }
+            if (node.default !== undefined) {
+                validateBranchArmTemplates(
+                    node.default,
+                    `${path}.default`,
+                    errors,
+                );
+            }
         }
         if (node.kind === "loop") {
             checkReservedTemplateKeys(
@@ -2631,6 +2675,95 @@ function validateScopeTemplates(
                 errors,
             );
         }
+        if (node.kind === "fork") {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                for (const [fieldName, tmpl] of Object.entries(
+                    branch.inputs,
+                )) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.branches.${bName}.inputs.${fieldName}`,
+                        errors,
+                    );
+                }
+                checkReservedTemplateKeys(
+                    branch.scope.output,
+                    `${path}.branches.${bName}.scope.output`,
+                    errors,
+                );
+                validateScopeTemplates(
+                    branch.scope.nodes,
+                    `${path}.branches.${bName}.scope.nodes`,
+                    errors,
+                );
+            }
+        }
+        if (node.kind === "forkMap") {
+            checkReservedTemplateKeys(
+                node.collection,
+                `${path}.collection`,
+                errors,
+            );
+            if (node.inputs) {
+                for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.inputs.${fieldName}`,
+                        errors,
+                    );
+                }
+            }
+            checkReservedTemplateKeys(
+                node.body.output,
+                `${path}.body.output`,
+                errors,
+            );
+            validateScopeTemplates(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                errors,
+            );
+        }
+    }
+}
+
+/**
+ * Recurse template checks into a branch arm: arm `inputs` templates,
+ * the arm scope's `output` template, and the arm scope's nodes.
+ */
+function validateBranchArmTemplates(
+    arm: unknown,
+    prefix: string,
+    errors: ValidationError[],
+): void {
+    if (!arm || typeof arm !== "object") return;
+    const armObj = arm as Record<string, unknown>;
+    if (armObj.inputs && typeof armObj.inputs === "object") {
+        for (const [fieldName, tmpl] of Object.entries(
+            armObj.inputs as Record<string, Template>,
+        )) {
+            checkReservedTemplateKeys(
+                tmpl,
+                `${prefix}.inputs.${fieldName}`,
+                errors,
+            );
+        }
+    }
+    const scope = armObj.scope as Record<string, unknown> | undefined;
+    if (!scope || typeof scope !== "object") return;
+    if (scope.output !== undefined) {
+        checkReservedTemplateKeys(
+            scope.output as Template,
+            `${prefix}.scope.output`,
+            errors,
+        );
+    }
+    if (scope.nodes && typeof scope.nodes === "object") {
+        validateScopeTemplates(
+            scope.nodes as Record<string, WorkflowNode>,
+            `${prefix}.scope.nodes`,
+            errors,
+        );
     }
 }
 
