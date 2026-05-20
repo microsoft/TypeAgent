@@ -983,4 +983,80 @@ describe("Emitter", () => {
         // so we test the emitter directly with a manually constructed AST
         // (skip this test - covered by the parser)
     });
+
+    // ---- Decision 0010 structural assertions ----
+
+    // Both arms of an if/else that contain only a return statement
+    // must compile to a single-task noop arm whose output template
+    // points at the workflow input passed in via the arm's `inputs`.
+    test("if/else with return-only arms uses buildOutputOnlyArm shape", () => {
+        const ir = compileOk(`
+            workflow choose(x: boolean, a: string, b: string): string {
+                if (x) {
+                    return a;
+                } else {
+                    return b;
+                }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+
+        for (const armKey of ["true", "false"] as const) {
+            const arm = branchNode.cases[armKey];
+            expect(arm).toBeDefined();
+            const armNodes = Object.values(arm.scope.nodes);
+            // Single synthetic noop task in each arm.
+            expect(armNodes).toHaveLength(1);
+            const only = armNodes[0] as TaskNode;
+            expect(only.kind).toBe("task");
+            expect(only.task).toBe("noop");
+            // The outer input is hoisted into the arm's inputs and the
+            // scope output template reads from input.value, so neither arm
+            // ends up with a stray $from:input reference inside.
+            expect(Object.keys(arm.inputs).length).toBeGreaterThan(0);
+            const output = arm.scope.output as Record<string, unknown>;
+            expect(output.$from).toBe("input");
+        }
+    });
+
+    // emitFilter emits an inner `filter_check` branch that decides whether
+    // to append the current element. threadNext does not auto-link branch
+    // nodes, so the emitter wires `filter_check.next = step_i` manually.
+    // Without this wiring the loop body would not advance the counter.
+    test("filter inner branch is wired to the step counter", () => {
+        const ir = compileOk(`
+            workflow test(items: string[]): unknown {
+                return filter(items, (item) => {
+                    return item === "keep";
+                });
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+
+        // The body's outer iteration check (true arm = work).
+        const checkNode = Object.values(body.nodes).find(
+            (n) => n.kind === "branch",
+        ) as BranchNode | undefined;
+        expect(checkNode).toBeDefined();
+
+        // The inner filter branch sits in the work arm.
+        const workScope = (checkNode!.cases["true"] as unknown as {
+            scope: { nodes: Record<string, WorkflowNode> };
+        }).scope;
+        const filterBranchEntry = Object.entries(workScope.nodes).find(
+            ([, n]) => n.kind === "branch",
+        );
+        expect(filterBranchEntry).toBeDefined();
+        const [, filterBranch] = filterBranchEntry!;
+        const fb = filterBranch as BranchNode;
+
+        // The branch must point at a step_i (math.add) task; without
+        // this wiring the loop body would not advance the counter.
+        expect(fb.next).toBeDefined();
+        const stepNode = workScope.nodes[fb.next!] as TaskNode;
+        expect(stepNode).toBeDefined();
+        expect(stepNode.kind).toBe("task");
+        expect(stepNode.task).toBe("math.add");
+    });
 });
