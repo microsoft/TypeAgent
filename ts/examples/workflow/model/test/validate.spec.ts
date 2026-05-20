@@ -277,7 +277,7 @@ describe("validateWorkflowIR", () => {
         );
     });
 
-    // removed by decision 0010: @iterate/@exit sentinels are gone
+    // @iterate/@exit sentinels are retired; these test cases verify rejection
 
     it("rejects loop next pointing to non-existent node", () => {
         const ir = makeMinimalIR({
@@ -4157,7 +4157,7 @@ describe("validateWorkflowIR", () => {
         });
     });
 
-    describe("decision 0010: branch as value-producing node", () => {
+    describe("branch as value-producing node", () => {
         it("accepts branch with bind+outputSchema where arms are assignable", () => {
             const ir = makeMinimalIR({
                 nodes: {

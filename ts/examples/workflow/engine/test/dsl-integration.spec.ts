@@ -1169,7 +1169,7 @@ describe("DSL -> Engine integration", () => {
             expect(result.output).toEqual([2, 8, 4]);
         });
 
-        it("G15: ternary inside map body (branch in forkMap scope)", async () => {
+        it("ternary inside map body (branch in forkMap scope)", async () => {
             const ir = compileOk(`
                 workflow test(nums: number[]): unknown {
                     const result = map(nums, (n) => {

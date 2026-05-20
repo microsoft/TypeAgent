@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Positive-coverage matrix for decision 0010 (finish-workflow-scope-unification).
-// Each test exercises one cell of the matrix from the implementation plan
-// (task 19). Negative coverage lives in validate.spec.ts.
+// Positive-coverage matrix for branch-as-value-producing-node and
+// loop-with-continueWhen IR shapes. Each test exercises one cell.
+// Negative coverage lives in validate.spec.ts.
 
 import {
     WorkflowIR,
@@ -32,7 +32,7 @@ function taskMap(...names: string[]): Map<string, TaskDefinition> {
 function baseIR(overrides: Partial<WorkflowIR>): WorkflowIR {
     return {
         kind: "workflow",
-        name: "decision-0010-coverage",
+        name: "branch-loop-ir-coverage",
         version: "1",
         inputSchema: { type: "object" },
         outputSchema: { type: "object" },
@@ -66,7 +66,7 @@ function stringArm(bindName: string, value: string): BranchArm {
     };
 }
 
-describe("decision 0010 positive coverage matrix", () => {
+describe("branch/loop IR positive coverage matrix", () => {
     // ---- Cell 1: branch with bind + outputSchema (uniform-output arms) ----
     it("accepts branch with bind+outputSchema (uniform string arms)", () => {
         const branch: BranchNode = {

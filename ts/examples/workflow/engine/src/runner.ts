@@ -1143,7 +1143,7 @@ export class WorkflowEngine {
                     i,
                 );
 
-                // Evaluate continueWhen (decision 0010, replaces sentinels).
+                // Evaluate continueWhen to determine whether to iterate or exit.
                 const continueResult = resolveTemplate(
                     node.continueWhen,
                     bodyScope,

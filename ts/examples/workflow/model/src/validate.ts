@@ -272,11 +272,11 @@ function detectCycles(cfg: ScopeCFG): string[][] {
 
 /**
  * Check that every node can reach a terminal (a node with no
- * outgoing edges). Per decision 0010, this applies uniformly across
- * all scopes (top-level, loop body, fork branch, forkMap body, and
- * branch arm): a terminal in a sub-scope is the scope's natural
- * completion site where its `output` resolves. The `@iterate` /
- * `@exit` sentinels have been retired.
+ * outgoing edges). This applies uniformly across all scopes
+ * (top-level, loop body, fork branch, forkMap body, and branch arm):
+ * a terminal in a sub-scope is the scope's natural completion site
+ * where its `output` resolves. The `@iterate` / `@exit` sentinels
+ * have been retired.
  */
 function checkTermination(cfg: ScopeCFG): Set<string> {
     const exitNodes = new Set<string>(cfg.terminals);
@@ -1124,7 +1124,7 @@ function validateBranchArm(
             path: armPath,
             message:
                 `Branch arm must be an object with "inputs" and "scope" ` +
-                `fields (decision 0010).`,
+                `fields.`,
         });
         return;
     }
@@ -1280,13 +1280,13 @@ function validateScope(
                     errors,
                 );
             }
-            // Branch bind / outputSchema mutual requirement per decision 0010.
+            // Branch bind / outputSchema are mutually required.
             if (node.bind !== undefined && node.outputSchema === undefined) {
                 errors.push({
                     path: `${path}.outputSchema`,
                     message:
                         `Branch declares bind "${node.bind}" but no outputSchema. ` +
-                        `Decision 0010: when a branch declares bind, outputSchema is required.`,
+                        `When a branch declares bind, outputSchema is required.`,
                 });
             }
             if (node.outputSchema !== undefined && node.bind === undefined) {
@@ -1337,7 +1337,7 @@ function validateScope(
                     });
                 }
             }
-            // Branch carries its own next / onError per decision 0010.
+            // Branch carries its own next / onError.
             checkTargetExists(nodeIds, node.next, path, "next", errors);
             checkTargetExists(nodeIds, node.onError, path, "onError", errors);
         } else if (node.kind === "loop") {
@@ -1350,14 +1350,14 @@ function validateScope(
             validateScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
             validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
 
-            // Decision 0010: continueWhen replaces @iterate / @exit sentinels.
+            // continueWhen replaces the retired @iterate / @exit sentinels.
             if (node.continueWhen === undefined) {
                 errors.push({
                     path: `${path}.continueWhen`,
                     message:
                         `Loop must declare continueWhen (a Template that ` +
                         `resolves to a boolean in the body scope at body ` +
-                        `natural completion). Per decision 0010.`,
+                        `natural completion).`,
                 });
             } else {
                 // Validate that $from:scope refs in continueWhen resolve to
@@ -1635,7 +1635,7 @@ function typeSetsOverlap(aType: unknown, bType: unknown): boolean {
 }
 
 /** True when `target` is a loop sentinel. */
-/** Loop sentinels @iterate / @exit have been retired by decision 0010;
+/** Loop sentinels @iterate / @exit are retired;
  *  this helper survives only as a documentation hook. */
 function isSentinel(_target: string): _target is never {
     return false;
@@ -1645,8 +1645,8 @@ function isSentinel(_target: string): _target is never {
 function isBindableNode(
     node: WorkflowNode,
 ): node is TaskNode | LoopNode | ForkNode | ForkMapNode | BranchNode {
-    // Per decision 0010, branch nodes can also bind a value when they
-    // carry both `bind` and `outputSchema` (uniform-output arms).
+    // Branch nodes bind a value when they carry both `bind` and
+    // `outputSchema` (uniform-output arms).
     return true;
 }
 

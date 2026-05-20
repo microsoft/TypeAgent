@@ -56,9 +56,9 @@ export interface BranchNode {
      * Each case maps a discriminant value to a `BranchArm`: an
      * `inputs` template wiring outer-scope values into the arm and a
      * `scope` (`WorkflowScope`) that runs in isolation. Identical in
-     * shape to `ForkBranch` (ir-v0.2 §2.1). Per decision 0010, arms
-     * are full sub-scopes - not bare node IDs - so a branch composes
-     * exactly like fork/forkMap/loop body.
+     * shape to `ForkBranch` (ir-v0.2 §2.1). Arms are full sub-scopes
+     * — not bare node IDs — so a branch composes exactly like
+     * fork/forkMap/loop body.
      */
     cases: Record<string, BranchArm>;
     /**
@@ -83,7 +83,7 @@ export interface BranchNode {
     /**
      * Recovery target for arm-scope failure. Selector resolution is
      * statically unreachable (exhaustiveness + dominator passes) and
-     * does not contribute to onError. Per decision 0010.
+     * does not contribute to onError.
      */
     onError?: string;
     /** Hide-by-default per §8.15; publishes the branch's output value
@@ -133,8 +133,7 @@ export interface LoopNode {
      * null` runs). When the resolved value is `true`, `iterateState`
      * is evaluated and the loop iterates; when `false`, the loop
      * exits with `body.output` as its output value. Must be
-     * boolean-typed. Per decision 0010 (retires `@iterate`/`@exit`
-     * sentinels).
+     * boolean-typed. Retires the `@iterate`/`@exit` sentinel pattern.
      */
     continueWhen: Template;
     maxIterations?: number;
