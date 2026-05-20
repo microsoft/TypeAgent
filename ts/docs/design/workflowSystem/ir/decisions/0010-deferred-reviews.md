@@ -82,11 +82,11 @@ literal-true is occasionally legitimate (e.g. a polling loop with
 exception for `onError`-using loops or a separate
 "is this loop reachable to a terminal" pass, neither of which is
 on the critical path for 0010 landing.
-Follow-up pointer: re-open on a second occurrence of an
-accidentally-infinite loop in user code, or a redesign of
-`maxIterations` semantics. At that point add a validator pass
-that flags constant-`true` `continueWhen` unless the body has a
-structural exit (throw, onError-terminating arm, etc.).
+Follow-up pointer: design options and open questions are tracked
+in [`../future/loop-termination-detection.md`](../future/loop-termination-detection.md).
+Re-open on a second occurrence of an accidentally-infinite loop
+in user code, a proof-of-concept for a bounded-loop variant, or
+a redesign of `maxIterations` semantics.
 
 ### 2026-05-20 - `continueWhen` template references not name-resolved
 
