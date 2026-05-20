@@ -119,6 +119,7 @@ points to the `const` keyword; the actual name is scanned forward).
 | Rename | `textDocument/rename` + `prepareRename` | `features/rename.ts` |
 | Code actions | `textDocument/codeAction` | `features/codeActions.ts` |
 | IR preview | `workflow/compileIR` (custom) | `features/compileIR.ts` |
+| Graph preview | `workflow/previewGraph` (custom) | `features/previewGraph.ts` |
 
 ---
 

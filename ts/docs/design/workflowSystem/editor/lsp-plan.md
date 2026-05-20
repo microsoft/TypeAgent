@@ -98,7 +98,7 @@ Key design choices:
 ```
 package.json                 # bin: workflow-lsp; deps: workflow-dsl, workflow-model, vscode-languageserver, vscode-languageserver-textdocument
 src/server.ts                # connection, capabilities, lifecycle
-src/documentStore.ts         # URI -> { text, tokens, ast, diagnostics }
+src/parsedDocument.ts        # URI -> { text, tokens, ast, diagnostics }
 src/taskSchemas.ts           # builds TaskSchemaInfo[] from workflow-engine's allBuiltinTasks (one-shot)
 src/features/
   diagnostics.ts
@@ -113,6 +113,8 @@ src/features/
   rename.ts
   codeActions.ts
   inlayHints.ts
+  compileIR.ts
+  previewGraph.ts
 src/util/position.ts         # SourceLocation <-> LSP Position/Range
 src/index.ts                 # bin entry: starts server on stdio
 test/                        # per-feature jest specs against in-memory docs
@@ -125,8 +127,7 @@ jest.config.cjs
 
 ```
 package.json                 # extension manifest; activationEvents on language:workflow
-src/extension.ts             # activate(): start LanguageClient, register preview commands
-src/irPreview.ts             # webview that shows compile() output
+src/extension.ts             # activate(): start LanguageClient, register preview commands (IR preview inline here)
 src/graphPreview.ts          # webview that renders extractGraph() as inline SVG (layered top-down)
 syntaxes/workflow.tmLanguage.json   # TextMate grammar
 language-configuration.json  # brackets, comments, auto-indent
