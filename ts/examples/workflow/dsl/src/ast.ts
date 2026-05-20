@@ -12,6 +12,8 @@ export interface SourceLocation {
     line: number;
     col: number;
     offset: number;
+    /** Number of source characters this location spans. */
+    length?: number;
 }
 
 export interface Comment {
@@ -135,6 +137,8 @@ export type Statement =
 export interface ConstStatement {
     kind: "ConstStatement";
     name: string;
+    /** Location of the binding identifier token (not the `const` keyword). */
+    nameLoc: SourceLocation;
     typeAnnotation?: TypeExpr | undefined;
     value: Expr;
     loc: SourceLocation;
@@ -159,6 +163,8 @@ export interface ConstStatement {
 export interface DestructuringConst {
     kind: "DestructuringConst";
     names: string[];
+    /** One location per bound name in the destructure pattern. */
+    nameLocs: SourceLocation[];
     value: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];

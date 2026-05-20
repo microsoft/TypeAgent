@@ -6,10 +6,8 @@
  * surface lex/parse/typecheck/emit errors via
  * `textDocument/publishDiagnostics`.
  *
- * Notes on range fidelity:
- *   `CompileError` only carries a start `line` / `col`. We synthesize
- *   a small range at that position (`pointRange`). Phase 2+ can widen
- *   the range once we propagate token spans through the compiler.
+ * `CompileError` now carries both a start position and a `length` so
+ * each diagnostic squiggle covers the real token span.
  */
 
 import { Diagnostic, DiagnosticSeverity } from "vscode-languageserver/node.js";
@@ -28,7 +26,7 @@ export function computeDiagnostics(
 function toDiagnostic(err: CompileError): Diagnostic {
     return {
         severity: DiagnosticSeverity.Error,
-        range: pointRange({ line: err.line, col: err.col }),
+        range: pointRange({ line: err.line, col: err.col }, err.length),
         message: err.message,
         source: "workflow",
         code: err.phase,

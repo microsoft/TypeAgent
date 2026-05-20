@@ -90,6 +90,7 @@ export interface ParseError {
     message: string;
     line: number;
     col: number;
+    length: number;
 }
 
 /**
@@ -384,7 +385,12 @@ export class Parser {
 
     private error(msg: string): void {
         const t = this.peek();
-        this.errors.push({ message: msg, line: t.line, col: t.col });
+        this.errors.push({
+            message: msg,
+            line: t.line,
+            col: t.col,
+            length: t.value.length || 1,
+        });
     }
 
     /**
@@ -414,7 +420,7 @@ export class Parser {
                 tok.line,
                 tok.col + 1,
             );
-            this.errors.push({ message: e.message, line, col });
+            this.errors.push({ message: e.message, line, col, length: 1 });
         }
     }
 
@@ -632,6 +638,7 @@ export class Parser {
                 return {
                     kind: "ConstStatement",
                     name: `__synthetic_${expr.loc.line}_${expr.loc.col}`,
+                    nameLoc: expr.loc,
                     value: expr,
                     loc: expr.loc,
                     isSynthetic: true,
@@ -655,6 +662,12 @@ export class Parser {
 
         const nameTok = this.expect(TokenKind.Identifier);
         const name = nameTok.value;
+        const nameLoc: SourceLocation = {
+            line: nameTok.line,
+            col: nameTok.col,
+            offset: nameTok.offset,
+            length: nameTok.value.length,
+        };
         // The `__synthetic_` prefix is reserved for the formatter's
         // bare-expression wrappers (see parseStatement on Identifier).
         // Reject user code that tries to shadow it so format -> parse
@@ -673,25 +686,47 @@ export class Parser {
         this.expect(TokenKind.Equals);
         const value = this.parseExpression();
         this.expectSemicolon();
-        return { kind: "ConstStatement", name, typeAnnotation, value, loc: l };
+        return {
+            kind: "ConstStatement",
+            name,
+            nameLoc,
+            typeAnnotation,
+            value,
+            loc: l,
+        };
     }
 
     private parseDestructuringConst(l: SourceLocation): DestructuringConst {
         this.expect(TokenKind.LBracket);
         const names: string[] = [];
+        const nameLocs: SourceLocation[] = [];
         if (this.peek().kind !== TokenKind.RBracket) {
-            names.push(this.expect(TokenKind.Identifier).value);
+            const t0 = this.expect(TokenKind.Identifier);
+            names.push(t0.value);
+            nameLocs.push({
+                line: t0.line,
+                col: t0.col,
+                offset: t0.offset,
+                length: t0.value.length,
+            });
             while (this.peek().kind === TokenKind.Comma) {
                 this.advance();
                 if (this.peek().kind === TokenKind.RBracket) break;
-                names.push(this.expect(TokenKind.Identifier).value);
+                const t = this.expect(TokenKind.Identifier);
+                names.push(t.value);
+                nameLocs.push({
+                    line: t.line,
+                    col: t.col,
+                    offset: t.offset,
+                    length: t.value.length,
+                });
             }
         }
         this.expect(TokenKind.RBracket);
         this.expect(TokenKind.Equals);
         const value = this.parseExpression();
         this.expectSemicolon();
-        return { kind: "DestructuringConst", names, value, loc: l };
+        return { kind: "DestructuringConst", names, nameLocs, value, loc: l };
     }
 
     private parseIfStmt(): IfStatement {

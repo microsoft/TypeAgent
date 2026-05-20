@@ -71,6 +71,7 @@ export interface TypeError {
     message: string;
     line: number;
     col: number;
+    length: number;
 }
 
 // ---- Helpers ----
@@ -277,8 +278,13 @@ export class TypeChecker {
         return this.errors;
     }
 
-    private addError(msg: string, line: number, col: number): void {
-        this.errors.push({ message: msg, line, col });
+    private addError(
+        msg: string,
+        line: number,
+        col: number,
+        length: number = 1,
+    ): void {
+        this.errors.push({ message: msg, line, col, length });
     }
 
     private resolveTypeExpr(te: TypeExpr): TypeInfo {
@@ -287,6 +293,7 @@ export class TypeChecker {
                 `Unknown type: '${unknownType.name}'`,
                 unknownType.loc.line,
                 unknownType.loc.col,
+                unknownType.name.length,
             );
         });
     }
@@ -454,6 +461,7 @@ export class TypeChecker {
                             `Unknown reference: '${e.segments[0]}'`,
                             e.loc.line,
                             e.loc.col,
+                            e.segments[0].length,
                         );
                         return UNRESOLVED;
                     }
@@ -466,6 +474,7 @@ export class TypeChecker {
                         `Unknown reference: '${e.segments[0]}'`,
                         e.loc.line,
                         e.loc.col,
+                        e.segments[0].length,
                     );
                     return UNRESOLVED;
                 }
@@ -478,6 +487,7 @@ export class TypeChecker {
                             `Cannot access property '${e.segments[i]}' on unknown type`,
                             e.loc.line,
                             e.loc.col,
+                            e.segments[i].length,
                         );
                         return UNRESOLVED;
                     }
@@ -486,6 +496,7 @@ export class TypeChecker {
                             `Cannot access property '${e.segments[i]}' on type '${typeName(current)}'`,
                             e.loc.line,
                             e.loc.col,
+                            e.segments[i].length,
                         );
                         return UNRESOLVED;
                     }
@@ -495,6 +506,7 @@ export class TypeChecker {
                             `Property '${e.segments[i]}' does not exist on type '${typeName(current)}'`,
                             e.loc.line,
                             e.loc.col,
+                            e.segments[i].length,
                         );
                         return UNRESOLVED;
                     }
@@ -509,6 +521,7 @@ export class TypeChecker {
                         `Unknown task: '${e.task}'`,
                         e.loc.line,
                         e.loc.col,
+                        e.task.length,
                     );
                     return UNRESOLVED;
                 }
@@ -524,6 +537,7 @@ export class TypeChecker {
                         `Unknown workflow: '${e.name}'`,
                         e.loc.line,
                         e.loc.col,
+                        e.name.length,
                     );
                     return UNRESOLVED;
                 }

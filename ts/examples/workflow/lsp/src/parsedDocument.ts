@@ -53,7 +53,7 @@ export function getParsed(doc: TextDocument): ParsedDocument {
         const { ast } = parser.parseSingle();
         if (ast) {
             entry.ast = ast;
-            entry.symbols = buildSymbolTable(ast, text);
+            entry.symbols = buildSymbolTable(ast);
         }
     }
     cache.set(doc.uri, entry);
