@@ -395,3 +395,35 @@ class of bug.
 
 Phase 3 (non-DSL stdlib documentation, straggler search, decision
 log audit) can now proceed.
+
+---
+
+### Phase 3 promote summary
+
+**Phase 3 = "documentation/audit cleanup".** Closed with:
+
+- engineering/plan.md: decision 0009 row and Loop output appendix
+  now reference body completion under `continueWhen` (corrected
+  twice via reviews to be precise about the per-iteration
+  ordering: body completes → continueWhen evaluates → if false,
+  output resolves).
+- principles/design-principles.md: P5 has a historical note that
+  scenarios 37 and 41 were written under the @iterate/@exit shape
+  and that decision 0010 made two coupled changes (arms as
+  WorkflowScope, continueWhen as iteration control).
+- Straggler search audit: no active code references remain. The
+  remaining @iterate/@exit mentions in IR v0.1, the DSL-gap doc,
+  the workflow-scope-proposal, and future/ designs are all either
+  (a) inside explicit "Pre-0010" / proposal / design-rationale
+  sections, (b) test fixtures verifying rejection, or (c)
+  future-feature comparisons that intentionally contrast new vs.
+  old.
+
+**Reviews:** 2 code-review rounds (both surfaced real phrasing
+issues that were corrected). Test-gap rounds for Phase 3 are
+n/a — no production-code changes. Phase 2's gap-round results
+already cover the runtime/emitter assertions for the new model.
+
+**Decision 0010 status: complete.** All 26 plan tasks done. All
+test suites green: model 148/148 (1 skip tracked), dsl 634/634,
+engine 199/199.
