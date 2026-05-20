@@ -10,7 +10,7 @@ noted in `runner.ts`:
 1. Branch arms and loop body iterations receive a **shallow copy**
    of the parent `state` dict, so top-level reassignment by one
    arm/iteration is invisible to sibling arms / subsequent
-   iterations. But a task that mutates a *property* of an input
+   iterations. But a task that mutates a _property_ of an input
    object (e.g. `results.push(x)`) would still mutate the parent's
    copy, because `resolveTemplate` returns the live reference
    stored in `scope.bindings` or `scope.state`.
@@ -62,7 +62,9 @@ const resolvedInput = resolveTemplate(node.inputs, resolveScope);
 with:
 
 ```ts
-const resolvedInput = structuredClone(resolveTemplate(node.inputs, resolveScope));
+const resolvedInput = structuredClone(
+  resolveTemplate(node.inputs, resolveScope),
+);
 ```
 
 **Pros:** Eliminates the risk entirely; tasks are free to mutate
@@ -118,6 +120,7 @@ purity; no enforcement for unmarked tasks.
 ## Trigger for revisiting
 
 Re-open when:
+
 - A user-supplied task causes a silent mutation bug in a workflow.
 - A standard-library task is added that mutates its inputs.
 - A benchmarking pass on `structuredClone` shows acceptable cost.

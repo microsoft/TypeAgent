@@ -79,9 +79,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -99,11 +97,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -118,11 +112,7 @@
       },
       "inputs": {
         "command": "git",
-        "args": [
-          "rev-parse",
-          "--abbrev-ref",
-          "HEAD"
-        ],
+        "args": ["rev-parse", "--abbrev-ref", "HEAD"],
         "cwd": {
           "$from": "input",
           "name": "repoPath"
@@ -136,10 +126,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -169,9 +156,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -189,11 +174,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -228,9 +209,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -248,11 +227,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -288,10 +263,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -314,16 +286,12 @@
           "files": {
             "$from": "scope",
             "name": "fileList",
-            "path": [
-              "stdout"
-            ]
+            "path": ["stdout"]
           },
           "diff": {
             "$from": "scope",
             "name": "fullDiff",
-            "path": [
-              "stdout"
-            ]
+            "path": ["stdout"]
           }
         }
       },
@@ -335,9 +303,7 @@
       "task": "llm.generateJson",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "prompt"
-        ],
+        "required": ["prompt"],
         "properties": {
           "prompt": {
             "type": "string"
@@ -349,19 +315,13 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "groups"
-        ],
+        "required": ["groups"],
         "properties": {
           "groups": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "name",
-                "files",
-                "commitMessage"
-              ],
+              "required": ["name", "files", "commitMessage"],
               "properties": {
                 "name": {
                   "type": "string"
@@ -406,10 +366,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -434,9 +391,7 @@
         "groups": {
           "$from": "scope",
           "name": "analysisResult",
-          "path": [
-            "groups"
-          ]
+          "path": ["groups"]
         },
         "repoPath": {
           "$from": "input",
@@ -538,10 +493,7 @@
             "task": "list.elementAt",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "list",
-                "index"
-              ],
+              "required": ["list", "index"],
               "properties": {
                 "list": {
                   "type": "array"
@@ -553,11 +505,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "name",
-                "files",
-                "commitMessage"
-              ],
+              "required": ["name", "files", "commitMessage"],
               "properties": {
                 "name": {
                   "type": "string"
@@ -600,10 +548,7 @@
             "task": "string.join",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "list",
-                "delimiter"
-              ],
+              "required": ["list", "delimiter"],
               "properties": {
                 "list": {
                   "type": "array",
@@ -623,9 +568,7 @@
               "list": {
                 "$from": "scope",
                 "name": "currentGroup",
-                "path": [
-                  "files"
-                ]
+                "path": ["files"]
               },
               "delimiter": "\n"
             },
@@ -637,10 +580,7 @@
             "task": "string.join",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "list",
-                "delimiter"
-              ],
+              "required": ["list", "delimiter"],
               "properties": {
                 "list": {
                   "type": "array",
@@ -660,9 +600,7 @@
               "list": {
                 "$from": "scope",
                 "name": "currentGroup",
-                "path": [
-                  "dependsOn"
-                ]
+                "path": ["dependsOn"]
               },
               "delimiter": " "
             },
@@ -674,10 +612,7 @@
             "task": "text.template",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "template",
-                "vars"
-              ],
+              "required": ["template", "vars"],
               "properties": {
                 "template": {
                   "type": "string"
@@ -696,9 +631,7 @@
                 "name": {
                   "$from": "scope",
                   "name": "currentGroup",
-                  "path": [
-                    "name"
-                  ]
+                  "path": ["name"]
                 },
                 "featureBranch": {
                   "$from": "input",
@@ -723,9 +656,7 @@
                 "commitMessage": {
                   "$from": "scope",
                   "name": "currentGroup",
-                  "path": [
-                    "commitMessage"
-                  ]
+                  "path": ["commitMessage"]
                 }
               }
             },
@@ -737,9 +668,7 @@
             "task": "shell.exec",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "command"
-              ],
+              "required": ["command"],
               "properties": {
                 "command": {
                   "type": "string"
@@ -757,11 +686,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "stdout",
-                "stderr",
-                "exitCode"
-              ],
+              "required": ["stdout", "stderr", "exitCode"],
               "properties": {
                 "stdout": {
                   "type": "string"
@@ -796,9 +721,7 @@
             "task": "shell.exec",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "command"
-              ],
+              "required": ["command"],
               "properties": {
                 "command": {
                   "type": "string"
@@ -816,11 +739,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "stdout",
-                "stderr",
-                "exitCode"
-              ],
+              "required": ["stdout", "stderr", "exitCode"],
               "properties": {
                 "stdout": {
                   "type": "string"
@@ -856,9 +775,7 @@
             "task": "shell.exec",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "command"
-              ],
+              "required": ["command"],
               "properties": {
                 "command": {
                   "type": "string"
@@ -876,11 +793,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "stdout",
-                "stderr",
-                "exitCode"
-              ],
+              "required": ["stdout", "stderr", "exitCode"],
               "properties": {
                 "stdout": {
                   "type": "string"
@@ -916,10 +829,7 @@
             "task": "text.template",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "template",
-                "vars"
-              ],
+              "required": ["template", "vars"],
               "properties": {
                 "template": {
                   "type": "string"
@@ -942,9 +852,7 @@
                 "name": {
                   "$from": "scope",
                   "name": "currentGroup",
-                  "path": [
-                    "name"
-                  ]
+                  "path": ["name"]
                 }
               }
             },
@@ -956,10 +864,7 @@
             "task": "list.append",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "list",
-                "item"
-              ],
+              "required": ["list", "item"],
               "properties": {
                 "list": {
                   "type": "array"
@@ -988,9 +893,7 @@
             "task": "shell.exec",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "command"
-              ],
+              "required": ["command"],
               "properties": {
                 "command": {
                   "type": "string"
@@ -1008,11 +911,7 @@
             },
             "outputSchema": {
               "type": "object",
-              "required": [
-                "stdout",
-                "stderr",
-                "exitCode"
-              ],
+              "required": ["stdout", "stderr", "exitCode"],
               "properties": {
                 "stdout": {
                   "type": "string"
@@ -1047,10 +946,7 @@
             "task": "math.add",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "left",
-                "right"
-              ],
+              "required": ["left", "right"],
               "properties": {
                 "left": {
                   "type": "number"
@@ -1078,9 +974,7 @@
             "task": "list.length",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "list"
-              ],
+              "required": ["list"],
               "properties": {
                 "list": {
                   "type": "array"
@@ -1104,10 +998,7 @@
             "task": "compare.lessThan",
             "inputSchema": {
               "type": "object",
-              "required": [
-                "left",
-                "right"
-              ],
+              "required": ["left", "right"],
               "properties": {
                 "left": {
                   "type": "number"
@@ -1158,10 +1049,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1185,10 +1073,7 @@
       "task": "string.join",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "list",
-          "delimiter"
-        ],
+        "required": ["list", "delimiter"],
         "properties": {
           "list": {
             "type": "array",
@@ -1219,10 +1104,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1260,9 +1142,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -1280,11 +1160,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -1320,10 +1196,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1353,10 +1226,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1394,9 +1264,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -1414,11 +1282,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -1453,10 +1317,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1480,10 +1341,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1507,10 +1365,7 @@
       "task": "text.template",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "template",
-          "vars"
-        ],
+        "required": ["template", "vars"],
         "properties": {
           "template": {
             "type": "string"
@@ -1529,9 +1384,7 @@
           "branch": {
             "$from": "scope",
             "name": "originalBranch",
-            "path": [
-              "stdout"
-            ]
+            "path": ["stdout"]
           }
         }
       },
@@ -1543,9 +1396,7 @@
       "task": "shell.exec",
       "inputSchema": {
         "type": "object",
-        "required": [
-          "command"
-        ],
+        "required": ["command"],
         "properties": {
           "command": {
             "type": "string"
@@ -1563,11 +1414,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "stdout",
-          "stderr",
-          "exitCode"
-        ],
+        "required": ["stdout", "stderr", "exitCode"],
         "properties": {
           "stdout": {
             "type": "string"
@@ -1617,9 +1464,7 @@
     "validated": {
       "$from": "scope",
       "name": "validationResult",
-      "path": [
-        "stdout"
-      ],
+      "path": ["stdout"],
       "optional": true
     }
   }

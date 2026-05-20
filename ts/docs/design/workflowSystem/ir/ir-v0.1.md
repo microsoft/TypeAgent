@@ -333,18 +333,18 @@ inputs.
 
 ### 2.1 In scope for v1
 
-| Area                  | v1 covers                                                                                                                                |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Node kinds            | `task`, `branch`, `loop`                                                                                                                 |
-| Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state                                                            |
-| Reference modality    | Required and optional references                                                                                                         |
-| Type compatibility    | Structural subtyping over JSON Schema-described types                                                                                    |
-| Control flow          | Explicit `next` per node; natural completion (`next: null` or absent) terminates the enclosing scope                                     |
+| Area                  | v1 covers                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Node kinds            | `task`, `branch`, `loop`                                                                                                                                                 |
+| Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state                                                                                            |
+| Reference modality    | Required and optional references                                                                                                                                         |
+| Type compatibility    | Structural subtyping over JSON Schema-described types                                                                                                                    |
+| Control flow          | Explicit `next` per node; natural completion (`next: null` or absent) terminates the enclosing scope                                                                     |
 | Branching             | Discriminant-based switch with exhaustive cases and required `default`; arms are `WorkflowScope`s ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)) |
-| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap; termination via `continueWhen` reference     |
-| Error handling        | Per-node `onError` edge to a task node; engine injects `error`/`trigger` input fields (§3.8); uncaught errors propagate and fail the run |
-| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, termination (every scope reaches natural completion)               |
-| Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations                                                |
+| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap; termination via `continueWhen` reference                                      |
+| Error handling        | Per-node `onError` edge to a task node; engine injects `error`/`trigger` input fields (§3.8); uncaught errors propagate and fail the run                                 |
+| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, termination (every scope reaches natural completion)                                               |
+| Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations                                                                                |
 
 ### 2.2 Out of scope for v1 (post-v1)
 
@@ -482,11 +482,11 @@ dominance constraint applied per namespace.
 namespaces, one per `$from` discriminant. All four namespaces are
 scope-wide.
 
-| `$from`      | Declared at                                                             | Visible in                    | Frame (single-assignment lifetime)                                                             |
-| ------------ | ----------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| `"input"`    | Workflow `inputSchema` typing the run input, or a loop's `inputs` block | The scope it belongs to       | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
-| `"constant"` | Workflow root `constants`                                               | Every scope                   | The run.                                                                                       |
-| `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to | One execution of the binding node. In a loop body, re-bound each iteration.                    |
+| `$from`      | Declared at                                                             | Visible in                    | Frame (single-assignment lifetime)                                                                                    |
+| ------------ | ----------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `"input"`    | Workflow `inputSchema` typing the run input, or a loop's `inputs` block | The scope it belongs to       | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter.                        |
+| `"constant"` | Workflow root `constants`                                               | Every scope                   | The run.                                                                                                              |
+| `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to | One execution of the binding node. In a loop body, re-bound each iteration.                                           |
 | `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope        | One iteration. Frame transition is body completion with `continueWhen` true, which evaluates `iterateState` (§3.7.1). |
 
 A task node dispatched via an `onError` edge additionally receives two
@@ -885,17 +885,23 @@ validator, and analyzers in agreement on a single observable behavior
       },
     },
   },
-  "default": {                       // optional; see exhaustiveness contract
-    "inputs": { /* ... */ },
-    "scope": { /* WorkflowScope */ },
+  "default": {
+    // optional; see exhaustiveness contract
+    "inputs": {
+      /* ... */
+    },
+    "scope": {
+      /* WorkflowScope */
+    },
   },
-  "outputSchema": {                  // optional; required iff `bind` is declared
+  "outputSchema": {
+    // optional; required iff `bind` is declared
     /* JSON Schema. Every arm's scope.outputSchema must be assignable
        to it. MUST NOT be declared without `bind`. */
   },
-  "next": "<nodeId>",                // optional
-  "onError": "<nodeId>",             // optional; covers arm-scope failure
-  "bind": "<scopeVarName>",          // optional; hide-by-default per §8.15
+  "next": "<nodeId>", // optional
+  "onError": "<nodeId>", // optional; covers arm-scope failure
+  "bind": "<scopeVarName>", // optional; hide-by-default per §8.15
 }
 ```
 
@@ -997,10 +1003,10 @@ sub-scope completion ([decision 0010](decisions/0010-finish-workflow-scope-unifi
       /* reference object resolved in body scope at body completion */
     },
   },
-  "maxIterations": 1000,             // optional; engine default 10,000
-  "next": "<nodeId>",                // optional; see section 3.3
-  "onError": "<nodeId>",             // optional; see section 3.3
-  "bind": "<scopeVarName>",          // optional; loop output is body.output
+  "maxIterations": 1000, // optional; engine default 10,000
+  "next": "<nodeId>", // optional; see section 3.3
+  "onError": "<nodeId>", // optional; see section 3.3
+  "bind": "<scopeVarName>", // optional; loop output is body.output
 }
 ```
 
@@ -1605,7 +1611,6 @@ semantics are post-v1 (§2.2).
    edge propagates to the loop node, which then routes to its own
    `onError` (if any) or fails its outer scope.
 
-
 ### 5.5 onError dispatch
 
 When a trigger node T fails and T declares `onError: R`, the engine
@@ -2134,7 +2139,9 @@ be declared in the enclosing workflow's `types` block, e.g.:
           "required": ["text"],
         },
         "outputSchema": { "$ref": "#/types/Evaluation" },
-        "inputs": { "text": { "$from": "scope", "name": "write", "path": ["text"] } },
+        "inputs": {
+          "text": { "$from": "scope", "name": "write", "path": ["text"] },
+        },
         "next": null,
         "bind": "evaluate",
       },
@@ -2143,7 +2150,9 @@ be declared in the enclosing workflow's `types` block, e.g.:
     "outputSchema": { "type": "string" },
   },
   "continueWhen": {
-    "$from": "scope", "name": "evaluate", "path": ["verdict_isRevise"]
+    "$from": "scope",
+    "name": "evaluate",
+    "path": ["verdict_isRevise"],
   },
   "iterateState": {
     "draft": { "$from": "scope", "name": "write", "path": ["text"] },
@@ -2202,9 +2211,9 @@ reference them.
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | P1        | **Intra-IR axis:** template model with `$from` references and named source (§3.4); static dominator pass over an acyclic intra-scope CFG; compositional type compatibility pass (resolved template types); `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
 | P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                        |
-| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies, branch arms, and fork branches are structural `WorkflowScope`s, not flat regions; iteration is the loop's `continueWhen` re-entering `body.entry` at body completion ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)), not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies, branch arms, and fork branches are structural `WorkflowScope`s, not flat regions; iteration is the loop's `continueWhen` re-entering `body.entry` at body completion ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)), not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                       |
 | P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                                                            |
-| P5        | Required `kind` discriminant; required explicit `next` in body scopes (no implicit re-entry; `next: null` marks natural completion); explicit `continueWhen` for loop termination ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)); required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                            |
+| P5        | Required `kind` discriminant; required explicit `next` in body scopes (no implicit re-entry; `next: null` marks natural completion); explicit `continueWhen` for loop termination ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)); required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                             |
 
 ---
 
@@ -2313,7 +2322,8 @@ own design review against P5.
   `true`), computes the complete next-iteration state from the body
   scope. Symmetric with `state[*].initial`.[^iterate-boundary]
 
-[^iterate-boundary]: Before [decision 0010](decisions/0010-finish-workflow-scope-unification.md)
+[^iterate-boundary]:
+    Before [decision 0010](decisions/0010-finish-workflow-scope-unification.md)
     the iteration boundary was the `@iterate` sentinel transition. The
     boundary is now body natural completion gated by `continueWhen`;
     the centralizing rationale, the reuse of the §3.3 phi for

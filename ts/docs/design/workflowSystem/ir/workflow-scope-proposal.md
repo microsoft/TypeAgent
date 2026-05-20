@@ -7,13 +7,13 @@ Status: **Accepted.**
 The IR has five places that embed a "sub-workflow" (a sequence of nodes with
 inputs and an output):
 
-| Site                   | `entry`     | `nodes`     | `inputSchema`           | `inputs`                | `output`                | `outputSchema`          |
-| ---------------------- | ----------- | ----------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- |
-| WorkflowIR (top-level) | yes         | yes         | yes                     | no (runtime-provided)   | yes                     | yes                     |
-| LoopNode               | body.entry  | body.nodes  | body.inputSchema (0010) | on LoopNode             | body.output (0010)      | body.outputSchema (0010)|
-| ForkNode branches      | scope.entry | scope.nodes | scope.inputSchema       | per-branch `inputs`     | scope.output            | scope.outputSchema      |
-| ForkMapNode body       | body.entry  | body.nodes  | body.inputSchema        | on ForkMapNode          | body.output             | body.outputSchema       |
-| BranchNode arms (0010) | scope.entry | scope.nodes | scope.inputSchema       | per-arm `inputs`        | scope.output            | scope.outputSchema      |
+| Site                   | `entry`     | `nodes`     | `inputSchema`           | `inputs`              | `output`           | `outputSchema`           |
+| ---------------------- | ----------- | ----------- | ----------------------- | --------------------- | ------------------ | ------------------------ |
+| WorkflowIR (top-level) | yes         | yes         | yes                     | no (runtime-provided) | yes                | yes                      |
+| LoopNode               | body.entry  | body.nodes  | body.inputSchema (0010) | on LoopNode           | body.output (0010) | body.outputSchema (0010) |
+| ForkNode branches      | scope.entry | scope.nodes | scope.inputSchema       | per-branch `inputs`   | scope.output       | scope.outputSchema       |
+| ForkMapNode body       | body.entry  | body.nodes  | body.inputSchema        | on ForkMapNode        | body.output        | body.outputSchema        |
+| BranchNode arms (0010) | scope.entry | scope.nodes | scope.inputSchema       | per-arm `inputs`      | scope.output       | scope.outputSchema       |
 
 Three problems:
 

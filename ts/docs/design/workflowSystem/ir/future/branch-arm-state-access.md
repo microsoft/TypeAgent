@@ -32,8 +32,8 @@ removed; arm scopes now match the fork-branch model exactly.
 
 ## Open question: arm state writes
 
-The current model covers *reads*: state values flow in via `arm.inputs`
-and are visible as `$from:"input"` inside the arm. What about *writes*?
+The current model covers _reads_: state values flow in via `arm.inputs`
+and are visible as `$from:"input"` inside the arm. What about _writes_?
 
 Today there is no mechanism for an arm to update the parent loop's
 state. A task inside an arm can produce a new value (via `bind`), and

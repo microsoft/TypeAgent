@@ -24,7 +24,7 @@ This note captures the design space for addressing that gap.
 ## Context
 
 Decision 0010 replaced `@iterate` / `@exit` sentinels with a
-boolean `continueWhen` Template resolved at body completion.  A
+boolean `continueWhen` Template resolved at body completion. A
 loop whose `continueWhen` is a literal `true` (or a reference that
 always resolves to `true`) will iterate until `maxIterations` fires
 — the only termination guarantee is the safety cap.
@@ -47,7 +47,7 @@ runtime failure, not a design-time signal.
 
 - Accidentally unbounded loops are a recurring authoring mistake.
 - The existing `foreach` sketch (`foreach.md`) already motivates
-  a category of loops that are *structurally* bounded (element
+  a category of loops that are _structurally_ bounded (element
   count known at entry). Unifying this direction would make
   "always terminates" a property the IR can express and the
   validator can enforce.

@@ -153,5 +153,6 @@ apply to `body.output` exactly as the v0.1 spec required for the
 loop-level `output` reference. The footnote in [§8.5][^iterate-boundary]
 of ir-v0.1.md records the iteration-boundary retiming.
 
-[^iterate-boundary]: See ir-v0.1.md §8.5 footnote on the
+[^iterate-boundary]:
+    See ir-v0.1.md §8.5 footnote on the
     `@iterate` -> "body completion gated by `continueWhen`" retiming.

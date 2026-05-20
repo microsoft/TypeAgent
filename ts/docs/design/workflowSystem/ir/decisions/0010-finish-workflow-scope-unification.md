@@ -102,14 +102,14 @@ Under the v0.2 IR, every structured construct nests its sub-execution
 as a `WorkflowScope`. The unification is, however, incomplete in two
 related ways:
 
-| Kind            | Uses `WorkflowScope`?       | Declared `output`?    | May `bind`? | In-scope routing escape hatch?           |
-| --------------- | --------------------------- | --------------------- | ----------- | ---------------------------------------- |
-| top-level       | yes (extends WorkflowScope) | yes                   | n/a         | none                                     |
-| `task`          | n/a (opaque executable)     | yes (opaque)          | ✅          | n/a                                      |
-| `loop`          | yes (`body`)                | yes (at `@exit`)      | ✅          | **`@iterate` / `@exit` sentinels**       |
-| `fork`          | yes (per branch's `scope`)  | yes (combined object) | ✅          | none                                     |
-| `forkMap`       | yes (`body`)                | yes (array of bodies) | ✅          | none                                     |
-| **`branch`**    | **❌ (arms are nodeIds)**   | **❌**                | **❌**      | n/a                                      |
+| Kind         | Uses `WorkflowScope`?       | Declared `output`?    | May `bind`? | In-scope routing escape hatch?     |
+| ------------ | --------------------------- | --------------------- | ----------- | ---------------------------------- |
+| top-level    | yes (extends WorkflowScope) | yes                   | n/a         | none                               |
+| `task`       | n/a (opaque executable)     | yes (opaque)          | ✅          | n/a                                |
+| `loop`       | yes (`body`)                | yes (at `@exit`)      | ✅          | **`@iterate` / `@exit` sentinels** |
+| `fork`       | yes (per branch's `scope`)  | yes (combined object) | ✅          | none                               |
+| `forkMap`    | yes (`body`)                | yes (array of bodies) | ✅          | none                               |
+| **`branch`** | **❌ (arms are nodeIds)**   | **❌**                | **❌**      | n/a                                |
 
 Two carve-outs, both v0.1 artifacts:
 
@@ -123,7 +123,7 @@ Two carve-outs, both v0.1 artifacts:
   case in the IR where control flow inside a sub-scope can name a
   control point outside it directly. It is the reason a v0.1 branch
   inside a loop body can encode "more / done" as `cases: { more:
-  "@iterate", done: "@exit" }`.
+"@iterate", done: "@exit" }`.
 
 The two carve-outs are coupled. Removing the branch-arm carve-out
 without also removing the sentinel carve-out leaves an
@@ -197,28 +197,28 @@ choose to express literal-as-task for tracing reasons, etc.); they
 simply cease to be required at branch convergence.
 
 This proposal does **not** change the `state` / `iterateState`
-mechanism or its read semantics. Only the commit *point* moves (from
+mechanism or its read semantics. Only the commit _point_ moves (from
 the `@iterate` sentinel transition to body-scope natural completion).
 
 ## 2. The §1.1.3 row, before and after
 
 ### Before (v1)
 
-| Tension      | Writer pull        | Engine sufficiency / cost                                                 | v1 resolution                                | Where                |
-| ------------ | ------------------ | ------------------------------------------------------------------------- | -------------------------------------------- | -------------------- |
-| Branch model | Predicate `if/else`| Engine needs total dispatch with no expression evaluator on the hot path. | Discriminant switch with required `default`. | §8.3, decision 0006  |
+| Tension      | Writer pull         | Engine sufficiency / cost                                                 | v1 resolution                                | Where               |
+| ------------ | ------------------- | ------------------------------------------------------------------------- | -------------------------------------------- | ------------------- |
+| Branch model | Predicate `if/else` | Engine needs total dispatch with no expression evaluator on the hot path. | Discriminant switch with required `default`. | §8.3, decision 0006 |
 
 ### Proposed amendment
 
-| Tension      | Writer pull                                              | Engine sufficiency / cost                                                                                                                                                                              | Proposed resolution                                                                                                                                                                                                                                                                                | Where                                  |
-| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Branch model | Predicate `if/else`, branch-as-expression value selection | Engine needs total dispatch with no expression evaluator on the hot path; scope-output resolution is the same machinery already used by loop, fork, and forkMap.                                       | Discriminant switch with required `default`; **arms are `WorkflowScope`s with declared `output`, same shape as fork branches (ir-v0.2 §2.1). Branch supports `bind`, `next`, `onError`, and `outputSchema`.**                                                                                       | §8.3, ir-v0.2 §2.1, decisions 0006 and 0010 |
+| Tension      | Writer pull                                               | Engine sufficiency / cost                                                                                                                                        | Proposed resolution                                                                                                                                                                                           | Where                                       |
+| ------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Branch model | Predicate `if/else`, branch-as-expression value selection | Engine needs total dispatch with no expression evaluator on the hot path; scope-output resolution is the same machinery already used by loop, fork, and forkMap. | Discriminant switch with required `default`; **arms are `WorkflowScope`s with declared `output`, same shape as fork branches (ir-v0.2 §2.1). Branch supports `bind`, `next`, `onError`, and `outputSchema`.** | §8.3, ir-v0.2 §2.1, decisions 0006 and 0010 |
 
 A new row is added for the loop-termination change:
 
-| Tension          | Writer pull                                              | Engine sufficiency / cost                                                                                                                                          | Proposed resolution                                                                                                                                                                                  | Where                                  |
-| ---------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Loop termination | Body should be able to decide "iterate vs exit" locally  | Engine needs a single termination decision per iteration; reference resolution to a boolean is the same machinery already used for loop `output` (decision 0009). | Loop node carries `continueWhen` (boolean reference resolved in body scope at body completion). `@iterate` / `@exit` retired. Body becomes a plain `WorkflowScope` matching fork branches.            | §3.7, §8.4, decisions 0009 and 0010    |
+| Tension          | Writer pull                                             | Engine sufficiency / cost                                                                                                                                         | Proposed resolution                                                                                                                                                                        | Where                               |
+| ---------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| Loop termination | Body should be able to decide "iterate vs exit" locally | Engine needs a single termination decision per iteration; reference resolution to a boolean is the same machinery already used for loop `output` (decision 0009). | Loop node carries `continueWhen` (boolean reference resolved in body scope at body completion). `@iterate` / `@exit` retired. Body becomes a plain `WorkflowScope` matching fork branches. | §3.7, §8.4, decisions 0009 and 0010 |
 
 The predicate-side writer pull remains resolved against (decision 0006
 stands). The value-producing writer pull is met by extending the
@@ -242,20 +242,30 @@ same shape as decision 0009 for `output`.
   },
   "cases": {
     "<caseValue>": {
-      "inputs": { /* outer -> arm-scope wiring, templates */ },
-      "scope": { /* WorkflowScope */ }
-    }
+      "inputs": {
+        /* outer -> arm-scope wiring, templates */
+      },
+      "scope": {
+        /* WorkflowScope */
+      },
+    },
   },
-  "default": {                       // optional; see exhaustiveness contract
-    "inputs": { /* ... */ },
-    "scope": { /* WorkflowScope */ }
+  "default": {
+    // optional; see exhaustiveness contract
+    "inputs": {
+      /* ... */
+    },
+    "scope": {
+      /* WorkflowScope */
+    },
   },
-  "outputSchema": {                  // optional; required iff any arm declares an output
+  "outputSchema": {
+    // optional; required iff any arm declares an output
     /* JSON Schema. Compatible with every arm's scope.outputSchema. */
   },
-  "next": "<nodeId>",                // optional
-  "onError": "<nodeId>",             // optional; new for branch (parallel to fork)
-  "bind": "<scopeVarName>"           // optional; hide-by-default per §8.15
+  "next": "<nodeId>", // optional
+  "onError": "<nodeId>", // optional; new for branch (parallel to fork)
+  "bind": "<scopeVarName>", // optional; hide-by-default per §8.15
 }
 ```
 
@@ -268,7 +278,7 @@ Notes:
 2. **`scope.output` resolves at arm-scope completion**, exactly as for
    fork branches (ir-v0.2 §2.1 step 4). The arm-region question is
    answered by `WorkflowScope` itself: the scope is closed; `next:
-   null` inside the arm scope means arm-scope completion; output is
+null` inside the arm scope means arm-scope completion; output is
    the explicit template.
 3. **Branch's combined output is the value of whichever arm's
    `scope.output` resolved.** Unlike fork (which combines all branches
@@ -363,15 +373,25 @@ outputs.
 ```jsonc
 {
   "kind": "loop",
-  "inputs": { /* outer -> body scope wiring, templates */ },
-  "inputSchema": { /* JSON Schema */ },
+  "inputs": {
+    /* outer -> body scope wiring, templates */
+  },
+  "inputSchema": {
+    /* JSON Schema */
+  },
   "state": {
     "<stateVarName>": {
-      "schema": { /* JSON Schema */ },
-      "initial": { /* reference resolved at loop entry, in outer scope */ }
-    }
+      "schema": {
+        /* JSON Schema */
+      },
+      "initial": {
+        /* reference resolved at loop entry, in outer scope */
+      },
+    },
   },
-  "body": { /* WorkflowScope */ },
+  "body": {
+    /* WorkflowScope */
+  },
   "continueWhen": {
     /* reference object resolved in body scope at body-scope completion;
        must yield a boolean. true = iterate (next iteration). false = exit. */
@@ -379,17 +399,19 @@ outputs.
   "iterateState": {
     "<stateVarName>": {
       /* reference resolved in body scope at body-scope completion */
-    }
+    },
   },
   "output": {
     /* reference resolved in body scope at body-scope completion of the
        final iteration (the iteration in which continueWhen resolved false) */
   },
-  "outputSchema": { /* JSON Schema */ },
-  "maxIterations": 1000,         // optional; engine default 10,000
-  "next": "<nodeId>",            // optional
-  "onError": "<nodeId>",         // optional
-  "bind": "<scopeVarName>"       // optional
+  "outputSchema": {
+    /* JSON Schema */
+  },
+  "maxIterations": 1000, // optional; engine default 10,000
+  "next": "<nodeId>", // optional
+  "onError": "<nodeId>", // optional
+  "bind": "<scopeVarName>", // optional
 }
 ```
 
@@ -413,9 +435,9 @@ Notes:
 5. **`output` semantics unchanged in substance** (decision 0009).
    Resolved in body scope at the final iteration's body completion
    - i.e., the same iteration that resolved `continueWhen` to false.
-   The commit *point* moves from "`@exit` transition" to
-   "body-completion-with-`continueWhen`-false" but the binding
-   context and reference shape are identical.
+     The commit _point_ moves from "`@exit` transition" to
+     "body-completion-with-`continueWhen`-false" but the binding
+     context and reference shape are identical.
 6. **`maxIterations` semantics unchanged.** If reached before
    `continueWhen` yields false, the loop fails with the existing
    well-known error type (consumable by `onError`).
@@ -461,27 +483,27 @@ validator passes apply (dominator, type compatibility, scope closure,
 
 The proposal has two coupled changes. The branch-arm row set:
 
-| Property                                  | A (status quo)              | B (this proposal: WorkflowScope per arm + loop continueWhen)                                                          |
-| ----------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| New IR concepts                           | 0                           | 1 (`continueWhen` boolean reference on loop; reuses reference-resolution machinery from decision 0009)                |
-| Special-case rules in the IR              | 2 ("branch is the only structured construct without WorkflowScope and without output"; "loop has in-scope routing targets that pierce its sub-scope") | 0 |
-| Hot-path engine work                      | dispatch + sentinel-transition state commit | dispatch + WorkflowScope output resolution + boolean reference resolution (all already in the engine for fork/forkMap/loop) |
-| Decision 0006 status                      | upheld                      | upheld (arm outputs, `continueWhen`, and loop `output` are all template references, not expressions)                  |
-| Decision 0001 status                      | upheld                      | upheld and made uniform (hide-by-default `bind` applies to all structured kinds)                                      |
-| Decision 0002 (CFG/DDG)                   | branch is CFG-only          | branch may be a DDG source when `bind` is declared; same as fork, loop                                                |
-| Decision 0009 status                      | upheld                      | upheld and extended: termination joins output on the "reference resolved at scope completion" footing                 |
-| P3 task boundary                          | crisp but inconsistent      | crisp and uniform: no kind evaluates expressions; selection/resolution are not computation                            |
-| Minimization rule                         | violates by two exceptions  | satisfies: one uniform rule across all structured kinds                                                               |
-| LLM-direct surface (§1.1.2)               | LLM must learn branch carve-out, shared-bind shim convention, and loop sentinels | LLM learns one rule across all structured kinds: "the scope has `output`; the kind has its kind-specific reference fields" |
-| Codegen surface                           | one extra branch-convergence shape (identity shims + merge noop); special routing for loop iteration/exit | one lowering shape unified across loop/fork/forkMap/branch                  |
-| Validator complexity                      | low + open G6 phi heuristic + sentinel path-projection passes | low; reuses fork's per-branch-scope validation; G6 dissolves; path-projection drops sentinel cases |
-| Splice safety                             | easy at the IR level; hard for emitters (prefix conventions and sentinel-routed loops) | best - arms and bodies are scope-closed (P4)                  |
-| Static exhaustiveness                     | clean                       | clean (mechanism unchanged)                                                                                           |
-| `identity`/`noop` at branch convergence   | required as load-bearing builtins | not required; remain as ordinary tasks for non-branch literal materialization                                   |
-| Construct symmetry                        | branch and loop are exceptions | aligns with fork/forkMap/top-level - one scope shape across the IR                                                  |
-| Debugger nodes per source decision        | ~4 (compare + branch + 2 identity + noop merge) | ~1 (branch with arm scopes)                                                                       |
-| `&&` / `||` lowering                      | uses prefix-string phi heuristic | uses ordinary arm-scope outputs                                                                                  |
-| Loop body inner-routing escape hatch      | `@iterate` / `@exit` sentinels in-scope from anywhere in body | none; termination is a reference on the loop node, computed by an ordinary body-scope task |
+| Property                                | A (status quo)                                                                                                                                        | B (this proposal: WorkflowScope per arm + loop continueWhen)                                                                |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------- |
+| New IR concepts                         | 0                                                                                                                                                     | 1 (`continueWhen` boolean reference on loop; reuses reference-resolution machinery from decision 0009)                      |
+| Special-case rules in the IR            | 2 ("branch is the only structured construct without WorkflowScope and without output"; "loop has in-scope routing targets that pierce its sub-scope") | 0                                                                                                                           |
+| Hot-path engine work                    | dispatch + sentinel-transition state commit                                                                                                           | dispatch + WorkflowScope output resolution + boolean reference resolution (all already in the engine for fork/forkMap/loop) |
+| Decision 0006 status                    | upheld                                                                                                                                                | upheld (arm outputs, `continueWhen`, and loop `output` are all template references, not expressions)                        |
+| Decision 0001 status                    | upheld                                                                                                                                                | upheld and made uniform (hide-by-default `bind` applies to all structured kinds)                                            |
+| Decision 0002 (CFG/DDG)                 | branch is CFG-only                                                                                                                                    | branch may be a DDG source when `bind` is declared; same as fork, loop                                                      |
+| Decision 0009 status                    | upheld                                                                                                                                                | upheld and extended: termination joins output on the "reference resolved at scope completion" footing                       |
+| P3 task boundary                        | crisp but inconsistent                                                                                                                                | crisp and uniform: no kind evaluates expressions; selection/resolution are not computation                                  |
+| Minimization rule                       | violates by two exceptions                                                                                                                            | satisfies: one uniform rule across all structured kinds                                                                     |
+| LLM-direct surface (§1.1.2)             | LLM must learn branch carve-out, shared-bind shim convention, and loop sentinels                                                                      | LLM learns one rule across all structured kinds: "the scope has `output`; the kind has its kind-specific reference fields"  |
+| Codegen surface                         | one extra branch-convergence shape (identity shims + merge noop); special routing for loop iteration/exit                                             | one lowering shape unified across loop/fork/forkMap/branch                                                                  |
+| Validator complexity                    | low + open G6 phi heuristic + sentinel path-projection passes                                                                                         | low; reuses fork's per-branch-scope validation; G6 dissolves; path-projection drops sentinel cases                          |
+| Splice safety                           | easy at the IR level; hard for emitters (prefix conventions and sentinel-routed loops)                                                                | best - arms and bodies are scope-closed (P4)                                                                                |
+| Static exhaustiveness                   | clean                                                                                                                                                 | clean (mechanism unchanged)                                                                                                 |
+| `identity`/`noop` at branch convergence | required as load-bearing builtins                                                                                                                     | not required; remain as ordinary tasks for non-branch literal materialization                                               |
+| Construct symmetry                      | branch and loop are exceptions                                                                                                                        | aligns with fork/forkMap/top-level - one scope shape across the IR                                                          |
+| Debugger nodes per source decision      | ~4 (compare + branch + 2 identity + noop merge)                                                                                                       | ~1 (branch with arm scopes)                                                                                                 |
+| `&&` / `                                |                                                                                                                                                       | ` lowering                                                                                                                  | uses prefix-string phi heuristic | uses ordinary arm-scope outputs |
+| Loop body inner-routing escape hatch    | `@iterate` / `@exit` sentinels in-scope from anywhere in body                                                                                         | none; termination is a reference on the loop node, computed by an ordinary body-scope task                                  |
 
 ### 4.2 Where B helps
 
@@ -604,7 +626,7 @@ is not a cost B owes. The remaining items:
   "branches targeting `@iterate` directly" sub-rationale is now
   moot. Footnote, not rewrite.
 - **ir-v0.1.md §8.6:** Update commit-timing description: state is
-  still committed atomically per iteration; the commit *point*
+  still committed atomically per iteration; the commit _point_
   moves from `@iterate` transition to body-completion-with-
   `continueWhen`-true. Snapshot-read semantics preserved verbatim.
 - **decision 0001:** no change. Cross-reference added noting branch
@@ -722,10 +744,10 @@ and one stays in place with a footnote.
 
 #### 5.6.1 §3.6 "No `onError`" - preserved in part, augmented in part
 
-v0.1 §3.6 bullet 2: *"No `onError`. Branch is pure control flow with
+v0.1 §3.6 bullet 2: _"No `onError`. Branch is pure control flow with
 no runtime failure mode: selector template resolution is statically
 proven by the validator's dominator + path-projection passes (§5.8.3),
-and `BranchSelectorUnmatched` is also statically unreachable …"*
+and `BranchSelectorUnmatched` is also statically unreachable …"_
 
 That argument is two-part, and only one part is touched by this
 proposal:
@@ -749,9 +771,9 @@ not a generalization of the other.
 
 #### 5.6.2 §3.6 "Branch arms target `@iterate` / `@exit`" - retracted (resolved by §3.6 of this proposal)
 
-v0.1 §3.6 last bullet: *"`cases` and `default` target node ids in the
+v0.1 §3.6 last bullet: _"`cases` and `default` target node ids in the
 same scope. In a loop body, the targets may also be `@iterate` or
-`@exit`."*
+`@exit`."_
 
 Under the branch-arm change alone, arms are closed `WorkflowScope`s
 and cannot reach the enclosing loop's sentinels. That would be a
@@ -815,9 +837,9 @@ v0.1 §8.4 considered were all routing-layer encodings.
 #### 5.6.4 §8.5 rejection rationale - preserved, with a footnote
 
 v0.1 §8.5 (rejection of per-node `stateWrites`) cites, among other
-reasons, *"branches that target `@iterate` directly to either
+reasons, _"branches that target `@iterate` directly to either
 disallow that or carry state-write declarations (compromising the
-pure-control-flow story for branches)."*
+pure-control-flow story for branches)."_
 
 Under B, neither branch arms nor anyone else targets `@iterate`
 directly - the sentinel is retired. The specific failure mode §8.5
@@ -833,7 +855,7 @@ decision.
 v0.1 §8.6: state commits at `@iterate`; reads see iteration-start
 values; no intra-iteration mutation. The substantive guarantee
 (snapshot-read semantics; atomic per-iteration commit) is preserved
-verbatim. Only the commit *point* moves: from "`@iterate` transition
+verbatim. Only the commit _point_ moves: from "`@iterate` transition
 taken" to "body completion with `continueWhen` resolving to true."
 The §8.6 prose updates to reflect the new commit point, but the
 rationale stack (P4, P5) carries over unchanged.

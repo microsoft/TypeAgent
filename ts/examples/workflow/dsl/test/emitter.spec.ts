@@ -1040,9 +1040,11 @@ describe("Emitter", () => {
         expect(checkNode).toBeDefined();
 
         // The inner filter branch sits in the work arm.
-        const workScope = (checkNode!.cases["true"] as unknown as {
-            scope: { nodes: Record<string, WorkflowNode> };
-        }).scope;
+        const workScope = (
+            checkNode!.cases["true"] as unknown as {
+                scope: { nodes: Record<string, WorkflowNode> };
+            }
+        ).scope;
         const filterBranchEntry = Object.entries(workScope.nodes).find(
             ([, n]) => n.kind === "branch",
         );
