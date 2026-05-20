@@ -11,6 +11,31 @@ Items raised by those reviews that we **chose not to act on** in this
 landing are documented here. Each entry records what was raised, why
 it was deferred, and what would re-open it.
 
+## Phase 2 - code review round 2
+
+### Literal `continueWhen: true` not flagged by validator
+
+**Raised by:** code-review subagent (Phase 2 round 2).
+
+**Summary:** The validator confirms `continueWhen` is present and
+boolean-typed but does not flag a literal `true`. A loop with
+`continueWhen: true` and no body-internal exit will iterate up to
+`maxIterations` (default 10,000) before terminating.
+
+**Why deferred:** `maxIterations` is the documented safety valve;
+literal-true is occasionally legitimate (e.g. a polling loop with
+`onError` as the exit path). Flagging it would require either an
+exception for `onError`-using loops or a separate "is this loop
+reachable to a terminal" pass, neither of which is on the critical
+path for 0010 landing.
+
+**What would re-open this:** A second occurrence of an
+accidentally-infinite loop in user code, or a redesign of
+`maxIterations` semantics that removes the implicit safety. At that
+point add a validator pass that flags constant-`true` `continueWhen`
+unless the body has a structural exit (throw, onError-terminating
+arm, etc.).
+
 ## Phase 2 - code review round 1
 
 ### Deep-object mutation of inherited loop state
