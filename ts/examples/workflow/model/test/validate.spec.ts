@@ -3943,9 +3943,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes('"$weirdInputs"'),
-                ),
+                result.errors.some((e) => e.message.includes('"$weirdInputs"')),
             ).toBe(true);
         });
 
