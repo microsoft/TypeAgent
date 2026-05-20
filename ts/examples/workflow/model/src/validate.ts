@@ -1167,6 +1167,27 @@ function validateBranchArm(
     // Recurse: validate the arm's nodes as a scope.
     validateScope(armNodes, `${armPath}.scope.nodes`, tasks, errors);
     validateSchemaCompat(armNodes, `${armPath}.scope.nodes`, errors);
+
+    // Branch arms are isolated sub-scopes: $from:"state" is not available
+    // (no state namespace in arm ScopeContext). State values must cross the
+    // arm boundary via arm.inputs (the DSL emitter does this automatically).
+    for (const [id, node] of Object.entries(armNodes)) {
+        if (!hasInputs(node)) continue;
+        const stateRefs = collectTemplateRefs(
+            node.inputs,
+            `${armPath}.scope.nodes.${id}.inputs`,
+            "state",
+        );
+        for (const ref of stateRefs) {
+            errors.push({
+                path: ref.templatePath,
+                message:
+                    `$from "state", name "${ref.name}": branch arm nodes ` +
+                    `have no state namespace. Thread state values through ` +
+                    `arm.inputs instead.`,
+            });
+        }
+    }
 }
 
 function validateScope(

@@ -962,14 +962,11 @@ export class WorkflowEngine {
             input: armInput,
             constants: resolveScope.constants,
             bindings: new Map(),
-            // Shallow-copy state to match loop body semantics (runner.ts
-            // executeLoop). Branch arms read ambient state but should not
-            // observe top-level mutations made by sibling arms or by the
-            // parent scope after the arm starts. Deep-object mutation by
-            // an in-arm task would still leak — see 0010-design-notes.md.
-            ...(resolveScope.state !== undefined
-                ? { state: { ...resolveScope.state } }
-                : {}),
+            // No state: branch arms are isolated sub-scopes like fork branches.
+            // $from:"state" refs in arm nodes are hoisted through arm.inputs
+            // by the DSL emitter (captureOuterRefs) and rewritten to
+            // $from:"input". Hand-crafted IR must do the same; the validator
+            // rejects $from:"state" in arm node inputs.
         };
         const armScopePath = [...scopePath, `${nodeId}.${caseKey}`];
 
