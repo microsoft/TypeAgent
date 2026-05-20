@@ -287,3 +287,72 @@ add a stricter producer-schema check that requires arm outputs to be
 compatible), the map/filter arms' task `outputSchema` should be
 audited to match - currently they declare `type: object, properties:
 { newI, newResults }` for map and `{ newI, newResults }` for filter.
+
+---
+
+### Branch arms inherit ambient `state` from parent scope
+
+**Category:** Revised assumption.
+
+**Phase:** 2 (engine runner, dsl-integration follow-up).
+
+**Where:** ts/examples/workflow/engine/src/runner.ts -
+`executeBranch`; ts/examples/workflow/dsl/src/emitter.ts -
+`captureOuterRefs` (state-rewrite logic).
+
+**Problem:** When 0010 was sketched, branch arms were described as
+fully isolated sub-scopes: their visible inputs are only what
+`arm.inputs` provides. That works for plain `if`/`switch`, but breaks
+when arms appear *inside* a loop body. The map/filter emitter places
+per-iteration work (read element, evaluate predicate, append) inside
+a checkBranch arm. Those arm-internal tasks need to read the loop's
+`state.i` and `state.results` - but a fully isolated arm scope has
+no `state` namespace, so those references fail with `Reference
+unresolved: $from "state"`.
+
+**Choice:** `executeBranch` now inherits `state` from
+`resolveScope.state` into the arm scope, treating state as ambient
+(like `constants`). The emitter's `captureOuterRefs` keeps its
+state-rewrite codepath, but only applies it when `hasState: false`
+(i.e. genuine arm sub-scopes, not loop bodies).
+
+**Trade-off / why this is worth a re-read:** This subtly broadens
+what "arm scope" means: arms now share their parent's `state`
+namespace by reference. That matches the user mental model that an
+arm is a *continuation* of the outer scope's data flow, but it does
+mean that future passes that audit "what does an arm see?" must
+treat state as readable. Writes to state from inside an arm are not
+currently exercised - if we later allow that, we need an explicit
+decision about whether arm writes mutate the parent's state map.
+
+---
+
+### Output templates participate in arm capture
+
+**Category:** Non-obvious choice.
+
+**Phase:** 2 (DSL emitter, task 18 follow-up).
+
+**Where:** ts/examples/workflow/dsl/src/emitter.ts - `buildArmScope`,
+`captureOuterRefs` (`extraVisit` option).
+
+**Problem:** An arm scope's `output` template is set on the scope
+itself (not on any node). The first cut of `captureOuterRefs` only
+visited `scope.nodes`, so an else arm that did `return x` (where `x`
+is a workflow-level input) produced an arm with `inputs: {}` and an
+unresolvable `output: $from:"input", name:"x"`. Symptom: the else
+branch returned `undefined` at runtime.
+
+**Choice:** `captureOuterRefs` now accepts an `extraVisit` array
+that is scanned with the same rewrite logic as node inputs.
+`buildArmScope` passes the arm `output` template through this hook,
+so refs in the output are hoisted into `arm.inputs` and rewritten to
+`$from:"input"`. We also added every node's `bind` name to the local
+"do not hoist" set so branch-bind names like `updated_results` are
+not mistakenly captured as outer refs when seen from the output.
+
+**Why this is worth a re-read:** The `extraVisit` hook is generic;
+any future code that adds templates living on a scope (annotations,
+guards, etc.) should pass them through the same hook. If we forget,
+we'll see the same "ref unresolved at runtime, no validator error"
+class of bug.

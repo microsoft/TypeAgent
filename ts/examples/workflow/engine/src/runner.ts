@@ -962,6 +962,9 @@ export class WorkflowEngine {
             input: armInput,
             constants: resolveScope.constants,
             bindings: new Map(),
+            ...(resolveScope.state !== undefined
+                ? { state: resolveScope.state }
+                : {}),
         };
         const armScopePath = [...scopePath, `${nodeId}.${caseKey}`];
 

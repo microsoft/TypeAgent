@@ -405,10 +405,12 @@ export class Emitter {
             }
         }
 
-        // When both branches return a value, carry it through arm scope
-        // output so the branch bind exposes it in the parent scope.
+        // When ANY branch returns a value, publish through branch.bind so
+        // consumers in the parent scope can read it (arm-scope names are
+        // not visible to the parent). When only one branch returns, the
+        // other arm's output is `null` (declared null-typed scope output).
         let resultBind: string | undefined;
-        if (thenOutput !== undefined && elseOutput !== undefined) {
+        if (thenOutput !== undefined || elseOutput !== undefined) {
             resultBind = this.freshId("if_result");
             this.referencedNodes.add(resultBind);
         }
@@ -419,19 +421,29 @@ export class Emitter {
             thenScope.nodeOrder.length > 0
                 ? this.buildArmScope(
                       thenScope,
-                      resultBind !== undefined ? thenOutput : undefined,
+                      resultBind !== undefined
+                          ? (thenOutput ?? null)
+                          : undefined,
                       resultBind !== undefined ? {} : undefined,
                   )
-                : this.makeNoopArm();
+                : resultBind !== undefined && thenOutput !== undefined
+                  ? this.buildOutputOnlyArm(thenScope, thenOutput)
+                  : this.makeNoopArm();
 
         const falseArm =
             elseScope && elseScope.nodeOrder.length > 0
                 ? this.buildArmScope(
                       elseScope,
-                      resultBind !== undefined ? elseOutput : undefined,
+                      resultBind !== undefined
+                          ? (elseOutput ?? null)
+                          : undefined,
                       resultBind !== undefined ? {} : undefined,
                   )
-                : this.makeNoopArm();
+                : resultBind !== undefined &&
+                    elseOutput !== undefined &&
+                    elseScope
+                  ? this.buildOutputOnlyArm(elseScope, elseOutput)
+                  : this.makeNoopArm();
 
         // Boolean if-else is always exhaustive: { type: "boolean" } is
         // treated as an implicit enum [true, false] by the validator,
@@ -459,7 +471,7 @@ export class Emitter {
         scope.nodes[mergeId] = mergeNode;
         scope.nodeOrder.push(mergeId);
 
-        // Propagate return value from branches
+        // Propagate return value from branches via branch.bind.
         if (resultBind) {
             return {
                 output: {
@@ -467,12 +479,6 @@ export class Emitter {
                     name: resultBind,
                 } as unknown as Template,
             };
-        }
-        if (thenOutput !== undefined) {
-            return { output: thenOutput };
-        }
-        if (elseOutput !== undefined) {
-            return { output: elseOutput };
         }
         return undefined;
     }
@@ -487,10 +493,17 @@ export class Emitter {
         const branchId = this.freshId("switch");
         const mergeId = this.freshId("merge");
 
-        // Decision 0010: cases map to BranchArm sub-scopes.
+        // Decision 0010: cases map to BranchArm sub-scopes; per-arm
+        // outputs are exposed to the parent via branch.bind. The arm's
+        // `output` is set on its sub-scope; the branch publishes that
+        // arm output under `bind` (a fresh `switch_result_N` name).
         const cases: Record<string, BranchArm> = {};
         let defaultArm: BranchArm | undefined;
-        let branchOutput: Template | undefined;
+        const armOutputs: (Template | undefined)[] = [];
+        const armScopes: {
+            scope: ScopeContext;
+            output: Template | undefined;
+        }[] = [];
         const caseValues: unknown[] = [];
 
         for (let i = 0; i < stmt.arms.length; i++) {
@@ -499,43 +512,57 @@ export class Emitter {
             let armOutput: Template | undefined;
             for (const s of arm.body) {
                 const r = this.emitStatement(s, armScope);
-                if (r?.output !== undefined) {
-                    armOutput = r.output;
-                    if (branchOutput === undefined) branchOutput = r.output;
-                }
+                if (r?.output !== undefined) armOutput = r.output;
             }
-
-            const caseValue = this.constExprToValue(arm.value);
-            caseValues.push(caseValue);
-            const caseKey = String(caseValue);
-            cases[caseKey] =
-                armScope.nodeOrder.length > 0
-                    ? this.buildArmScope(armScope, armOutput)
-                    : this.makeNoopArm();
+            armOutputs.push(armOutput);
+            armScopes.push({ scope: armScope, output: armOutput });
+            caseValues.push(this.constExprToValue(arm.value));
         }
 
         const hasSourceDefault = !!(stmt.default_ && stmt.default_.length > 0);
-
+        let defScope: ScopeContext | undefined;
+        let defOutput: Template | undefined;
         if (hasSourceDefault) {
-            const defScope = this.childScope(scope);
-            let defOutput: Template | undefined;
+            defScope = this.childScope(scope);
             for (const s of stmt.default_!) {
                 const r = this.emitStatement(s, defScope);
-                if (r?.output !== undefined) {
-                    defOutput = r.output;
-                    if (branchOutput === undefined) branchOutput = r.output;
-                }
+                if (r?.output !== undefined) defOutput = r.output;
             }
+        }
+
+        // If any arm produced an output, we must publish through branch.bind
+        // so consumers in the parent scope can read it. (Arm-scope names are
+        // not visible to the parent.)
+        const anyOutput =
+            armOutputs.some((o) => o !== undefined) || defOutput !== undefined;
+        const resultBind = anyOutput
+            ? this.freshId("switch_result")
+            : undefined;
+        if (resultBind) this.referencedNodes.add(resultBind);
+
+        for (let i = 0; i < armScopes.length; i++) {
+            const { scope: armScope, output: armOutput } = armScopes[i];
+            const caseKey = String(caseValues[i]);
+            cases[caseKey] =
+                armScope.nodeOrder.length > 0
+                    ? this.buildArmScope(
+                          armScope,
+                          resultBind !== undefined ? armOutput : undefined,
+                          resultBind !== undefined ? {} : undefined,
+                      )
+                    : this.makeNoopArm();
+        }
+        if (hasSourceDefault) {
             defaultArm =
-                defScope.nodeOrder.length > 0
-                    ? this.buildArmScope(defScope, defOutput)
+                defScope!.nodeOrder.length > 0
+                    ? this.buildArmScope(
+                          defScope!,
+                          resultBind !== undefined ? defOutput : undefined,
+                          resultBind !== undefined ? {} : undefined,
+                      )
                     : this.makeNoopArm();
         }
 
-        // Infer selectorSchema from case value types.  When the source
-        // omits `default`, treat the switch as exhaustive: emit an enum
-        // selectorSchema and no default. Static validation then enforces
-        // that the discriminant's resolved type is provably narrowed.
         const inferredType = inferCommonType(caseValues);
         let selectorSchema: JSONSchema;
         if (!hasSourceDefault && inferredType) {
@@ -553,6 +580,7 @@ export class Emitter {
             cases,
             ...(defaultArm !== undefined ? { default: defaultArm } : {}),
             next: mergeId,
+            ...(resultBind ? { bind: resultBind, outputSchema: {} } : {}),
         };
 
         const mergeNode: TaskNode = {
@@ -568,8 +596,13 @@ export class Emitter {
         scope.nodes[mergeId] = mergeNode;
         scope.nodeOrder.push(mergeId);
 
-        if (branchOutput !== undefined) {
-            return { output: branchOutput };
+        if (resultBind) {
+            return {
+                output: {
+                    $from: "scope",
+                    name: resultBind,
+                } as unknown as Template,
+            };
         }
         return undefined;
     }
@@ -1351,7 +1384,9 @@ export class Emitter {
         }
 
         // Capture outer-scope references used in attempts body
-        const outer = this.captureOuterRefs(bodyScope, new Set<string>());
+        const outer = this.captureOuterRefs(bodyScope, new Set<string>(), {
+            hasState: true,
+        });
 
         // The body output references a name bound only on the success path
         // (the user task's bind). On the error path the branch arms throw or
@@ -1576,7 +1611,9 @@ export class Emitter {
         };
 
         // Capture outer-scope references used in body + work arm scopes.
-        const outer = this.captureOuterRefs(bodyScope, new Set(["items"]));
+        const outer = this.captureOuterRefs(bodyScope, new Set(["items"]), {
+            hasState: true,
+        });
 
         const loopNode: LoopNode = {
             kind: "loop",
@@ -1777,6 +1814,8 @@ export class Emitter {
         workScope.nodeOrder.push(filterBranchId);
 
         const stepId = this.freshId("step_i");
+        // threadNext does not auto-link branch nodes; wire filter_check -> step_i.
+        (workScope.nodes[filterBranchId] as BranchNode).next = stepId;
         workScope.nodes[stepId] = {
             kind: "task",
             task: "math.add",
@@ -1850,7 +1889,9 @@ export class Emitter {
             results: { schema: { type: "array" }, initial: [] as Template[] },
         };
 
-        const outer = this.captureOuterRefs(bodyScope, new Set(["items"]));
+        const outer = this.captureOuterRefs(bodyScope, new Set(["items"]), {
+            hasState: true,
+        });
 
         const loopNode: LoopNode = {
             kind: "loop",
@@ -2005,7 +2046,9 @@ export class Emitter {
         }
 
         // Capture outer-scope references used in body
-        const outer = this.captureOuterRefs(bodyScope, new Set([expr.param]));
+        const outer = this.captureOuterRefs(bodyScope, new Set([expr.param]), {
+            hasState: true,
+        });
 
         // Use the explicit return template (which may include a path),
         // falling back to last node's bind.
@@ -2193,12 +2236,26 @@ export class Emitter {
     private captureOuterRefs(
         bodyScope: ScopeContext,
         existingInputNames: Set<string>,
+        options: { hasState?: boolean; extraVisit?: unknown[] } = {},
     ): {
         inputs: Record<string, Template>;
         properties: Record<string, JSONSchema>;
         required: string[];
     } {
+        // hasState=true: this scope has a state namespace (loop body).
+        //                State refs are local; do NOT rewrite them.
+        // hasState=false: arm sub-scope without state. State refs must
+        //                be hoisted into arm.inputs (evaluated in the
+        //                parent loop body scope which DOES have state).
+        const hasState = !!options.hasState;
         const bodyNodeIds = new Set(Object.keys(bodyScope.nodes));
+        // Branch nodes bind through `node.bind`, which is the name consumers
+        // use to read the unified arm result. Treat those bind names as
+        // locally-available so they aren't hoisted as outer refs.
+        for (const node of Object.values(bodyScope.nodes)) {
+            const bn = node as { bind?: string };
+            if (typeof bn.bind === "string") bodyNodeIds.add(bn.bind);
+        }
         const captured = new Map<string, Template>();
 
         const visit = (value: unknown): void => {
@@ -2227,7 +2284,11 @@ export class Emitter {
                 }
                 // Rewrite in-place to reference the loop input
                 obj.$from = "input";
-            } else if (obj.$from === "state" && typeof obj.name === "string") {
+            } else if (
+                obj.$from === "state" &&
+                typeof obj.name === "string" &&
+                !hasState
+            ) {
                 // Decision 0010: arm sub-scopes have no state namespace.
                 // Capture state refs as arm inputs (evaluated in the outer
                 // loop body scope that DOES have state), then rewrite the
@@ -2283,6 +2344,9 @@ export class Emitter {
             }
             visit(node);
         }
+        if (options.extraVisit) {
+            for (const t of options.extraVisit) visit(t);
+        }
 
         const inputs: Record<string, Template> = {};
         const properties: Record<string, JSONSchema> = {};
@@ -2314,7 +2378,12 @@ export class Emitter {
         existingInputNames: Set<string> = new Set(),
     ): BranchArm {
         this.threadNext(childScope);
-        const outer = this.captureOuterRefs(childScope, existingInputNames);
+        // captureOuterRefs also rewrites refs in the output template,
+        // so e.g. `return x` in an else arm correctly threads `x` through
+        // arm.inputs as $from:"input".
+        const outer = this.captureOuterRefs(childScope, existingInputNames, {
+            extraVisit: output !== undefined ? [output] : [],
+        });
         const scope: WorkflowScope = {
             inputSchema: {
                 type: "object",
@@ -2354,6 +2423,29 @@ export class Emitter {
                 outputSchema: {},
             },
         };
+    }
+
+    /**
+     * Build a BranchArm from a scope that may have no statements of its own
+     * but produces an output template (e.g. an `if` arm whose body is just
+     * `return x`). Adds a noop node so the arm has a real entry, then runs
+     * the normal buildArmScope path so captureOuterRefs hoists references
+     * in the output template into arm.inputs.
+     */
+    private buildOutputOnlyArm(
+        scope: ScopeContext,
+        output: Template,
+    ): BranchArm {
+        const noopId = this.freshId("arm_noop");
+        scope.nodes[noopId] = {
+            kind: "task",
+            task: "noop",
+            inputSchema: {},
+            outputSchema: {},
+            inputs: {},
+        } as TaskNode;
+        scope.nodeOrder.push(noopId);
+        return this.buildArmScope(scope, output, {});
     }
 
     private childScope(parent: ScopeContext): ScopeContext {

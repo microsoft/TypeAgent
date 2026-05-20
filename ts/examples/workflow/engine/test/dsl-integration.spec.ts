@@ -96,6 +96,37 @@ function makeEngine(extraTasks: TaskDefinition[] = []): {
     return { eng, events };
 }
 
+/**
+ * Decision 0010: BranchArm scopes are nested. Walk every node in the
+ * IR (including arm sub-scopes and loop bodies) and return the first
+ * node ID matching the predicate.
+ */
+function findNodeIdDeep(
+    ir: WorkflowIR,
+    predicate: (id: string) => boolean,
+): string | undefined {
+    const visit = (nodes: Record<string, any>): string | undefined => {
+        for (const [id, node] of Object.entries(nodes)) {
+            if (predicate(id)) return id;
+            if (node?.kind === "branch") {
+                for (const arm of Object.values(node.cases ?? {})) {
+                    const found = visit((arm as any).scope?.nodes ?? {});
+                    if (found) return found;
+                }
+                if (node.default?.scope?.nodes) {
+                    const found = visit(node.default.scope.nodes);
+                    if (found) return found;
+                }
+            } else if (node?.kind === "loop" && node.body?.nodes) {
+                const found = visit(node.body.nodes);
+                if (found) return found;
+            }
+        }
+        return undefined;
+    };
+    return visit(ir.nodes);
+}
+
 // ---- Tests ----
 
 describe("DSL -> Engine integration", () => {
@@ -427,10 +458,10 @@ describe("DSL -> Engine integration", () => {
                 }
             `);
             // Find the RHS-evaluation and short-circuit arm node IDs
-            const rhsNode = Object.keys(ir.nodes).find((id) =>
+            const rhsNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("and_rhs"),
             )!;
-            const shortNode = Object.keys(ir.nodes).find((id) =>
+            const shortNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("and_short"),
             )!;
             expect(rhsNode).toBeDefined();
@@ -464,10 +495,10 @@ describe("DSL -> Engine integration", () => {
                     return r;
                 }
             `);
-            const rhsNode = Object.keys(ir.nodes).find((id) =>
+            const rhsNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("or_rhs"),
             )!;
-            const shortNode = Object.keys(ir.nodes).find((id) =>
+            const shortNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("or_short"),
             )!;
             expect(rhsNode).toBeDefined();
