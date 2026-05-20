@@ -1474,6 +1474,53 @@ describe("validateWorkflowIR", () => {
                 ),
             ).toBe(true);
         });
+
+        it("rejects loop recovery target with its own onError exactly once (no Rule 3+4 double-fire)", () => {
+            // Regression test for the validateOnErrorRules fix: a loop-kind
+            // recovery target that also declares onError used to trip both
+            // Rule 3 ("no recursive recovery") and Rule 4 ("must be a
+            // task"). Rule 3 / Rule 5 are task-specific; only Rule 4
+            // should fire here.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        bind: "out",
+                        onError: "handler",
+                    }),
+                    handler: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: {
+                                step: makeTaskNode({ bind: "h" }),
+                            },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        iterateState: {},
+                        continueWhen: false,
+                        maxIterations: 1,
+                        onError: "end",
+                    } as any,
+                    end: makeTaskNode({ bind: "end" }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            // Exactly one error mentions the recovery-target-kind rule.
+            const kindErrors = result.errors.filter((e) =>
+                e.message.includes("must be a task node"),
+            );
+            expect(kindErrors).toHaveLength(1);
+            // No Rule 3 ("Recursive recovery") error should be present.
+            const recursiveErrors = result.errors.filter((e) =>
+                e.message.includes("Recursive recovery"),
+            );
+            expect(recursiveErrors).toHaveLength(0);
+        });
     });
 
     // ---- Phase 3: Termination (pass 9) ----
@@ -3692,6 +3739,259 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(false);
             expect(
                 result.errors.some((e) => e.message.includes('"$bad"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in branch arm inputs", () => {
+            const arm = makeSimpleArm("armStep");
+            (arm.inputs as any).bad = { $weird: 1 };
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: arm },
+                        default: makeSimpleArm("defStep"),
+                    } as any,
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weird"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in fork branch inputs", () => {
+            const ir = makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: { bad: { $weirdA: 1 } } as any,
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "object" },
+                                b: { type: "object" },
+                            },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdA"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in fork branch scope.output", () => {
+            const ir = makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $weirdOut: 1 } as any,
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "object" },
+                                b: { type: "object" },
+                            },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdOut"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in forkMap.collection template", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $weirdColl: 1 } as any,
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdColl"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in forkMap.inputs", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        inputs: { bad: { $weirdInputs: 1 } } as any,
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('"$weirdInputs"'),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in forkMap.body.output", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $weirdBodyOut: 1 } as any,
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('"$weirdBodyOut"'),
+                ),
             ).toBe(true);
         });
     });
