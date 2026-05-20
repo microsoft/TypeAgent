@@ -113,9 +113,9 @@ function buildHtml(
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+    content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}';" />
 <title>Workflow Graph: ${safeLabel}</title>
-<style>
+<style nonce="${nonce}">
     body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 12px; }
     h1 { font-size: 1em; margin: 0 0 8px 0; font-weight: 600; }
     .errors { color: var(--vscode-errorForeground); white-space: pre-wrap; font-family: var(--vscode-editor-font-family); font-size: 12px; }
@@ -225,8 +225,9 @@ const RENDER_SCRIPT = String.raw`
     const NODE_W = 160, NODE_H = 36, GAP_X = 24, GAP_Y = 60, PAD = 20;
     const positions = new Map(); // id -> {x, y, w, h, kind, label, line}
 
-    const paramSet = new Set(g.params.map((p) => p.id));
+    const paramMap = new Map(g.params.map((p) => [p.id, p]));
     const nodeMap = new Map(g.nodes.map((n) => [n.id, n]));
+    const groupMap = new Map(g.groups.map((gr) => [gr.id, gr]));
 
     let maxW = 0;
     for (const d of layers) {
@@ -241,8 +242,8 @@ const RENDER_SCRIPT = String.raw`
         const y = PAD + d * (NODE_H + GAP_Y);
         for (const id of ids) {
             let kind, label, line;
-            if (paramSet.has(id)) {
-                const p = g.params.find((q) => q.id === id);
+            if (paramMap.has(id)) {
+                const p = paramMap.get(id);
                 kind = "param";
                 label = p.name + ": " + p.type;
             } else {
@@ -266,7 +267,7 @@ const RENDER_SCRIPT = String.raw`
 
     // Groups (drawn behind nodes).
     for (const grp of g.groups) {
-        const memberIds = collectGroupMembers(grp, g.groups);
+        const memberIds = collectGroupMembers(grp);
         const ps = memberIds.map((id) => positions.get(id)).filter(Boolean);
         if (!ps.length) continue;
         const minX = Math.min(...ps.map((p) => p.x)) - 8;
@@ -288,13 +289,13 @@ const RENDER_SCRIPT = String.raw`
         svg.appendChild(t);
     }
 
-    function collectGroupMembers(grp, allGroups) {
+    function collectGroupMembers(grp) {
         const out = [];
         const seen = new Set();
         function visit(id) {
             if (seen.has(id)) return;
             seen.add(id);
-            const sub = allGroups.find((x) => x.id === id);
+            const sub = groupMap.get(id);
             if (sub) {
                 for (const c of sub.children) visit(c);
             } else {

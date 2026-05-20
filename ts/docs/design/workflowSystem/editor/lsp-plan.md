@@ -393,30 +393,9 @@ Decision entry format:
 **Revisit when:** ...
 ```
 
-**Review-deferral log:** `ts/docs/design/workflowSystem/editor/lsp-review-log.md`
-(created at the start of Phase 1, the first phase with reviews).
-Append an entry for **every** code-review or test-gap finding that was
-**not** acted upon in the phase it was raised — whether rejected,
-deferred, or accepted-with-rationale. Findings that were fixed don't
-need an entry (the diff is the record).
-
-Review-deferral entry format:
-
-```
-## YYYY-MM-DD — <short title>
-**Phase:** N
-**Source:** code-review round 1|2 | test-gap round 1|2
-**Severity:** must-fix | should-fix | nice-to-have | must-add | should-add
-**Finding:** verbatim or summarized reviewer note
-**Disposition:** rejected | deferred to Phase M | accepted-as-is
-**Rationale:** why we didn't act
-**Revisit when:** condition that re-opens this (if deferred)
-```
-
-These two files are the artifacts the user reviews after each phase.
-Together they cover both directions of plan deviation: choices we made
-(decisions log) and reviewer requests we didn't honor (review-deferral
-log).
+`lsp-decisions.md` is the artifact the user reviews after each phase.
+It covers plan deviations: choices we made and alternatives worth
+revisiting.
 
 ### C. Code review — 2 rounds via subagents
 
@@ -433,8 +412,7 @@ For each round:
      duplication, missing comment on non-obvious code.
    - **Reject / defer:** style or preference, or scope creep.
    Any finding that is **not** addressed in this phase — regardless of
-   severity — gets an entry in `lsp-review-log.md` with its disposition
-   and rationale.
+   severity — is logged with its disposition and rationale.
 3. Re-run the reviewer for round 2 against the updated diff.
 4. Phase is not done until round-2 review surfaces **no must-fix items**.
    Should-fix items in round 2 may be deferred with a logged entry.
@@ -457,8 +435,7 @@ For each round:
      feature spec.
    - **Defer:** combinatorial cases, perf benchmarks.
    Any gap that is **not** filled in this phase — regardless of
-   severity — gets an entry in `lsp-review-log.md` with its
-   disposition and rationale.
+   severity — is logged with its disposition and rationale.
 3. Run the reviewer again for round 2 after gaps are addressed.
 4. Phase is not done until round-2 surfaces no must-add tests and
    overall coverage has not regressed from the prior phase.
@@ -480,8 +457,6 @@ A phase is complete when:
   two rounds regardless (we iterate once, we don't chase convergence).
 - `lsp-decisions.md` has an entry for any plan deviation introduced
   during the phase.
-- `lsp-review-log.md` has an entry for every review/test-gap finding
-  that was not acted upon during the phase.
 - `lsp-manual-tests.md` has any new manual scenarios appended.
 - A `pN-decisions-review` checkpoint todo is marked done by the user
   (signals they've actually read the log files).
