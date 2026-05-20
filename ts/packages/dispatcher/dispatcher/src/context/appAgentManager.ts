@@ -55,6 +55,19 @@ import {
     RegistrationId,
 } from "./portRegistrar.js";
 
+/**
+ * Role string used by agents that have migrated off the legacy
+ * `setLocalHostPort` shim and onto explicit
+ * `sessionContext.registerPort("view", port)` for their per-session
+ * local view (browser views, montage gallery, markdown preview).
+ *
+ * The legacy "default" role and this "view" role coexist: lookups for
+ * `getLocalHostPort` / `getSharedLocalHostPort` try "default" first
+ * (back-compat) and fall back to "view" (new pattern). This lets
+ * cross-agent site lookup keep working through the migration.
+ */
+const LOCAL_VIEW_ROLE = "view";
+
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
 const debugLoad = registerDebug("typeagent:dispatcher:agents:load");
@@ -435,7 +448,13 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     public getLocalHostPort(appAgentName: string) {
-        return this.portRegistrar.lookup(appAgentName, DEFAULT_ROLE);
+        // Fall back to the "view" role for agents migrated off the
+        // legacy `setLocalHostPort` shim (browser-views, montage,
+        // markdown). Lookup order matches `getSharedLocalHostPort`.
+        return (
+            this.portRegistrar.lookup(appAgentName, DEFAULT_ROLE) ??
+            this.portRegistrar.lookup(appAgentName, LOCAL_VIEW_ROLE)
+        );
     }
 
     /**
@@ -490,7 +509,13 @@ export class AppAgentManager implements ActionConfigProvider {
             );
         }
 
-        const port = this.portRegistrar.lookup(target, DEFAULT_ROLE);
+        // Lookup order: "default" first for back-compat with legacy
+        // `setLocalHostPort` callers, then "view" for agents that
+        // migrated to the explicit `registerPort("view", ...)` pattern
+        // (browser-views, montage, markdown).
+        const port =
+            this.portRegistrar.lookup(target, DEFAULT_ROLE) ??
+            this.portRegistrar.lookup(target, LOCAL_VIEW_ROLE);
         if (port === undefined) {
             throw new Error(`Local view not available for agent '${target}'.`);
         }

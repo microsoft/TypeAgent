@@ -783,6 +783,8 @@ async function updateBrowserContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
             context.agentContext.viewProcess = undefined;
+            context.agentContext.viewPortRegistration?.release();
+            context.agentContext.viewPortRegistration = undefined;
             // Reset to OS-assigned so a subsequent re-enable forks
             // server.mjs with arg "0" instead of the stale port. The
             // killed child may still hold the old port for a brief
@@ -806,6 +808,8 @@ async function closeBrowserContext(
     if (context.agentContext.viewProcess) {
         context.agentContext.viewProcess.kill();
         context.agentContext.viewProcess = undefined;
+        context.agentContext.viewPortRegistration?.release();
+        context.agentContext.viewPortRegistration = undefined;
         context.agentContext.localHostPort = 0;
     }
 }
@@ -2471,7 +2475,9 @@ async function createViewServiceHost(
                 childProcess.on("message", function (message: any) {
                     if (message?.type === "Success") {
                         context.agentContext.localHostPort = message.port;
-                        context.setLocalHostPort(message.port);
+                        context.agentContext.viewPortRegistration?.release();
+                        context.agentContext.viewPortRegistration =
+                            context.registerPort("view", message.port);
                         resolve(childProcess);
                     } else if (message === "Failure") {
                         resolve(undefined);

@@ -44,6 +44,10 @@ type MarkdownActionContext = {
     currentFileName?: string | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    // Handle returned by sessionContext.registerPort for the markdown
+    // preview / Yjs WebSocket server. Released on
+    // updateMarkdownContext(false, ...).
+    viewPortRegistration?: { release: () => void } | undefined;
 };
 
 async function handleUICommand(
@@ -304,7 +308,9 @@ async function updateMarkdownContext(
                 if (result) {
                     context.agentContext.viewProcess = result.process;
                     context.agentContext.localHostPort = result.port;
-                    context.setLocalHostPort(result.port);
+                    context.agentContext.viewPortRegistration?.release();
+                    context.agentContext.viewPortRegistration =
+                        context.registerPort("view", result.port);
                 }
             }
         }
@@ -314,6 +320,8 @@ async function updateMarkdownContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
             context.agentContext.viewProcess = undefined;
+            context.agentContext.viewPortRegistration?.release();
+            context.agentContext.viewPortRegistration = undefined;
         }
     }
 }

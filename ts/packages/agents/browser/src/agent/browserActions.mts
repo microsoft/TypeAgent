@@ -38,6 +38,10 @@ export type BrowserActionContext = {
     index: IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    // Handle returned by sessionContext.registerPort for the views
+    // server (PDF viewer / per-session HTML views). Released on
+    // updateBrowserContext(false, ...) or closeAgentContext.
+    viewPortRegistration?: { release: () => void } | undefined;
     webFlowStore?: WebFlowStore | undefined;
     choiceManager?: ChoiceManager | undefined;
     lastInferredActions?: any[] | undefined;

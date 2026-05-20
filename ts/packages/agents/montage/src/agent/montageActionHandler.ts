@@ -60,6 +60,10 @@ type MontageActionContext = {
     imageCollection?: im.ImageCollection | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    // Handle returned by sessionContext.registerPort for the gallery
+    // view server. Released on updateMontageContext(false, ...) or
+    // closeMontageContext.
+    viewPortRegistration?: { release: () => void } | undefined;
     searchSettings: {
         minScore: number;
         exactMatch: boolean;
@@ -233,6 +237,8 @@ async function closeMontageContext(
     if (context.agentContext.viewProcess) {
         context.agentContext.viewProcess.kill();
         context.agentContext.viewProcess = undefined;
+        context.agentContext.viewPortRegistration?.release();
+        context.agentContext.viewPortRegistration = undefined;
     }
 }
 
@@ -298,7 +304,12 @@ async function updateMontageContext(
             );
             if (viewServiceResult) {
                 agentContext.viewProcess = viewServiceResult.process;
-                context.setLocalHostPort(viewServiceResult.port);
+                agentContext.localHostPort = viewServiceResult.port;
+                agentContext.viewPortRegistration?.release();
+                agentContext.viewPortRegistration = context.registerPort(
+                    "view",
+                    viewServiceResult.port,
+                );
             }
 
             // send the folder info
@@ -333,6 +344,8 @@ async function updateMontageContext(
         if (agentContext.viewProcess) {
             agentContext.viewProcess.kill();
             agentContext.viewProcess = undefined;
+            agentContext.viewPortRegistration?.release();
+            agentContext.viewPortRegistration = undefined;
         }
     }
 }
