@@ -381,8 +381,12 @@ This is not a workaround or alternative expression. The cross-scope reference is
 
 > **Historical note (decision 0010):** This section reasons about
 > loop control using `@iterate` / `@exit` sentinels, which was the
-> shape of v0.1 loops when P5 was written. Decision 0010 retired
-> those sentinels and replaced them with a boolean `continueWhen`
+> shape of v0.1 loops when P5 was written. Decision 0010 made two
+> coupled changes that finished the WorkflowScope unification: (1)
+> branch arms became full `WorkflowScope`s with their own
+> `output` / `outputSchema` (replacing the earlier flat list of
+> node IDs that converged through an implicit merge node), and (2)
+> loop sentinels were retired in favor of a boolean `continueWhen`
 > template evaluated at body completion. The P5 reasoning is
 > unchanged — the sentinels were one concrete way to make body
 > re-entry locally predictable, and `continueWhen` is the
