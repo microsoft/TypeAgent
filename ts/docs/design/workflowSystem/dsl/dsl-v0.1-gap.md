@@ -39,7 +39,14 @@ new surface area:
     AST honesty and visual-editor clarity, but current behavior works.
 13. **G12: Decide `list.append` naming/semantics.** This is naming/API
     consistency with coordinated emitter, engine, and snapshot churn.
-14. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+14. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+    Decision 0010 removed `identity` / `noop` as load-bearing at branch
+    convergence, but the emitter still synthesizes them in several other
+    places. Classify each remaining usage as (a) reducible after 0010,
+    (b) forced by an IR shape that could be relaxed additively, or (c)
+    inherent to decision 0006 (no expressions). Pure audit; only
+    schedules follow-up work.
+15. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
 
@@ -206,6 +213,7 @@ nested calls would obscure the step-by-step execution model.
    (error if not). There are no union types. This was an intentional
    simplification: returns the consequent type, rejects mismatches at
    compile time.
+
 ## G9: Bare task calls wrapped as synthetic ConstStatement
 
 **Context:** The parser allows bare task calls in statement position
@@ -365,6 +373,7 @@ reversed.
 
 **Reproduction:** Compile a switch with string cases, run with a value
 matching the second case. Output is always from the first case.
+
 ## G16: `throw` produces empty error message
 
 **Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
@@ -528,3 +537,80 @@ model supports and what the DSL can actually produce.
 5. Decide and document the canonical retry-exhaustion semantics for
    `attempts(...)` (silent exit vs. explicit fail) and add a test that
    pins it down.
+
+## G20: Remaining `identity` / `noop` usage in the emitter
+
+**Context:** [Decision 0010](../ir/decisions/0010-finish-workflow-scope-unification.md)
+removed `identity` + shared-bind + `noop` as the load-bearing lowering
+for value-producing branches: with branch arms as `WorkflowScope`s,
+each arm's `output` is a normal reference and convergence does not
+need a carrier node. Resolved item G5 covered that specific pattern.
+
+The emitter still synthesizes `identity` and `noop` nodes in several
+other places. Whether each one is benign "DSL convenience" or evidence
+of a remaining IR friction is not yet decided.
+
+**Remaining categories** (snapshot of
+[emitter.ts](../../../examples/workflow/dsl/src/emitter.ts)):
+
+1. **Top-level / scope `output` materialization.** `output` must be a
+   `$from` reference; literal or computed return values get wrapped in
+   an `identity` node so they can be named. Affects `workflow.output`
+   for literal returns and several lowering paths (short-circuit RHS,
+   ternary literal consequents, etc.).
+2. **`makeNoopArm` placeholder.** A `WorkflowScope` requires `entry`,
+   `nodes`, and (in practice) something to reference from `output`.
+   The "missing else" of an `if` without `else`, and other defaulted
+   arms, emit a single `noop` whose bound output is the arm's value.
+3. **Loop "retry" arm body.** The `attempts(...)` lowering emits a
+   `noop` whose output (literal `true`) is the value `continueWhen`
+   reads. Same shape as item 2 specialized for loop termination.
+4. **Post-branch merge / continuation nodes.** Several lowering paths
+   still emit a trailing `noop` as a join point even though arms now
+   carry their own outputs. May be vestigial from the pre-0010 emitter.
+
+**Why this might point at an IR problem:**
+
+Each remaining usage is a place where the DSL has a _value_ but the
+IR rules ("every value is a node output" + `WorkflowScope` must
+declare `entry` / `nodes` / `output`, per
+[workflow-scope-proposal.md](../ir/workflow-scope-proposal.md)) force
+the emitter to invent a carrier node. The cost is real: synthetic IDs
+leak into IR (compare G9), execution traces include nodes the author
+never wrote, and node counts overstate the workflow's conceptual size.
+
+Three plausible end states, one per category:
+
+- **Reducible after 0010.** Category 4 (post-branch merge) may be
+  outright dead code now that branch arms have outputs. Removing it
+  costs nothing if true.
+- **Additive IR relaxation.** Categories 1, 2, and 3 could be
+  addressed by an additive IR change: allow `scope.output` (or
+  `WorkflowIR.output`) to be a literal-or-reference template rather
+  than strictly a reference, and treat "arm with no body" as a
+  syntactic shorthand. This trades one validator rule for a smaller
+  emitted IR. Needs an IR decision; the variance lens of
+  [revisit-triggers.md](../ir/revisit-triggers.md) applies (separate
+  concept vs. broadening an existing one).
+- **Inherent to decision 0006.** If the audit finds the remaining
+  carriers are the natural cost of "no expressions in the IR," then
+  G20 closes as "working as intended" and the row in
+  [revisit-triggers.md](../ir/revisit-triggers.md) for decision 0006
+  becomes the place to track if pressure grows.
+
+**What needs to happen:**
+
+1. Enumerate every remaining `identity` / `noop` emit site in
+   [emitter.ts](../../../examples/workflow/dsl/src/emitter.ts) and
+   tag each with its category above.
+2. For category 4, write the test that would fail if the node were
+   removed; if no such test exists, remove the node - if tests stay
+   green that confirms vestigial.
+3. For categories 1-3, draft the minimal IR relaxation that would
+   eliminate each, and decide per-category whether the relaxation is
+   worth the validator-rule cost or whether to accept the carrier
+   nodes as the cost of decision 0006.
+4. If any category triggers an IR relaxation, update
+   [revisit-triggers.md](../ir/revisit-triggers.md) and either
+   [ir-v0.1.md](../ir/ir-v0.1.md) or a new decision record.
+5. If all categories close as "working as intended," remove this gap.
