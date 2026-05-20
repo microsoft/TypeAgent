@@ -20,7 +20,6 @@ import { compile, TaskSchemaInfo, CompileOptions } from "workflow-dsl";
 // ---- Helpers ----
 
 const VALIDATE: CompileOptions = { validate: true };
-const NO_VALIDATE: CompileOptions = { validate: false };
 
 function makeRegistry(...tasks: TaskDefinition[]): TaskRegistry {
     const registry = new TaskRegistry();
@@ -597,21 +596,17 @@ describe("DSL -> Engine integration", () => {
                     }
                 }
             `,
-                [],
-                NO_VALIDATE,
             );
             const { eng } = makeEngine();
 
             let result = await eng.run(ir, {
                 input: { x: 20 },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("big: 20");
 
             result = await eng.run(ir, {
                 input: { x: 5 },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("small: 5");
@@ -656,28 +651,23 @@ describe("DSL -> Engine integration", () => {
                     }
                 }
             `,
-                [],
-                NO_VALIDATE,
             );
             const { eng } = makeEngine();
 
             let result = await eng.run(ir, {
                 input: { cmd: "hello" },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("greeting");
 
             result = await eng.run(ir, {
                 input: { cmd: "bye" },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("farewell");
 
             result = await eng.run(ir, {
                 input: { cmd: "other" },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("unknown");
@@ -1073,20 +1063,16 @@ describe("DSL -> Engine integration", () => {
                     }
                 }
             `,
-                [],
-                NO_VALIDATE,
             );
             const { eng } = makeEngine();
 
             let result = await eng.run(ir, {
                 input: { x: -5 },
-                skipValidation: true,
             });
             expect(result.output).toBe(5);
 
             result = await eng.run(ir, {
                 input: { x: 3 },
-                skipValidation: true,
             });
             expect(result.output).toBe(3);
         });
@@ -1103,19 +1089,16 @@ describe("DSL -> Engine integration", () => {
                 }
             `,
                 [webFetch],
-                NO_VALIDATE,
             );
 
             const result = await eng.run(ir, {
                 input: { url: "test.com", minLen: 10 },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("long enough");
 
             const result2 = await eng.run(ir, {
                 input: { url: "test.com", minLen: 3 },
-                skipValidation: true,
             });
             expect(result2.success).toBe(true);
             expect(result2.output).toBe("too short");
