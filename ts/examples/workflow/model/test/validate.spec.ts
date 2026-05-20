@@ -4413,6 +4413,37 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
+        it("rejects continueWhen referencing an undeclared state variable", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {},
+                        iterateState: {},
+                        continueWhen: {
+                            $from: "state",
+                            name: "noSuchVar",
+                        } as any,
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("noSuchVar")),
+            ).toBe(true);
+        });
+
         it("rejects loop missing continueWhen entirely", () => {
             const ir = makeMinimalIR({
                 nodes: {
