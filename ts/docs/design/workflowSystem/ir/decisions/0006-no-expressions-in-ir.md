@@ -371,3 +371,34 @@ Register as revisit trigger row 11:
 - **Minimal response:** `$expr` as a template-position key,
   string-typed, pure-functional, no arithmetic. Extend only if
   arithmetic is independently forced.
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
+
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) preserves
+the "no expressions in the IR" invariant on both surfaces it touches:
+
+- **Branch arms** become [`WorkflowScope`](../workflow-scope-proposal.md)s,
+  but the branch itself still dispatches on a discriminant value
+  produced by an upstream task (the v0.1 `selector`/`selectorSchema`
+  shape is unchanged). The arm's `inputs` and `scope.output` are
+  reference objects, not expressions.
+- **Loop termination** via `continueWhen` is a reference object
+  resolved in the body-scope binding context. Decisions about whether
+  to continue are values computed by a body task (typically a
+  classifier or comparison task whose output is bound under a
+  predictable name), exactly the §1 "tasks are the only computation
+  surface" rule. `continueWhen` does not introduce a predicate
+  sublanguage; it is a `Template` with the same grammar as `inputs`
+  or `output`.
+
+If revisit-trigger row 11 fires (an `$expr` template-position key
+lands), `continueWhen` becomes the most ergonomic site for tiny
+boolean expressions (e.g., `{ "$expr": "state.attempts < 3" }`); the
+shape of the loop does not change.

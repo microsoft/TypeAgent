@@ -169,9 +169,10 @@ following are the largest:
 | Schema redundancy on task nodes        | Omit, inherit                                                      | Static drift check needs both sides at validation time; runtime dispatch needs schemas without registry lookup.                                                                                                  | Required, drift-checked                                                                                                                                                         | §8.16, decision 0003 |
 | Reference encoding (string vs. object) | String shorthand                                                   | Engine needs source kind, name, and path without a parser; analyzers need uniform structural access.                                                                                                             | Object form                                                                                                                                                                     | §8.2                 |
 | IR encoding format                     | YAML for terseness                                                 | Engine needs a strict, ambiguity-free parse; LLM emitters need no whitespace traps.                                                                                                                              | JSON                                                                                                                                                                            | §8.14                |
-| Branch model                           | Predicate `if/else`                                                | Engine needs total dispatch with no expression evaluator on the hot path.                                                                                                                                        | Discriminant switch with required `default`                                                                                                                                     | §8.3                 |
+| Branch model                           | Predicate `if/else`                                                | Engine needs total dispatch with no expression evaluator on the hot path.                                                                                                                                        | Discriminant switch with required `default`; arms are `WorkflowScope`s ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)).                                  | §8.3                 |
 | Bound outputs                          | Implicit publication                                               | Engine needs a static liveness signal to free unreferenced values immediately (§5.7 SHOULD).                                                                                                                     | Hide-by-default `bind` switch                                                                                                                                                   | §8.15, decision 0001 |
-| Mutable state / implicit carry-forward | Less verbose `iterateState`; "natural" update syntax               | Validator and engine want a single-assignment-per-frame model so dominance + phi (textbook SSA) are the only data-flow rules; in-place mutation forces bespoke ordering rules and forecloses parallelism.        | Pure SSA per namespace; codegen restates state at each `@iterate`.                                                                                                              | §8.17, decision 0004 |
+| Mutable state / implicit carry-forward | Less verbose `iterateState`; "natural" update syntax               | Validator and engine want a single-assignment-per-frame model so dominance + phi (textbook SSA) are the only data-flow rules; in-place mutation forces bespoke ordering rules and forecloses parallelism.        | Pure SSA per namespace; codegen restates state at each iteration boundary.                                                                                                      | §8.17, decision 0004 |
+| Loop termination                       | Implicit re-entry / explicit `@iterate` / `@exit` sentinels        | Engine needs a single, locally validatable rule for "when does an iteration end" without reserving target ids.                                                                                                   | Body is a plain `WorkflowScope`; the loop's `continueWhen` reference decides each iteration's fate ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)).      | §8.4                 |
 | Verbosity tax in the LLM era           | Codegen output size; human review/diff burden when reading IR cold | Engine needs the verbose, explicit, locally validatable form regardless of who writes it.                                                                                                                        | Build a DSL when authors are LLM or human; codegen pays the tax once per change rather than per emission. IR remains emittable so the LLM-direct fallback in §1.1.2 stays open. | §1.1.2 LLM rows      |
 | Forced sequencing of independent tasks | Mark independent tasks as parallel or unordered                    | v1 has no parallel construct and no side-effect declarations; the engine sequences along `next` chains. Every pair of independent tasks must be threaded in an arbitrary order that looks meaningful but is not. | Accept the over-sequencing; readers and reviewers carry the cost. Post-v1 side-effect / capability declarations will close the gap (§3.2.2).                                    | §3.2.2               |
 
@@ -338,11 +339,11 @@ inputs.
 | Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state                                                            |
 | Reference modality    | Required and optional references                                                                                                         |
 | Type compatibility    | Structural subtyping over JSON Schema-described types                                                                                    |
-| Control flow          | Explicit `next` per node; sentinel `@iterate` and `@exit` inside loop bodies                                                             |
-| Branching             | Discriminant-based switch with exhaustive cases and required `default`                                                                   |
-| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap                                                |
+| Control flow          | Explicit `next` per node; natural completion (`next: null` or absent) terminates the enclosing scope                                     |
+| Branching             | Discriminant-based switch with exhaustive cases and required `default`; arms are `WorkflowScope`s ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)) |
+| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap; termination via `continueWhen` reference     |
 | Error handling        | Per-node `onError` edge to a task node; engine injects `error`/`trigger` input fields (§3.8); uncaught errors propagate and fail the run |
-| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, sentinel correctness                                               |
+| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, termination (every scope reaches natural completion)               |
 | Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations                                                |
 
 ### 2.2 Out of scope for v1 (post-v1)
@@ -472,7 +473,7 @@ that contains the loop node.
 **frame**: each name is bound at most once per frame and never mutated in
 place. What differs across namespaces is only the lifetime of the frame.
 Apparent "updates" - re-running a binding node on the next iteration,
-advancing `state` across `@iterate` - are not mutations; they are entries
+advancing `state` across the iteration boundary - are not mutations; they are entries
 into a new frame that re-binds the name. The §3.3 multiple-binders rule and
 the §4.1 pass 6 dominator check are the standard SSA join (phi) and
 dominance constraint applied per namespace.
@@ -486,7 +487,7 @@ scope-wide.
 | `"input"`    | Workflow `inputSchema` typing the run input, or a loop's `inputs` block | The scope it belongs to       | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
 | `"constant"` | Workflow root `constants`                                               | Every scope                   | The run.                                                                                       |
 | `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to | One execution of the binding node. In a loop body, re-bound each iteration.                    |
-| `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope        | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
+| `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope        | One iteration. Frame transition is body completion with `continueWhen` true, which evaluates `iterateState` (§3.7.1). |
 
 A task node dispatched via an `onError` edge additionally receives two
 engine-injected input fields named `error` and `trigger` before its
@@ -523,10 +524,12 @@ Body nodes cannot reference outer-scope `scope` variables, outer-scope
 `input` fields, or another loop's `state`. This is the **scope closure**
 property (P4) and is enforced by validation pass 5.
 
-**Sentinels.** `@iterate` and `@exit` are reserved tokens, not names,
-scoped to where they are legal (only inside a loop body as `next` or branch
-case targets). They participate in the CFG only and never appear in
-reference objects.
+**No sentinels.** v1 has no reserved CFG target tokens. Iteration is
+expressed by the enclosing loop's `continueWhen` reference resolved at
+body natural completion (§3.7); exit is just natural completion of a
+scope. (Earlier drafts reserved `@iterate` / `@exit`; that design was
+retracted by [decision 0010](decisions/0010-finish-workflow-scope-unification.md);
+see §8.4.)
 
 **Forward note (post-v1, nested loops).** When loops may contain loops, an
 inner body's only outer-data channels remain its own loop's `inputs`, its
@@ -542,8 +545,12 @@ re-litigated when nested loops land.
 Every IR encodes **two distinct graphs over the same node set**:
 
 1. The **control-flow graph (CFG).** Edges come from `next` (task,
-   loop), branch `cases` and `default`, `onError`, and the loop sentinels
-   `@iterate` and `@exit`. The CFG says _when_ a node runs.
+   loop), branch `cases` and `default`, and `onError`. The CFG says
+   _when_ a node runs. Sub-scopes (loop bodies, branch arms, fork
+   branches, forkMap bodies) have their own nested CFGs joined at the
+   enclosing node's natural completion; the enclosing loop's
+   `continueWhen` decides whether body completion returns to
+   `body.entry` or exits the loop (§3.7).
 2. The **data-dependency graph (DDG).** Edges come from reference objects
    (`$from: "scope"` and, transitively, `$from: "state"`). The DDG says
    _which values a node consumes from where_. Only nodes that `bind` their
@@ -617,9 +624,12 @@ Every node carries a discriminant `kind` (P5: self-describing).
 (section 3.4). The shape of `inputs` is part of the node's typed input
 schema (section 3.5). `onError`, when present, must point to a `task` node
 in the same scope; the engine dispatches that task with two injected input
-fields (`error` and `trigger`) per §3.8. `onError` does not apply to
-`branch` nodes (see §3.6): branch is pure control flow and has no
-runtime failure mode after static validation.
+fields (`error` and `trigger`) per §3.8. `onError` applies to `task`,
+`loop`, and `branch` nodes (and to `fork` / `forkMap` per ir-v0.2): for
+branches it covers arm-scope failure (selector resolution and arm
+selection remain statically proven; see §3.6 and §5.3); for loops it
+covers body or state-transition failure that escapes the body
+(§5.4).
 
 **Absent fields, no `null`.** Optional fields throughout the IR
 (`onError`, `bind`, `next` for terminals, `path` and `optional` on
@@ -657,10 +667,14 @@ Not every node kind produces a value worth binding:
 - `task` nodes produce values; `bind` is the publishing switch. A task
   reached via an `onError` edge is still a task: it produces a value the
   same way and may be `bind`ed.
-- `branch` nodes produce no value (they are pure control flow); `bind` is
-  not allowed on a branch.
-- `loop` nodes produce a value (the resolved `output` reference); `bind`
-  works on the loop node like any other value-producing node.
+- `branch` nodes may produce a value when `bind` is declared: the selected
+  arm's `scope.output` becomes the branch's output, validated against the
+  branch's `outputSchema` ([decision 0010](decisions/0010-finish-workflow-scope-unification.md);
+  §3.6). When `bind` is omitted, the branch is pure control flow and
+  publishes nothing.
+- `loop` nodes produce a value (`body.output` resolved at the terminating
+  iteration's body completion); `bind` works on the loop node like any
+  other value-producing node.
 
 ### 3.4 Reference positions (template model)
 
@@ -835,9 +849,13 @@ validator, and analyzers in agreement on a single observable behavior
   used by the runtime to validate the task implementation's return value).
   A special case: `outputSchema: { "not": {} }` declares that the task
   always fails (see v2 §3.4, "Never-output convention").
-- An absent `next` (terminal node) is legal **only** in the top-level
-  scope. In a loop body, every task must have `next` set to another body
-  node, `@iterate`, or `@exit` (P5 scenario 39).
+- An absent `next` (terminal node) is legal **only** in a value-producing
+  scope: at the top level it terminates the workflow, and inside any
+  `WorkflowScope` (loop body, branch arm, fork branch, forkMap body) it
+  marks natural completion of that scope. There are no reserved CFG
+  target tokens in v1 ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)
+  retired the `@iterate` / `@exit` sentinels in favour of body natural
+  completion + `continueWhen`; see §8.4 Alt D).
 - A task node may be the target of one or more `next`/`cases`/`default`
   edges (its normal dispatch paths) **or** the target of an `onError` edge
   from exactly one trigger T (the recovery dispatch path), but not both.
@@ -857,9 +875,27 @@ validator, and analyzers in agreement on a single observable behavior
     /* JSON Schema with "enum" or string-typed discriminant */
   },
   "cases": {
-    "<caseValue>": "<nodeId>",
+    "<caseValue>": {
+      "inputs": {
+        /* outer -> arm-scope wiring; reference objects resolved in
+           the branch's outer scope */
+      },
+      "scope": {
+        /* WorkflowScope: inputSchema, entry, nodes, output, outputSchema */
+      },
+    },
   },
-  "default": "<nodeId>", // optional; see exhaustiveness rule below
+  "default": {                       // optional; see exhaustiveness contract
+    "inputs": { /* ... */ },
+    "scope": { /* WorkflowScope */ },
+  },
+  "outputSchema": {                  // optional; required iff `bind` is declared
+    /* JSON Schema. Every arm's scope.outputSchema must be assignable
+       to it. MUST NOT be declared without `bind`. */
+  },
+  "next": "<nodeId>",                // optional
+  "onError": "<nodeId>",             // optional; covers arm-scope failure
+  "bind": "<scopeVarName>",          // optional; hide-by-default per §8.15
 }
 ```
 
@@ -868,35 +904,64 @@ validator, and analyzers in agreement on a single observable behavior
   with all-string members. Non-string discriminants (e.g., booleans from
   `int.lessThan`) require an explicit conversion task such as `bool.toLabel`
   ([decision 0008](decisions/0008-discriminant-key-encoding.md)).
-- **No `onError`.** Branch is pure control flow with no runtime failure
-  mode: selector template resolution is statically proven by the
-  validator's dominator + path-projection passes (§5.8.3), and
-  `BranchSelectorUnmatched` is also statically unreachable (see
-  exhaustiveness contract below and §5.8.3). The common `onError` field
-  from §3.3 therefore does not apply to branch nodes.
-- **Exhaustiveness contract.** Either `default` is present, **or** the
-  branch is statically exhaustive. A branch is statically exhaustive when:
+- **Arms are `WorkflowScope`s.** `cases[<caseValue>]` and `default` are
+  `{ inputs, scope }` wrappers around a [`WorkflowScope`](workflow-scope-proposal.md),
+  identical in shape to fork branches (ir-v0.2 §2.1). `inputs` wires
+  outer-scope values into the arm; `scope` declares the arm's
+  `inputSchema`, `entry`, `nodes`, `output`, and `outputSchema`. The
+  arm's `output` template is resolved in the arm-scope binding context
+  at arm-scope natural completion (any body node with `next: null`),
+  exactly like fork branch outputs.
+- **Branch output is the selected arm's output.** Unlike fork (which
+  combines all branches into one object), branch executes exactly one
+  arm and its `output` becomes the branch node's output value. The
+  branch's `outputSchema`, if declared, types that single value; every
+  arm's `scope.outputSchema` must be assignable to it (selection
+  semantics, not combination).
+- **`bind` follows §8.15** (hide-by-default). If `bind` is declared,
+  `outputSchema` must also be declared (the bound name needs a
+  declared type). When `bind` is omitted, the branch's output value is
+  not published into the outer scope; the branch is then a pure
+  control-flow construct just like a v0.1 branch was.
+- **`onError` covers arm-scope failure.** Selector resolution failure
+  remains statically unreachable (§5.8.3 dominator + path-projection
+  passes still apply, and the exhaustiveness contract below still
+  rules out `BranchSelectorUnmatched`). Arm-scope failure is, however,
+  a real runtime failure mode under v1: an arm's `scope` may contain
+  arbitrary tasks. `onError` on the branch routes arm-scope failures
+  to a recovery task in the branch's outer scope, parallel to fork's
+  `onError` semantics (§3.8). Cross-arm error semantics are
+  unambiguous because at most one arm executes per dispatch.
+- **Exhaustiveness contract** (unchanged from v0.1). Either `default`
+  is present, **or** the branch is statically exhaustive. A branch is
+  statically exhaustive when:
   1. `selectorSchema` declares an `enum` (or is `{ "type": "boolean" }`,
      which is treated as the implicit enum `[true, false]`), AND
   2. `cases` contains a key for every enum member, AND
   3. The discriminant's resolved producer type is provably narrowed to a
      subset of the declared enum (the producer carries a matching `const`,
-     `enum`, or `boolean` type — see [§3.6.1](#361-discriminant-narrowing)).
+     `enum`, or `boolean` type - see [§3.6.1](#361-discriminant-narrowing)).
      When all three hold, omitting `default` is legal and
      `BranchSelectorUnmatched` is statically unreachable. Otherwise `default`
      is required (P5: no implicit fall-through).
-- A branch has no `inputs` other than `selector`, no `outputs`, and no
-  `bind` (it produces no value). It is pure control flow. Data needed
-  downstream of the branch must already be available via dominator
-  references from before the branch (or threaded through tasks in each case
-  path - P1 scenarios 3, 6).
-- `cases` and `default` target node ids in the same scope. In a loop body,
-  the targets may also be `@iterate` or `@exit`.
+- **No raw nodeId targets.** Branch arms do not target nodes in the
+  branch's outer scope. Each arm is a closed sub-scope. Data that
+  must outlive a single arm flows out via the arm's `scope.output`;
+  control after the branch flows through the branch node's own
+  `next`.
+- **`cases[k]` arms differ from fork branches in one respect** -
+  exactly one arm executes per dispatch, selected by `selector`. Fork
+  executes all branches; the WorkflowScope contract is otherwise
+  identical.
 
 The choice to model a branch as a **discriminant switch** (rather than a
 predicate `if/else`) is deliberate: a discriminant is a value computed by an
 upstream task, which keeps decision logic inside a task (P3 boundary) and
-keeps the branch node a pure structural construct.
+keeps the branch node a pure structural dispatcher. The arm-as-`WorkflowScope`
+shape preserves this property: the branch still does not evaluate
+expressions; it dispatches to a sub-scope and resolves a reference at
+sub-scope completion ([decision 0010](decisions/0010-finish-workflow-scope-unification.md);
+[decision 0006](decisions/0006-no-expressions-in-ir.md) is unaffected).
 
 ### 3.7 Loop node
 
@@ -907,9 +972,6 @@ keeps the branch node a pure structural construct.
     "<boundaryInputName>": {
       /* reference from outer scope */
     },
-  },
-  "inputSchema": {
-    /* JSON Schema for the boundary inputs */
   },
   "state": {
     "<stateVarName>": {
@@ -922,74 +984,91 @@ keeps the branch node a pure structural construct.
     },
   },
   "body": {
-    "nodes": {
-      "<bodyNodeId>": {
-        /* node object */
-      },
-    },
-    "entry": "<bodyNodeId>",
+    /* WorkflowScope: inputSchema, entry, nodes, output, outputSchema.
+       The loop's `inputs` and `state[*].initial` together must satisfy
+       body.inputSchema; see "Body scope contract" below. */
   },
-  "output": {
-    /* reference object resolved in body scope at @exit */
-  },
-  "outputSchema": {
-    /* JSON Schema */
+  "continueWhen": {
+    /* reference object resolved in body scope at body completion.
+       Must resolve to a boolean. `true` -> next iteration; `false` -> exit. */
   },
   "iterateState": {
     "<stateVarName>": {
-      /* reference object resolved in body scope at @iterate */
+      /* reference object resolved in body scope at body completion */
     },
   },
-  "maxIterations": 1000, // optional; engine default 10,000
-  "next": "<nodeId>", // optional; see section 3.3
-  "onError": "<nodeId>", // optional; see section 3.3
-  "bind": "<scopeVarName>", // optional; loop output is the resolved `output` value
+  "maxIterations": 1000,             // optional; engine default 10,000
+  "next": "<nodeId>",                // optional; see section 3.3
+  "onError": "<nodeId>",             // optional; see section 3.3
+  "bind": "<scopeVarName>",          // optional; loop output is body.output
 }
 ```
 
 Key points:
 
-- `body` is a **closed sub-scope** with the same shape as the top-level
-  workflow's `nodes` + `entry` (P4). Body nodes cannot reference outer-scope
-  scope variables directly; they reach outer data only through `state`
-  (initialized from outer refs) and the loop's declared `inputs` (which body
-  nodes read via `$from: "input"`).
-- `state` declares cross-iteration variables (P2 scenario 15). Each state
-  variable has a schema and an initial value (resolved once at loop entry from
-  the outer scope).
+- **Body is a plain [`WorkflowScope`](workflow-scope-proposal.md)**, the
+  same shape used by the top-level workflow, fork branches (ir-v0.2 §2.1),
+  forkMap bodies, and branch arms ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)).
+  Body nodes cannot reference outer-scope variables directly; they reach
+  outer data only through `state` (initialized from outer refs) and the
+  loop's declared `inputs` (which body nodes read via `$from: "input"`).
+- **Body scope contract.** `body.inputSchema` declares what the body
+  scope expects. At loop dispatch the engine constructs the body scope's
+  input value from two sources: the loop's `inputs` (values threaded from
+  the outer scope, constant across iterations) and `state` (current
+  iteration's values). The validator checks that the union of these two
+  satisfies `body.inputSchema` ([§4.1 pass 7](#41-validation-passes)).
+- `state` declares cross-iteration variables (P2 scenario 15). Each
+  state variable has a schema and an initial value (resolved once at
+  loop entry from the outer scope).
+- **`continueWhen` decides each iteration's fate at body completion.**
+  After the body reaches natural completion (its `body.output` template
+  is resolved), the engine resolves `continueWhen` in the same body
+  binding context. If it resolves to `true`, the engine evaluates
+  `iterateState`, increments the iteration counter, and re-enters at
+  `body.entry`. If it resolves to `false`, the loop exits and the body's
+  resolved `body.output` value becomes the loop node's output. The body
+  must reach natural completion every iteration (a body node with
+  `next: null`); there are no sentinels. Loops that previously used
+  `@iterate` / `@exit` from inside a body branch now have each arm bind
+  the continuation discriminant under a shared scope name, and the loop
+  reads that name as `continueWhen`. See [decision 0010 §3.6](decisions/0010-finish-workflow-scope-unification.md)
+  for the lowering pattern.
 - `iterateState` declares how each state variable is computed for the
-  **next** iteration (section 3.7.1). It is the symmetric companion of
-  `state[*].initial`: `initial` builds iteration 0's state from the outer
-  scope; `iterateState` builds iteration N+1's state from the body scope at
-  the moment `@iterate` is taken. There is no implicit "node output
-  overwrites state" rule and no per-node write declaration; every
-  cross-iteration value flows through `iterateState`.
-- `output` is resolved when the body reaches `@exit`. It is a single
-  reference resolved in the full body scope (state, scope, input, and
-  constant namespaces - the same scope available to `iterateState` at
-  `@iterate`). For accumulator-pattern loops the output typically reads
-  from `state`; for retry-pattern loops it may read directly from a
-  body-scoped binding ([decision 0009](decisions/0009-loop-output-source.md)).
-  The shape is exactly the same as the workflow root's `output` (§3.1).
-  Loops that need to publish more than one value wrap them in an object
-  built by a tail body node and bound under one name; the loop's
-  `output` then references that single name. This keeps every
-  value-producing scope (workflow, loop) on one shape.
-- `maxIterations` is optional. If present, must be a positive integer; if
-  exceeded, the loop fails with a well-known error type (consumable by
-  `onError`). If omitted, the engine applies a default safety cap (10,000).
-- `bind` on the loop publishes the resolved `output` value as a scope
-  variable in the **outer** scope, just like any other value-producing node.
+  **next** iteration ([§3.7.1](#371-iterate-state)). It is the symmetric
+  companion of `state[*].initial`: `initial` builds iteration 0's state
+  from the outer scope; `iterateState` builds iteration N+1's state from
+  the body scope at body completion when `continueWhen` is true. There
+  is no implicit "node output overwrites state" rule and no per-node
+  write declaration; every cross-iteration value flows through
+  `iterateState`.
+- **Loop output is `body.output`.** The body's `output` template, resolved
+  at body completion of the **final** iteration (the one where
+  `continueWhen` is `false`), is the loop node's output value. The
+  loop's external output type is `body.outputSchema`. For
+  accumulator-pattern loops the body typically reads from `state`; for
+  retry-pattern loops it reads directly from a body-scoped binding
+  ([decision 0009](decisions/0009-loop-output-source.md)). Loops that
+  need to publish more than one value have a tail body node assemble
+  them into a single object and the body's `output` references that
+  one name.
+- `maxIterations` is optional. If present, must be a positive integer;
+  if exceeded, the loop fails with a well-known error type (consumable
+  by `onError`). If omitted, the engine applies a default safety cap
+  (10,000).
+- `bind` on the loop publishes the loop's output value as a scope
+  variable in the **outer** scope, just like any other value-producing
+  node (§8.15).
 
 #### 3.7.1 Iterate state
 
 `iterateState` lives on the loop node and declares the **complete** state
 for the next iteration. It is structurally parallel to `state[*].initial`:
 
-| Site               | Computes              | References resolved in   |
-| ------------------ | --------------------- | ------------------------ |
-| `state[*].initial` | iteration 0's state   | outer scope              |
-| `iterateState[*]`  | iteration N+1's state | body scope at `@iterate` |
+| Site               | Computes              | References resolved in        |
+| ------------------ | --------------------- | ----------------------------- |
+| `state[*].initial` | iteration 0's state   | outer scope                   |
+| `iterateState[*]`  | iteration N+1's state | body scope at body completion |
 
 Rules:
 
@@ -997,19 +1076,24 @@ Rules:
   `state`. There is no implicit carry-forward; a variable that should keep
   its current value writes `{ "$from": "state", "name": "<S>" }` (P5: no
   surprise defaults).
-- Each entry is a normal reference object resolved in the body scope at the
-  moment `@iterate` is taken. References to bound producers (`$from:
-"scope"`) must be satisfied on every body-CFG path that reaches `@iterate`,
-  using the standard dominator + multiple-binders (phi) rules of §3.3 and
-  §4.1 pass 6.
+- Each entry is a normal reference object resolved in the body scope at
+  body completion (the same binding context in which `body.output` and
+  `continueWhen` resolve). References to bound producers (`$from:
+"scope"`) must be satisfied on every body-CFG path that reaches body
+  completion, using the standard dominator + multiple-binders (phi)
+  rules of §3.3 and §4.1 pass 6.
 - Each entry's resolved value must be type-compatible with the corresponding
   `state[*].schema` (§4.1 pass 7).
+- `iterateState` is evaluated only when `continueWhen` resolves to `true`.
+  On the terminating iteration its templates are not resolved; if a
+  template were to fail there, that failure is statically unreachable
+  for the terminating iteration by construction.
 
 State reads (`$from: "state"`) inside iteration `i` always see the values
 computed by iteration `i-1`'s `iterateState` evaluation (or by
 `state[*].initial` for `i = 0`). They never see partial mid-iteration
-values because there are none: state only changes at the `@iterate`
-boundary.
+values because there are none: state only changes at the iteration
+boundary (post-`continueWhen=true`).
 
 **Why this shape.** Centralizing next-iteration state on the loop node
 (rather than scattering writes across body nodes) means:
@@ -1017,10 +1101,10 @@ boundary.
 - The phi structure of state values is the same SSA mechanism as for bound
   scope variables (§3.3): different body paths may bind a name like
   `newDraft`, and `iterateState.draft = { "$from": "scope", "name":
-"newDraft" }` resolves via the standard phi at the `@iterate` join. No
+"newDraft" }` resolves via the standard phi at body completion. No
   separate "no-race" rule for state writes is needed.
-- Branches inside the body remain pure control flow; they do not carry
-  state-write declarations even when they target `@iterate` directly.
+- Branches inside the body remain pure dispatchers over `WorkflowScope`
+  arms; they do not carry state-write declarations.
 - Reasoning about "what changes per iteration" is local to the loop node;
   reviewers do not have to scan every body node looking for writers.
 
@@ -1033,23 +1117,10 @@ emits the canonical state shape and binds it under the shared name. Do not
 try to encode per-arm conditionals inside an `iterateState` entry; it is
 just a reference object.
 
-**Failure semantics.** If the body fails before reaching any `@iterate`,
-`iterateState` is never evaluated; state simply stays at the current
-iteration's values and the failure propagates per §5.4 step 5.
-
-#### 3.7.2 Sentinels
-
-`@iterate` and `@exit` are reserved values legal only as `next` (or branch
-case targets) **inside a loop body**. They are explicit because P5 scenario
-37 says implicit re-entry is surprising.
-
-- `@iterate` - evaluate the loop's `iterateState` against the current body
-  scope to compute the next iteration's state (§3.7.1), increment the
-  iteration counter, and re-enter at `body.entry`.
-- `@exit` - leave the loop; resolve `output` against the final state
-  and body-scope values, then continue at the loop's outer `next`.
-
-There are no other sentinels in v1.
+**Failure semantics.** If the body fails before reaching natural
+completion, neither `continueWhen` nor `iterateState` are evaluated;
+state stays at the current iteration's values and the failure
+propagates per §5.4.
 
 ### 3.8 onError dispatch
 
@@ -1093,9 +1164,9 @@ trigger" model:
    that itself keeps failing is observable, and the answer in v1 is the
    simple one - the recovery task is the last chance, and if it fails,
    the failure propagates. If a recovery needs to retry the work that
-   originally failed, it does so via `next: "@iterate"` in a loop body
-   (the bounded-retry pattern, P3 scenario 27), not by attaching
-   another `onError` to itself.
+   originally failed, it does so by reaching the loop's body natural
+   completion with `continueWhen` resolving to `true` (the bounded-retry
+   pattern, P3 scenario 27), not by attaching another `onError` to itself.
 
 A recovery node's `next` follows the same rules as any task's `next`
 (terminal in top-level, must lead somewhere in a loop body), and a
@@ -1208,17 +1279,17 @@ into a discriminated union; that work is post-v1.
 
 ```
 Node     := TaskNode | BranchNode | LoopNode
-Scope    := { nodes: Map<Id, Node>, entry: Id }
-Workflow := { name, version, inputSchema, outputSchema, constants?, ...Scope, output }
+Scope    := WorkflowScope  // see workflow-scope-proposal.md
+Workflow := { name, version, inputSchema, outputSchema, constants?, ...Scope }
 ```
 
-Three node kinds, one scope shape, one template model (§3.4: JSON
-templates with `$from` references and `$literal` escape), two sentinels,
-one bind switch, one `output` template shape shared by every
-value-producing scope (workflow root, loop). This is the entire v1
-surface. Error
-recovery is an `onError` edge to a task node (§3.8); it adds no node
-kind.
+Three node kinds, one scope shape ([`WorkflowScope`](workflow-scope-proposal.md):
+`inputSchema`, `entry`, `nodes`, `output`, `outputSchema`), one template
+model (§3.4: JSON templates with `$from` references and `$literal`
+escape), one `bind` switch, one `output` template shape shared by every
+value-producing scope (workflow root, loop body, branch arm). This is
+the entire v1 surface. Error recovery is an `onError` edge to a task
+node (§3.8); it adds no node kind.
 
 ---
 
@@ -1264,10 +1335,23 @@ reference will resolve) for any execution path.
    the template), verify the target name exists. `$literal` subtrees
    are skipped (no resolution inside them). Objects with unrecognized
    `$`-prefixed top-level keys are rejected.
-   Additionally: sentinels are only used inside loop bodies; `onError`
-   targets a `task` node in the same scope; `entry` names an existing
-   node. `bind`, when present, is a non-empty string (no boolean
-   shorthand in v1; see §8.15). `branch` nodes do not declare `bind`.
+   Additionally: there are no reserved CFG target tokens in v1
+   (§3.2.1 "No sentinels"); `onError` targets a `task` node in the
+   same scope; `entry` names an existing node. `bind`, when present,
+   is a non-empty string (no boolean shorthand in v1; see §8.15). A
+   branch node MAY declare `bind` ([decision 0010](decisions/0010-finish-workflow-scope-unification.md));
+   when it does, the branch's `outputSchema` MUST be present and
+   every arm's `scope.outputSchema` MUST be assignable to it. A branch
+   node MUST NOT declare `outputSchema` unless it also declares `bind`
+   (an unbound branch is pure control-flow and has no outer-visible
+   value to type). Each arm's `scope` MUST itself satisfy the
+   `WorkflowScope` validation passes (this section, recursively): name
+   resolution, scope closure, dominator, type compatibility,
+   termination, and acyclicity all apply within the arm scope, taking
+   the arm's `inputs` as its boundary input binding. Each loop node's
+   `body` MUST likewise satisfy the `WorkflowScope` validation passes
+   recursively, taking the loop's `inputs` and `state` as its boundary
+   input binding (see §3.7).
    A node N that is the target of an `onError` edge from a trigger T:
    MUST NOT itself declare `onError`; MUST NOT be the target of any
    `next`, branch `cases` / `default`, or scope `entry` (the recovery
@@ -1311,14 +1395,16 @@ reference will resolve) for any execution path.
 
    References inside `iterateState` (loop node, §3.7.1) participate in
    this pass like any other reference, but their dominance question is
-   asked against the body CFG joined at `@iterate`: every body-CFG path
-   from `body.entry` to any `@iterate` target must satisfy each
-   `iterateState[*]` reference (a binder of the named value dominates
-   that path's `@iterate` site, or the reference is `optional` and the
-   target schema admits `null`). Multiple-binder phi (§3.3) is the
-   mechanism for path-dependent next-iteration values: different arms
-   may bind the same name, and `iterateState` resolves to whichever
-   binder ran on the path that reached `@iterate`.
+   asked against the body CFG joined at body natural completion: every
+   body-CFG path from `body.entry` to any natural-completion node (a
+   body node with `next: null`) must satisfy each `iterateState[*]`
+   reference (a binder of the named value dominates that path's
+   completion site, or the reference is `optional` and the target
+   schema admits `null`). The same coverage condition applies to
+   `body.output` and to the loop's `continueWhen`. Multiple-binder phi
+   (§3.3) is the mechanism for path-dependent next-iteration values:
+   different arms may bind the same name, and `iterateState` resolves
+   to whichever binder ran on the path that reached body completion.
 
 7. **Type compatibility pass (P1).** Compute each template position's
    **resolved type** compositionally:
@@ -1337,23 +1423,38 @@ reference will resolve) for any execution path.
    at the consumer's `inputSchema`. When multiple binders contribute
    to the same name (phi merge), every binder's `outputSchema` must
    be a structural subtype of the consumer's expected type.
-   `output`'s resolved type is checked against the workflow's
-   `outputSchema`. Branch `selectorSchema` checks against the
-   selector's resolved type; `cases` keys must be valid values in
-   `selectorSchema`. Fast path: if all producer and consumer
-   positions are the same `"#/types/<typeName>"` reference,
-   compatibility holds by identity without structural walking.
+   `output`'s resolved type is checked against the enclosing scope's
+   `outputSchema` (workflow root, every fork branch's `scope`, every
+   forkMap body, every loop body, and every branch arm's `scope`).
+   Branch `selectorSchema` checks against the selector's resolved
+   type; `cases` keys must be valid values in `selectorSchema`.
+   **Boundary checks introduced by [decision 0010](decisions/0010-finish-workflow-scope-unification.md):**
+   for each branch node, each arm's resolved `inputs` map (per-field
+   types composed in the branch's outer scope) must be a structural
+   subtype of the arm's `scope.inputSchema`, and -- when the branch
+   declares `bind` -- every arm's `scope.outputSchema` must be a
+   structural subtype of the branch's `outputSchema`. For each loop
+   node, the union of the loop's `inputs` (typed in outer scope) and
+   the loop's `state[*].schema` must satisfy `body.inputSchema`; the
+   loop's `continueWhen` resolved type must be a structural subtype
+   of `{ "type": "boolean" }`; and `body.outputSchema` types the
+   loop's output value (and -- when the loop declares `bind` --
+   `body.outputSchema` is what the bound name carries in the outer
+   scope). Fast path: if all producer and consumer positions are the
+   same `"#/types/<typeName>"` reference, compatibility holds by
+   identity without structural walking.
 
 8. **Exhaustiveness pass.** Every branch has either an exhaustive `cases`
    over an enum-typed selector or a `default`. v1 requires `default`
    regardless.
-9. **Termination pass.** Every node in the top-level scope can reach a
-   terminal (a task with `next` absent, or a branch all of whose
-   targets transitively terminate). Every body node can reach `@exit` or
-   `@iterate`.
-   Pure cycles without `@iterate`/`@exit` are rejected (P3 scenario 26).
+9. **Termination pass.** Every node in any scope can reach the scope's
+   natural completion (a node with `next` absent, or a branch all of
+   whose arms transitively terminate). Pure cycles are rejected
+   (P3 scenario 26); iteration is expressed only at the loop boundary
+   via `continueWhen` (§3.7), never as a back-edge inside a scope.
 10. **Acyclicity within scope (P3 + P4).** The intra-scope control-flow graph
-    is acyclic. Iteration is expressed only via `@iterate` inside a loop body.
+    is acyclic. Iteration is expressed only by the enclosing loop's
+    `continueWhen` re-entering `body.entry` at body completion (§3.7).
     This makes the dominator computation a standard DAG analysis and prevents
     "accidental loops" (P3 scenario 26).
 11. **State soundness pass.** Every loop state variable declared in `state`
@@ -1444,39 +1545,78 @@ semantics are post-v1 (§2.2).
 
 ### 5.3 Branch execution
 
-The engine resolves `selector`, looks up `cases[value]`, and proceeds to that
-node. If no case matches, proceeds to `default`. Branches do not produce
-output, and other nodes never reference a branch as a data source.
+1. Resolve `selector` against the branch's outer scope.
+2. Look up the arm: `cases[value]`, else `default`. If no case matches and
+   no `default` is declared, the branch is statically exhaustive (§3.6);
+   reaching this step at runtime is unreachable by validator construction
+   (§5.8.3).
+3. Resolve the arm's `inputs` against the branch's outer scope, producing
+   the arm scope's boundary input value; validate against
+   `arm.scope.inputSchema`.
+4. Execute the arm scope: begin at `arm.scope.entry` and run its nodes by
+   the same rules as the top-level scope (§5.1). Body nodes read the
+   boundary value via `$from: "input"`. The arm scope's own scope and
+   input namespaces are private to the arm; the branch's outer scope is
+   not visible inside.
+5. When the arm scope reaches natural completion (a body node with
+   `next: null`), resolve `arm.scope.output` in the arm-scope binding
+   context; validate against `arm.scope.outputSchema`. That value is
+   the branch node's output.
+6. If `bind` is declared on the branch, publish the resolved output
+   under that name in the branch's outer scope (§8.15); validate
+   against the branch's `outputSchema`. Otherwise the value is not
+   published.
+7. Proceed to the branch node's outer `next`.
+8. Failure during arm-scope execution that is not caught inside the arm
+   propagates to the branch node, which routes to its own `onError` (if
+   any) or fails its outer scope. Recovery task injection follows §3.8
+   with the branch as trigger.
 
 ### 5.4 Loop execution
 
-1. Resolve loop `inputs` from outer scope; validate against `inputSchema`.
-2. Initialize each `state` variable from its `initial` reference (resolved in
-   outer scope), validating against the variable's schema.
+1. Resolve loop `inputs` from outer scope.
+2. Initialize each `state` variable from its `initial` reference (resolved
+   in outer scope), validating against the variable's schema.
 3. Set iteration counter `i = 0`.
 4. Begin iteration:
-   - If `i >= maxIterations` (or the engine default when omitted), fail with `LoopMaxIterationsExceeded`.
-   - Execute body starting at `body.entry`. Inside the body:
-     - `$from: "state"` reads see the values established at the start of
-       this iteration. State does not change during a body iteration.
-     - The body terminates when a body node's `next` (or a branch case
-       target) is `@iterate` or `@exit`.
-   - On `@iterate`: evaluate the loop's `iterateState` against the current
-     body scope to produce the next iteration's state; validate each
-     resolved value against its `state[*].schema`; increment `i`; restart
-     at `body.entry` with the new state.
-   - On `@exit`: resolve `output` against the final body scope (state +
-     last-iteration node values), validate against `outputSchema`, and
-     proceed to the loop node's outer `next`.
+   - If `i >= maxIterations` (or the engine default when omitted), fail
+     with `LoopMaxIterationsExceeded`.
+   - Compose the body scope's boundary input value from the loop's
+     `inputs` (constant across iterations) and the current iteration's
+     `state`; validate against `body.inputSchema`.
+   - Execute the body scope starting at `body.entry`, by the same rules
+     as the top-level scope (§5.1). Inside the body, `$from: "state"`
+     reads see the values established at the start of this iteration;
+     state does not change during a body iteration.
+   - When the body reaches natural completion (a body node with
+     `next: null`), resolve `body.output` in the body-scope binding
+     context; validate against `body.outputSchema`. Call the resolved
+     value `Y_i`.
+   - Resolve `continueWhen` in the same body-scope binding context.
+     - If `false`: the loop exits. `Y_i` is the loop node's output
+       value; if `bind` is declared, publish it under that name in the
+       loop's outer scope. Proceed to the loop node's outer `next`.
+     - If `true`: evaluate the loop's `iterateState` against the body
+       scope to produce the next iteration's state; validate each
+       resolved value against its `state[*].schema`; increment `i`;
+       restart at body initialization with the new state. `Y_i` is
+       discarded.
 5. Failure inside the body that is not caught by a body-scope `onError`
    edge propagates to the loop node, which then routes to its own
    `onError` (if any) or fails its outer scope.
 
+
 ### 5.5 onError dispatch
 
-When a trigger node T fails (T's task throws or returns a value that
-violates `outputSchema`) and T declares `onError: R`, the engine
-dispatches R as the recovery task:
+When a trigger node T fails and T declares `onError: R`, the engine
+dispatches R as the recovery task. T may be a task, a loop, a branch
+(arm-scope failure), a fork, or a forkMap. Failure of T is whichever
+failure mode applies to its kind: for `task`, the implementation throws
+or returns a value that violates `outputSchema`; for `loop`, body or
+state failure that escapes the body (§5.4 step 5); for `branch`,
+arm-scope failure that escapes the arm (§5.3 step 8); for `fork` /
+`forkMap`, sub-scope failure per ir-v0.2 §2. The dispatch shape is the
+same in every case:
 
 1. Build R's `inputs` map: inject `error` (the structured failure value
    per §3.8.1) and `trigger` (an object whose fields are T's resolved
@@ -1528,14 +1668,17 @@ parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
    node before dispatching its `next` successor. v1 does not specify
    concurrent execution of independent nodes; the parallelism question is
    deferred to post-v1 (§2.2).
-3. Compute next-iteration `state` at `@iterate` per section 3.7.1
-   (evaluate `iterateState` against the body scope; failure before
-   `@iterate` leaves state unchanged and propagates per section 5.4
-   step 5).
+3. Compute next-iteration `state` per section 3.7.1 (after `body.output`
+   resolves at body completion, resolve `continueWhen`; when it is
+   `true`, evaluate `iterateState` against the body scope; failure
+   before body completion leaves state unchanged and propagates per
+   section 5.4 step 5).
 4. Route failures via `onError` per section 5.5; propagate uncaught
    failures to the enclosing scope per section 5.4 step 5.
-5. Resolve sentinels (`@iterate`, `@exit`) per loop semantics in
-   section 5.4.
+5. Execute branch arms as `WorkflowScope`s per section 5.3 (resolve
+   `selector`, dispatch the matching arm, run the arm's scope to
+   natural completion, resolve `arm.scope.output` as the branch's
+   output value; bind only when the branch declares `bind`).
 6. Emit the observability events listed in section 5.6.
 7. Run §4.1 pass 3 (IR/task drift) at engine load time with the
    registry available, and reject any IR whose `task`
@@ -1808,20 +1951,61 @@ an identity check.
       "kind": "branch",
       "selector": { "$from": "scope", "name": "classified", "path": ["label"] },
       "selectorSchema": { "$ref": "#/types/ClassifyLabel" },
-      "cases": { "news": "summarizeNews", "code": "explainCode" },
-      "default": "fallback",
-    },
-    "summarizeNews": {
-      /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "output" ... next: "format" */
-    },
-    "explainCode": {
-      /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "output" ... next: "format" */
-    },
-    "fallback": {
-      /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "output" ... next: "format" */
+      "cases": {
+        "news": {
+          "inputs": { "doc": { "$from": "input", "name": "doc" } },
+          "scope": {
+            "inputSchema": { "$ref": "#/types/Doc" },
+            "outputSchema": { "$ref": "#/types/Result" },
+            "entry": "summarizeNews",
+            "nodes": {
+              "summarizeNews": {
+                /* task ... outputSchema: { "$ref": "#/types/Result" }
+                   ... bind: "armOut" (terminal: next omitted) */
+              },
+            },
+            "output": { "$from": "scope", "name": "armOut" },
+          },
+        },
+        "code": {
+          "inputs": { "doc": { "$from": "input", "name": "doc" } },
+          "scope": {
+            "inputSchema": { "$ref": "#/types/Doc" },
+            "outputSchema": { "$ref": "#/types/Result" },
+            "entry": "explainCode",
+            "nodes": {
+              "explainCode": {
+                /* task ... outputSchema: { "$ref": "#/types/Result" }
+                   ... bind: "armOut" (terminal: next omitted) */
+              },
+            },
+            "output": { "$from": "scope", "name": "armOut" },
+          },
+        },
+      },
+      "default": {
+        "inputs": { "doc": { "$from": "input", "name": "doc" } },
+        "scope": {
+          "inputSchema": { "$ref": "#/types/Doc" },
+          "outputSchema": { "$ref": "#/types/Result" },
+          "entry": "fallback",
+          "nodes": {
+            "fallback": {
+              /* task ... outputSchema: { "$ref": "#/types/Result" }
+                 ... bind: "armOut" (terminal: next omitted) */
+            },
+          },
+          "output": { "$from": "scope", "name": "armOut" },
+        },
+      },
+      "outputSchema": { "$ref": "#/types/Result" },
+      "bind": "routed",
+      "next": "format",
     },
     "format": {
-      /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "final" (terminal: next omitted) */
+      /* task ... inputs: { result: { "$from": "scope", "name": "routed" } }
+         ... outputSchema: { "$ref": "#/types/Result" }
+         ... bind: "final" (terminal: next omitted) */
     },
     "classifyError": {
       "kind": "task",
@@ -1850,17 +2034,19 @@ an identity check.
 `ClassifyLabel` is the canonical enum: it appears once in `types`, is reused
 by `classify.outputSchema` (nested) and by `route.selectorSchema`, and the
 exhaustiveness pass reads its `enum` from there. `Result` is shared by every
-path that reaches `format`, so the diamond merge (P1 scenario 3) is checked
-by identity rather than by structural walking.
+arm's `scope.outputSchema` and by the branch's `outputSchema`, so the
+boundary check (§4.1 pass 7) that "every arm's `scope.outputSchema` is
+assignable to the branch's `outputSchema`" collapses to an identity check.
 
-`format` is reachable from `summarizeNews`/`explainCode`/`fallback` because
-each path makes one of them dominate `format`. Each branch arm binds its
-output under the same scope variable name (`output`), so `format` reads
-`{ "$from": "scope", "name": "output" }` once and the dominator pass checks
-that exactly one of the three binders dominates `format` in every
-branch-selected path. The author must arrange that all three produce a
-compatible output that `format` can consume - this is P1 scenario 3 (diamond
-merge).
+Each branch arm is its own `WorkflowScope` ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)):
+the arm declares `inputs` that wire the outer `doc` into the arm boundary,
+and the arm's body produces its result under `armOut`, exposed as the
+arm's `scope.output`. The branch selects exactly one arm; the selected
+arm's `output` becomes the branch's output value, which is published into
+the outer scope under `bind: "routed"`. The downstream `format` task
+reads `{ "$from": "scope", "name": "routed" }` once - no diamond merge
+is needed because the branch itself reifies the selection into a single
+binder.
 
 The `classifyError` recovery task receives the original `doc` via the
 engine-injected `trigger` field (whose value is `classify`'s resolved
@@ -1901,7 +2087,6 @@ be declared in the enclosing workflow's `types` block, e.g.:
 {
   "kind": "loop",
   "inputs": { "topic": { "$from": "input", "name": "topic" } },
-  "inputSchema": { "$ref": "#/types/Topic" },
   "state": {
     "draft": {
       "schema": { "type": "string" },
@@ -1913,6 +2098,7 @@ be declared in the enclosing workflow's `types` block, e.g.:
     },
   },
   "body": {
+    "inputSchema": { "$ref": "#/types/Topic" },
     "entry": "write",
     "nodes": {
       "write": {
@@ -1948,25 +2134,17 @@ be declared in the enclosing workflow's `types` block, e.g.:
           "required": ["text"],
         },
         "outputSchema": { "$ref": "#/types/Evaluation" },
-        "inputs": { "text": { "$from": "state", "name": "draft" } },
-        "next": "decide",
+        "inputs": { "text": { "$from": "scope", "name": "write", "path": ["text"] } },
+        "next": null,
         "bind": "evaluate",
       },
-      "decide": {
-        "kind": "branch",
-        "selector": {
-          "$from": "scope",
-          "name": "evaluate",
-          "path": ["verdict"],
-        },
-        "selectorSchema": { "$ref": "#/types/Verdict" },
-        "cases": { "accept": "@exit", "revise": "@iterate" },
-        "default": "@exit",
-      },
     },
+    "output": { "$from": "scope", "name": "write", "path": ["text"] },
+    "outputSchema": { "type": "string" },
   },
-  "output": { "$from": "state", "name": "draft" },
-  "outputSchema": { "$ref": "#/types/Article" },
+  "continueWhen": {
+    "$from": "scope", "name": "evaluate", "path": ["verdict_isRevise"]
+  },
   "iterateState": {
     "draft": { "$from": "scope", "name": "write", "path": ["text"] },
     "feedback": { "$from": "scope", "name": "evaluate", "path": ["feedback"] },
@@ -1975,8 +2153,15 @@ be declared in the enclosing workflow's `types` block, e.g.:
 }
 ```
 
+(For brevity, the example assumes `llm.evaluate` returns
+`{ verdict, feedback, verdict_isRevise: boolean }`; in practice a
+small `string.equals` task lowering of `verdict === "revise"` would
+sit between `evaluate` and the body's natural completion, binding
+`verdict_isRevise`. The loop's `continueWhen` then reads that
+boolean.)
+
 This demonstrates: loop construct (P3), declared cross-iteration state (P2),
-explicit `@iterate`/`@exit` (P5), boundary-closed body (P4), bounded
+explicit `continueWhen` termination (P5; no implicit re-entry), boundary-closed body (P4), bounded
 iteration (P5 universally-unsurprising default with explicit cap).
 
 ### 6.4 Optional reference at a merge
@@ -2017,9 +2202,9 @@ reference them.
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | P1        | **Intra-IR axis:** template model with `$from` references and named source (§3.4); static dominator pass over an acyclic intra-scope CFG; compositional type compatibility pass (resolved template types); `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
 | P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                        |
-| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                              |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies, branch arms, and fork branches are structural `WorkflowScope`s, not flat regions; iteration is the loop's `continueWhen` re-entering `body.entry` at body completion ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)), not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                                                            |
-| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                            |
+| P5        | Required `kind` discriminant; required explicit `next` in body scopes (no implicit re-entry; `next: null` marks natural completion); explicit `continueWhen` for loop termination ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)); required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                            |
 
 ---
 
@@ -2062,10 +2247,12 @@ Notes (post-v1):
 - Alt B: JSONPath/JMESPath. Rejected: too expressive (computed indirection
   conflicts with P1 scenario 8).
 
-### 8.3 Branching: discriminant switch with required `default`
+### 8.3 Branching: discriminant switch with required `default`; arms are `WorkflowScope`s
 
 - **Chosen:** switch on a discriminant value with `cases` map and required
-  `default`.
+  `default`. Each `cases[k]` and `default` arm is `{ inputs, scope }`
+  where `scope` is a [`WorkflowScope`](workflow-scope-proposal.md)
+  ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)).
 - Alt A: predicate-based `if/else` with an embedded expression language.
   Rejected: introduces an expression language (more concepts, P5 surprise
   surface) and pushes decision logic out of tasks. See also
@@ -2074,6 +2261,16 @@ Notes (post-v1):
 - Alt B: exhaustive switch with no `default`. Rejected for v1: simpler to
   always require `default`; can be relaxed later when enum exhaustiveness is
   trusted.
+- Alt C: arm targets node ids in the branch's outer scope (the v0.1
+  shape, "no inputs, no outputs, no bind"). Rejected by
+  [decision 0010](decisions/0010-finish-workflow-scope-unification.md):
+  the carve-out forced the DSL to lower arm bodies to a chain of
+  outer-scope nodes and synthesize an identity-noop at the join (DSL
+  gap G5/G6), and it left branch as the only structured kind without
+  `WorkflowScope` while fork, forkMap, and loop bodies already used
+  it. The arm-as-scope shape removes that asymmetry and lets the
+  branch optionally publish its selected arm's output via `bind`,
+  keeping the discriminant-switch / no-expression contract intact.
 
 Note (post-v1): the discriminant-switch model assumes the cost of an extra
 classifier task is negligible. If profiling shows that per-decision task
@@ -2082,43 +2279,76 @@ restricted predicate form (Alt A) may be reintroduced as a performance escape
 hatch. It would be additive, not a replacement, and would have to carry its
 own design review against P5.
 
-### 8.4 Loop sentinels: `@iterate` and `@exit`
+### 8.4 Loop termination: `continueWhen` reference, no sentinels
 
-- **Chosen:** explicit string sentinels in `next` / branch case targets.
+- **Chosen:** the loop body is a plain [`WorkflowScope`](workflow-scope-proposal.md);
+  each iteration runs the body to natural completion (a body node with
+  `next: null`), then the loop's `continueWhen` reference is resolved
+  in the body-scope binding context. `true` continues to the next
+  iteration; `false` exits with the body's resolved `body.output` as
+  the loop's output ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)).
 - Alt A: distinct node kinds (`iterateNode`, `exitNode`). Rejected:
-  unnecessary node kinds; the sentinel is purely a transition target.
+  unnecessary node kinds; the sentinel was purely a transition target.
 - Alt B: boolean flags on the body node (e.g., `terminal: true`). Rejected:
   P5 - reader has to learn that `terminal: true` means "exit the loop".
 - Alt C: implicit re-entry when `next` is omitted. Rejected by P5 scenario 37.
+- Alt D (v0.1 chosen, now retracted): explicit string sentinels
+  `@iterate` / `@exit` in `next` / branch case targets. Retracted by
+  [decision 0010](decisions/0010-finish-workflow-scope-unification.md):
+  the sentinels were the carve-out that kept the loop body different
+  from every other `WorkflowScope`. They were also the reason the v0.1
+  branch carve-out had to be preserved (a branch inside a loop body
+  needed to target `@iterate` / `@exit` from inside an arm, which is
+  not expressible once arms become scopes). `continueWhen` makes both
+  carve-outs disappear: the body terminates the same way every other
+  scope does, and termination is a value computed in the body scope
+  rather than a special target string. The P5 "no implicit re-entry"
+  property is preserved because `continueWhen` is required and is just
+  a reference object (no defaults).
 
 ### 8.5 Next-iteration state: declared centrally on the loop (`iterateState`)
 
 - **Chosen:** the loop node carries an `iterateState` block that, at every
-  `@iterate` transition, computes the complete next-iteration state from the
-  body scope. Symmetric with `state[*].initial`.
+  iteration boundary (after body completion when `continueWhen` is
+  `true`), computes the complete next-iteration state from the body
+  scope. Symmetric with `state[*].initial`.[^iterate-boundary]
+
+[^iterate-boundary]: Before [decision 0010](decisions/0010-finish-workflow-scope-unification.md)
+    the iteration boundary was the `@iterate` sentinel transition. The
+    boundary is now body natural completion gated by `continueWhen`;
+    the centralizing rationale, the reuse of the §3.3 phi for
+    path-dependent next state, and the rejection of per-node
+    `stateWrites` (Alt A) are all unchanged.
+
 - Alt A: per-body-node `stateWrites` map (the original v1 design). Rejected:
   forced a no-race validation rule across multiple writers, admitted
   dominance-ordered "dead writes" that are unobservable under snapshot
   reads (§3.7.1's "reads see start-of-iteration values"), and required
   branches that target `@iterate` directly to either disallow that or carry
-  state-write declarations (compromising the pure-control-flow story for
-  branches). Centralizing on the loop removes all three problems and reuses
+  state-write declarations (a concern dissolved when sentinels themselves
+  were retired by [decision 0010](decisions/0010-finish-workflow-scope-unification.md):
+  branches no longer target iteration boundaries). Centralizing on the loop removes all three problems and reuses
   the existing multiple-binders phi (§3.3) for path-dependent next state.
 - Alt B: implicit "node output of name X overwrites state X". Rejected by
   P2 scenario 15 and P5.
 
-### 8.6 State commit timing: at `@iterate`, visible next iteration
+### 8.6 State commit timing: at the iteration boundary, visible next iteration
 
-- **Chosen:** state changes only at the `@iterate` boundary, by evaluating
-  the loop's `iterateState` against the body scope. Reads in iteration `i`
-  see state as of iteration-`i` start; there is no intra-iteration state
-  mutation.
+- **Chosen:** state changes only at the iteration boundary (body
+  natural completion when `continueWhen` resolves to `true`), by
+  evaluating the loop's `iterateState` against the body scope. Reads
+  in iteration `i` see state as of iteration-`i` start; there is no
+  intra-iteration state mutation. The boundary itself was retimed
+  from "the `@iterate` sentinel transition" to "body completion gated
+  by `continueWhen`" by [decision 0010](decisions/0010-finish-workflow-scope-unification.md);
+  the snapshot-read semantics and the rejection of intra-iteration
+  visibility (Alt A) are unchanged.
 - Alt A: writes visible immediately within the same iteration. Rejected:
   reads would depend on the order of writes; harder to reason about
   locally (P4, P5).
 - Alt B: per-node writes that buffer and commit on node success (the
   original v1 design). Rejected together with the per-node write site
-  itself in \u00a78.5.
+  itself in §8.5.
 
 ### 8.7 Recovery model: task dispatched via `onError` with engine-injected fields
 
@@ -2128,7 +2358,8 @@ own design review against P5.
   resolved inputs) before resolving the recovery task's other inputs.
   The recovery node is a task in every structural respect (it has
   `inputs`, `inputSchema`, `outputSchema`, `next`, optional `bind`,
-  optional retry via `next: "@iterate"` in a loop body). The validator
+  and supports the bounded-retry pattern by routing back through a
+  body node whose completion lets the loop's `continueWhen` re-fire). The validator
   enforces four edge-role rules (§3.8): reached only via T's `onError`
   edge, single trigger, dominator scope `dominators(T) ∪ {T}`, no
   recursive `onError` on the recovery itself.
@@ -2172,8 +2403,11 @@ own design review against P5.
 
 ### 8.8 Loop body: closed sub-scope, DAG only
 
-- **Chosen:** body is a sub-scope with the same shape as the workflow,
-  acyclic, iteration only via `@iterate`.
+- **Chosen:** body is a [`WorkflowScope`](workflow-scope-proposal.md)
+  with the same shape as the workflow, acyclic; iteration happens only
+  at the loop boundary (body natural completion gated by `continueWhen`
+  per [decision 0010](decisions/0010-finish-workflow-scope-unification.md);
+  retired sentinel form was `@iterate` per §8.4 Alt D).
 - Alt A: body is a flat region of the parent graph. Rejected by P4 (no
   composability) and P3 (loop pattern hidden in topology).
 - Alt B: body may contain its own cycles. Rejected by P3 scenario 26 - any
@@ -2367,7 +2601,7 @@ so the property has one canonical justification.
 - **Chosen:** every `$from` namespace is single-assignment within its
   frame. There is no in-place mutation anywhere in v1; every apparent
   update (re-running a binding node on the next iteration, advancing
-  `state` across `@iterate`, a recovery task firing) is the entry into a new
+  `state` across the iteration boundary, a recovery task firing) is the entry into a new
   frame that re-binds the name.
 
 Why this matters:

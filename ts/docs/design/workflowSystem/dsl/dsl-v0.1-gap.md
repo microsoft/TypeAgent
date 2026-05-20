@@ -8,12 +8,16 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G5: Decide/document `identity` and `noop` as intentional lowering
-   primitives.** This stabilizes the interpretation of branch convergence and
-   literal materialization before changing validator or emitter behavior.
-2. **G6: Fix validator branch-return convergence.** This restores validation
-   coverage for workflows the emitter already produces and lets the skipped DSL
-   integration validation paths come back online.
+1. **G5: Resolved by IR decision 0010** ([0010-finish-workflow-scope-unification.md](../ir/decisions/0010-finish-workflow-scope-unification.md)).
+   Branch arms become `WorkflowScope`s; the `identity`-as-arm-target and
+   shared-bind merge `noop` patterns are retired. Implementation work
+   tracked under
+   [0010-implementation-plan.md](../ir/decisions/0010-implementation-plan.md)
+   Phase 2 (emitter rewrite).
+2. **G6: Dissolved by IR decision 0010** (same source). The validator
+   does not need new convergence-pattern handling because the
+   convergence shape is gone; the prefixed-node phi traversal is
+   removed instead.
 3. **G14: Fix switch lowering always taking first case.** This is a core
    control-flow runtime correctness bug and should be fixed before richer switch
    typing or exhaustiveness work.
@@ -55,14 +59,19 @@ new surface area:
 
 Dependency spine:
 
-- `G5 -> G6` restores confidence in validation for existing branch lowering.
+- ~~`G5 -> G6` restores confidence in validation for existing branch lowering.~~
+  Resolved/dissolved together by IR decision 0010 (branch arms become
+  `WorkflowScope`s; G6's convergence pattern no longer exists). The
+  emitter and validator work is tracked under decision 0010 instead.
 - `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
 - `G13 + G10 -> G3 -> G4 -> G18` builds type-system features on sound
   assignability.
 - `G14 -> G18` ensures switch runtime behavior is correct before adding
   exhaustive union-typed switch support.
-- `G6 + G14 + G15 + G16` makes implemented control-flow and error features
-  trustworthy before adding major new DSL surface area.
+- `G14 + G15 + G16` makes implemented control-flow and error features
+  trustworthy before adding major new DSL surface area. (G15's runtime
+  failure should be re-tested against the new 0010 lowering; the bug
+  may dissolve if it was rooted in arm-as-noop-target.)
 
 ## G1: Sub-workflow calls
 
@@ -184,9 +193,88 @@ to a variable and pass it opaquely to another task.
    type checker support for resolving generic instantiations, and emitter
    support for threading the resolved type into the schema.
 
-## G5: `identity` is covering two distinct IR gaps
+## G5: `identity` is covering two distinct IR gaps (RESOLVED by IR decision 0010)
 
-**Context:** The current emitter uses builtin `identity` nodes in several
+**Status:** Resolved by
+[decision 0010](../ir/decisions/0010-finish-workflow-scope-unification.md)
+(branch arms become `WorkflowScope`s; the DSL no longer needs
+`identity`-as-arm-target or shared-bind merge `noop`s).
+
+**How 0010 closes G5.** Both jobs `identity` was doing disappear under
+the new branch shape:
+
+- **Literal branch arms:** an arm is a `WorkflowScope` with an
+  `output` template. A literal-returning arm has zero body nodes; the
+  arm's `scope.output` is the literal/template directly. No
+  `identity` shim is needed.
+- **Shared-bind normalization:** the branch's selected arm output IS
+  the branch's output value; if the DSL wants to publish it, the
+  branch declares `bind`. Both arms feed the same outer-scope name
+  through the branch node, not through a synthesized `noop` join.
+
+**Lowering pattern after 0010** (replaces strategy (a) and (b) from
+the v0.1 analysis below):
+
+```ts
+// DSL:
+let result = (cond === "a") ? makeA(x) : makeB(y);
+
+// Lowering (sketch):
+{ kind: "branch",
+  selector: { $from: "scope", name: "cond" },
+  selectorSchema: { enum: ["a", "b"] },
+  cases: {
+    a: { inputs: { x: { $from: "scope", name: "x" } },
+         scope: { inputSchema: …, entry: "makeA",
+                  nodes: { makeA: { kind: "task", task: "makeA",
+                                    inputs: { x: { $from: "input", path: "x" } },
+                                    bind: "v" } },
+                  output: { $from: "scope", name: "v" },
+                  outputSchema: … } },
+    b: { inputs: { y: { $from: "scope", name: "y" } },
+         scope: { inputSchema: …, entry: "makeB",
+                  nodes: { makeB: { kind: "task", task: "makeB",
+                                    inputs: { y: { $from: "input", path: "y" } },
+                                    bind: "v" } },
+                  output: { $from: "scope", name: "v" },
+                  outputSchema: … } },
+  },
+  outputSchema: …,
+  bind: "result"
+}
+```
+
+**Coupling with G6 and G15.** G6 (validator branch-return convergence)
+and G15 (branch/ternary inside loop body fails at runtime) **dissolve
+under the same 0010 change**: the prefix-based "shared-bind through a
+merge `noop`" pattern that triggered both gaps does not exist after
+0010 lowering, and the dominator coverage required by §4.1 pass 6 is
+satisfied by the branch's own `bind` rather than by a phi across
+prefixed arm nodes. The recommended-sequence section above should be
+updated to drop G5/G6 (and reduce G15 to a runtime check that
+exercises the new lowering on a loop-body branch).
+
+**What needs to happen:**
+
+1. ~~Decide whether the spec should explicitly document `identity` as
+   an accepted compiler/runtime lowering primitive for these cases.~~
+   No longer needed.
+2. Implement the new lowering in the DSL emitter (Phase 2 of decision
+   0010's implementation plan; see
+   [0010-implementation-plan.md](../ir/decisions/0010-implementation-plan.md)).
+3. Remove `identity`-as-arm-target and shared-bind merge `noop`s from
+   the emitter.
+4. Update validator coverage tests to use the new lowering shape.
+
+The historical v0.1 analysis (strategies 1-3, the `ConstNode` / merge
+phi alternatives) is preserved below for archival reasons; readers
+implementing G5 should follow 0010, not the strategies below.
+
+---
+
+### Historical v0.1 analysis (superseded)
+
+**Context (v0.1):** The current emitter uses builtin `identity` nodes in several
 places where the DSL produces a value but the IR only allows control flow
 to continue through executable node IDs. The principle question is not just
 "can we remove `identity`?" but which uses reflect a real missing IR
@@ -285,9 +373,30 @@ These are related in the emitter, but they are not the same design problem.
    support separately rather than treating all `identity` uses as one
    problem.
 
-## G6: Validator does not handle branch-return convergence patterns
+## G6: Validator does not handle branch-return convergence patterns (DISSOLVED by IR decision 0010)
 
-**Context:** The IR validator's domination analysis rejects some
+**Status:** Dissolved by
+[decision 0010](../ir/decisions/0010-finish-workflow-scope-unification.md).
+The validator does not need a new convergence-pattern rule because
+the branch-return convergence shape (prefixed nodes converging
+through a merge `noop`) does not exist after 0010 lowering. The
+selected arm's `scope.output` becomes the branch node's output
+directly; if `bind` is declared, that value is published in the outer
+scope under the branch's bound name. Strategy (c) in
+`isBindingCoveredAtNode` -- the prefix-based phi check -- can be
+deleted along with strategies (a) and (b) for branch-return.
+
+**What needs to happen:**
+
+1. Re-emit the four DSL-integration tests with the new lowering and
+   remove `NO_VALIDATE` / `skipValidation`.
+2. Delete the prefix-based phi traversal from the validator.
+3. Keep the hand-built engine tests that use `skipValidation` for
+   error-handling paths; they are unrelated to G6.
+
+### Historical v0.1 analysis (superseded)
+
+**Context (v0.1):** The IR validator's domination analysis rejects some
 emitter-produced workflows that execute correctly in the runner. Four
 DSL-integration tests and several hand-built engine tests bypass
 validation to preserve behavioral coverage.

@@ -127,3 +127,36 @@ explicit language:
 > from a body-scoped binding.
 
 No change to §5.4 step 4 (already correct).
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
+
+
+---
+
+## Related: decision 0010 (loop `continueWhen`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) reframes
+where the loop's output value comes from without changing the
+guidance in this decision. Under 0010 the loop body is a plain
+[`WorkflowScope`](../workflow-scope-proposal.md), and the loop's
+output value **is** `body.output` resolved at body completion of the
+terminating iteration (the iteration where `continueWhen` resolves
+to `false`). The two patterns this decision describes still apply:
+
+- **Accumulator pattern:** `body.output` reads from `state` (the
+  accumulator carried across iterations). The terminating iteration's
+  state, by construction of `iterateState`, holds the final value.
+- **Retry pattern:** `body.output` reads from a body-scoped binding
+  produced this iteration (typically the successful task's bound
+  output). The terminating iteration is the one in which that
+  binding was produced; `continueWhen` reads `false` on that path.
+
+The §3.3 phi rules and the dominator coverage required by §4.1 pass 6
+apply to `body.output` exactly as the v0.1 spec required for the
+loop-level `output` reference. The footnote in [§8.5][^iterate-boundary]
+of ir-v0.1.md records the iteration-boundary retiming.
+
+[^iterate-boundary]: See ir-v0.1.md §8.5 footnote on the
+    `@iterate` -> "body completion gated by `continueWhen`" retiming.
