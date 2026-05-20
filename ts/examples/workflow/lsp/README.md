@@ -53,3 +53,13 @@ shape across versions.
 pnpm --filter workflow-lsp build
 pnpm --filter workflow-lsp test
 ```
+
+> **Note on `--forceExit`:** the `jest-esm` script passes `--forceExit`.
+> The in-process integration tests in `serverIntegration.spec.ts` open
+> a `vscode-jsonrpc` `Connection` over a `node:stream` pair. After full
+> dispose of the client, server, streams, and reader/writer, jest still
+> hangs ~10s because `vscode-jsonrpc`'s internal worker queue keeps
+> `setImmediate`/microtask handles alive that aren't exposed via
+> `Connection.dispose()`. This is a test-harness-only issue — production
+> uses `LanguageClient`, which the extension host tears down cleanly.
+> Remove `--forceExit` only if vscode-jsonrpc grows a sync drain API.

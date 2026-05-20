@@ -13,6 +13,11 @@
  * good enough for the typical workflow size, and the inline SVG
  * remains zoomable in the panel.
  *
+ * Revisit a real layout engine (e.g. `elkjs` or `dagre`, loaded in a
+ * webview worker) if real workflows routinely exceed ~30 nodes/edges
+ * or if users start asking for cleaner edge routing — at that point
+ * the added bundle cost is justified.
+ *
  * Security: the webview disables remote resources, uses a strict CSP
  * with a per-load nonce, and never echoes raw `.wf` source text — it
  * only renders the structured GraphModel coming from the server.

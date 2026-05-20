@@ -89,7 +89,7 @@ Key design choices:
 | 12  | Code actions         | `textDocument/codeAction`                 | Quick fixes: insert missing param, inline let, extract let, convert template to concat |
 | 13  | Inlay hints          | `textDocument/inlayHint`                  | Inferred types on `const`, return-type on task calls |
 | 14  | IR preview           | Custom command `workflow.previewIR`       | `compile()` -> JSON in a side webview, updated on save |
-| 15  | Graph preview        | Custom command `workflow.previewGraph`    | `extractGraph()` rendered with elkjs in webview (reuses milestone-2 work from editor exploration plan) |
+| 15  | Graph preview        | Custom command `workflow.previewGraph`    | `extractGraph()` rendered as inline SVG (layered top-down) in a webview. A real layout engine (`elkjs`, `dagre`, …) was considered and deferred — bundle cost not justified for typical workflow sizes; revisit if graphs exceed ~30 nodes or routing complaints arrive. |
 
 ## Packages and files
 
@@ -127,7 +127,7 @@ jest.config.cjs
 package.json                 # extension manifest; activationEvents on language:workflow
 src/extension.ts             # activate(): start LanguageClient, register preview commands
 src/irPreview.ts             # webview that shows compile() output
-src/graphPreview.ts          # webview that renders extractGraph() with elkjs
+src/graphPreview.ts          # webview that renders extractGraph() as inline SVG (layered top-down)
 syntaxes/workflow.tmLanguage.json   # TextMate grammar
 language-configuration.json  # brackets, comments, auto-indent
 icons/wf.png

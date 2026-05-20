@@ -134,15 +134,17 @@ users register project-local tasks without modifying the engine.
 
 ### Custom LSP requests
 
-The server registers one custom request:
+The server registers two custom requests:
 
 - **`workflow/compileIR`** — compiles the named `.wf` URI and returns
   `{ ir, errors }`. The VS Code extension uses this for the
   "Preview IR" command. Any LSP-capable editor can invoke the same
   request.
-
-A future **`workflow/previewGraph`** request will return a layout-ready
-graph structure; the VS Code extension will render it in a webview.
+- **`workflow/previewGraph`** — returns `{ graph?: GraphModel, errors }`
+  for the named `.wf` URI. The VS Code extension renders the graph as
+  inline SVG in a webview (layered top-down layout). A real layout
+  engine (`elkjs`, `dagre`, …) was considered and deferred — revisit
+  if graphs routinely exceed ~30 nodes or routing becomes a complaint.
 
 ---
 
@@ -159,7 +161,8 @@ package.json: "activationEvents": ["onLanguage:workflow"]
   → extension.ts: activate()
       → LanguageClient.start()   spawns dist/server.js via IPC
       → registers workflow.previewIR command
-      → registers workflow.previewGraph command (stub)
+      → registers workflow.previewGraph command
+      → registers workflow.showServerOutput command
 ```
 
 ### IR Preview live refresh
