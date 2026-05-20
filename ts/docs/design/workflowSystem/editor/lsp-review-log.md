@@ -19,7 +19,10 @@ Entries are appended in chronological order; newest at the bottom.
 **Phase:** 1
 **Origin:** code-review round 1 / test-gap round 1 (intended)
 **Severity:** process
-**Status:** noted
+**Status:** Resolved (2026-05-20) — sync code-review subagent ran
+successfully later in the project (4 findings returned and fixed); the
+turn-1-progress probe concern is no longer blocking. Background-agent
+mode remains unreliable.
 **Finding:** The two background subagents launched for the Phase 1
 code-review and test-gap reviews stalled at zero turns for ~4 hours and
 were killed. The reviews were performed inline by the implementing
@@ -51,6 +54,9 @@ reject out-of-range positions.
 **Resolution:** Acceptable for Phase 1. Phase 2's symbol-resolver pass
 will already need real token spans on errors; we'll widen ranges then
 by passing the token's end location through from the lexer/parser.
+**Updated 2026-05-20:** Still open — `util/position.ts:40 pointRange`
+remains unchanged; the promised Phase 2 widening did not happen. Low
+priority but worth a follow-up: clamp `end.character` to line length.
 
 ---
 
@@ -89,7 +95,8 @@ across lines if user feedback indicates the cursor jumps are noticeable.
 
 **Phase:** 2
 **Origin:** code-review rounds 1-2 / test-gap rounds 1-2 (planned)
-**Status:** Deferred / replaced
+**Status:** Resolved (2026-05-20) — same closure as the Phase 1 entry;
+sync subagent review subsequently demonstrated to work.
 **Resolution:** Same pattern as Phase 1 — background review subagents
 were not used. Per the Phase 1 decision in `lsp-decisions.md`, sub-
 agent reviews should only run if a sync turn-1 probe responds quickly;
@@ -105,7 +112,8 @@ captured below.
 
 **Phase:** 2
 **Origin:** scope vs. plan table rows 8 (signature help) and 11 (rename)
-**Status:** Deferred
+**Status:** Resolved (2026-05-20) — signature help shipped in Phase 3
+and rename + prepareRename shipped in Phase 4, both with tests.
 **Resolution:** The Phase 2 features (#4, #6, #7, #9, #10) all landed
 with tests. Signature help is a natural fit for Phase 3 (authoring
 assists) alongside completion-context work, and rename belongs with
@@ -134,11 +142,16 @@ quick-fixes need member-aware completion.
 
 **Phase:** 3
 **Origin:** code-review rounds 1-2 / test-gap rounds 1-2 (planned)
-**Status:** Deferred / replaced (same pattern as P1/P2)
+**Status:** Resolved (2026-05-20) — both deferred items below have
+since shipped: cancellation tests were added in the gap-audit pass,
+and all four code actions (extract-to-const, inline-const, surround-
+with-attempts, concat→template) landed in Phase 4 / gap-audit with
+AST-driven safety checks.
 **Resolution:** Inline self-review only. Bundle audit still clean
 (292.6 KB, no aiclient leak); 9 spec suites with 36 tests pass.
 
 Phase 3 deliverables that landed:
+
 - **Signature help** at task call sites via a text-based scanner that
   walks back from the cursor counting parens/commas with string
   literals masked, then matches the call name against the builtin
@@ -150,6 +163,7 @@ Phase 3 deliverables that landed:
   scaffold, control flow, lambdas, parallel, attempts, template literals.
 
 Deferred from Phase 3 (carried forward):
+
 - **Cancellation tokens.** Our handlers are synchronous and fast; no
   user-visible benefit yet. Will revisit during Phase 4 rename / Phase 5
   webview previews where work can be heavier.
@@ -173,16 +187,16 @@ scan from `stmt.loc.offset`. This fix also tightens find-references
 ranges for const bindings.
 
 Deferred from Phase 4:
-- **Code actions / quick fixes.** Not implemented — would benefit
-  from a richer diagnostic catalog (currently we just surface
-  `compile()` errors). Suggested first quick-fix candidates for a
-  follow-up: "rename to closest builtin" when a task name typo is
-  reported, "extract literal to const", "convert template to
-  concat".
-- **Symbol-resolver decoupling from text.** The new `locateName` is a
-  pragmatic fix; a cleaner solution is to extend the DSL AST with a
-  separate `nameLoc` field on Const / DestructuringConst (filed as a
-  follow-up for the DSL team).
+
+- **Code actions / quick fixes.** **Resolved (2026-05-20)** — all four
+  quick fixes (extract-to-const, inline-const, surround-with-attempts,
+  concat→template) landed in the gap-audit / code-review-fix passes
+  with AST-based safety checks and unit tests.
+- **Symbol-resolver decoupling from text.** **Still open.** The
+  `locateName` text scan in `symbolResolver.ts` is still the
+  mechanism; the cleaner solution (extend the DSL AST with a
+  `nameLoc` field on Const / DestructuringConst) remains a follow-up
+  for the DSL team.
 
 ---
 
@@ -192,6 +206,7 @@ Deferred from Phase 4:
 **Origin:** scope vs. plan table rows 14-15
 **Status:** Partial delivery
 **Resolution:**
+
 - **IR preview** is implemented via a custom LSP request
   (`workflow/compileIR`) that runs `compile()` server-side using the
   builtin task schemas. The extension command `workflow.previewIR`
@@ -201,15 +216,19 @@ Deferred from Phase 4:
   cover the happy path, parse errors, and missing-URI handling.
 
 Deferred from Phase 5:
+
 - **Graph preview** (`workflow.previewGraph`) is registered as a
   command but currently surfaces a "coming soon" message. Full
   delivery needs (a) `elkjs` bundled into the extension or loaded as
   a web worker, (b) a webview implementation with content-security
   policy, (c) manual validation in a GUI VS Code host — none of
-  which can be exercised inside this restricted dev container. Filed
-  as the primary follow-up.
+  which can be exercised inside this restricted dev container.
+  **Updated 2026-05-20:** Formally captured as a container-constrained
+  deferral in `lsp-decisions.md` ("Graph preview deferred"). Still
+  open as a follow-up; revisit when running in a full devcontainer.
 - **Manual smoke tests** documented in `lsp-manual-tests.md` are
-  still pending a GUI VS Code session to walk through.
+  still pending a GUI VS Code session to walk through. **Updated
+  2026-05-20:** Still open; same environment dependency.
 
 ---
 
@@ -217,7 +236,8 @@ Deferred from Phase 5:
 
 **Phase:** retrospective (all phases)
 **Origin:** background subagent reliability
-**Status:** Documented; pattern abandoned for this session.
+**Status:** Closed (2026-05-20) — historical closure note; no further
+action. Sync subagent reviews have since worked reliably.
 **Resolution:** After Phase 5 wrapped, completion notifications fired
 for `phase1-review-round1` (code-review) and `phase1-testgap-round1`
 (general-purpose, claude-haiku-4.5). Both agents reported
@@ -227,3 +247,34 @@ This confirms the Phase 1 decision to switch to inline self-review
 across all subsequent phases. Future iterations should sanity-check
 subagent turn-1 progress with a short sync probe before launching
 long-running background reviews.
+
+---
+
+## 2026-05-20 — Status sweep
+
+Walked every entry above against the current branch. Snapshot:
+
+| Entry                                        | Status                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Phase 1 subagent waived                      | Resolved (sync subagent works)                                                               |
+| Phase 1 `pointRange` EOF clamp               | **Still open** — `util/position.ts:40` unchanged                                             |
+| Schemas loaded once                          | Still applies, by design (not actionable)                                                    |
+| Formatting whole-document edit               | Still applies, accepted pattern (not actionable)                                             |
+| Phase 2 subagent waived                      | Resolved                                                                                     |
+| Phase 2 signature help + rename deferred     | Resolved (shipped P3 / P4)                                                                   |
+| Phase 2 dotted-name hover head-only          | **Still applies**, accepted-with-rationale                                                   |
+| Phase 3 cancellation + code-actions deferred | Resolved (cancellation tests + 4 code actions shipped)                                       |
+| Phase 4 code-actions / `nameLoc` decouple    | Code-actions resolved; **AST `nameLoc` still open** (DSL team)                               |
+| Phase 5 graph preview + manual smoke tests   | Both still open; graph preview formalized in `lsp-decisions.md`; manual tests await GUI host |
+| Subagent post-mortem                         | Closed (historical)                                                                          |
+
+Open follow-ups worth tracking:
+
+- `pointRange` line-length clamp (low priority).
+- Dotted-name hover beyond the head segment (only if user feedback
+  requests it).
+- DSL AST `nameLoc` field on Const / DestructuringConst (cross-team
+  ask).
+- Graph preview webview + `elkjs` bundling (needs GUI dev host).
+- Manual smoke-test walkthrough of `lsp-manual-tests.md` (needs GUI
+  VS Code session).
