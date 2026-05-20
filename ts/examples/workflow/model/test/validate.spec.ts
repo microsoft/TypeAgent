@@ -277,8 +277,6 @@ describe("validateWorkflowIR", () => {
         );
     });
 
-    // @iterate/@exit sentinels are retired; these test cases verify rejection
-
     it("rejects loop next pointing to non-existent node", () => {
         const ir = makeMinimalIR({
             nodes: {
