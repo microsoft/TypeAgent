@@ -391,9 +391,7 @@ class of bug.
 1. Deep-object mutation of inherited loop/arm state.
 2. Literal `continueWhen: true` not flagged — design options tracked in
    `ir/future/loop-termination-detection.md`.
-3. `continueWhen` template references not name-resolved (skipped test in
-   validate.spec.ts; depends on broader template name-resolution work).
-4. Loop body state shallow-copy isolation has no runtime test.
+3. Loop body state shallow-copy isolation has no runtime test.
 
 Phase 3 (non-DSL stdlib documentation, straggler search, decision
 log audit) can now proceed.

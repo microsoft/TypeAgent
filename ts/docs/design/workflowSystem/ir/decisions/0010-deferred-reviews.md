@@ -64,39 +64,6 @@ are pure with respect to their inputs" convention. At that point
 either deep-copy on hand-off or add a validator pass that flags
 `$from:state` references in arms whose nodes touch mutating tasks.
 
-### 2026-05-20 - `continueWhen` template references not name-resolved
-
-Source: phase 2 test-gap review round 2
-Phase: 2
-Finding: The validator confirms a loop has `continueWhen` and that
-its resolved type is boolean, but it does not walk the Template to
-confirm `$from:scope` (or `$from:state`) references resolve to
-names actually bound in the body scope. A loop with
-`continueWhen: { $from:"scope", name:"doesNotExist" }` currently
-passes validation. A skipped test is checked in to track the gap.
-Files / sections: `ts/examples/workflow/model/src/validate.ts`
-loop block; matching `.skip` test in
-`ts/examples/workflow/model/test/validate.spec.ts` ("rejects
-continueWhen referencing an unknown scope name").
-Severity (reviewer's assessment): medium
-Deferral reason: out of scope
-Reasoning: `continueWhen` is one of several node-adjacent
-templates (alongside `iterateState` values, `output` templates,
-branch `selector`, arm `inputs`, etc.) that today are type-checked
-via `resolveTemplateType` but not name-resolved against scope. A
-focused fix should add name-resolution for all of them in one
-pass, not just `continueWhen`. Runtime currently fails on the
-first iteration with an unresolved-reference error, which is
-loud-but-late.
-Follow-up pointer: separate task to add scope-aware name
-resolution to the template validator across all template
-positions. When that lands, remove `.skip` and add equivalent
-coverage for `iterateState`, branch `selector`, and arm `inputs`.
-**Resolution (2026-05-20):** Fixed in the same session — the
-deferral reasoning was incorrect. The targeted fix to validate
-`$from:scope` and `$from:state` refs in `continueWhen` was
-two-liners per ref-kind, not a wide refactor. Added to the loop
-validator block in `validate.ts`; `.skip` removed; 149/149 pass.
 
 ### 2026-05-20 - Loop body state shallow-copy isolation has no runtime test
 
