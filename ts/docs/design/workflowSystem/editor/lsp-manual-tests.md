@@ -150,6 +150,22 @@ spawns the LSP server.
 4. Confirm the IR preview tab content refreshes automatically.
 
 ### 5d — Preview Graph
-1. Run "Workflow: Preview Graph".
-2. Confirm an information message appears: "Workflow graph preview is coming in a follow-up release."
-3. Confirm no error is thrown in the Output panel.
+1. Open a valid `.wf` file and run "Workflow: Preview Graph".
+2. Confirm a webview panel titled "Graph: &lt;filename&gt;" opens beside the editor.
+3. Confirm the SVG shows one rectangle per parameter and per `const`
+   binding, plus edges between them; control-flow blocks (`if`,
+   `switch`, `parallel`, ...) appear as dashed group rectangles.
+4. Add a new task call and save the `.wf` file. Confirm the webview
+   refreshes automatically with the new node.
+5. Introduce a parse error (e.g. delete a closing brace) and save.
+   Confirm the error list at the top of the webview lists the parse
+   error and that the graph either shows a recovery-partial layout or
+   disappears (depending on lex/parse severity).
+6. Close the panel. Run the command again on the same file. Confirm a
+   new panel opens without crash.
+
+### 5e — Show Server Output / trace
+1. Set `workflow.trace.server` to `verbose` in user settings.
+2. Run "Workflow: Show Server Output".
+3. Open a `.wf` file. Confirm trace lines for the
+   `textDocument/didOpen` exchange appear in the output channel.

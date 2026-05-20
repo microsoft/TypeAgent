@@ -344,4 +344,73 @@ describe("server integration", () => {
             session.cleanup();
         }
     });
+
+    it("workflow/previewGraph custom request returns a graph (Phase 5)", async () => {
+        const session = await startSession();
+        try {
+            await session.client.sendNotification(
+                DidOpenTextDocumentNotification.type,
+                {
+                    textDocument: {
+                        uri: "file:///graph.wf",
+                        languageId: "workflow",
+                        version: 1,
+                        text: VALID_SRC,
+                    },
+                },
+            );
+            const result = (await session.client.sendRequest(
+                "workflow/previewGraph",
+                { uri: "file:///graph.wf" },
+            )) as {
+                graph?: {
+                    workflowName: string;
+                    nodes: unknown[];
+                    edges: unknown[];
+                    params: unknown[];
+                };
+                errors: unknown[];
+            };
+            expect(result).toBeDefined();
+            expect(Array.isArray(result.errors)).toBe(true);
+            expect(result.errors.length).toBe(0);
+            expect(result.graph).toBeDefined();
+            expect(result.graph!.workflowName).toBe("w");
+            expect(Array.isArray(result.graph!.nodes)).toBe(true);
+            expect(Array.isArray(result.graph!.edges)).toBe(true);
+            expect(Array.isArray(result.graph!.params)).toBe(true);
+        } finally {
+            session.cleanup();
+        }
+    });
+
+    it("workflow/previewGraph reports lex errors and omits graph", async () => {
+        const session = await startSession();
+        try {
+            await session.client.sendNotification(
+                DidOpenTextDocumentNotification.type,
+                {
+                    textDocument: {
+                        uri: "file:///bad.wf",
+                        languageId: "workflow",
+                        version: 1,
+                        // Unterminated string literal — lex error.
+                        text: `workflow w(): string { const x = "oops; return x; }`,
+                    },
+                },
+            );
+            const result = (await session.client.sendRequest(
+                "workflow/previewGraph",
+                { uri: "file:///bad.wf" },
+            )) as {
+                graph?: unknown;
+                errors: { phase: string }[];
+            };
+            expect(result.graph).toBeUndefined();
+            expect(result.errors.length).toBeGreaterThan(0);
+            expect(result.errors.every((e) => e.phase === "lex")).toBe(true);
+        } finally {
+            session.cleanup();
+        }
+    });
 });

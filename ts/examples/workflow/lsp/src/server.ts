@@ -44,6 +44,10 @@ import { computeSignatureHelp } from "./features/signatureHelp.js";
 import { computeInlayHints } from "./features/inlayHints.js";
 import { computePrepareRename, computeRename } from "./features/rename.js";
 import { compileIR, type CompileIRParams } from "./features/compileIR.js";
+import {
+    previewGraph,
+    type PreviewGraphParams,
+} from "./features/previewGraph.js";
 import { computeCodeActions } from "./features/codeActions.js";
 import { invalidate } from "./parsedDocument.js";
 import { loadTaskSchemas } from "./taskSchemas.js";
@@ -75,10 +79,10 @@ export function createServer(
 
     const connection = transport
         ? createConnection(
-              ProposedFeatures.all,
-              new StreamMessageReader(transport.input),
-              new StreamMessageWriter(transport.output),
-          )
+            ProposedFeatures.all,
+            new StreamMessageReader(transport.input),
+            new StreamMessageWriter(transport.output),
+        )
         : createConnection(ProposedFeatures.all);
 
     const documents = new TextDocuments<TextDocument>(TextDocument);
@@ -236,6 +240,11 @@ export function createServer(
 
     connection.onRequest("workflow/compileIR", (params: CompileIRParams) =>
         compileIR(documents, params, schemas),
+    );
+
+    connection.onRequest(
+        "workflow/previewGraph",
+        (params: PreviewGraphParams) => previewGraph(documents, params),
     );
 
     connection.languages.semanticTokens.on((params) => {

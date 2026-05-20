@@ -12,20 +12,20 @@
 #   Xvfb :99 &
 #   export DISPLAY=:99
 #
-# This script is a documented stub.  The actual test suite lives in
-# src/test/extension.test.ts (not yet written — see lsp-decisions.md for
-# the @vscode/test-electron deferral rationale).
+# The test runner and Mocha suite live under src/test/:
+#   - src/test/runTests.ts             — downloads VS Code, launches host
+#   - src/test/suite/index.ts          — Mocha bootstrap
+#   - src/test/suite/extension.test.ts — smoke tests
 #
-# When you are ready to write the tests:
-#   1. npm install --save-dev @vscode/test-electron
-#   2. Create src/test/runTests.ts  (uses runTests from @vscode/test-electron)
-#   3. Create src/test/extension.test.ts  (uses @vscode/test-electron helpers)
-#   4. Add a "test:e2e" script to package.json: "node ./dist/test/runTests.js"
-#   5. Replace this stub with: node ./dist/test/runTests.js
+# See ts/docs/design/workflowSystem/editor/lsp-decisions.md for context.
 
 set -euo pipefail
 
-echo "❌  @vscode/test-electron E2E tests are not yet implemented."
-echo "   See ts/docs/design/workflowSystem/editor/lsp-decisions.md"
-echo "   and ts/examples/workflow/vscode/scripts/extension-test.sh for details."
-exit 1
+if [[ -z "${DISPLAY:-}" && "$(uname)" == "Linux" ]]; then
+    echo "⚠️  No DISPLAY set; @vscode/test-electron requires Xvfb on Linux." >&2
+    echo "   Run:  Xvfb :99 & export DISPLAY=:99   then re-run this script." >&2
+    exit 1
+fi
+
+exec npm run test:e2e
+

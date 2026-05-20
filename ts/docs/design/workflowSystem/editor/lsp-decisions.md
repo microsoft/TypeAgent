@@ -173,6 +173,49 @@ PR.
 
 ---
 
+## Update: graph preview implemented (inline SVG, no `elkjs`)
+
+**Phase:** 5
+**Status:** delivered
+**Context:** Re-opened the earlier deferral. Goal was to ship a usable
+graph preview without taking on `elkjs` as an extension dependency
+(bundle size + worker plumbing).
+**Decision:** Render the `GraphModel` returned by the new
+`workflow/previewGraph` LSP request as inline SVG inside a
+`vscode.WebviewPanel`. Layout is a simple layered top-down algorithm
+(depth = longest incoming-edge chain) computed in the webview script.
+This trades pretty-routing for zero added dependencies and keeps the
+extension bundle within its current size budget.
+**Alternatives considered:**
+- `elkjs` via worker — best layout but adds ~500&nbsp;KB to the bundle
+  and a worker-startup pause; revisit if the simple layout proves
+  insufficient for typical workflow sizes.
+- Mermaid `flowchart` — would require a Mermaid runtime in the
+  webview and limits styling/click-to-source affordances.
+**Revisit when:** Workflows routinely exceed ~30 nodes/edges or when
+users ask for cleaner routing — at that point bring in `elkjs` and
+run it in a webview worker.
+
+---
+
+## Update: @vscode/test-electron scaffolding added (still gated on display)
+
+**Phase:** 0/5
+**Status:** scaffolding landed, execution still env-gated
+**Context:** Earlier decision deferred adding the harness at all. The
+follow-up plan called for landing the runner + a single smoke test so
+that developers with a GUI VS Code host (or a CI runner with `xvfb`)
+can run it without further setup.
+**Decision:** Add `@vscode/test-electron`, `mocha`, and `glob` as
+dev-dependencies; create `src/test/runTests.ts`,
+`src/test/suite/index.ts`, and `src/test/suite/extension.test.ts`
+(activation + command-registration smoke); add `test:e2e` script;
+replace the previous error-stub `scripts/extension-test.sh` with a
+thin wrapper that fails loudly if `DISPLAY` is missing on Linux.
+**Revisit when:** A CI job adds `xvfb-run` so this can run on every
+PR — at that point promote it from manual to required.
+
+
 ## 2026-05-19 — Use `--forceExit` for workflow-lsp jest runs
 
 **Phase:** 0
