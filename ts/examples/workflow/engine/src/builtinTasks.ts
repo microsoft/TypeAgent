@@ -17,7 +17,9 @@ import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { JSONSchema, TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
+import type { CustomAgentConfig } from "@github/copilot-sdk";
 import { BUILTIN_TASK_SCHEMAS } from "./builtinTaskSchemas.js";
+import { invokeCopilotAgent } from "./copilotClientHost.js";
 
 const SCHEMA_BY_NAME = new Map(
     BUILTIN_TASK_SCHEMAS.map((s) => [s.name, s] as const),
@@ -292,6 +294,121 @@ export const llmGenerateJson: TaskDefinition<
                 },
             };
         }
+    },
+};
+
+/**
+ * This task runs a Copilot agent turn against a fresh session, with the agent's
+ * response shaped by the IR node's declared `outputSchema`.
+ *
+ * Key contracts:
+ *   - Registered output schema: `{type: "object"}`. The actual per-call
+ *     output shape is whatever the IR node declares.
+ *   - Authentication: env vars (`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` /
+ *     `GITHUB_TOKEN`) or the logged-in `copilot` CLI user. No IR knob.
+ *   - Permission posture: Tools restricted to set listed in `allowedTools`.
+ *     Requests to `allowedTools` are `approveAll` for v1. Capability-based
+ *     security model is the longer-term follow-up (decision 0010 §7).
+ */
+export const copilotInvoke: TaskDefinition<
+    {
+        prompt: string;
+        model?: string;
+        systemMessage?: string;
+        customAgents?: CustomAgentConfig[];
+        allowedTools?: string[];
+        attachments?: Array<{ path: string }>;
+        timeoutMs?: number;
+        reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+        repairBudget?: number;
+    },
+    Record<string, unknown>
+> = {
+    name: "copilot.invoke",
+    sideEffects: true,
+    inputSchema: {
+        type: "object",
+        required: ["prompt"],
+        properties: {
+            prompt: { type: "string" },
+            model: { type: "string" },
+            systemMessage: { type: "string" },
+            customAgents: { type: "array" },
+            allowedTools: { type: "array", items: { type: "string" } },
+            attachments: {
+                type: "array",
+                items: {
+                    type: "object",
+                    required: ["path"],
+                    properties: { path: { type: "string" } },
+                },
+            },
+            timeoutMs: { type: "integer" },
+            reasoningEffort: {
+                type: "string",
+                enum: ["low", "medium", "high", "xhigh"],
+            },
+            repairBudget: {
+                type: "integer",
+                minimum: 1,
+                maximum: 10,
+                description: "Schema-repair attempts; default 3.",
+            },
+        },
+    },
+    outputSchema: {
+        // `copilot.invoke`'s schema-guided turn loop registers a synthetic
+        // `submit_response` tool whose JSON Schema parameters block must be an
+        // object (LLM tool-call APIs require object parameters).
+        type: "object",
+    },
+    async execute(input, ctx) {
+        // Validate any attachment paths against the same allowed roots
+        // file.read / file.write enforce.
+        if (input.attachments) {
+            for (const a of input.attachments) {
+                try {
+                    a.path = validateFilePath(a.path);
+                } catch (err) {
+                    return {
+                        kind: "fail",
+                        error: {
+                            message: `copilot.invoke attachment ${a.path} rejected: ${err instanceof Error ? err.message : String(err)}`,
+                        },
+                    };
+                }
+            }
+        }
+
+        const result = await invokeCopilotAgent({
+            prompt: input.prompt,
+            outputSchema: ctx.outputSchema,
+            ...(input.model !== undefined ? { model: input.model } : {}),
+            ...(input.systemMessage !== undefined
+                ? { systemMessageAppend: input.systemMessage }
+                : {}),
+            ...(input.customAgents !== undefined
+                ? { customAgents: input.customAgents }
+                : {}),
+            ...(input.allowedTools !== undefined
+                ? { availableTools: input.allowedTools }
+                : {}),
+            ...(input.attachments !== undefined
+                ? { attachments: input.attachments }
+                : {}),
+            ...(input.timeoutMs !== undefined
+                ? { timeoutMs: input.timeoutMs }
+                : {}),
+            ...(input.reasoningEffort !== undefined
+                ? { reasoningEffort: input.reasoningEffort }
+                : {}),
+            ...(input.repairBudget !== undefined
+                ? { repairBudget: input.repairBudget }
+                : {}),
+            signal: ctx.signal,
+        });
+
+        return result;
     },
 };
 
@@ -779,6 +896,7 @@ export const allBuiltinTasks: TaskDefinition[] = [
     shellExec,
     llmGenerate,
     llmGenerateJson,
+    copilotInvoke,
     httpGet,
     fileRead,
     fileWrite,

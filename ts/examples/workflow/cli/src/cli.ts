@@ -174,6 +174,14 @@ async function cmdRun(
         console.error(
             `${prefix} Workflow failed${location}: ${result.error?.message ?? "unknown error"}`,
         );
+
+        // Log any structured context attached to the error.
+        if (result.error?.data !== undefined) {
+            console.error(
+                `${prefix} error data: ${JSON.stringify(result.error.data, null, 2)}`,
+            );
+        }
+
         process.exit(1);
     }
 }
