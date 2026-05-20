@@ -169,11 +169,6 @@ covers both.
 
 ---
 
-## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
-
-
----
-
 ## Related: decision 0010 (branch as `WorkflowScope`)
 
 [Decision 0010](0010-finish-workflow-scope-unification.md) reshapes

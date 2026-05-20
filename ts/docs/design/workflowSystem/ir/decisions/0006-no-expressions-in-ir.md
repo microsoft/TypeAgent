@@ -376,11 +376,6 @@ Register as revisit trigger row 11:
 
 ## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
 
-
----
-
-## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
-
 [Decision 0010](0010-finish-workflow-scope-unification.md) preserves
 the "no expressions in the IR" invariant on both surfaces it touches:
 

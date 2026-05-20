@@ -130,11 +130,6 @@ No change to §5.4 step 4 (already correct).
 
 ---
 
-## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
-
-
----
-
 ## Related: decision 0010 (loop `continueWhen`)
 
 [Decision 0010](0010-finish-workflow-scope-unification.md) reframes
