@@ -167,11 +167,10 @@ interface ScopeCFG {
 
 /**
  * Build a CFG for a scope. Control-flow edges include next, onError,
- * and (for branches) the branch's own next/onError. Per decision
- * 0010, branch arms are independent WorkflowScopes that do not
- * contribute edges to the parent CFG. The @iterate / @exit sentinels
- * are retired; body natural completion + the loop's `continueWhen`
- * reference replace them.
+ * and (for branches) the branch's own next/onError. Branch arms are
+ * independent WorkflowScopes that do not contribute edges to the
+ * parent CFG. Loop body natural completion + `continueWhen` handle
+ * loop termination.
  */
 function buildScopeCFG(
     nodes: Record<string, WorkflowNode>,
@@ -1349,7 +1348,7 @@ function validateScope(
             validateScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
             validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
 
-            // continueWhen replaces the retired @iterate / @exit sentinels.
+            // continueWhen is required; loop body natural completion triggers evaluation.
             if (node.continueWhen === undefined) {
                 errors.push({
                     path: `${path}.continueWhen`,

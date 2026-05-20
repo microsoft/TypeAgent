@@ -1190,7 +1190,6 @@ export class Emitter {
         };
 
         // --- Success path: set _should_retry = false so the loop exits.
-        // Decision 0010: replaces "@exit" sentinel.
         const setDoneId = this.freshId("attempts_done");
         bodyScope.nodes[setDoneId] = {
             kind: "task",
@@ -2498,8 +2497,8 @@ export class Emitter {
     /**
      * Deep-clone a template, adding `optional: true` to every `$from` ref.
      * Used for attempts body output where the exhaustion path always throws
-     * before reaching @exit, so the output binding is guaranteed to be set
-     * on any path that actually resolves the template.
+     * before the output binding is reached, so the binding is guaranteed to
+     * be set on any path that actually resolves the template.
      */
     private markTemplateOptional(template: Template): Template {
         if (template === null || template === undefined) return template;

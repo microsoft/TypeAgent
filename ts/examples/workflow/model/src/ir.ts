@@ -133,7 +133,7 @@ export interface LoopNode {
      * null` runs). When the resolved value is `true`, `iterateState`
      * is evaluated and the loop iterates; when `false`, the loop
      * exits with `body.output` as its output value. Must be
-     * boolean-typed. Retires the `@iterate`/`@exit` sentinel pattern.
+     * boolean-typed.
      */
     continueWhen: Template;
     maxIterations?: number;

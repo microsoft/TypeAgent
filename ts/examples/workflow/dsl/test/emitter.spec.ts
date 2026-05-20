@@ -716,8 +716,7 @@ describe("Emitter", () => {
         const body = loopNode.body;
         const entryNode = body.nodes[body.entry] as TaskNode;
         expect(entryNode).toBeDefined();
-        // Decision 0010: success path leads to attempts_done (binds
-        // _should_retry = false), not "@exit".
+        // Success path leads to attempts_done (binds _should_retry = false).
         const doneNode = body.nodes[entryNode.next!] as TaskNode;
         expect(doneNode.task).toBe("identity");
         expect(doneNode.bind).toBe("_should_retry");
@@ -764,7 +763,7 @@ describe("Emitter", () => {
 
         const branchNode = body.nodes[checkNode.next!] as BranchNode;
         expect(branchNode.kind).toBe("branch");
-        // Decision 0010: default is now a retry arm (sub-scope), not "@iterate".
+        // The default arm is the retry arm (a sub-scope).
         expect(branchNode.default).toBeDefined();
 
         // The true case is the exhausted arm whose entry is error.fail.
@@ -792,7 +791,7 @@ describe("Emitter", () => {
         // Walk the body's main chain from entry via next pointers
         const mainChain = new Set<string>();
         let nodeId: string | undefined = body.entry;
-        while (nodeId && nodeId !== "@exit" && nodeId !== "@iterate") {
+        while (nodeId) {
             mainChain.add(nodeId);
             const node: WorkflowNode = body.nodes[nodeId];
             nodeId =
