@@ -233,8 +233,8 @@ their Phase 2 antecedents.
 Phase 2 and Phase 3 todos are loaded into SQL when their phase
 begins, not in advance. Loading them lazily keeps the active task
 set small and lets earlier-phase findings (recorded in
-`0010-design-notes.md` and `0010-deferred-reviews.md`) inform the
-exact wording of later-phase tasks.
+`0010-design-notes.md`) inform the exact wording of later-phase
+tasks.
 
 ## Execution policy
 
@@ -270,13 +270,14 @@ survives the phase loop:
   wrong and had to be revised, and solutions that have plausible
   alternatives worth reconsidering. Updated during execution.
   Reviewed once all phases complete.
-- [0010-deferred-reviews.md](0010-deferred-reviews.md) - **review
-  findings (code-review or test-gap) that were *not* acted upon**,
-  with the reason for deferral. Each entry names the source review
-  round, the finding, the deferral reason, and any follow-up
-  pointer. Updated during the review rounds. Reviewed once all
-  phases complete.
+- **Deferred review findings** — review findings (code-review or
+  test-gap) that were *not* acted upon, with the reason for
+  deferral. Each entry names the source review round, the
+  finding, the deferral reason, and any follow-up pointer.
+  Open follow-ups from the 0010 execution are noted inline in
+  [0010-design-notes.md](0010-design-notes.md) (Phase 2 promote
+  summary) and in the relevant `ir/future/` sketch files.
 
 The triage rule for each finding is binary: either fix it now (and
-note it in the relevant phase's task log) or record it in
-`0010-deferred-reviews.md`. Nothing silently dropped.
+note it in the relevant phase's task log) or document it with a
+follow-up pointer. Nothing silently dropped.

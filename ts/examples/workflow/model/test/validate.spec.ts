@@ -4384,9 +4384,10 @@ describe("validateWorkflowIR", () => {
         // body scope on each iteration; ideally the validator would
         // reject references to non-existent names. Today the validator
         // only enforces presence and (where typed) primitive/boolean
-        // shape. Deferred — see 0010-deferred-reviews.md (phase 2 test
-        // gap r2 "continueWhen reference resolution"). When that is
-        // implemented this test should be enabled and pass.
+        // shape. Deferred — the gap is tracked in
+        // ir/future/loop-termination-detection.md and the broader
+        // template name-resolution work. When that is implemented this
+        // test should be enabled and pass.
         it.skip("rejects continueWhen referencing an unknown scope name", () => {
             const ir = makeMinimalIR({
                 nodes: {

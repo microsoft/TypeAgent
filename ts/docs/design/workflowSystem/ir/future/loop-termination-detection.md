@@ -1,9 +1,25 @@
 # Future: loop termination detection / bounded-loop constraint
 
-Status: **Exploratory.** Surfaced by decision 0010 phase 2 code
-review; deferred item tracked in
-[../decisions/0010-deferred-reviews.md](../decisions/0010-deferred-reviews.md)
-("Validator does not flag literal `continueWhen: true`").
+Status: **Exploratory.**
+
+## Origin
+
+Decision 0010 replaced `@iterate` / `@exit` loop-termination
+sentinels with a boolean `continueWhen` Template resolved at body
+completion. During the phase 2 code review a gap was noted: the
+validator does not flag `continueWhen: true` (literal). A loop
+with a literal-`true` `continueWhen` and no body-internal exit
+will iterate until `maxIterations` fires (default 10 000). The
+finding was deferred because:
+
+- `maxIterations` is the documented runtime safety valve.
+- Literal-`true` is occasionally legitimate (e.g. a polling loop
+  whose only exit is `onError`).
+- Flagging it requires either an exception for `onError`-using
+  loops or a separate "does this loop always reach a terminal?"
+  pass, neither of which was on the critical path for 0010.
+
+This note captures the design space for addressing that gap.
 
 ## Context
 
