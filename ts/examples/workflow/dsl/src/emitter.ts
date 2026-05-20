@@ -386,8 +386,8 @@ export class Emitter {
         const mergeId = this.freshId("merge");
 
         // Create child scopes for then/else, capturing return values.
-        // Decision 0010: each arm is a BranchArm sub-scope; nodes are
-        // NOT merged into the parent scope.
+        // Each arm is a BranchArm sub-scope; nodes are NOT merged into the
+        // parent scope.
         const thenScope = this.childScope(scope);
         let thenOutput: Template | undefined;
         for (const s of stmt.then) {
@@ -493,10 +493,10 @@ export class Emitter {
         const branchId = this.freshId("switch");
         const mergeId = this.freshId("merge");
 
-        // Decision 0010: cases map to BranchArm sub-scopes; per-arm
-        // outputs are exposed to the parent via branch.bind. The arm's
-        // `output` is set on its sub-scope; the branch publishes that
-        // arm output under `bind` (a fresh `switch_result_N` name).
+        // Cases map to BranchArm sub-scopes; per-arm outputs are exposed to
+        // the parent via branch.bind. The arm's `output` is set on its
+        // sub-scope; the branch publishes that arm output under `bind` (a
+        // fresh `switch_result_N` name).
         const cases: Record<string, BranchArm> = {};
         let defaultArm: BranchArm | undefined;
         const armOutputs: (Template | undefined)[] = [];
@@ -963,7 +963,7 @@ export class Emitter {
      * `a && b` -> branch on a: true -> evaluate b; false -> return false
      * `a || b` -> branch on a: true -> return true;  false -> evaluate b
      *
-     * Decision 0010: each arm is a BranchArm sub-scope.
+     * Each arm is a BranchArm sub-scope.
      */
     private emitShortCircuit(expr: BinaryExpr, scope: ScopeContext): Template {
         const isAnd = expr.op === "&&";
@@ -1074,7 +1074,7 @@ export class Emitter {
         const resultBind = this.freshId("ternary_result");
 
         // Emit consequent and alternate as BranchArm sub-scopes.
-        // Decision 0010: nodes stay in their arm scopes, not the parent.
+        // Nodes stay in their arm scopes, not the parent.
         const thenScope = this.childScope(scope);
         const thenResult = this.emitExpr(expr.consequent, thenScope);
         let thenArm: BranchArm;
@@ -2288,7 +2288,7 @@ export class Emitter {
                 typeof obj.name === "string" &&
                 !hasState
             ) {
-                // Decision 0010: arm sub-scopes have no state namespace.
+                // Arm sub-scopes have no state namespace.
                 // Capture state refs as arm inputs (evaluated in the outer
                 // loop body scope that DOES have state), then rewrite the
                 // in-arm reference to $from:"input".
@@ -2325,12 +2325,12 @@ export class Emitter {
         };
 
         for (const node of Object.values(bodyScope.nodes)) {
-            // Decision 0010: branch nodes have BranchArm children with
-            // self-contained sub-scopes. Their arm.scope internals already
-            // had captureOuterRefs run on them when the arm was built; the
+            // Branch nodes have BranchArm children with self-contained
+            // sub-scopes. Their arm.scope internals already had
+            // captureOuterRefs run on them when the arm was built; the
             // surviving outer refs were promoted to arm.inputs (evaluated
             // in THIS scope). So visit only `selector`, arm `inputs`, and
-            // top-level `next`/`onError` — skip `cases.*.scope` and
+            // top-level `next`/`onError` - skip `cases.*.scope` and
             // `default.scope`.
             if ((node as WorkflowNode).kind === "branch") {
                 const bn = node as BranchNode;
@@ -2529,10 +2529,10 @@ export class Emitter {
             clone.onError = `${prefix}${node.onError}`;
         }
         if (node.kind === "branch") {
-            // Decision 0010: cases/default are BranchArm sub-scope objects —
-            // their internal node references are already self-contained.
-            // Only `next` and `onError` on the branch itself need prefixing,
-            // which is handled above by the generic checks.
+            // cases/default are BranchArm sub-scope objects: their internal
+            // node references are already self-contained. Only `next` and
+            // `onError` on the branch itself need prefixing, which is
+            // handled above by the generic checks.
         }
         return clone as unknown as WorkflowNode;
     }

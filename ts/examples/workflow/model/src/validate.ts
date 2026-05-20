@@ -859,7 +859,7 @@ function validateScopeCFG(
                 );
             }
         } else if (node.kind === "branch") {
-            // Decision 0010: recursively validate each branch arm scope.
+            // Recursively validate each branch arm sub-scope.
             for (const [label, arm] of Object.entries(node.cases)) {
                 if (arm?.scope && arm.scope.entry in arm.scope.nodes) {
                     const armPrefix = `${prefix}.${id}.cases.${label}.scope.nodes`;
@@ -1292,7 +1292,7 @@ function validateScope(
                     path: `${path}.outputSchema`,
                     message:
                         `Branch declares outputSchema without bind. ` +
-                        `Decision 0010: outputSchema is only meaningful when the ` +
+                        `outputSchema is only meaningful when the ` +
                         `branch publishes its value via bind.`,
                 });
             }

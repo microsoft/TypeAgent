@@ -4378,10 +4378,10 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        // Decision 0010: continueWhen is a Template resolved against the body
-        // scope on each iteration. The validator checks $from:scope and
-        // $from:state refs in continueWhen against the body's binding map and
-        // the loop's declared state variables respectively.
+        // continueWhen is a Template resolved against the body scope on each
+        // iteration. The validator checks $from:scope and $from:state refs in
+        // continueWhen against the body's binding map and the loop's declared
+        // state variables respectively.
         it("rejects continueWhen referencing an unknown scope name", () => {
             const ir = makeMinimalIR({
                 nodes: {

@@ -96,7 +96,7 @@ function makeEngine(extraTasks: TaskDefinition[] = []): {
 }
 
 /**
- * Decision 0010: BranchArm scopes are nested. Walk every node in the
+ * BranchArm scopes are nested. Walk every node in the
  * IR (including arm sub-scopes and loop bodies) and return the first
  * node ID matching the predicate.
  */
