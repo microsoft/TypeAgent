@@ -379,6 +379,17 @@ This is not a workaround or alternative expression. The cross-scope reference is
 
 ## P5: A reader of the IR can predict engine behavior without knowing engine conventions
 
+> **Historical note (decision 0010):** This section reasons about
+> loop control using `@iterate` / `@exit` sentinels, which was the
+> shape of v0.1 loops when P5 was written. Decision 0010 retired
+> those sentinels and replaced them with a boolean `continueWhen`
+> template evaluated at body completion. The P5 reasoning is
+> unchanged — the sentinels were one concrete way to make body
+> re-entry locally predictable, and `continueWhen` is the
+> replacement that achieves the same predictability without an
+> auxiliary sentinel namespace. Scenarios 37 and 41 below should
+> be read with that substitution in mind.
+
 Someone reading the IR should be able to predict what the engine will do, without needing to know engine defaults, conventions, or inference rules. The test isn't "is there implicit behavior?" but "would a reader be surprised?"
 
 "Engine behavior" has two axes the reader should be able to predict from the IR alone:
