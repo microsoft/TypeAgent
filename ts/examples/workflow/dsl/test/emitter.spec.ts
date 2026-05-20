@@ -572,22 +572,21 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        expect(checkNode.default).toBe("@exit");
+        // Decision 0010: default is now a BranchArm sub-scope (no-op).
+        expect(checkNode.default).toBeDefined();
 
-        const pickId = checkNode.cases["true"];
-        const pickNode = body.nodes[pickId] as TaskNode;
+        const trueArm = checkNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const pickNode = trueArm.scope.nodes[trueArm.scope.entry] as TaskNode;
         expect(pickNode.task).toBe("list.elementAt");
 
-        const stepNode = Object.values(body.nodes).find(
+        const stepNode = Object.values(trueArm.scope.nodes).find(
             (node): node is TaskNode =>
-                node.kind === "task" &&
-                node.task === "math.add" &&
-                node.next === "@iterate",
+                node.kind === "task" && node.task === "math.add",
         );
         expect(stepNode).toBeDefined();
     });
-
-    // ---- Filter built-in ----
 
     test("filter lowers to loop node with branch", () => {
         const ir = compileOk(`
@@ -625,23 +624,25 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        expect(checkNode.default).toBe("@exit");
+        // Decision 0010: default is now a BranchArm sub-scope (no-op).
+        expect(checkNode.default).toBeDefined();
 
-        const pickId = checkNode.cases["true"];
-        const pickNode = body.nodes[pickId] as TaskNode;
+        const trueArm = checkNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const pickNode = trueArm.scope.nodes[trueArm.scope.entry] as TaskNode;
         expect(pickNode.task).toBe("list.elementAt");
 
-        const conditionalBranch = Object.values(body.nodes).find(
-            (node): node is BranchNode =>
-                node.kind === "branch" && node !== checkNode,
+        // Conditional filter branch lives inside the true arm scope.
+        const conditionalBranch = Object.values(trueArm.scope.nodes).find(
+            (node) => (node as { kind: string }).kind === "branch",
         );
         expect(conditionalBranch).toBeDefined();
 
-        const stepNode = Object.values(body.nodes).find(
+        const stepNode = Object.values(trueArm.scope.nodes).find(
             (node): node is TaskNode =>
-                node.kind === "task" &&
-                node.task === "math.add" &&
-                node.next === "@iterate",
+                (node as { kind: string }).kind === "task" &&
+                (node as TaskNode).task === "math.add",
         );
         expect(stepNode).toBeDefined();
     });
@@ -702,7 +703,7 @@ describe("Emitter", () => {
         expect(loopNode.state!.attempt.initial).toBe(0);
     });
 
-    test("attempts body: last task has next @exit", () => {
+    test("attempts body: last task chains to set_done (success path)", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
@@ -713,11 +714,13 @@ describe("Emitter", () => {
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
         const body = loopNode.body;
-        // Find the last node in the body's main chain (from entry)
         const entryNode = body.nodes[body.entry] as TaskNode;
         expect(entryNode).toBeDefined();
-        // The last body task should have next: "@exit"
-        expect(entryNode.next).toBe("@exit");
+        // Decision 0010: success path leads to attempts_done (binds
+        // _should_retry = false), not "@exit".
+        const doneNode = body.nodes[entryNode.next!] as TaskNode;
+        expect(doneNode.task).toBe("identity");
+        expect(doneNode.bind).toBe("_should_retry");
     });
 
     test("attempts body: task nodes have onError pointing to step_attempt", () => {
@@ -761,11 +764,16 @@ describe("Emitter", () => {
 
         const branchNode = body.nodes[checkNode.next!] as BranchNode;
         expect(branchNode.kind).toBe("branch");
-        expect(branchNode.default).toBe("@iterate");
+        // Decision 0010: default is now a retry arm (sub-scope), not "@iterate".
+        expect(branchNode.default).toBeDefined();
 
-        // The true case should point to the exhaust node
-        const exhaustId = branchNode.cases["true"] as string;
-        const exhaustNode = body.nodes[exhaustId] as TaskNode;
+        // The true case is the exhausted arm whose entry is error.fail.
+        const exhaustArm = branchNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const exhaustNode = exhaustArm.scope.nodes[
+            exhaustArm.scope.entry
+        ] as TaskNode;
         expect(exhaustNode.task).toBe("error.fail");
     });
 
@@ -925,8 +933,16 @@ describe("Emitter", () => {
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
         expect(branchNode.cases).toHaveProperty("a");
-        // Default should point to the default body, not the branch itself
-        expect(branchNode.default).toContain("default_");
+        // Default arm runs the fallback web.fetch.
+        expect(branchNode.default).toBeDefined();
+        const defaultArm = branchNode.default!;
+        const defaultEntryId = defaultArm.scope.entry;
+        expect(defaultEntryId).toMatch(/^r2|^default_/);
+        const defaultEntry = defaultArm.scope.nodes[defaultEntryId];
+        expect(defaultEntry.kind).toBe("task");
+        expect((defaultEntry as TaskNode).inputs.url).toBe(
+            "https://fallback.com",
+        );
     });
 
     // ---- Dotted-name with path ----

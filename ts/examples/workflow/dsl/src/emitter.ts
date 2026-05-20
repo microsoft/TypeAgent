@@ -24,12 +24,14 @@ import {
     WorkflowNode,
     TaskNode,
     BranchNode,
+    BranchArm,
     LoopNode,
     ForkNode,
     ForkMapNode,
     LoopStateVar,
     Template,
     JSONSchema,
+    WorkflowScope,
 } from "workflow-model";
 import {
     WorkflowDecl,
@@ -383,7 +385,9 @@ export class Emitter {
         const branchId = this.freshId("branch");
         const mergeId = this.freshId("merge");
 
-        // Create child scopes for then/else, capturing return values
+        // Create child scopes for then/else, capturing return values.
+        // Decision 0010: each arm is a BranchArm sub-scope; nodes are
+        // NOT merged into the parent scope.
         const thenScope = this.childScope(scope);
         let thenOutput: Template | undefined;
         for (const s of stmt.then) {
@@ -401,75 +405,44 @@ export class Emitter {
             }
         }
 
-        // When both branches return, normalize through identity nodes
-        // with a common bind name so the scope ref resolves regardless
-        // of which branch actually executes.
+        // When both branches return a value, carry it through arm scope
+        // output so the branch bind exposes it in the parent scope.
         let resultBind: string | undefined;
         if (thenOutput !== undefined && elseOutput !== undefined) {
             resultBind = this.freshId("if_result");
             this.referencedNodes.add(resultBind);
-
-            const thenWrapId = this.freshId("then_wrap");
-            thenScope.nodes[thenWrapId] = {
-                kind: "task",
-                task: "identity",
-                inputSchema: {
-                    type: "object",
-                    required: ["value"],
-                    properties: { value: {} },
-                },
-                outputSchema: {},
-                inputs: { value: thenOutput },
-                bind: resultBind,
-            };
-            thenScope.nodeOrder.push(thenWrapId);
-
-            const elseWrapId = this.freshId("else_wrap");
-            elseScope!.nodes[elseWrapId] = {
-                kind: "task",
-                task: "identity",
-                inputSchema: {
-                    type: "object",
-                    required: ["value"],
-                    properties: { value: {} },
-                },
-                outputSchema: {},
-                inputs: { value: elseOutput },
-                bind: resultBind,
-            };
-            elseScope!.nodeOrder.push(elseWrapId);
         }
 
-        this.threadNext(thenScope);
-        if (elseScope) this.threadNext(elseScope);
+        // Build BranchArm objects from child scopes.
+        // buildArmScope calls threadNext + captureOuterRefs internally.
+        const thenArm =
+            thenScope.nodeOrder.length > 0
+                ? this.buildArmScope(
+                      thenScope,
+                      resultBind !== undefined ? thenOutput : undefined,
+                      resultBind !== undefined ? {} : undefined,
+                  )
+                : this.makeNoopArm();
 
-        // Merge then/else nodes into parent with prefixes
-        const thenEntry = thenScope.nodeOrder[0];
-        const elseEntry = elseScope?.nodeOrder[0];
-
-        for (const [id, node] of Object.entries(thenScope.nodes)) {
-            scope.nodes[`then_${id}`] = this.prefixNodeRefs(node, "then_");
-        }
-        for (const [id, node] of Object.entries(elseScope?.nodes ?? {})) {
-            scope.nodes[`else_${id}`] = this.prefixNodeRefs(node, "else_");
-        }
-
-        // Patch branch body tails to point to merge node
-        this.patchBranchTail(thenScope, "then_", mergeId, scope);
-        if (elseScope) {
-            this.patchBranchTail(elseScope, "else_", mergeId, scope);
-        }
+        const falseArm =
+            elseScope && elseScope.nodeOrder.length > 0
+                ? this.buildArmScope(
+                      elseScope,
+                      resultBind !== undefined ? elseOutput : undefined,
+                      resultBind !== undefined ? {} : undefined,
+                  )
+                : this.makeNoopArm();
 
         // Boolean if-else is always exhaustive: { type: "boolean" } is
-        // treated as an implicit enum [true, false] by the validator.
+        // treated as an implicit enum [true, false] by the validator,
+        // so both cases live under `cases` (no default needed).
         const branchNode: BranchNode = {
             kind: "branch",
             selector: condTemplate,
             selectorSchema: { type: "boolean" },
-            cases: {
-                true: thenEntry ? `then_${thenEntry}` : mergeId,
-                false: elseEntry ? `else_${elseEntry}` : mergeId,
-            },
+            cases: { true: thenArm, false: falseArm },
+            next: mergeId,
+            ...(resultBind ? { bind: resultBind, outputSchema: {} } : {}),
         };
 
         // Merge is a noop task that serves as the continuation point
@@ -488,7 +461,6 @@ export class Emitter {
 
         // Propagate return value from branches
         if (resultBind) {
-            // Both branches wrapped in identity with common bind
             return {
                 output: {
                     $from: "scope",
@@ -515,65 +487,49 @@ export class Emitter {
         const branchId = this.freshId("switch");
         const mergeId = this.freshId("merge");
 
-        const cases: Record<string, string> = {};
-        let defaultTarget: string | undefined;
+        // Decision 0010: cases map to BranchArm sub-scopes.
+        const cases: Record<string, BranchArm> = {};
+        let defaultArm: BranchArm | undefined;
         let branchOutput: Template | undefined;
         const caseValues: unknown[] = [];
 
         for (let i = 0; i < stmt.arms.length; i++) {
             const arm = stmt.arms[i];
             const armScope = this.childScope(scope);
+            let armOutput: Template | undefined;
             for (const s of arm.body) {
                 const r = this.emitStatement(s, armScope);
-                if (r?.output !== undefined && branchOutput === undefined) {
-                    branchOutput = r.output;
+                if (r?.output !== undefined) {
+                    armOutput = r.output;
+                    if (branchOutput === undefined) branchOutput = r.output;
                 }
             }
-            this.threadNext(armScope);
-
-            const armPrefix = `case${i}_`;
-            for (const [id, node] of Object.entries(armScope.nodes)) {
-                scope.nodes[`${armPrefix}${id}`] = this.prefixNodeRefs(
-                    node,
-                    armPrefix,
-                );
-            }
-
-            this.patchBranchTail(armScope, armPrefix, mergeId, scope);
 
             const caseValue = this.constExprToValue(arm.value);
             caseValues.push(caseValue);
             const caseKey = String(caseValue);
             cases[caseKey] =
                 armScope.nodeOrder.length > 0
-                    ? `${armPrefix}${armScope.nodeOrder[0]}`
-                    : mergeId;
+                    ? this.buildArmScope(armScope, armOutput)
+                    : this.makeNoopArm();
         }
 
         const hasSourceDefault = !!(stmt.default_ && stmt.default_.length > 0);
 
         if (hasSourceDefault) {
             const defScope = this.childScope(scope);
+            let defOutput: Template | undefined;
             for (const s of stmt.default_!) {
                 const r = this.emitStatement(s, defScope);
-                if (r?.output !== undefined && branchOutput === undefined) {
-                    branchOutput = r.output;
+                if (r?.output !== undefined) {
+                    defOutput = r.output;
+                    if (branchOutput === undefined) branchOutput = r.output;
                 }
             }
-            this.threadNext(defScope);
-
-            const defPrefix = "default_";
-            for (const [id, node] of Object.entries(defScope.nodes)) {
-                scope.nodes[`${defPrefix}${id}`] = this.prefixNodeRefs(
-                    node,
-                    defPrefix,
-                );
-            }
-            this.patchBranchTail(defScope, defPrefix, mergeId, scope);
-            defaultTarget =
+            defaultArm =
                 defScope.nodeOrder.length > 0
-                    ? `${defPrefix}${defScope.nodeOrder[0]}`
-                    : mergeId;
+                    ? this.buildArmScope(defScope, defOutput)
+                    : this.makeNoopArm();
         }
 
         // Infer selectorSchema from case value types.  When the source
@@ -595,7 +551,8 @@ export class Emitter {
             selector: discTemplate,
             selectorSchema,
             cases,
-            ...(defaultTarget !== undefined ? { default: defaultTarget } : {}),
+            ...(defaultArm !== undefined ? { default: defaultArm } : {}),
+            next: mergeId,
         };
 
         const mergeNode: TaskNode = {
@@ -972,6 +929,8 @@ export class Emitter {
      *
      * `a && b` -> branch on a: true -> evaluate b; false -> return false
      * `a || b` -> branch on a: true -> return true;  false -> evaluate b
+     *
+     * Decision 0010: each arm is a BranchArm sub-scope.
      */
     private emitShortCircuit(expr: BinaryExpr, scope: ScopeContext): Template {
         const isAnd = expr.op === "&&";
@@ -981,28 +940,19 @@ export class Emitter {
         const mergeId = this.freshId(isAnd ? "and_merge" : "or_merge");
         const resultBind = this.freshId(isAnd ? "and_result" : "or_result");
 
-        // The "evaluate" arm: evaluate the right operand
+        // The "evaluate" arm: evaluate the right operand in its own scope.
         const evalScope = this.childScope(scope);
         const evalResult = this.emitExpr(expr.right, evalScope);
-        let evalEntry: string;
-        const evalPrefix = isAnd ? "and_rhs_" : "or_rhs_";
+        let evalArm: BranchArm;
         if (evalScope.nodeOrder.length > 0) {
-            this.threadNext(evalScope);
-            for (const [id, node] of Object.entries(evalScope.nodes)) {
-                const prefixed = this.prefixNodeRefs(node, evalPrefix);
-                if (
-                    id === evalScope.nodeOrder[evalScope.nodeOrder.length - 1]
-                ) {
-                    (prefixed as TaskNode).bind = resultBind;
-                    (prefixed as TaskNode).next = mergeId;
-                }
-                scope.nodes[`${evalPrefix}${id}`] = prefixed;
-            }
-            evalEntry = `${evalPrefix}${evalScope.nodeOrder[0]}`;
+            evalArm = this.buildArmScope(evalScope, evalResult, {
+                type: "boolean",
+            });
         } else {
-            // Right operand is a simple value; wrap in identity
+            // Right operand is a simple value; use a single identity node.
             const passId = this.freshId(isAnd ? "and_rhs" : "or_rhs");
-            scope.nodes[passId] = {
+            const passScope = this.childScope(scope);
+            passScope.nodes[passId] = {
                 kind: "task",
                 task: "identity",
                 inputSchema: {
@@ -1012,15 +962,23 @@ export class Emitter {
                 },
                 outputSchema: { type: "boolean" },
                 inputs: { value: evalResult },
-                bind: resultBind,
-                next: mergeId,
-            };
-            evalEntry = passId;
+                bind: passId,
+            } as TaskNode;
+            passScope.nodeOrder.push(passId);
+            evalArm = this.buildArmScope(
+                passScope,
+                {
+                    $from: "scope",
+                    name: passId,
+                } as unknown as Template,
+                { type: "boolean" },
+            );
         }
 
-        // The "short-circuit" arm: return the known boolean literal
-        const shortId = this.freshId(isAnd ? "and_short" : "or_short");
-        scope.nodes[shortId] = {
+        // The "short-circuit" arm: return the known boolean literal.
+        const shortScope = this.childScope(scope);
+        const shortPassId = this.freshId(isAnd ? "and_short" : "or_short");
+        shortScope.nodes[shortPassId] = {
             kind: "task",
             task: "identity",
             inputSchema: {
@@ -1031,9 +989,17 @@ export class Emitter {
             outputSchema: { type: "boolean" },
             // &&: short-circuit on false; ||: short-circuit on true
             inputs: { value: !isAnd },
-            bind: resultBind,
-            next: mergeId,
-        };
+            bind: shortPassId,
+        } as TaskNode;
+        shortScope.nodeOrder.push(shortPassId);
+        const shortArm = this.buildArmScope(
+            shortScope,
+            {
+                $from: "scope",
+                name: shortPassId,
+            } as unknown as Template,
+            { type: "boolean" },
+        );
 
         // &&: true -> evaluate rhs, false (default) -> short-circuit
         // ||: true -> short-circuit, false (default) -> evaluate rhs
@@ -1041,8 +1007,11 @@ export class Emitter {
             kind: "branch",
             selector: condTemplate,
             selectorSchema: { type: "boolean" },
-            cases: { true: isAnd ? evalEntry : shortId },
-            default: isAnd ? shortId : evalEntry,
+            cases: { true: isAnd ? evalArm : shortArm },
+            default: isAnd ? shortArm : evalArm,
+            bind: resultBind,
+            outputSchema: { type: "boolean" },
+            next: mergeId,
         };
 
         const mergeNode: TaskNode = {
@@ -1071,28 +1040,18 @@ export class Emitter {
         const mergeId = this.freshId("merge");
         const resultBind = this.freshId("ternary_result");
 
-        // Emit consequent and alternate as single-node sub-scopes
+        // Emit consequent and alternate as BranchArm sub-scopes.
+        // Decision 0010: nodes stay in their arm scopes, not the parent.
         const thenScope = this.childScope(scope);
         const thenResult = this.emitExpr(expr.consequent, thenScope);
-        let thenEntry: string;
+        let thenArm: BranchArm;
         if (thenScope.nodeOrder.length > 0) {
-            this.threadNext(thenScope);
-            for (const [id, node] of Object.entries(thenScope.nodes)) {
-                const prefixed = this.prefixNodeRefs(node, "then_");
-                // Ensure the last node uses the common bind name
-                if (
-                    id === thenScope.nodeOrder[thenScope.nodeOrder.length - 1]
-                ) {
-                    (prefixed as TaskNode).bind = resultBind;
-                    (prefixed as TaskNode).next = mergeId;
-                }
-                scope.nodes[`then_${id}`] = prefixed;
-            }
-            thenEntry = `then_${thenScope.nodeOrder[0]}`;
+            thenArm = this.buildArmScope(thenScope, thenResult, {});
         } else {
-            // Create a passthrough node for the literal value
+            // Literal consequent: wrap in a single identity node.
             const passId = this.freshId("ternary_then");
-            scope.nodes[passId] = {
+            const passScope = this.childScope(scope);
+            passScope.nodes[passId] = {
                 kind: "task",
                 task: "identity",
                 inputSchema: {
@@ -1102,31 +1061,28 @@ export class Emitter {
                 },
                 outputSchema: {},
                 inputs: { value: thenResult },
-                bind: resultBind,
-                next: mergeId,
-            };
-            thenEntry = passId;
+                bind: passId,
+            } as TaskNode;
+            passScope.nodeOrder.push(passId);
+            thenArm = this.buildArmScope(
+                passScope,
+                {
+                    $from: "scope",
+                    name: passId,
+                } as unknown as Template,
+                {},
+            );
         }
 
         const elseScope = this.childScope(scope);
         const elseResult = this.emitExpr(expr.alternate, elseScope);
-        let elseEntry: string;
+        let elseArm: BranchArm;
         if (elseScope.nodeOrder.length > 0) {
-            this.threadNext(elseScope);
-            for (const [id, node] of Object.entries(elseScope.nodes)) {
-                const prefixed = this.prefixNodeRefs(node, "else_");
-                if (
-                    id === elseScope.nodeOrder[elseScope.nodeOrder.length - 1]
-                ) {
-                    (prefixed as TaskNode).bind = resultBind;
-                    (prefixed as TaskNode).next = mergeId;
-                }
-                scope.nodes[`else_${id}`] = prefixed;
-            }
-            elseEntry = `else_${elseScope.nodeOrder[0]}`;
+            elseArm = this.buildArmScope(elseScope, elseResult, {});
         } else {
             const passId = this.freshId("ternary_else");
-            scope.nodes[passId] = {
+            const passScope = this.childScope(scope);
+            passScope.nodes[passId] = {
                 kind: "task",
                 task: "identity",
                 inputSchema: {
@@ -1136,18 +1092,28 @@ export class Emitter {
                 },
                 outputSchema: {},
                 inputs: { value: elseResult },
-                bind: resultBind,
-                next: mergeId,
-            };
-            elseEntry = passId;
+                bind: passId,
+            } as TaskNode;
+            passScope.nodeOrder.push(passId);
+            elseArm = this.buildArmScope(
+                passScope,
+                {
+                    $from: "scope",
+                    name: passId,
+                } as unknown as Template,
+                {},
+            );
         }
 
         const branchNode: BranchNode = {
             kind: "branch",
             selector: condTemplate,
             selectorSchema: { type: "boolean" },
-            cases: { true: thenEntry },
-            default: elseEntry,
+            cases: { true: thenArm },
+            default: elseArm,
+            bind: resultBind,
+            outputSchema: {},
+            next: mergeId,
         };
 
         const mergeNode: TaskNode = {
@@ -1184,18 +1150,44 @@ export class Emitter {
                 outputTemplate = result.output;
             }
         }
-        this.threadNext(bodyScope);
 
         // State: attempt counter
         const state: Record<string, LoopStateVar> = {
             attempt: { schema: { type: "number" }, initial: 0 },
         };
 
-        // --- Attempts infrastructure (error path only) ---
-        // On failure, control flows: step_attempt -> check_done -> branch
-        //   can retry  -> @iterate
-        //   exhausted  -> attempts_exhaust (error.fail, triggers loop onError)
-        // On success, the last body node goes directly to @exit.
+        // --- Success path: set _should_retry = false so the loop exits.
+        // Decision 0010: replaces "@exit" sentinel.
+        const setDoneId = this.freshId("attempts_done");
+        bodyScope.nodes[setDoneId] = {
+            kind: "task",
+            task: "identity",
+            inputSchema: {
+                type: "object",
+                required: ["value"],
+                properties: { value: {} },
+            },
+            outputSchema: { type: "boolean" },
+            inputs: { value: false },
+            bind: "_should_retry",
+        } as TaskNode;
+        bodyScope.nodeOrder.push(setDoneId);
+
+        // Wire body task nodes to enter error path on failure.
+        // set_done is intentionally excluded (added after this loop).
+        for (const id of bodyScope.nodeOrder.slice(0, -1)) {
+            const node = bodyScope.nodes[id];
+            if (node && node.kind === "task") {
+                node.onError = "@@attempts_step";
+            }
+        }
+
+        this.threadNext(bodyScope);
+
+        // --- Error-path infrastructure (only reached via onError) ---
+        // On failure: step_attempt -> check_done -> checkBranch
+        //   exhausted: arm scope with error.fail (throws)
+        //   retry:     arm scope with noop, output true -> _should_retry
 
         const stepId = this.freshId("step_attempt");
         bodyScope.nodes[stepId] = {
@@ -1220,8 +1212,8 @@ export class Emitter {
                 right: 1,
             },
             bind: stepId,
-        };
-        // NOT pushed to nodeOrder: these are only reachable via onError
+        } as TaskNode;
+        // NOT pushed to nodeOrder — reachable only via onError
 
         const compareId = this.freshId("check_done");
         bodyScope.nodes[compareId] = {
@@ -1241,10 +1233,14 @@ export class Emitter {
                 right: countTemplate,
             },
             bind: compareId,
-        };
+        } as TaskNode;
+        (bodyScope.nodes[stepId] as TaskNode).next = compareId;
 
-        const exhaustId = this.freshId("attempts_exhaust");
-        bodyScope.nodes[exhaustId] = {
+        // Build arm scopes for the checkBranch.
+        // Exhausted arm: throw so the loop's onError handler fires.
+        const exhaustScope = this.childScope(bodyScope);
+        const exhaustNodeId = this.freshId("attempts_exhaust");
+        exhaustScope.nodes[exhaustNodeId] = {
             kind: "task",
             task: "error.fail",
             inputSchema: {
@@ -1252,13 +1248,33 @@ export class Emitter {
                 required: ["value"],
                 properties: { value: {} },
             },
-            outputSchema: { type: "object" },
-            inputs: {
-                value: "Attempts exhausted",
-            },
-            bind: exhaustId,
-            next: "@exit",
-        };
+            outputSchema: { not: {} },
+            inputs: { value: "Attempts exhausted" },
+        } as TaskNode;
+        exhaustScope.nodeOrder.push(exhaustNodeId);
+        const exhaustedArm = this.buildArmScope(
+            exhaustScope,
+            false as unknown as Template,
+            { type: "boolean" },
+        );
+
+        // Retry arm: noop, output true → loop continues.
+        const retryScope = this.childScope(bodyScope);
+        const retryNoopId = this.freshId("attempts_retry");
+        retryScope.nodes[retryNoopId] = {
+            kind: "task",
+            task: "noop",
+            inputSchema: {},
+            outputSchema: {},
+            inputs: {},
+            bind: retryNoopId,
+        } as TaskNode;
+        retryScope.nodeOrder.push(retryNoopId);
+        const retryArm = this.buildArmScope(
+            retryScope,
+            true as unknown as Template,
+            { type: "boolean" },
+        );
 
         const checkBranchId = this.freshId("attempts_check");
         bodyScope.nodes[checkBranchId] = {
@@ -1268,31 +1284,26 @@ export class Emitter {
                 name: compareId,
             } as unknown as Template,
             selectorSchema: { type: "boolean" },
-            cases: { true: exhaustId },
-            default: "@iterate",
-        };
-
-        // Chain the attempts infrastructure nodes
-        (bodyScope.nodes[stepId] as TaskNode).next = compareId;
+            cases: { true: exhaustedArm },
+            default: retryArm,
+            bind: "_should_retry",
+            outputSchema: { type: "boolean" },
+        } as BranchNode;
         (bodyScope.nodes[compareId] as TaskNode).next = checkBranchId;
 
-        // Wire body nodes: last body node -> @exit on success,
-        // all body task nodes -> stepId on error (enters attempts path)
-        const lastBodyId = bodyScope.nodeOrder[bodyScope.nodeOrder.length - 1];
-        if (lastBodyId) {
-            const lastNode = bodyScope.nodes[lastBodyId];
-            if (lastNode && lastNode.kind !== "branch") {
-                lastNode.next = "@exit";
-            }
-        }
-        for (const id of bodyScope.nodeOrder) {
+        // Now fix up the placeholder onError targets set above
+        for (const id of bodyScope.nodeOrder.slice(0, -1)) {
             const node = bodyScope.nodes[id];
-            if (node && node.kind === "task") {
+            if (
+                node &&
+                node.kind === "task" &&
+                node.onError === "@@attempts_step"
+            ) {
                 node.onError = stepId;
             }
         }
 
-        // Handle fallback (onError at loop level, for exhaustion)
+        // Handle fallback (loop-level onError, for exhaustion propagation)
         let onError: string | undefined;
         if (expr.fallback) {
             const fbScope = this.childScope(scope);
@@ -1342,10 +1353,10 @@ export class Emitter {
         // Capture outer-scope references used in attempts body
         const outer = this.captureOuterRefs(bodyScope, new Set<string>());
 
-        // The body output is optional because the attempts_exhaust path
-        // (error.fail) always throws before reaching @exit, so the output
-        // binding is never actually unresolved. Mark optional to satisfy
-        // the dominator coverage check.
+        // The body output references a name bound only on the success path
+        // (the user task's bind). On the error path the branch arms throw or
+        // iterate, so the output is never evaluated. Mark optional so the
+        // dominator coverage check passes.
         const bodyOutput = this.markTemplateOptional(outputTemplate ?? null);
 
         const loopNode: LoopNode = {
@@ -1363,6 +1374,10 @@ export class Emitter {
                 outputSchema: {},
             },
             state,
+            continueWhen: {
+                $from: "scope",
+                name: "_should_retry",
+            } as unknown as Template,
             iterateState: {
                 attempt: {
                     $from: "scope",
@@ -1382,10 +1397,11 @@ export class Emitter {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const loopId = this.freshId("map");
 
-        // Build body scope: param is the loop element
+        // Body scope: only loop-control nodes live here.
+        // The per-iteration work lives in the checkBranch's true arm scope.
         const bodyScope = this.childScope(scope);
 
-        // --- Loop infrastructure (condition check FIRST) ---
+        // --- Loop condition check ---
         const lengthId = this.freshId("length");
         bodyScope.nodes[lengthId] = {
             kind: "task",
@@ -1400,7 +1416,7 @@ export class Emitter {
                 list: { $from: "input", name: "items" } as unknown as Template,
             },
             bind: lengthId,
-        };
+        } as TaskNode;
         bodyScope.nodeOrder.push(lengthId);
 
         const compareId = this.freshId("compare");
@@ -1427,26 +1443,13 @@ export class Emitter {
                 } as unknown as Template,
             },
             bind: compareId,
-        };
+        } as TaskNode;
         bodyScope.nodeOrder.push(compareId);
 
-        // Branch: true (i < length) → continue to pick, false → @exit
+        // --- True arm scope: pick element, run user body, append, step ---
+        const workScope = this.childScope(bodyScope);
         const pickId = expr.param;
-        const checkId = this.freshId("check_done");
-        bodyScope.nodes[checkId] = {
-            kind: "branch",
-            selector: {
-                $from: "scope",
-                name: compareId,
-            } as unknown as Template,
-            selectorSchema: { type: "boolean" },
-            cases: { true: pickId },
-            default: "@exit",
-        };
-        bodyScope.nodeOrder.push(checkId);
-
-        // --- Body: pick element, user code, append, increment ---
-        bodyScope.nodes[pickId] = {
+        workScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
             inputSchema: {
@@ -1463,30 +1466,26 @@ export class Emitter {
                 index: { $from: "state", name: "i" } as unknown as Template,
             },
             bind: pickId,
-        };
-        bodyScope.nodeOrder.push(pickId);
-        bodyScope.bindings.set(expr.param, { kind: "node", nodeId: pickId });
+        } as TaskNode;
+        workScope.nodeOrder.push(pickId);
+        workScope.bindings.set(expr.param, { kind: "node", nodeId: pickId });
 
         let outputTemplate: Template = null;
         for (const s of expr.body) {
-            const result = this.emitStatement(s, bodyScope);
+            const result = this.emitStatement(s, workScope);
             if (result?.output !== undefined) {
                 outputTemplate = result.output;
             }
         }
 
-        // Accumulator for results
         const appendId = this.freshId("append");
-        bodyScope.nodes[appendId] = {
+        workScope.nodes[appendId] = {
             kind: "task",
             task: "list.append",
             inputSchema: {
                 type: "object",
                 required: ["list", "item"],
-                properties: {
-                    list: { type: "array" },
-                    item: {},
-                },
+                properties: { list: { type: "array" }, item: {} },
             },
             outputSchema: { type: "array" },
             inputs: {
@@ -1497,12 +1496,11 @@ export class Emitter {
                 item: outputTemplate ?? null,
             },
             bind: appendId,
-        };
-        bodyScope.nodeOrder.push(appendId);
+        } as TaskNode;
+        workScope.nodeOrder.push(appendId);
 
-        // Increment i, then @iterate back to condition check
         const stepId = this.freshId("step_i");
-        bodyScope.nodes[stepId] = {
+        workScope.nodes[stepId] = {
             kind: "task",
             task: "math.add",
             inputSchema: {
@@ -1518,10 +1516,51 @@ export class Emitter {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
             },
-            next: "@iterate",
             bind: stepId,
-        };
-        bodyScope.nodeOrder.push(stepId);
+        } as TaskNode;
+        workScope.nodeOrder.push(stepId);
+
+        // True arm output: pair (newI, newResults) so iterateState can pick.
+        const workArm = this.buildArmScope(
+            workScope,
+            {
+                newI: {
+                    $from: "scope",
+                    name: stepId,
+                } as unknown as Template,
+                newResults: {
+                    $from: "scope",
+                    name: appendId,
+                } as unknown as Template,
+            } as unknown as Template,
+            {
+                type: "object",
+                required: ["newI", "newResults"],
+                properties: {
+                    newI: { type: "integer" },
+                    newResults: { type: "array" },
+                },
+            },
+        );
+
+        // False arm: no-op (loop exits next turn because continueWhen=false).
+        const falseArm = this.makeNoopArm();
+
+        // checkBranch binds `_iter_out` which iterateState projects on.
+        const checkId = this.freshId("check_done");
+        bodyScope.nodes[checkId] = {
+            kind: "branch",
+            selector: {
+                $from: "scope",
+                name: compareId,
+            } as unknown as Template,
+            selectorSchema: { type: "boolean" },
+            cases: { true: workArm },
+            default: falseArm,
+            bind: "_iter_out",
+            outputSchema: {},
+        } as BranchNode;
+        bodyScope.nodeOrder.push(checkId);
 
         this.threadNext(bodyScope);
 
@@ -1530,7 +1569,7 @@ export class Emitter {
             results: { schema: { type: "array" }, initial: [] as Template[] },
         };
 
-        // Capture outer-scope references used in body and promote to loop inputs
+        // Capture outer-scope references used in body + work arm scopes.
         const outer = this.captureOuterRefs(bodyScope, new Set(["items"]));
 
         const loopNode: LoopNode = {
@@ -1554,14 +1593,23 @@ export class Emitter {
                 outputSchema: { type: "array" },
             },
             state,
+            continueWhen: {
+                $from: "scope",
+                name: compareId,
+            } as unknown as Template,
+            // iterateState evaluated only when continueWhen=true (work arm
+            // ran), so `_iter_out` is guaranteed to exist with the path
+            // fields below.
             iterateState: {
                 i: {
                     $from: "scope",
-                    name: stepId,
+                    name: "_iter_out",
+                    path: ["newI"],
                 } as unknown as Template,
                 results: {
                     $from: "scope",
-                    name: appendId,
+                    name: "_iter_out",
+                    path: ["newResults"],
                 } as unknown as Template,
             },
             bind: loopId,
@@ -1578,7 +1626,7 @@ export class Emitter {
 
         const bodyScope = this.childScope(scope);
 
-        // --- Loop infrastructure (condition check FIRST) ---
+        // --- Loop condition check ---
         const lengthId = this.freshId("length");
         bodyScope.nodes[lengthId] = {
             kind: "task",
@@ -1593,7 +1641,7 @@ export class Emitter {
                 list: { $from: "input", name: "items" } as unknown as Template,
             },
             bind: lengthId,
-        };
+        } as TaskNode;
         bodyScope.nodeOrder.push(lengthId);
 
         const compareId = this.freshId("compare");
@@ -1610,36 +1658,20 @@ export class Emitter {
             },
             outputSchema: { type: "boolean" },
             inputs: {
-                left: {
-                    $from: "state",
-                    name: "i",
-                } as unknown as Template,
+                left: { $from: "state", name: "i" } as unknown as Template,
                 right: {
                     $from: "scope",
                     name: lengthId,
                 } as unknown as Template,
             },
             bind: compareId,
-        };
+        } as TaskNode;
         bodyScope.nodeOrder.push(compareId);
 
-        // Branch: true (i < length) -> continue to pick, false -> @exit
+        // --- True arm: pick element, evaluate predicate, conditional append, step ---
+        const workScope = this.childScope(bodyScope);
         const pickId = expr.param;
-        const checkId = this.freshId("check_done");
-        bodyScope.nodes[checkId] = {
-            kind: "branch",
-            selector: {
-                $from: "scope",
-                name: compareId,
-            } as unknown as Template,
-            selectorSchema: { type: "boolean" },
-            cases: { true: pickId },
-            default: "@exit",
-        };
-        bodyScope.nodeOrder.push(checkId);
-
-        // --- Body: pick element, user code, conditional append, increment ---
-        bodyScope.nodes[pickId] = {
+        workScope.nodes[pickId] = {
             kind: "task",
             task: "list.elementAt",
             inputSchema: {
@@ -1656,34 +1688,29 @@ export class Emitter {
                 index: { $from: "state", name: "i" } as unknown as Template,
             },
             bind: pickId,
-        };
-        bodyScope.nodeOrder.push(pickId);
-        bodyScope.bindings.set(expr.param, { kind: "node", nodeId: pickId });
+        } as TaskNode;
+        workScope.nodeOrder.push(pickId);
+        workScope.bindings.set(expr.param, { kind: "node", nodeId: pickId });
 
-        // User body (should return boolean)
+        // User predicate (returns boolean)
         let condTemplate: Template = null;
         for (const s of expr.body) {
-            const result = this.emitStatement(s, bodyScope);
+            const result = this.emitStatement(s, workScope);
             if (result?.output !== undefined) {
                 condTemplate = result.output;
             }
         }
 
-        // Conditional append: if body returns true, append element to results
-        const filterBranchId = this.freshId("filter_check");
-        const appendId = this.freshId("append");
-        const stepId = this.freshId("step_i");
-
-        bodyScope.nodes[appendId] = {
+        // Inner branch: condTemplate ? append : keep, bind unified result.
+        const appendScope = this.childScope(workScope);
+        const appendNodeId = this.freshId("append");
+        appendScope.nodes[appendNodeId] = {
             kind: "task",
             task: "list.append",
             inputSchema: {
                 type: "object",
                 required: ["list", "item"],
-                properties: {
-                    list: { type: "array" },
-                    item: {},
-                },
+                properties: { list: { type: "array" }, item: {} },
             },
             outputSchema: { type: "array" },
             inputs: {
@@ -1696,13 +1723,18 @@ export class Emitter {
                     name: pickId,
                 } as unknown as Template,
             },
-            bind: appendId,
-        };
+            bind: appendNodeId,
+        } as TaskNode;
+        appendScope.nodeOrder.push(appendNodeId);
+        const appendArm = this.buildArmScope(
+            appendScope,
+            { $from: "scope", name: appendNodeId } as unknown as Template,
+            { type: "array" },
+        );
 
-        // Normalize both paths through identity so both bind "updated_results"
-        // with shape { result: array }, then converge at step_i.
-        const wrapAppendId = this.freshId("wrap_append");
-        bodyScope.nodes[wrapAppendId] = {
+        const keepScope = this.childScope(workScope);
+        const keepId = this.freshId("keep_results");
+        keepScope.nodes[keepId] = {
             kind: "task",
             task: "identity",
             inputSchema: {
@@ -1710,54 +1742,36 @@ export class Emitter {
                 required: ["value"],
                 properties: { value: {} },
             },
-            outputSchema: {},
-            inputs: {
-                value: {
-                    $from: "scope",
-                    name: appendId,
-                } as unknown as Template,
-            },
-            bind: "updated_results",
-            next: stepId,
-        };
-
-        const keepResultsId = this.freshId("keep_results");
-        bodyScope.nodes[keepResultsId] = {
-            kind: "task",
-            task: "identity",
-            inputSchema: {
-                type: "object",
-                required: ["value"],
-                properties: { value: {} },
-            },
-            outputSchema: {},
+            outputSchema: { type: "array" },
             inputs: {
                 value: {
                     $from: "state",
                     name: "results",
                 } as unknown as Template,
             },
-            bind: "updated_results",
-            next: stepId,
-        };
+            bind: keepId,
+        } as TaskNode;
+        keepScope.nodeOrder.push(keepId);
+        const keepArm = this.buildArmScope(
+            keepScope,
+            { $from: "scope", name: keepId } as unknown as Template,
+            { type: "array" },
+        );
 
-        // Branch on filter condition: true -> append -> wrap_append -> step_i
-        //                             false -> keep_results -> step_i
-        bodyScope.nodes[filterBranchId] = {
+        const filterBranchId = this.freshId("filter_check");
+        workScope.nodes[filterBranchId] = {
             kind: "branch",
             selector: condTemplate ?? false,
             selectorSchema: { type: "boolean" },
-            cases: { true: appendId },
-            default: keepResultsId,
-        };
-        bodyScope.nodeOrder.push(filterBranchId);
-        (bodyScope.nodes[appendId] as TaskNode).next = wrapAppendId;
-        bodyScope.nodeOrder.push(appendId);
-        bodyScope.nodeOrder.push(wrapAppendId);
-        bodyScope.nodeOrder.push(keepResultsId);
+            cases: { true: appendArm },
+            default: keepArm,
+            bind: "updated_results",
+            outputSchema: { type: "array" },
+        } as BranchNode;
+        workScope.nodeOrder.push(filterBranchId);
 
-        // Increment i, then @iterate back to condition check
-        bodyScope.nodes[stepId] = {
+        const stepId = this.freshId("step_i");
+        workScope.nodes[stepId] = {
             kind: "task",
             task: "math.add",
             inputSchema: {
@@ -1773,10 +1787,49 @@ export class Emitter {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
             },
-            next: "@iterate",
             bind: stepId,
-        };
-        bodyScope.nodeOrder.push(stepId);
+        } as TaskNode;
+        workScope.nodeOrder.push(stepId);
+
+        // Work-arm output: (newI, newResults) for iterateState path projection.
+        const workArm = this.buildArmScope(
+            workScope,
+            {
+                newI: {
+                    $from: "scope",
+                    name: stepId,
+                } as unknown as Template,
+                newResults: {
+                    $from: "scope",
+                    name: "updated_results",
+                } as unknown as Template,
+            } as unknown as Template,
+            {
+                type: "object",
+                required: ["newI", "newResults"],
+                properties: {
+                    newI: { type: "integer" },
+                    newResults: { type: "array" },
+                },
+            },
+        );
+
+        const falseArm = this.makeNoopArm();
+
+        const checkId = this.freshId("check_done");
+        bodyScope.nodes[checkId] = {
+            kind: "branch",
+            selector: {
+                $from: "scope",
+                name: compareId,
+            } as unknown as Template,
+            selectorSchema: { type: "boolean" },
+            cases: { true: workArm },
+            default: falseArm,
+            bind: "_iter_out",
+            outputSchema: {},
+        } as BranchNode;
+        bodyScope.nodeOrder.push(checkId);
 
         this.threadNext(bodyScope);
 
@@ -1785,7 +1838,6 @@ export class Emitter {
             results: { schema: { type: "array" }, initial: [] as Template[] },
         };
 
-        // Capture outer-scope references used in body
         const outer = this.captureOuterRefs(bodyScope, new Set(["items"]));
 
         const loopNode: LoopNode = {
@@ -1809,14 +1861,20 @@ export class Emitter {
                 outputSchema: { type: "array" },
             },
             state,
+            continueWhen: {
+                $from: "scope",
+                name: compareId,
+            } as unknown as Template,
             iterateState: {
                 i: {
                     $from: "scope",
-                    name: stepId,
+                    name: "_iter_out",
+                    path: ["newI"],
                 } as unknown as Template,
                 results: {
                     $from: "scope",
-                    name: "updated_results",
+                    name: "_iter_out",
+                    path: ["newResults"],
                 } as unknown as Template,
             },
             bind: loopId,
@@ -2157,6 +2215,19 @@ export class Emitter {
                 }
                 // Rewrite in-place to reference the loop input
                 obj.$from = "input";
+            } else if (obj.$from === "state" && typeof obj.name === "string") {
+                // Decision 0010: arm sub-scopes have no state namespace.
+                // Capture state refs as arm inputs (evaluated in the outer
+                // loop body scope that DOES have state), then rewrite the
+                // in-arm reference to $from:"input".
+                const stateName = obj.name as string;
+                if (!captured.has(stateName)) {
+                    captured.set(stateName, {
+                        $from: "state",
+                        name: stateName,
+                    } as unknown as Template);
+                }
+                obj.$from = "input";
             } else if (
                 obj.$from === "input" &&
                 typeof obj.name === "string" &&
@@ -2182,6 +2253,22 @@ export class Emitter {
         };
 
         for (const node of Object.values(bodyScope.nodes)) {
+            // Decision 0010: branch nodes have BranchArm children with
+            // self-contained sub-scopes. Their arm.scope internals already
+            // had captureOuterRefs run on them when the arm was built; the
+            // surviving outer refs were promoted to arm.inputs (evaluated
+            // in THIS scope). So visit only `selector`, arm `inputs`, and
+            // top-level `next`/`onError` — skip `cases.*.scope` and
+            // `default.scope`.
+            if ((node as WorkflowNode).kind === "branch") {
+                const bn = node as BranchNode;
+                visit(bn.selector);
+                for (const arm of Object.values(bn.cases)) {
+                    visit(arm.inputs);
+                }
+                if (bn.default) visit(bn.default.inputs);
+                continue;
+            }
             visit(node);
         }
 
@@ -2195,6 +2282,66 @@ export class Emitter {
         }
 
         return { inputs, properties, required };
+    }
+
+    /**
+     * Build a BranchArm from a child scope. Calls captureOuterRefs to
+     * rewrite outer/$state refs to arm input refs, threads next within the
+     * scope, and returns the arm object.
+     *
+     * @param childScope   Scope whose nodes become the arm scope.
+     * @param output       Template for the arm's scope output (optional).
+     * @param outputSchema Schema for the arm's scope output (optional).
+     * @param existingInputNames Names already available as $from:"input"
+     *                     in the parent scope — not re-captured.
+     */
+    private buildArmScope(
+        childScope: ScopeContext,
+        output?: Template,
+        outputSchema?: JSONSchema,
+        existingInputNames: Set<string> = new Set(),
+    ): BranchArm {
+        this.threadNext(childScope);
+        const outer = this.captureOuterRefs(childScope, existingInputNames);
+        const scope: WorkflowScope = {
+            inputSchema: {
+                type: "object",
+                ...(outer.required.length > 0
+                    ? {
+                          required: outer.required,
+                          properties: outer.properties,
+                      }
+                    : {}),
+            },
+            entry: childScope.nodeOrder[0] ?? "",
+            nodes: childScope.nodes,
+            output: output !== undefined ? output : null,
+            outputSchema: outputSchema !== undefined ? outputSchema : {},
+        };
+        return { inputs: outer.inputs, scope };
+    }
+
+    /** Minimal no-op arm for branches that need a placeholder. */
+    private makeNoopArm(): BranchArm {
+        const noopId = this.freshId("arm_noop");
+        return {
+            inputs: {},
+            scope: {
+                inputSchema: { type: "object" },
+                entry: noopId,
+                nodes: {
+                    [noopId]: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {},
+                        outputSchema: {},
+                        inputs: {},
+                    } as TaskNode,
+                },
+                output: null,
+                outputSchema: {},
+            },
+        };
     }
 
     private childScope(parent: ScopeContext): ScopeContext {
@@ -2274,43 +2421,12 @@ export class Emitter {
             clone.onError = `${prefix}${node.onError}`;
         }
         if (node.kind === "branch") {
-            const cases = { ...node.cases };
-            for (const [k, v] of Object.entries(cases)) {
-                if (!v.startsWith("@")) {
-                    cases[k] = `${prefix}${v}`;
-                }
-            }
-            clone.cases = cases;
-            if (node.default !== undefined) {
-                if (!node.default.startsWith("@")) {
-                    clone.default = `${prefix}${node.default}`;
-                } else {
-                    clone.default = node.default;
-                }
-            }
+            // Decision 0010: cases/default are BranchArm sub-scope objects —
+            // their internal node references are already self-contained.
+            // Only `next` and `onError` on the branch itself need prefixing,
+            // which is handled above by the generic checks.
         }
         return clone as unknown as WorkflowNode;
-    }
-
-    /**
-     * Patch the last node in a branch body scope to point to the merge node
-     * in the parent scope. The nodes have already been merged with the prefix.
-     */
-    private patchBranchTail(
-        childScope: ScopeContext,
-        prefix: string,
-        mergeId: string,
-        parentScope: ScopeContext,
-    ): void {
-        if (childScope.nodeOrder.length === 0) return;
-        const lastChildId =
-            childScope.nodeOrder[childScope.nodeOrder.length - 1];
-        const prefixedId = `${prefix}${lastChildId}`;
-        const node = parentScope.nodes[prefixedId];
-        if (!node) return;
-        if (node.kind !== "branch" && !("next" in node && node.next)) {
-            (node as TaskNode).next = mergeId;
-        }
     }
 
     // ---- Helpers ----
