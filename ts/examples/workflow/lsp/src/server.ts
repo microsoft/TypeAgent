@@ -42,10 +42,7 @@ import {
 } from "./features/semanticTokens.js";
 import { computeSignatureHelp } from "./features/signatureHelp.js";
 import { computeInlayHints } from "./features/inlayHints.js";
-import {
-    computePrepareRename,
-    computeRename,
-} from "./features/rename.js";
+import { computePrepareRename, computeRename } from "./features/rename.js";
 import { compileIR, type CompileIRParams } from "./features/compileIR.js";
 import { computeCodeActions } from "./features/codeActions.js";
 import { invalidate } from "./parsedDocument.js";
@@ -105,7 +102,13 @@ export function createServer(
                 signatureHelpProvider: { triggerCharacters: ["(", ","] },
                 inlayHintProvider: true,
                 renameProvider: { prepareProvider: true },
-                codeActionProvider: { codeActionKinds: ["refactor.rewrite", "refactor.extract", "refactor.inline"] },
+                codeActionProvider: {
+                    codeActionKinds: [
+                        "refactor.rewrite",
+                        "refactor.extract",
+                        "refactor.inline",
+                    ],
+                },
                 semanticTokensProvider: {
                     legend: semanticTokensLegend,
                     full: true,
@@ -231,9 +234,8 @@ export function createServer(
         return computeCodeActions(doc, params.range);
     });
 
-    connection.onRequest(
-        "workflow/compileIR",
-        (params: CompileIRParams) => compileIR(documents, params, schemas),
+    connection.onRequest("workflow/compileIR", (params: CompileIRParams) =>
+        compileIR(documents, params, schemas),
     );
 
     connection.languages.semanticTokens.on((params) => {

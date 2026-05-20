@@ -30,7 +30,10 @@ export function computeDefinition(
     const start = toLspPosition(ref.def.loc);
     const range: Range = {
         start,
-        end: { line: start.line, character: start.character + ref.def.name.length },
+        end: {
+            line: start.line,
+            character: start.character + ref.def.name.length,
+        },
     };
     return { uri: doc.uri, range };
 }

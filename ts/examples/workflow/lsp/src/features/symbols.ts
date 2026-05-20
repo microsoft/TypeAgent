@@ -104,6 +104,9 @@ function locToRange(loc: SourceLocation, length: number): Range {
     const start = toLspPosition({ line: loc.line, col: loc.col });
     return {
         start,
-        end: { line: start.line, character: start.character + Math.max(1, length) },
+        end: {
+            line: start.line,
+            character: start.character + Math.max(1, length),
+        },
     };
 }

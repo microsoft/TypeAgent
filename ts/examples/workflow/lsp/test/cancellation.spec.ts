@@ -65,8 +65,10 @@ async function startSession() {
         cleanup: () => {
             client.dispose();
             server.dispose();
-            pipes.serverTransport.input.end();
-            pipes.serverTransport.output.end();
+            pipes.serverTransport.input.destroy();
+            pipes.serverTransport.output.destroy();
+            pipes.clientReader.dispose();
+            pipes.clientWriter.dispose();
         },
     };
 }
@@ -93,29 +95,25 @@ describe("cancellation", () => {
             );
 
             // Fire the request and cancel in the same microtask queue turn.
-            const hoverPromise = session.client.sendRequest(
-                HoverRequest.type,
-                {
-                    textDocument: { uri: "file:///cancel.wf" },
-                    position: { line: 1, character: 10 },
-                },
-            );
+            const hoverPromise = session.client.sendRequest(HoverRequest.type, {
+                textDocument: { uri: "file:///cancel.wf" },
+                position: { line: 1, character: 10 },
+            });
 
             // Cancel immediately — the server is synchronous so the result
             // may already be in-flight; the important invariant is no crash.
-            hoverPromise.catch(() => {/* ignore cancellation rejection */});
+            hoverPromise.catch(() => {
+                /* ignore cancellation rejection */
+            });
 
             // Allow the event loop to tick.
             await new Promise((r) => setTimeout(r, 20));
 
             // Server should still be responsive after the cancel.
-            const result = await session.client.sendRequest(
-                HoverRequest.type,
-                {
-                    textDocument: { uri: "file:///cancel.wf" },
-                    position: { line: 1, character: 10 },
-                },
-            );
+            const result = await session.client.sendRequest(HoverRequest.type, {
+                textDocument: { uri: "file:///cancel.wf" },
+                position: { line: 1, character: 10 },
+            });
             // We just care the server responded without throwing.
             expect(result === null || typeof result === "object").toBe(true);
         } finally {
@@ -149,7 +147,9 @@ describe("cancellation", () => {
                     options: { tabSize: 4, insertSpaces: true },
                 },
             );
-            fmtPromise.catch(() => {/* ignore */});
+            fmtPromise.catch(() => {
+                /* ignore */
+            });
 
             await new Promise((r) => setTimeout(r, 20));
 

@@ -29,9 +29,7 @@ describe("code actions — surround with attempts", () => {
             end: { line: 1, character: 28 },
         };
         const actions = computeCodeActions(doc(TASK_SRC), range);
-        const attempt = actions.find((a) =>
-            a.title.includes("attempts"),
-        );
+        const attempt = actions.find((a) => a.title.includes("attempts"));
         expect(attempt).toBeDefined();
     });
 
@@ -89,11 +87,109 @@ describe("code actions — extract to const", () => {
         const extract = actions.find((a) => a.title.includes("Extract"))!;
         const edits = extract.edit!.changes!["file:///t.wf"]!;
         expect(edits.length).toBe(2);
-        const insertEdit = edits.find((e) => e.newText.includes("_extracted ="))!;
-        expect(insertEdit.newText).toContain("[a, b]");
-        const replaceEdit = edits.find(
-            (e) => e.newText === "_extracted",
+        const insertEdit = edits.find((e) =>
+            e.newText.includes("_extracted ="),
         )!;
+        expect(insertEdit.newText).toContain("[a, b]");
+        const replaceEdit = edits.find((e) => e.newText === "_extracted")!;
         expect(replaceEdit).toBeDefined();
+    });
+});
+
+describe("code actions — inline const", () => {
+    const INLINE_SRC = `workflow w(): string {
+    const greeting = "hello";
+    return greeting;
+}`;
+
+    it("offers inline-const action on a simple binding", () => {
+        const range = {
+            start: { line: 1, character: 10 },
+            end: { line: 1, character: 18 },
+        };
+        const actions = computeCodeActions(doc(INLINE_SRC), range);
+        const inline = actions.find((a) => a.title.startsWith("Inline const"));
+        expect(inline).toBeDefined();
+    });
+
+    it("refuses inline when RHS identifier is shadowed elsewhere", () => {
+        // 'x' is declared twice — inlining 'y' which references 'x' would be
+        // unsafe because the inner 'x' could shadow the outer one.
+        const SHADOW_SRC = `workflow w(): string {
+    const x = "outer";
+    const y = x;
+    if (true) {
+        const x = "inner";
+        return y;
+    }
+    return y;
+}`;
+        // Place cursor on `const y = x;` (line index 2).
+        const range = {
+            start: { line: 2, character: 10 },
+            end: { line: 2, character: 11 },
+        };
+        const actions = computeCodeActions(doc(SHADOW_SRC), range);
+        const inline = actions.find((a) =>
+            a.title.includes("Inline const 'y'"),
+        );
+        // The safety check should suppress the inline action.
+        expect(inline).toBeUndefined();
+    });
+});
+
+describe("code actions — concat→template", () => {
+    const CONCAT_SRC = `workflow w(name: string): string {
+    const msg = string.concat(["Hello, ", name, "!"]);
+    return msg;
+}`;
+
+    it("offers template literal action on a string.concat call", () => {
+        const range = {
+            start: { line: 1, character: 4 },
+            end: { line: 1, character: 4 },
+        };
+        const actions = computeCodeActions(doc(CONCAT_SRC), range);
+        const tmpl = actions.find((a) => a.title.includes("template literal"));
+        expect(tmpl).toBeDefined();
+    });
+
+    it("template literal replaces the full concat call (range correct)", () => {
+        const range = {
+            start: { line: 1, character: 4 },
+            end: { line: 1, character: 4 },
+        };
+        const actions = computeCodeActions(doc(CONCAT_SRC), range);
+        const tmpl = actions.find((a) => a.title.includes("template literal"))!;
+        const edits = tmpl.edit!.changes!["file:///t.wf"]!;
+        expect(edits.length).toBe(1);
+        expect(edits[0]!.newText).toBe("`Hello, ${name}!`");
+    });
+
+    it("handles nested brackets safely (does not corrupt syntax)", () => {
+        // The OLD regex-based action would break on nested arrays/brackets.
+        // The AST-based version must either skip the action or produce
+        // a correctly-bounded rewrite.
+        const NESTED_SRC = `workflow w(items: array<string>): string {
+    const msg = string.concat([list.elementAt(items, 0), "!"]);
+    return msg;
+}`;
+        const range = {
+            start: { line: 1, character: 4 },
+            end: { line: 1, character: 4 },
+        };
+        const actions = computeCodeActions(doc(NESTED_SRC), range);
+        const tmpl = actions.find((a) => a.title.includes("template literal"));
+        // The action can either be omitted (DottedNameExpr only — would
+        // print "list.elementAt" which isn't accurate for a call) or it
+        // can be emitted with a sound rewrite. Either way it must NOT
+        // produce a malformed literal that contains an unbalanced bracket.
+        if (tmpl) {
+            const edits = tmpl.edit!.changes!["file:///t.wf"]!;
+            // Just verify nothing crazy: backtick count is balanced.
+            const text = edits[0]!.newText;
+            const backticks = (text.match(/`/g) ?? []).length;
+            expect(backticks).toBe(2);
+        }
     });
 });

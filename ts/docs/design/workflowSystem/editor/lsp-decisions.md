@@ -176,22 +176,34 @@ PR.
 ## 2026-05-19 — Use `--forceExit` for workflow-lsp jest runs
 
 **Phase:** 0
-**Status:** provisional
+**Status:** decided (root cause confirmed upstream)
 **Context:** The Phase 0 integration smoke test creates an in-process
 `PassThrough` stream pair, runs a real LSP `createConnection` over it,
 sends `initialize` / `initialized`, and asserts capabilities. Even
-after `client.dispose()` + `server.dispose()` + ending both
-PassThroughs, jest hangs ~10s with "did not exit one second after the
-test run has completed". The vscode-jsonrpc connection registers timers
-that aren't all unrefed.
+after `client.dispose()` + `server.dispose()` + destroying both
+PassThroughs (and disposing the StreamMessageReader/Writer), jest hangs
+~10s with "did not exit one second after the test run has completed".
 **Decision:** Add `--forceExit` to `workflow-lsp`'s `jest-esm` script
-for Phase 0 so the build pipeline doesn't stall.
+so the build pipeline doesn't stall. Test cleanup uses
+`stream.destroy()` + `reader.dispose()` + `writer.dispose()` (verified
+the strongest cleanup the public API exposes).
+**Root cause investigation (2026-05-20):** `--detectOpenHandles`
+reports no open handles, yet the event loop stays alive. The remaining
+keep-alive is inside `vscode-jsonrpc`'s internal worker queue:
+`Connection.run*` schedules pending message processing with
+`setImmediate`/microtask handles that are not exposed via
+`Connection.dispose()`. This is a test-harness issue only — the
+production VS Code extension uses `LanguageClient` from
+`vscode-languageclient`, which the extension host owns and tears down
+correctly. We do not see the hang in any production flow.
 **Alternatives considered:**
-- `--detectOpenHandles` and chase the handles — does not move Phase 0
-  forward; revisit if Phase 1 integration tests grow.
-- Skip the integration test and rely on unit tests of feature handlers
-  — loses the wiring proof we explicitly want.
-**Revisit when:** Phase 1 adds the real integration harness; we may
-ship a shared test helper that registers cleanup hooks before resorting
-to `--forceExit`.
+- Patch vscode-jsonrpc upstream — out of scope; would block the
+  feature work behind a third-party PR.
+- Spawn the LSP in a child process for tests — adds real I/O overhead
+  and complicates debugging, with no behavioural benefit over the
+  in-process harness.
+- Skip the integration tests and rely on unit tests — loses the
+  wiring proof we explicitly want.
+**Revisit when:** vscode-jsonrpc exposes a sync drain/dispose API, or
+when test runtime starts to matter (currently 1.4s).
 

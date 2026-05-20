@@ -85,16 +85,11 @@ export function computeRename(
     const def = hit.def;
     const edits: TextEdit[] = [];
 
-    edits.push(
-        TextEdit.replace(pointRange(def.loc, def.name.length), newName),
-    );
+    edits.push(TextEdit.replace(pointRange(def.loc, def.name.length), newName));
     for (const ref of parsed.symbols.refs) {
         if (ref.def === def) {
             edits.push(
-                TextEdit.replace(
-                    pointRange(ref.loc, ref.name.length),
-                    newName,
-                ),
+                TextEdit.replace(pointRange(ref.loc, ref.name.length), newName),
             );
         }
     }

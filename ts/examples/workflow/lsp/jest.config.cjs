@@ -7,10 +7,7 @@ module.exports = {
     ...base,
     coverageDirectory: "coverage",
     coverageProvider: "v8",
-    collectCoverageFrom: [
-        "dist/src/**/*.js",
-        "!dist/src/index.js",
-    ],
+    collectCoverageFrom: ["dist/src/**/*.js", "!dist/src/index.js"],
     coverageThreshold: {
         global: {
             statements: 70,

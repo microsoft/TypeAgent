@@ -69,8 +69,10 @@ async function startSession(debounceMs = 5) {
         cleanup: () => {
             client.dispose();
             server.dispose();
-            pipes.serverTransport.input.end();
-            pipes.serverTransport.output.end();
+            pipes.serverTransport.input.destroy();
+            pipes.serverTransport.output.destroy();
+            pipes.clientReader.dispose();
+            pipes.clientWriter.dispose();
         },
     };
 }
@@ -131,11 +133,8 @@ describe("server integration", () => {
                     },
                 },
             );
-            await waitFor(
-                () =>
-                    session.publishes.some(
-                        (p) => p.diagnostics.length > 0,
-                    ),
+            await waitFor(() =>
+                session.publishes.some((p) => p.diagnostics.length > 0),
             );
 
             await session.client.sendNotification(
@@ -146,8 +145,7 @@ describe("server integration", () => {
             await waitFor(() =>
                 session.publishes.some(
                     (p) =>
-                        p.uri === "file:///t.wf" &&
-                        p.diagnostics.length === 0,
+                        p.uri === "file:///t.wf" && p.diagnostics.length === 0,
                 ),
             );
         } finally {
@@ -170,13 +168,10 @@ describe("server integration", () => {
                 },
             );
             // line 1 col 10: "    const x = a;" — 'x' at character 10
-            const result = await session.client.sendRequest(
-                HoverRequest.type,
-                {
-                    textDocument: { uri: "file:///hover.wf" },
-                    position: { line: 1, character: 10 },
-                },
-            );
+            const result = await session.client.sendRequest(HoverRequest.type, {
+                textDocument: { uri: "file:///hover.wf" },
+                position: { line: 1, character: 10 },
+            });
             // Result may be null if x resolves as const; we just verify no crash.
             expect(result === null || typeof result === "object").toBe(true);
         } finally {
@@ -207,8 +202,10 @@ describe("server integration", () => {
             );
             const items = Array.isArray(result)
                 ? result
-                : (result as { items: unknown[] } | null)?.items ?? [];
-            const labels = items.map((i: unknown) => (i as { label: string }).label);
+                : ((result as { items: unknown[] } | null)?.items ?? []);
+            const labels = items.map(
+                (i: unknown) => (i as { label: string }).label,
+            );
             // Should include task names
             expect(labels.some((l) => l.includes("."))).toBe(true);
             // Should include keywords
@@ -334,10 +331,10 @@ describe("server integration", () => {
                     },
                 },
             );
-            const result = await session.client.sendRequest(
+            const result = (await session.client.sendRequest(
                 "workflow/compileIR",
                 { uri: "file:///ir.wf" },
-            ) as { ir?: unknown; errors: unknown[] };
+            )) as { ir?: unknown; errors: unknown[] };
             expect(result).toBeDefined();
             expect(Array.isArray(result.errors)).toBe(true);
             if (result.errors.length === 0) {
@@ -348,4 +345,3 @@ describe("server integration", () => {
         }
     });
 });
-

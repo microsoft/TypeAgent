@@ -10,7 +10,16 @@
  */
 
 import * as path from "node:path";
-import { commands, ExtensionContext, window, workspace, Uri, TextDocument as VsTextDocument, WorkspaceEdit, Range } from "vscode";
+import {
+    commands,
+    ExtensionContext,
+    window,
+    workspace,
+    Uri,
+    TextDocument as VsTextDocument,
+    WorkspaceEdit,
+    Range,
+} from "vscode";
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -36,9 +45,7 @@ interface CompileIRResult {
 }
 
 export function activate(context: ExtensionContext): void {
-    const serverModule = context.asAbsolutePath(
-        path.join("dist", "server.js"),
-    );
+    const serverModule = context.asAbsolutePath(path.join("dist", "server.js"));
 
     const serverOptions: ServerOptions = {
         run: { module: serverModule, transport: TransportKind.ipc },
@@ -79,6 +86,18 @@ export function activate(context: ExtensionContext): void {
         }),
     );
 
+    // Drop tracked IR preview documents when their tab is closed so the
+    // map doesn't grow without bound over a long VS Code session.
+    context.subscriptions.push(
+        workspace.onDidCloseTextDocument((closed) => {
+            for (const [wfUri, previewDoc] of irPreviewDocs) {
+                if (previewDoc.uri.toString() === closed.uri.toString()) {
+                    irPreviewDocs.delete(wfUri);
+                }
+            }
+        }),
+    );
+
     client.start();
 }
 
@@ -111,9 +130,7 @@ async function refreshIRPreview(
 async function previewIR(): Promise<void> {
     const editor = window.activeTextEditor;
     if (!editor || editor.document.languageId !== "workflow") {
-        window.showInformationMessage(
-            "Open a .wf file to preview its IR.",
-        );
+        window.showInformationMessage("Open a .wf file to preview its IR.");
         return;
     }
     if (!client) return;

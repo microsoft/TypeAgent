@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { TextDocument } from "vscode-languageserver-textdocument";
-import {
-    computePrepareRename,
-    computeRename,
-} from "../src/features/rename.js";
+import { computePrepareRename, computeRename } from "../src/features/rename.js";
 import { clearCache } from "../src/parsedDocument.js";
 
 beforeEach(() => clearCache());
@@ -97,11 +94,7 @@ describe("rename", () => {
     it("renames a const binding and its uses", () => {
         const text = `workflow w(): string {\n    const x = "hi";\n    return x;\n}`;
         // 'x' decl at line 1, col 10 (0-based)
-        const edit = computeRename(
-            doc(text),
-            { line: 1, character: 10 },
-            "y",
-        );
+        const edit = computeRename(doc(text), { line: 1, character: 10 }, "y");
         expect(edit).not.toBeNull();
         const edits = edit!.changes!["file:///t.wf"]!;
         // 1 decl + 1 ref

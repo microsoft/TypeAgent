@@ -24,7 +24,11 @@ export function computeReferences(
     if (!parsed.symbols) return null;
 
     const { line, col } = fromLspPosition(position);
-    let def: SymbolDef | undefined = findReferenceAt(parsed.symbols, line, col)?.def;
+    let def: SymbolDef | undefined = findReferenceAt(
+        parsed.symbols,
+        line,
+        col,
+    )?.def;
     if (!def) {
         def = parsed.symbols.defs.find(
             (d) =>

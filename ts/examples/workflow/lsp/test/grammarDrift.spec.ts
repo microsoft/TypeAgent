@@ -41,8 +41,8 @@ const LEXER_KEYWORDS = [
 describe("grammar drift", () => {
     it("lists every lexer keyword in the TextMate grammar", () => {
         const grammar = JSON.parse(readFileSync(grammarPath, "utf8"));
-        const keywordPattern: string = grammar.repository.keywords.patterns[0]
-            .match;
+        const keywordPattern: string =
+            grammar.repository.keywords.patterns[0].match;
         // Pattern like \b(a|b|c)\b -- extract the alternation.
         const match = keywordPattern.match(/\\b\(([^)]+)\)\\b/);
         expect(match).not.toBeNull();

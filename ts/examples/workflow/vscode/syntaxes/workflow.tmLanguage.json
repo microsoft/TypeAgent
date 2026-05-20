@@ -1,77 +1,77 @@
 {
-    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "Workflow",
-    "scopeName": "source.wf",
-    "patterns": [
-        { "include": "#comments" },
-        { "include": "#keywords" },
-        { "include": "#strings" },
-        { "include": "#numbers" }
-    ],
-    "repository": {
-        "comments": {
-            "patterns": [
-                {
-                    "name": "comment.line.double-slash.wf",
-                    "match": "//.*$"
-                },
-                {
-                    "name": "comment.block.wf",
-                    "begin": "/\\*",
-                    "end": "\\*/"
-                }
-            ]
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Workflow",
+  "scopeName": "source.wf",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#strings" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.wf",
+          "match": "//.*$"
         },
-        "keywords": {
-            "patterns": [
-                {
-                    "name": "keyword.control.wf",
-                    "match": "\\b(workflow|const|if|else|switch|case|default|return|break|throw|true|false|null)\\b"
-                },
-                {
-                    "name": "storage.type.wf",
-                    "match": "\\b(string|number|boolean|object|array|any)\\b"
-                }
-            ]
-        },
-        "strings": {
-            "patterns": [
-                {
-                    "name": "string.quoted.double.wf",
-                    "begin": "\"",
-                    "end": "\"",
-                    "patterns": [
-                        {
-                            "name": "constant.character.escape.wf",
-                            "match": "\\\\."
-                        }
-                    ]
-                },
-                {
-                    "name": "string.template.wf",
-                    "begin": "`",
-                    "end": "`",
-                    "patterns": [
-                        {
-                            "name": "constant.character.escape.wf",
-                            "match": "\\\\."
-                        },
-                        {
-                            "name": "meta.template.expression.wf",
-                            "begin": "\\$\\{",
-                            "end": "\\}"
-                        }
-                    ]
-                }
-            ]
-        },
-        "numbers": {
-            "patterns": [
-                {
-                    "name": "constant.numeric.wf",
-                    "match": "\\b-?[0-9]+(\\.[0-9]+)?\\b"
-                }
-            ]
+        {
+          "name": "comment.block.wf",
+          "begin": "/\\*",
+          "end": "\\*/"
         }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.wf",
+          "match": "\\b(workflow|const|if|else|switch|case|default|return|break|throw|true|false|null)\\b"
+        },
+        {
+          "name": "storage.type.wf",
+          "match": "\\b(string|number|boolean|object|array|any)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.wf",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.wf",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.template.wf",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "constant.character.escape.wf",
+              "match": "\\\\."
+            },
+            {
+              "name": "meta.template.expression.wf",
+              "begin": "\\$\\{",
+              "end": "\\}"
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.wf",
+          "match": "\\b-?[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
     }
+  }
 }

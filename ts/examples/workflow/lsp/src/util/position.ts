@@ -41,7 +41,10 @@ export function pointRange(loc: SourceLocation, length: number = 1): Range {
     const start = toLspPosition(loc);
     return {
         start,
-        end: { line: start.line, character: start.character + Math.max(1, length) },
+        end: {
+            line: start.line,
+            character: start.character + Math.max(1, length),
+        },
     };
 }
 

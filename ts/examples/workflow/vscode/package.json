@@ -1,114 +1,114 @@
 {
-    "name": "workflow-vscode",
-    "displayName": "Workflow DSL",
-    "version": "0.0.1",
-    "private": true,
-    "description": "VS Code language support for the workflow DSL (.wf): syntax highlighting and language server integration.",
-    "categories": [
-        "Programming Languages"
+  "name": "workflow-vscode",
+  "displayName": "Workflow DSL",
+  "version": "0.0.1",
+  "private": true,
+  "description": "VS Code language support for the workflow DSL (.wf): syntax highlighting and language server integration.",
+  "categories": [
+    "Programming Languages"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/workflow/vscode"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:workflow"
+  ],
+  "scripts": {
+    "build": "node esbuild.mjs && node scripts/check-server-bundle.mjs && npm run tsc",
+    "clean": "rimraf --glob dist dist-pub *.vsix *.tsbuildinfo",
+    "compile": "node esbuild.mjs",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/workflow-vscode.vsix",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -p tsconfig.json --noEmit",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "workflow",
+        "aliases": [
+          "Workflow",
+          "workflow"
+        ],
+        "extensions": [
+          ".wf"
+        ],
+        "configuration": "./language-configuration.json"
+      }
     ],
-    "homepage": "https://github.com/microsoft/TypeAgent#readme",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/microsoft/TypeAgent.git",
-        "directory": "ts/examples/workflow/vscode"
-    },
-    "license": "MIT",
-    "author": "Microsoft",
-    "publisher": "typeagent",
-    "engines": {
-        "vscode": "^1.90.0"
-    },
-    "main": "./dist/extension.js",
-    "activationEvents": [
-        "onLanguage:workflow"
+    "grammars": [
+      {
+        "language": "workflow",
+        "scopeName": "source.wf",
+        "path": "./syntaxes/workflow.tmLanguage.json"
+      }
     ],
-    "scripts": {
-        "build": "node esbuild.mjs && node scripts/check-server-bundle.mjs && npm run tsc",
-        "clean": "rimraf --glob dist dist-pub *.vsix *.tsbuildinfo",
-        "compile": "node esbuild.mjs",
-        "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/workflow-vscode.vsix",
-        "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
-        "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-        "tsc": "tsc -p tsconfig.json --noEmit",
-        "vscode:prepublish": "npm run compile",
-        "watch": "node esbuild.mjs --watch"
+    "snippets": [
+      {
+        "language": "workflow",
+        "path": "./snippets/workflow.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "workflow.previewIR",
+        "title": "Workflow: Preview IR",
+        "category": "Workflow"
+      },
+      {
+        "command": "workflow.previewGraph",
+        "title": "Workflow: Preview Graph",
+        "category": "Workflow"
+      }
+    ],
+    "configuration": {
+      "title": "Workflow DSL",
+      "properties": {
+        "workflow.trace.server": {
+          "type": "string",
+          "scope": "window",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace messages exchanged between VS Code and the workflow language server."
+        }
+      }
     },
-    "contributes": {
-        "languages": [
-            {
-                "id": "workflow",
-                "aliases": [
-                    "Workflow",
-                    "workflow"
-                ],
-                "extensions": [
-                    ".wf"
-                ],
-                "configuration": "./language-configuration.json"
-            }
-        ],
-        "grammars": [
-            {
-                "language": "workflow",
-                "scopeName": "source.wf",
-                "path": "./syntaxes/workflow.tmLanguage.json"
-            }
-        ],
-        "snippets": [
-            {
-                "language": "workflow",
-                "path": "./snippets/workflow.code-snippets"
-            }
-        ],
-        "commands": [
-            {
-                "command": "workflow.previewIR",
-                "title": "Workflow: Preview IR",
-                "category": "Workflow"
-            },
-            {
-                "command": "workflow.previewGraph",
-                "title": "Workflow: Preview Graph",
-                "category": "Workflow"
-            }
-        ],
-        "configuration": {
-            "title": "Workflow DSL",
-            "properties": {
-                "workflow.trace.server": {
-                    "type": "string",
-                    "scope": "window",
-                    "enum": [
-                        "off",
-                        "messages",
-                        "verbose"
-                    ],
-                    "default": "off",
-                    "description": "Trace messages exchanged between VS Code and the workflow language server."
-                }
-            }
-        },
-        "iconThemes": [
-            {
-                "id": "workflow-icons",
-                "label": "Workflow DSL Icons",
-                "path": "./icons/icons.json"
-            }
-        ]
-    },
-    "dependencies": {
-        "vscode-languageclient": "^9.0.1",
-        "workflow-lsp": "workspace:*"
-    },
-    "devDependencies": {
-        "@types/node": "^22.10.5",
-        "@types/vscode": "^1.90.0",
-        "esbuild": "^0.25.0",
-        "mkdirp": "^3.0.1",
-        "prettier": "^3.5.3",
-        "rimraf": "^6.0.1",
-        "typescript": "~5.4.5"
-    },
-    "icon": "icons/wf.svg"
+    "iconThemes": [
+      {
+        "id": "workflow-icons",
+        "label": "Workflow DSL Icons",
+        "path": "./icons/icons.json"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "workflow-lsp": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.25.0",
+    "mkdirp": "^3.0.1",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "icon": "icons/wf.svg"
 }

@@ -36,7 +36,7 @@ workflow myFlow(a: string, b: number): string {
 
     it("returns no symbols when the document has no valid workflow", () => {
         // Pure garbage — lexer fails on the unterminated string.
-        expect(computeDocumentSymbols(doc("\"unterminated"))).toEqual([]);
+        expect(computeDocumentSymbols(doc('"unterminated'))).toEqual([]);
     });
 
     it("surfaces DestructuringConst entries", () => {

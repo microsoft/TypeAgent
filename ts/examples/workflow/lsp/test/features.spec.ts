@@ -59,20 +59,14 @@ describe("definition", () => {
     });
 
     it("returns null for unresolved names", () => {
-        expect(
-            computeDefinition(doc(), { line: 0, character: 0 }),
-        ).toBeNull();
+        expect(computeDefinition(doc(), { line: 0, character: 0 })).toBeNull();
     });
 });
 
 describe("references", () => {
     it("lists declaration + reference sites of a param", () => {
         // From the param 'a' declaration on line 0
-        const refs = computeReferences(
-            doc(),
-            { line: 0, character: 11 },
-            true,
-        );
+        const refs = computeReferences(doc(), { line: 0, character: 11 }, true);
         expect(refs).not.toBeNull();
         expect(refs!.length).toBeGreaterThanOrEqual(2);
     });
@@ -124,7 +118,9 @@ describe("completion", () => {
         // Keywords should not appear
         expect(labels).not.toContain("const");
         // At least one string task (e.g. "join")
-        expect(labels.some((l) => l === "join" || l.startsWith("string"))).toBe(true);
+        expect(labels.some((l) => l === "join" || l.startsWith("string"))).toBe(
+            true,
+        );
     });
 
     it("includes no keywords when completing after a dot", () => {

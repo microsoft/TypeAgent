@@ -20,10 +20,12 @@ import { createServer } from "../src/server.js";
 function makePipes() {
     const clientToServer = new PassThrough();
     const serverToClient = new PassThrough();
+    const clientReader = new StreamMessageReader(serverToClient);
+    const clientWriter = new StreamMessageWriter(clientToServer);
     return {
         serverTransport: { input: clientToServer, output: serverToClient },
-        clientReader: new StreamMessageReader(serverToClient),
-        clientWriter: new StreamMessageWriter(clientToServer),
+        clientReader,
+        clientWriter,
     };
 }
 
@@ -56,8 +58,10 @@ describe("workflow-lsp server (phase 0)", () => {
         } finally {
             client.dispose();
             server.dispose();
-            serverTransport.input.end();
-            serverTransport.output.end();
+            clientReader.dispose();
+            clientWriter.dispose();
+            serverTransport.input.destroy();
+            serverTransport.output.destroy();
         }
     });
 });

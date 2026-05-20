@@ -102,10 +102,7 @@ class Resolver {
      * can target the identifier itself rather than the surrounding
      * `const` / `[` token.
      */
-    private locateName(
-        stmtLoc: SourceLocation,
-        name: string,
-    ): SourceLocation {
+    private locateName(stmtLoc: SourceLocation, name: string): SourceLocation {
         const text = this.text;
         if (!text || stmtLoc.offset === undefined) return stmtLoc;
         const search = text.indexOf(name, stmtLoc.offset);
@@ -254,10 +251,7 @@ class Resolver {
                 const inner = new Scope(scope);
                 this.defineLambdaParam(expr.param, expr.loc, inner);
                 this.visitStatements(expr.body, inner);
-                if (
-                    expr.kind === "ParallelMapNode" &&
-                    expr.maxConcurrency
-                ) {
+                if (expr.kind === "ParallelMapNode" && expr.maxConcurrency) {
                     this.visitExpr(expr.maxConcurrency, scope);
                 }
                 return;
@@ -279,10 +273,7 @@ class Resolver {
     }
 }
 
-export function buildSymbolTable(
-    wf: WorkflowDecl,
-    text?: string,
-): SymbolTable {
+export function buildSymbolTable(wf: WorkflowDecl, text?: string): SymbolTable {
     const r = new Resolver(text);
     r.visit(wf);
     return { defs: r.defs, refs: r.refs, taskRefs: r.taskRefs };
@@ -295,7 +286,11 @@ export function findReferenceAt(
     col: number,
 ): SymbolReference | undefined {
     for (const r of table.refs) {
-        if (r.loc.line === line && col >= r.loc.col && col <= r.loc.col + r.name.length) {
+        if (
+            r.loc.line === line &&
+            col >= r.loc.col &&
+            col <= r.loc.col + r.name.length
+        ) {
             return r;
         }
     }

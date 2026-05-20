@@ -31,9 +31,77 @@ import {
     TextEdit,
     WorkspaceEdit,
 } from "vscode-languageserver/node.js";
-import type { Statement } from "workflow-dsl";
+import type { Statement, Expr } from "workflow-dsl";
 import { getParsed } from "../parsedDocument.js";
 import { toLspPosition } from "../util/position.js";
+
+/**
+ * Collect every identifier reference (head segment of a DottedNameExpr)
+ * that appears inside an expression sub-tree.  Used to safety-check the
+ * inline-const refactoring: if any of these names resolves to a
+ * different definition at a use site than at the declaration site, the
+ * inline is unsafe (variable shadowing).
+ */
+function collectIdentifiers(expr: Expr, out: Set<string>): void {
+    switch (expr.kind) {
+        case "DottedNameExpr":
+            out.add(expr.segments[0]!);
+            return;
+        case "TaskCallExpr":
+        case "WorkflowCallExpr":
+            for (const a of expr.args) collectIdentifiers(a.value, out);
+            return;
+        case "TemplateLiteralExpr":
+            for (const e of expr.expressions) collectIdentifiers(e, out);
+            return;
+        case "ArrayLiteralExpr":
+            for (const e of expr.elements) collectIdentifiers(e, out);
+            return;
+        case "ObjectLiteralExpr":
+            for (const entry of expr.entries)
+                collectIdentifiers(entry.value, out);
+            return;
+        case "BinaryExpr":
+            collectIdentifiers(expr.left, out);
+            collectIdentifiers(expr.right, out);
+            return;
+        case "UnaryExpr":
+            collectIdentifiers(expr.operand, out);
+            return;
+        case "TernaryExpr":
+            collectIdentifiers(expr.condition, out);
+            collectIdentifiers(expr.consequent, out);
+            collectIdentifiers(expr.alternate, out);
+            return;
+        // StringLiteralExpr / NumberLiteralExpr / BooleanLiteralExpr /
+        // NullLiteralExpr have no identifier sub-references.
+        default:
+            return;
+    }
+}
+
+/**
+ * Print a small subset of expression kinds back to surface syntax for
+ * use in the concat→template rewrite.  Returns null for any
+ * unsupported shape so the caller can skip the action rather than
+ * emit syntactically-suspect text.
+ */
+function exprToSource(expr: Expr): string | null {
+    switch (expr.kind) {
+        case "StringLiteralExpr":
+            return `${expr.quote}${expr.raw}${expr.quote}`;
+        case "NumberLiteralExpr":
+            return String(expr.value);
+        case "BooleanLiteralExpr":
+            return String(expr.value);
+        case "NullLiteralExpr":
+            return "null";
+        case "DottedNameExpr":
+            return expr.segments.join(".");
+        default:
+            return null;
+    }
+}
 
 /** 0-based LSP range → 1-based line/col for comparison with SourceLocation. */
 function rangeOverlaps(
@@ -46,10 +114,7 @@ function rangeOverlaps(
     return stmtLine >= startLine && stmtLine <= endLine;
 }
 
-function stmtContainsOffset(
-    stmt: Statement,
-    range: Range,
-): boolean {
+function stmtContainsOffset(stmt: Statement, range: Range): boolean {
     return rangeOverlaps(range, stmt.loc.line, stmt.loc.col);
 }
 
@@ -115,10 +180,9 @@ export function computeCodeActions(
         const stmtEnd = doc.positionAt(endOffset);
 
         // Read the current statement text.
-        const stmtText = text.slice(
-            doc.offsetAt(stmtStart),
-            endOffset,
-        ).trimEnd();
+        const stmtText = text
+            .slice(doc.offsetAt(stmtStart), endOffset)
+            .trimEnd();
 
         const newText =
             `${indent}attempts(3) {\n` +
@@ -166,7 +230,11 @@ export function computeCodeActions(
                 : "";
         const isFullRhs = selectionText === fullRhsText;
 
-        if (!isFullRhs && !selectionText.includes("\n") && selectionText.length > 2) {
+        if (
+            !isFullRhs &&
+            !selectionText.includes("\n") &&
+            selectionText.length > 2
+        ) {
             const indent = indentOf(text, enclosing);
             const insertPos = toLspPosition(enclosing.loc);
             const extractEdit: WorkspaceEdit = {
@@ -192,10 +260,31 @@ export function computeCodeActions(
 
     // --- Action 3: Inline const ---
     // Offer when the cursor is on a ConstStatement (single binding only).
+    // Safety: refuse to inline if any identifier in the RHS would resolve
+    // differently at a use site than at the declaration site (shadowing).
     if (enclosing && enclosing.kind === "ConstStatement" && parsed.symbols) {
         const constName = enclosing.name;
-        // Skip synthetic const wrappers (bare expression statements).
-        if (constName && !constName.startsWith("__synthetic_")) {
+        const safeToInline = (() => {
+            if (!constName || constName.startsWith("__synthetic_"))
+                return false;
+            // Collect identifier names used in the RHS expression tree.
+            const rhsIdentifiers = new Set<string>();
+            collectIdentifiers(enclosing.value, rhsIdentifiers);
+            // Conservative shadow-check: refuse the action if any RHS-referenced
+            // name has more than one definition anywhere in the workflow. This
+            // is over-conservative (a definition in an unrelated branch will
+            // also veto the inline) but it is sound and easy to reason about.
+            for (const name of rhsIdentifiers) {
+                let count = 0;
+                for (const def of parsed.symbols!.defs) {
+                    if (def.name === name) count++;
+                }
+                if (count > 1) return false;
+            }
+            return true;
+        })();
+
+        if (safeToInline) {
             const refs = parsed.symbols.refs.filter(
                 (r) => r.name === constName && r.def?.kind === "const",
             );
@@ -204,7 +293,10 @@ export function computeCodeActions(
                 const eqIdx = text.indexOf("=", enclosing.loc.offset ?? 0);
                 const rhsRaw =
                     eqIdx >= 0
-                        ? text.slice(eqIdx + 1).split(";")[0]?.trim() ?? ""
+                        ? (text
+                              .slice(eqIdx + 1)
+                              .split(";")[0]
+                              ?.trim() ?? "")
                         : "";
                 if (rhsRaw.length > 0) {
                     // Build the edit: replace each reference, then delete the decl line.
@@ -215,7 +307,7 @@ export function computeCodeActions(
                         };
                         const refEnd = {
                             line: r.loc.line - 1,
-                            character: r.loc.col - 1 + constName.length,
+                            character: r.loc.col - 1 + constName!.length,
                         };
                         return TextEdit.replace(
                             { start: refStart, end: refEnd },
@@ -244,64 +336,171 @@ export function computeCodeActions(
     }
 
     // --- Action 4: concat→template literal ---
-    // Detect `string.concat(["literal", expr, "literal"])` at the cursor line
-    // and offer to rewrite as a template literal.
-    const cursorLine = range.start.line;
-    const lineStart = doc.offsetAt({ line: cursorLine, character: 0 });
-    const lineEnd = doc.offsetAt({ line: cursorLine + 1, character: 0 });
-    const lineText = text.slice(lineStart, lineEnd);
-
-    // Simple regex: matches string.concat([ ... ])
-    const concatRe = /string\.concat\(\s*\[([^\]]+)\]\s*\)/;
-    const m = concatRe.exec(lineText);
-    if (m) {
-        const innerList = m[1]!;
-        // Split on commas not inside quotes (simple heuristic for DSL usage).
-        const parts: string[] = [];
-        let buf = "";
-        let inStr = false;
-        let strChar = "";
-        for (const ch of innerList) {
-            if (!inStr && (ch === '"' || ch === "'")) {
-                inStr = true;
-                strChar = ch;
-            } else if (inStr && ch === strChar) {
-                inStr = false;
+    // Walk the AST to find a `string.concat([…])` call inside the enclosing
+    // statement. Only offer the rewrite when every array element is a
+    // shape we can faithfully re-emit (string / dotted name / numeric /
+    // boolean / null literal). Range info is taken from the AST loc fields,
+    // which avoids the brittle regex used in earlier revisions.
+    if (enclosing && enclosing.kind === "ConstStatement") {
+        const found = findConcatCall(enclosing.value);
+        if (found) {
+            const elements = found.arrayArg.elements;
+            const parts: string[] = [];
+            let allRepresentable = true;
+            for (const el of elements) {
+                if (el.kind === "StringLiteralExpr") {
+                    // String literals contribute their cooked content
+                    // directly (no `${…}` wrapper). We use the raw form;
+                    // backtick-incompatible escapes are preserved.
+                    parts.push(el.raw);
+                } else {
+                    const src = exprToSource(el);
+                    if (src === null) {
+                        allRepresentable = false;
+                        break;
+                    }
+                    parts.push(`\${${src}}`);
+                }
             }
-            if (!inStr && ch === ",") {
-                parts.push(buf.trim());
-                buf = "";
-            } else {
-                buf += ch;
+            if (allRepresentable && elements.length > 0) {
+                const templateLiteral = "`" + parts.join("") + "`";
+                // Compute the source range for the entire concat call using
+                // AST offsets. Start is the call's loc.offset; end is found
+                // by counting parens/brackets forward from that offset.
+                const callStartOffset = found.call.loc.offset ?? -1;
+                if (callStartOffset >= 0) {
+                    const callEndOffset = findMatchingClose(
+                        text,
+                        callStartOffset,
+                    );
+                    if (callEndOffset > callStartOffset) {
+                        const editRange: Range = {
+                            start: doc.positionAt(callStartOffset),
+                            end: doc.positionAt(callEndOffset),
+                        };
+                        actions.push({
+                            title: "Convert to template literal",
+                            kind: CodeActionKind.RefactorRewrite,
+                            edit: {
+                                changes: {
+                                    [doc.uri]: [
+                                        TextEdit.replace(
+                                            editRange,
+                                            templateLiteral,
+                                        ),
+                                    ],
+                                },
+                            },
+                        });
+                    }
+                }
             }
         }
-        if (buf.trim()) parts.push(buf.trim());
-
-        const templateInner = parts
-            .map((p) => {
-                const strMatch = /^["'](.*)["']$/.exec(p);
-                return strMatch ? strMatch[1]! : `\${${p}}`;
-            })
-            .join("");
-        const templateLiteral = "`" + templateInner + "`";
-
-        const matchStart = lineStart + m.index;
-        const matchEnd = matchStart + m[0].length;
-        const editRange: Range = {
-            start: doc.positionAt(matchStart),
-            end: doc.positionAt(matchEnd),
-        };
-
-        actions.push({
-            title: "Convert to template literal",
-            kind: CodeActionKind.RefactorRewrite,
-            edit: {
-                changes: {
-                    [doc.uri]: [TextEdit.replace(editRange, templateLiteral)],
-                },
-            },
-        });
     }
 
     return actions;
+}
+
+/**
+ * Find a `string.concat(<ArrayLiteralExpr>)` call inside an expression
+ * tree. Returns the call node together with the (single) array-literal
+ * argument, or null if no such call is present.
+ */
+function findConcatCall(expr: Expr): {
+    call: Expr & { kind: "TaskCallExpr" };
+    arrayArg: Expr & { kind: "ArrayLiteralExpr" };
+} | null {
+    if (
+        expr.kind === "TaskCallExpr" &&
+        expr.task === "string.concat" &&
+        expr.args.length === 1 &&
+        expr.args[0]!.value.kind === "ArrayLiteralExpr"
+    ) {
+        return {
+            call: expr,
+            arrayArg: expr.args[0]!.value as Expr & {
+                kind: "ArrayLiteralExpr";
+            },
+        };
+    }
+    // Recurse into sub-expressions.
+    switch (expr.kind) {
+        case "TaskCallExpr":
+        case "WorkflowCallExpr":
+            for (const a of expr.args) {
+                const f = findConcatCall(a.value);
+                if (f) return f;
+            }
+            return null;
+        case "ArrayLiteralExpr":
+            for (const e of expr.elements) {
+                const f = findConcatCall(e);
+                if (f) return f;
+            }
+            return null;
+        case "ObjectLiteralExpr":
+            for (const entry of expr.entries) {
+                const f = findConcatCall(entry.value);
+                if (f) return f;
+            }
+            return null;
+        case "BinaryExpr": {
+            return findConcatCall(expr.left) ?? findConcatCall(expr.right);
+        }
+        case "TernaryExpr":
+            return (
+                findConcatCall(expr.condition) ??
+                findConcatCall(expr.consequent) ??
+                findConcatCall(expr.alternate)
+            );
+        case "UnaryExpr":
+            return findConcatCall(expr.operand);
+        case "TemplateLiteralExpr":
+            for (const e of expr.expressions) {
+                const f = findConcatCall(e);
+                if (f) return f;
+            }
+            return null;
+        default:
+            return null;
+    }
+}
+
+/**
+ * Given a call-like source position (cursor at or before `task.name(`),
+ * walk forward in the source text and return the offset just past the
+ * matching `)`, honouring nested `(`, `[`, `{` and string literals.
+ * Returns -1 if the matching close cannot be found.
+ */
+function findMatchingClose(text: string, start: number): number {
+    // Find the first `(` at or after start.
+    let i = start;
+    while (i < text.length && text[i] !== "(") i++;
+    if (i >= text.length) return -1;
+    const stack: string[] = ["("];
+    i++;
+    let inStr: string | null = null;
+    while (i < text.length && stack.length > 0) {
+        const c = text[i]!;
+        if (inStr !== null) {
+            if (c === "\\") {
+                i += 2;
+                continue;
+            }
+            if (c === inStr) inStr = null;
+            i++;
+            continue;
+        }
+        if (c === '"' || c === "'" || c === "`") {
+            inStr = c;
+            i++;
+            continue;
+        }
+        if (c === "(" || c === "[" || c === "{") stack.push(c);
+        else if (c === ")" || c === "]" || c === "}") {
+            stack.pop();
+        }
+        i++;
+    }
+    return stack.length === 0 ? i : -1;
 }
