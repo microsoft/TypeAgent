@@ -193,3 +193,87 @@ describe("code actions — concat→template", () => {
         }
     });
 });
+
+describe("code actions — inline const guards", () => {
+    it("does not offer inline-const for a synthetic (bare-call) statement", () => {
+        // A bare task call is wrapped by the parser in a ConstStatement
+        // with isSynthetic:true; the inline refactoring must skip it.
+        const SRC = `workflow w(): string {
+    shell.exec("echo hi");
+    return "done";
+}`;
+        const range = {
+            start: { line: 1, character: 4 },
+            end: { line: 1, character: 14 },
+        };
+        const actions = computeCodeActions(doc(SRC), range);
+        const inline = actions.find((a) => a.title.startsWith("Inline const"));
+        expect(inline).toBeUndefined();
+    });
+
+    it("does not offer inline-const when the const has zero references", () => {
+        const SRC = `workflow w(): string {
+    const unused = "hello";
+    return "goodbye";
+}`;
+        const line1 = SRC.split("\n")[1]!;
+        const col = line1.indexOf("unused");
+        const range = {
+            start: { line: 1, character: col },
+            end: { line: 1, character: col + "unused".length },
+        };
+        const actions = computeCodeActions(doc(SRC), range);
+        const inline = actions.find((a) => a.title.includes("Inline const"));
+        expect(inline).toBeUndefined();
+    });
+});
+
+describe("code actions — extract to const edge cases", () => {
+    const SRC = `workflow w(a: string, b: string): string {
+    const r = string.concat([a, b]);
+    return r;
+}`;
+
+    it("does not offer extract when selection spans multiple lines", () => {
+        // Selection with non-whitespace on both sides of a newline produces
+        // an embedded newline after .trim() and is rejected.
+        // line 1 char 14 = start of "string.concat"
+        // line 2 char 11 = 'r' of "return r"
+        const range = {
+            start: { line: 1, character: 14 },
+            end: { line: 2, character: 11 },
+        };
+        const actions = computeCodeActions(doc(SRC), range);
+        const extract = actions.find((a) => a.title.includes("Extract"));
+        expect(extract).toBeUndefined();
+    });
+
+    it("does not offer extract when selection is 1 character (too short)", () => {
+        const line1 = SRC.split("\n")[1]!;
+        const col = line1.indexOf("a");
+        const range = {
+            start: { line: 1, character: col },
+            end: { line: 1, character: col + 1 },
+        };
+        const actions = computeCodeActions(doc(SRC), range);
+        const extract = actions.find((a) => a.title.includes("Extract"));
+        expect(extract).toBeUndefined();
+    });
+
+    it("does not offer extract when selection equals the full RHS", () => {
+        const TASK_SRC = `workflow w(s: string): string {
+    const r = shell.exec(s);
+    return r;
+}`;
+        const line1 = TASK_SRC.split("\n")[1]!;
+        const rhsStart = line1.indexOf("shell.exec");
+        const rhsEnd = rhsStart + "shell.exec(s)".length;
+        const range = {
+            start: { line: 1, character: rhsStart },
+            end: { line: 1, character: rhsEnd },
+        };
+        const actions = computeCodeActions(doc(TASK_SRC), range);
+        const extract = actions.find((a) => a.title.includes("Extract"));
+        expect(extract).toBeUndefined();
+    });
+});

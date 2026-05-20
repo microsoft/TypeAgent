@@ -84,6 +84,33 @@ describe("signature help", () => {
         expect(help).not.toBeNull();
         expect(help!.activeParameter).toBe(1);
     });
+
+    it("clamps activeParameter to the last available parameter", () => {
+        // list.length has exactly 1 parameter; cursor after 2 commas clamps to 0.
+        const text = `workflow w(): integer {\n    return list.length([], [], );\n}`;
+        const d = doc(text);
+        const line1 = text.split("\n")[1]!;
+        const col = line1.lastIndexOf(",") + 2;
+        const help = computeSignatureHelp(d, { line: 1, character: col }, schemas);
+        expect(help).not.toBeNull();
+        expect(help!.activeParameter).toBe(0);
+    });
+
+    it("ignores a // comment containing a ( when locating the active call", () => {
+        // The `(` inside the comment must not be counted as an unclosed paren.
+        const text = `workflow w(): string {\n    // comment with ( stray paren\n    return string.join(["a"], ",");\n}`;
+        const d = doc(text);
+        const line2 = text.split("\n")[2]!;
+        const col = line2.indexOf("(") + 2; // inside first arg
+        const help = computeSignatureHelp(
+            d,
+            { line: 2, character: col },
+            schemas,
+        );
+        expect(help).not.toBeNull();
+        expect(help!.signatures[0]!.label).toContain("string.join");
+        expect(help!.activeParameter).toBe(0);
+    });
 });
 
 describe("inlay hints", () => {
@@ -117,5 +144,29 @@ describe("inlay hints", () => {
             end: { line: 3, character: 0 },
         });
         expect(limited.length).toBe(1);
+    });
+
+    it("excludes hints that fall before the requested range", () => {
+        // Const binding is on line 1; range starts at line 2 — hint excluded.
+        const text = `workflow w(): integer {\n    const n = list.length([1, 2, 3]);\n    return n;\n}`;
+        const hints = computeInlayHints(doc(text), schemas, {
+            start: { line: 2, character: 0 },
+            end: { line: 2, character: 20 },
+        });
+        expect(hints.length).toBe(0);
+    });
+
+    it("does not emit a hint for a synthetic (bare-call) const", () => {
+        // Bare task calls get isSynthetic:true and must be skipped.
+        const text = `workflow w(): string {\n    shell.exec("echo hi");\n    return "done";\n}`;
+        const hints = computeInlayHints(doc(text), schemas);
+        expect(hints.length).toBe(0);
+    });
+
+    it("traverses switch statement body and default_ to emit hints", () => {
+        const text = `workflow w(x: string): integer {\n    switch (x) {\n        case "a": {\n            const n = list.length(["a"]);\n            return n;\n        }\n        default: {\n            const m = list.length(["b", "c"]);\n            return m;\n        }\n    }\n}`;
+        const hints = computeInlayHints(doc(text), schemas);
+        // One hint per case-arm const binding (n and m).
+        expect(hints.length).toBeGreaterThanOrEqual(2);
     });
 });

@@ -47,6 +47,22 @@ describe("hover", () => {
             null,
         );
     });
+
+    it("returns null when cursor is at the declaration site of a const", () => {
+        // computeHover uses findReferenceAt which only searches refs, not defs.
+        // Hovering at the 'x' in `const x = ...` returns null.
+        const h = computeHover(doc(), { line: 1, character: 10 }, schemas);
+        expect(h).toBeNull();
+    });
+
+    it("task hover includes both input and output schema JSON", () => {
+        // string.join on line 2, character 11
+        const h = computeHover(doc(), { line: 2, character: 11 }, schemas);
+        expect(h).not.toBeNull();
+        const value = (h!.contents as { value: string }).value;
+        expect(value).toContain("input:");
+        expect(value).toContain("output:");
+    });
 });
 
 describe("definition", () => {
@@ -60,6 +76,14 @@ describe("definition", () => {
 
     it("returns null for unresolved names", () => {
         expect(computeDefinition(doc(), { line: 0, character: 0 })).toBeNull();
+    });
+
+    it("returns null when cursor is at the declaration itself", () => {
+        // computeDefinition uses findReferenceAt which only searches refs.
+        // The 'a' param at line 0 char 11 is a declaration, not a reference.
+        expect(
+            computeDefinition(doc(), { line: 0, character: 11 }),
+        ).toBeNull();
     });
 });
 
@@ -83,6 +107,26 @@ describe("references", () => {
             false,
         )!;
         expect(withoutDecl.length).toBe(withDecl.length - 1);
+    });
+
+    it("returns only the declaration when a const has no usage sites", () => {
+        const src = `workflow w(): string {\n    const unused = "hi";\n    return "bye";\n}`;
+        const d = doc(src);
+        const line1 = src.split("\n")[1]!;
+        const col = line1.indexOf("unused");
+        const refs = computeReferences(d, { line: 1, character: col }, true);
+        expect(refs).not.toBeNull();
+        expect(refs!.length).toBe(1);
+    });
+
+    it("returns an empty array when unused const and includeDeclaration=false", () => {
+        const src = `workflow w(): string {\n    const unused = "hi";\n    return "bye";\n}`;
+        const d = doc(src);
+        const line1 = src.split("\n")[1]!;
+        const col = line1.indexOf("unused");
+        const refs = computeReferences(d, { line: 1, character: col }, false);
+        expect(refs).not.toBeNull();
+        expect(refs!.length).toBe(0);
     });
 });
 
@@ -132,6 +176,28 @@ describe("completion", () => {
             expect(items.map((i) => i.label)).not.toContain(kw);
         }
     });
+
+    it("returns no completions when the prefix matches no task namespace", () => {
+        const src = `workflow w(): string {\n    return unknown.call();\n}`;
+        const d = doc(src);
+        const col = src.split("\n")[1]!.indexOf(".") + 1;
+        const items = computeCompletions(d, schemas, { line: 1, character: col });
+        expect(items.length).toBe(0);
+    });
+
+    it("includes all task names when pos is undefined", () => {
+        const items = computeCompletions(doc(), schemas);
+        const labels = items.map((i) => i.label);
+        expect(labels).toContain("shell.exec");
+        expect(labels).toContain("string.join");
+        expect(labels).toContain("list.length");
+    });
+
+    it("deduplicates symbol names that appear in multiple scopes", () => {
+        const src = `workflow w(x: string): string {\n    if (true) {\n        const x = "inner";\n        return x;\n    }\n    return x;\n}`;
+        const items = computeCompletions(doc(src), schemas);
+        expect(items.filter((i) => i.label === "x").length).toBe(1);
+    });
 });
 
 describe("semantic tokens", () => {
@@ -149,5 +215,26 @@ describe("semantic tokens", () => {
         expect(tokenTypes.has(0)).toBe(true);
         expect(tokenTypes.has(1)).toBe(true);
         expect(tokenTypes.has(2)).toBe(true);
+    });
+
+    it("delta-decoded positions are non-decreasing in (line, col)", () => {
+        const src = `workflow w(a: string, b: number): string {\n    const x = a;\n    return string.join([x, b], ",");\n}`;
+        const tokens = computeSemanticTokens(doc(src));
+        const data = tokens.data;
+        let prevLine = 0;
+        let prevChar = 0;
+        for (let i = 0; i < data.length; i += 5) {
+            const dLine = data[i]!;
+            const dChar = data[i + 1]!;
+            const line = prevLine + dLine;
+            const char = dLine === 0 ? prevChar + dChar : dChar;
+            if (line === prevLine) {
+                expect(char).toBeGreaterThanOrEqual(prevChar);
+            } else {
+                expect(line).toBeGreaterThan(prevLine);
+            }
+            prevLine = line;
+            prevChar = char;
+        }
     });
 });

@@ -100,4 +100,32 @@ describe("rename", () => {
         // 1 decl + 1 ref
         expect(edits.length).toBe(2);
     });
+
+    it("rejects an empty new name", () => {
+        const edit = computeRename(doc(SRC), { line: 0, character: 11 }, "");
+        expect(edit).toBeNull();
+    });
+
+    it("accepts a single underscore as a valid identifier", () => {
+        const edit = computeRename(doc(SRC), { line: 0, character: 11 }, "_");
+        expect(edit).not.toBeNull();
+    });
+
+    it("rejects a name containing a space", () => {
+        const edit = computeRename(
+            doc(SRC),
+            { line: 0, character: 11 },
+            "my name",
+        );
+        expect(edit).toBeNull();
+    });
+
+    it("rejects a name starting with a digit", () => {
+        const edit = computeRename(
+            doc(SRC),
+            { line: 0, character: 11 },
+            "2fast",
+        );
+        expect(edit).toBeNull();
+    });
 });

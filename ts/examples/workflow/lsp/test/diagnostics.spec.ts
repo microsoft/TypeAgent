@@ -52,4 +52,11 @@ workflow w(): string {
             true,
         );
     });
+
+    it("returns more than one diagnostic for a deeply broken source", () => {
+        // Missing closing brace and stray token produce multiple parse errors.
+        const src = `workflow broken(x: `;
+        const diags = computeDiagnostics(src, schemas);
+        expect(diags.length).toBeGreaterThan(1);
+    });
 });
