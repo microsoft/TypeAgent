@@ -366,3 +366,32 @@ any future code that adds templates living on a scope (annotations,
 guards, etc.) should pass them through the same hook. If we forget,
 we'll see the same "ref unresolved at runtime, no validator error"
 class of bug.
+
+---
+
+### Phase 2 promote summary
+
+**Phase 2 = "DSL emitter rewrite + engine runner alignment".** Closed
+2025-XX with all three test suites green:
+
+- model: 148 pass (+ 1 skip — see deferred items).
+- dsl: 634 pass.
+- engine: 199 pass.
+
+**Reviews:**
+- Code review r1 → fixed branch arm `state` to be shallow-copy.
+- Code review r2 → deferred literal-`continueWhen:true` flagging.
+- Test gap r1 → added `buildOutputOnlyArm` and `filter_check.next`
+  structural emitter tests.
+- Test gap r2 → added skipped test for `continueWhen` reference
+  validation (real validator gap surfaced); deferred loop body
+  state isolation runtime test.
+
+**Open soundness gaps** (tracked in `0010-review-deferred.md`):
+1. Deep-object mutation of inherited loop/arm state.
+2. Literal `continueWhen: true` not flagged.
+3. `continueWhen` template references not name-resolved.
+4. Loop body state shallow-copy isolation has no runtime test.
+
+Phase 3 (non-DSL stdlib documentation, straggler search, decision
+log audit) can now proceed.
