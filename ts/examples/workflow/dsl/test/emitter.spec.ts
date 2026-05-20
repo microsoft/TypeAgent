@@ -572,7 +572,7 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        // Decision 0010: default is now a BranchArm sub-scope (no-op).
+        // Default arm is a BranchArm sub-scope (no-op).
         expect(checkNode.default).toBeDefined();
 
         const trueArm = checkNode.cases["true"] as unknown as {
@@ -624,7 +624,7 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        // Decision 0010: default is now a BranchArm sub-scope (no-op).
+        // Default arm is a BranchArm sub-scope (no-op).
         expect(checkNode.default).toBeDefined();
 
         const trueArm = checkNode.cases["true"] as unknown as {
@@ -983,7 +983,7 @@ describe("Emitter", () => {
         // (skip this test - covered by the parser)
     });
 
-    // ---- Decision 0010 structural assertions ----
+    // ---- BranchArm sub-scope structural assertions ----
 
     // Both arms of an if/else that contain only a return statement
     // must compile to a single-task noop arm whose output template
