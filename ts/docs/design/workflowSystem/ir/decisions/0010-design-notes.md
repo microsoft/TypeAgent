@@ -388,7 +388,10 @@ class of bug.
   state isolation runtime test.
 
 **Open soundness gaps:**
-1. Deep-object mutation of inherited loop/arm state.
+1. Task inputs are not deeply immutable — `resolveTemplate` returns live
+   references for object/array values; a mutating task silently bleeds
+   changes back into scope. Design options tracked in
+   `ir/future/task-input-immutability.md`.
 2. Literal `continueWhen: true` not flagged — design options tracked in
    `ir/future/loop-termination-detection.md`.
 3. Loop body state shallow-copy isolation has no runtime test.
