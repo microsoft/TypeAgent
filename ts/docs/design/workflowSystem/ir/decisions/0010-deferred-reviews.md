@@ -64,30 +64,6 @@ are pure with respect to their inputs" convention. At that point
 either deep-copy on hand-off or add a validator pass that flags
 `$from:state` references in arms whose nodes touch mutating tasks.
 
-### 2026-05-20 - Validator does not flag literal `continueWhen: true`
-
-Source: phase 2 code review round 2
-Phase: 2
-Finding: The validator confirms `continueWhen` is present and
-boolean-typed but does not flag a literal `true`. A loop with
-`continueWhen: true` and no body-internal exit will iterate up to
-`maxIterations` (default 10,000) before terminating.
-Files / sections: `ts/examples/workflow/model/src/validate.ts`
-loop validation block.
-Severity (reviewer's assessment): low
-Deferral reason: cost vs value
-Reasoning: `maxIterations` is the documented safety valve;
-literal-true is occasionally legitimate (e.g. a polling loop with
-`onError` as the exit path). Flagging it would require either an
-exception for `onError`-using loops or a separate
-"is this loop reachable to a terminal" pass, neither of which is
-on the critical path for 0010 landing.
-Follow-up pointer: design options and open questions are tracked
-in [`../future/loop-termination-detection.md`](../future/loop-termination-detection.md).
-Re-open on a second occurrence of an accidentally-infinite loop
-in user code, a proof-of-concept for a bounded-loop variant, or
-a redesign of `maxIterations` semantics.
-
 ### 2026-05-20 - `continueWhen` template references not name-resolved
 
 Source: phase 2 test-gap review round 2
@@ -116,6 +92,11 @@ Follow-up pointer: separate task to add scope-aware name
 resolution to the template validator across all template
 positions. When that lands, remove `.skip` and add equivalent
 coverage for `iterateState`, branch `selector`, and arm `inputs`.
+**Resolution (2026-05-20):** Fixed in the same session — the
+deferral reasoning was incorrect. The targeted fix to validate
+`$from:scope` and `$from:state` refs in `continueWhen` was
+two-liners per ref-kind, not a wide refactor. Added to the loop
+validator block in `validate.ts`; `.skip` removed; 149/149 pass.
 
 ### 2026-05-20 - Loop body state shallow-copy isolation has no runtime test
 

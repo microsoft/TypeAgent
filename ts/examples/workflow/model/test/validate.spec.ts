@@ -4380,15 +4380,11 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        // Decision 0010: continueWhen is a Template resolved against
-        // body scope on each iteration; ideally the validator would
-        // reject references to non-existent names. Today the validator
-        // only enforces presence and (where typed) primitive/boolean
-        // shape. Deferred — the gap is tracked in
-        // ir/future/loop-termination-detection.md and the broader
-        // template name-resolution work. When that is implemented this
-        // test should be enabled and pass.
-        it.skip("rejects continueWhen referencing an unknown scope name", () => {
+        // Decision 0010: continueWhen is a Template resolved against the body
+        // scope on each iteration. The validator checks $from:scope and
+        // $from:state refs in continueWhen against the body's binding map and
+        // the loop's declared state variables respectively.
+        it("rejects continueWhen referencing an unknown scope name", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: {

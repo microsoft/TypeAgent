@@ -1338,6 +1338,43 @@ function validateScope(
                         `resolves to a boolean in the body scope at body ` +
                         `natural completion). Per decision 0010.`,
                 });
+            } else {
+                // Validate that $from:scope refs in continueWhen resolve to
+                // names bound in the body scope.
+                const bodyBindings = buildBindingMap(node.body.nodes);
+                const cwScopeRefs = collectTemplateRefs(
+                    node.continueWhen,
+                    `${path}.continueWhen`,
+                    "scope",
+                );
+                for (const ref of cwScopeRefs) {
+                    if (!bodyBindings.has(ref.name)) {
+                        errors.push({
+                            path: ref.templatePath,
+                            message:
+                                `$from "scope", name "${ref.name}": no node ` +
+                                `in the loop body binds "${ref.name}".`,
+                        });
+                    }
+                }
+                // Validate that $from:state refs in continueWhen resolve to
+                // declared state variables.
+                const stateNames = new Set(Object.keys(node.state ?? {}));
+                const cwStateRefs = collectTemplateRefs(
+                    node.continueWhen,
+                    `${path}.continueWhen`,
+                    "state",
+                );
+                for (const ref of cwStateRefs) {
+                    if (!stateNames.has(ref.name)) {
+                        errors.push({
+                            path: ref.templatePath,
+                            message:
+                                `$from "state", name "${ref.name}": no state ` +
+                                `variable "${ref.name}" is declared on this loop.`,
+                        });
+                    }
+                }
             }
 
             if (
