@@ -42,7 +42,11 @@ type BridgeResponse = {
 
 class VisualStudioBridge {
     private client: WebSocket | undefined;
-    private pending = new Map<string, (r: BridgeResponse) => void>();
+    private pending = new Map<
+        string,
+        { resolve: (r: BridgeResponse) => void; timer: NodeJS.Timeout }
+    >();
+    private readonly sendTimeoutMs: number;
 
     /**
      * @param wss   the underlying ws server, already bound and listening.
@@ -57,8 +61,11 @@ class VisualStudioBridge {
         private readonly wss: WebSocketServer,
         public readonly port: number,
     ) {
+        this.sendTimeoutMs = resolveSendTimeoutMs();
         this.setupHandlers();
-        debug(`VisualStudioBridge listening on port ${port}`);
+        debug(
+            `VisualStudioBridge listening on port ${port} (sendTimeoutMs=${this.sendTimeoutMs})`,
+        );
     }
 
     /**
@@ -75,6 +82,13 @@ class VisualStudioBridge {
         return new Promise((resolve, reject) => {
             const wss = new WebSocketServer({
                 port,
+                // Bind loopback-only so the bridge isn't reachable from
+                // other hosts on the LAN. The Origin allowlist below
+                // accepts requests with no Origin header (the C#
+                // ClientWebSocket doesn't send one), so without an
+                // explicit loopback bind a remote attacker on the same
+                // network could otherwise drive EnvDTE actions.
+                host: "127.0.0.1",
                 // Gate every upgrade on Origin so a random web page on
                 // the same host can't dial the ephemeral port assigned
                 // by the OS. `verifyClient` runs synchronously before
@@ -139,20 +153,47 @@ class VisualStudioBridge {
                     const response = JSON.parse(
                         data.toString(),
                     ) as BridgeResponse;
-                    this.pending.get(response.id)?.(response);
-                    this.pending.delete(response.id);
+                    const entry = this.pending.get(response.id);
+                    if (entry !== undefined) {
+                        clearTimeout(entry.timer);
+                        this.pending.delete(response.id);
+                        entry.resolve(response);
+                    }
                 } catch (err) {
                     debug("Failed to parse plugin message:", err);
                 }
             });
-            ws.on("close", () => {
-                debug("host plugin disconnected");
+            const onDisconnect = (reason: string) => {
+                debug(`host plugin disconnected (${reason})`);
                 this.client = undefined;
-            });
+                // Reject every in-flight send so callers don't hang
+                // forever and the map can't grow unbounded across
+                // reconnects. `stop()` runs the same cleanup; either
+                // path is sufficient.
+                this.failPending(
+                    new Error(`Host plugin disconnected: ${reason}`),
+                );
+            };
+            ws.on("close", () => onDisconnect("close"));
             ws.on("error", (err) => {
                 debug("host plugin socket error:", err);
+                onDisconnect(`error: ${err.message}`);
             });
         });
+    }
+
+    private failPending(error: Error): void {
+        if (this.pending.size === 0) return;
+        const entries = Array.from(this.pending.values());
+        this.pending.clear();
+        for (const entry of entries) {
+            clearTimeout(entry.timer);
+            entry.resolve({
+                id: "",
+                success: false,
+                error: error.message,
+            });
+        }
     }
 
     /**
@@ -167,6 +208,9 @@ class VisualStudioBridge {
             this.client.close();
         }
         this.client = undefined;
+        // Reject any in-flight sends before the server closes; otherwise
+        // callers awaiting `send()` hang forever after a manual disable.
+        this.failPending(new Error("VisualStudioBridge stopped"));
         return new Promise((resolve) => this.wss.close(() => resolve()));
     }
 
@@ -176,18 +220,40 @@ class VisualStudioBridge {
         }
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         return new Promise((resolve, reject) => {
-            this.pending.set(id, (res) =>
-                res.success
-                    ? resolve(res.result)
-                    : reject(new Error(res.error)),
-            );
-            this.client!.send(
-                JSON.stringify({
-                    id,
-                    actionName,
-                    parameters,
-                } satisfies BridgeRequest),
-            );
+            // Timeout so a plugin that accepts the WS frame but never
+            // replies (deadlock, EnvDTE hang, killed mid-action) doesn't
+            // wedge the caller. The pending entry is cleared either by
+            // the response handler or this timer — whichever fires
+            // first.
+            const timer = setTimeout(() => {
+                if (this.pending.delete(id)) {
+                    reject(
+                        new Error(
+                            `VS bridge action '${actionName}' timed out after ${this.sendTimeoutMs}ms`,
+                        ),
+                    );
+                }
+            }, this.sendTimeoutMs);
+            this.pending.set(id, {
+                timer,
+                resolve: (res) =>
+                    res.success
+                        ? resolve(res.result)
+                        : reject(new Error(res.error)),
+            });
+            try {
+                this.client!.send(
+                    JSON.stringify({
+                        id,
+                        actionName,
+                        parameters,
+                    } satisfies BridgeRequest),
+                );
+            } catch (err) {
+                clearTimeout(timer);
+                this.pending.delete(id);
+                reject(err);
+            }
         });
     }
 
@@ -197,6 +263,25 @@ class VisualStudioBridge {
 }
 
 // ---- Port resolution ---------------------------------------------------
+
+const DEFAULT_SEND_TIMEOUT_MS = 30_000;
+
+// Per-action send() timeout. EnvDTE actions are typically subsecond,
+// but a few (build/run, attach-to-process) can run for tens of seconds
+// on a cold solution. Default 30s leaves headroom; override via env for
+// debugging long-running actions.
+function resolveSendTimeoutMs(): number {
+    const raw = process.env["VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS"];
+    if (raw === undefined || raw === "") return DEFAULT_SEND_TIMEOUT_MS;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+        console.warn(
+            `Ignoring malformed VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS=${raw}; using ${DEFAULT_SEND_TIMEOUT_MS}ms`,
+        );
+        return DEFAULT_SEND_TIMEOUT_MS;
+    }
+    return n;
+}
 
 // Optional fixed-port override. Useful when launching the Visual Studio
 // extension in a debugger and you want both sides on a known port —
