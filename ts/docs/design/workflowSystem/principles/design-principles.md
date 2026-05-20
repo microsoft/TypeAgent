@@ -379,48 +379,33 @@ This is not a workaround or alternative expression. The cross-scope reference is
 
 ## P5: A reader of the IR can predict engine behavior without knowing engine conventions
 
-> **Historical note (decision 0010):** This section reasons about
-> loop control using `@iterate` / `@exit` sentinels, which was the
-> shape of v0.1 loops when P5 was written. Decision 0010 made two
-> coupled changes that finished the WorkflowScope unification: (1)
-> branch arms became full `WorkflowScope`s with their own
-> `output` / `outputSchema` (replacing the earlier flat list of
-> node IDs that converged through an implicit merge node), and (2)
-> loop sentinels were retired in favor of a boolean `continueWhen`
-> template evaluated at body completion. The P5 reasoning is
-> unchanged — the sentinels were one concrete way to make body
-> re-entry locally predictable, and `continueWhen` is the
-> replacement that achieves the same predictability without an
-> auxiliary sentinel namespace. Scenarios 37 and 41 below should
-> be read with that substitution in mind.
-
 Someone reading the IR should be able to predict what the engine will do, without needing to know engine defaults, conventions, or inference rules. The test isn't "is there implicit behavior?" but "would a reader be surprised?"
 
 "Engine behavior" has two axes the reader should be able to predict from the IR alone:
 
-- **What runs when.** Control-flow shape, transitions, error routing, sentinels, exhaustiveness.
+- **What runs when.** Control-flow shape, transitions, error routing, iteration conditions, exhaustiveness.
 - **What stays live.** Which values the engine must keep available after a node completes, and for how long. A reader should be able to look at a node and predict, locally, whether its output may be released when the node finishes or must be retained for later consumers.
 
 Both axes apply the same surprise test: would a reader who understands the general concepts (graphs, tasks, loops, branches, value lifetimes) but doesn't know this engine's conventions mispredict the behavior?
 
 ### Scenarios it ENABLES
 
-**37. No surprise re-entry.** A reader sees `increment -> write` in a loop body. In the cyclic model, this means "go back to write and re-execute." But is that obvious? Or does the reader need to know that back-edges cause re-execution? With `@iterate`, the reader sees an explicit sentinel: "go back to the loop entry." No knowledge of back-edge semantics needed.
+**37. No surprise iteration decision.** A reader sees a loop whose body terminates with `next: null` on its `evaluate` node. Does the loop run once and stop, or iterate? In a model where the engine inferred iteration from some flag inside the body (e.g., an output named `done`, a node that didn't run), the reader would have to know which signal the engine watches. With an explicit `continueWhen` reference at the loop's boundary, the reader sees exactly which body-scope value the engine evaluates after each body completion to decide whether to re-enter. The iteration condition is a single named reference at the boundary, not a convention inside body nodes.
 
 **38. No surprise pipeline wiring.** Pipeline mode (omitting explicit data wiring) means "wire the predecessor's output to my input." A reader after a branch merge would need to know the engine's predecessor selection rule. With explicit data wiring, the reader sees exactly which data flows where.
 
-**39. Terminal node behavior is clear.** In the top-level scope, a node without `next` is a terminal - workflow ends. Unsurprising, universal convention. In a loop body, a node without `next` is... what? The reader would need to know the engine's convention (re-enter? exit? error?). This is surprising. Therefore body nodes should have explicit `next`.
+**39. Terminal node behavior is clear.** A node without `next` is a terminal: the enclosing scope completes via this node. Unsurprising, universal convention, and uniform across every `WorkflowScope` embedding (top-level, loop body, fork branch, branch arm). The reader does not have to learn a different rule for body nodes vs. top-level nodes.
 
 **40. Error handling is predictable.** Missing `onError` means "if this node fails, the run fails." This is the unsurprising default - failure propagates. No convention knowledge needed.
 
 ### Patterns requiring alternative expression
 
-**41. Implicit loop body re-entry.**
+**41. Implicit iteration condition.**
 
-- _Intent:_ A body node without `next` implicitly re-enters the loop at `entry`. Less syntax for simple loop bodies.
-- _Why P5 requires a different expression:_ "Missing `next` in a loop body means implicit re-entry at the loop entry" requires knowing the engine's convention. A reader seeing no `next` could reasonably expect exit, error, or re-entry. The behavior is ambiguous without engine knowledge.
-- _Alternative:_ Use explicit `next: "@iterate"` to re-enter, `next: "@exit"` to exit. Every body path terminates at a declared sentinel or another body node.
-- _Tradeoff:_ More syntax per body node. But the reader never has to guess: the IR says what happens. The DSL can default missing `next` in loop bodies to `@iterate` (a reasonable authoring convention), compiling to the explicit form.
+- _Intent:_ The engine implicitly re-enters the loop body until some signal inside the body (a missing output, a node that didn't run, a sentinel value) tells it to stop. Less syntax than declaring an exit condition at the loop boundary.
+- _Why P5 requires a different expression:_ "Iterate until something inside the body signals stop" requires the reader to know what the engine watches and what counts as a stop signal. A reader seeing a loop body cannot predict, locally, what determines another iteration; they have to know an engine convention.
+- _Alternative:_ The loop carries an explicit `continueWhen` template referencing a boolean value in the body scope, evaluated after the body reaches natural completion. The reader sees, at the loop boundary, exactly which value drives iteration.
+- _Tradeoff:_ One required reference per loop. In return, the iteration decision is local to the loop boundary, body nodes look like any other `WorkflowScope` nodes (no special back-edges, no sentinel namespace), and the reader never has to guess. The DSL can synthesize `continueWhen` from authoring forms like `while (cond) { ... }` or `attempts(N, ...)`.
 
 **42. Inferred node types.**
 
@@ -447,23 +432,22 @@ P5 governs what a reader can predict from the IR. Task internals are opaque (see
 
 P5 does not rule out any computational capability. Every computation expressible with implicit conventions is also expressible with explicit declarations. The principle constrains _how behavior is communicated_, not _what behavior is possible_.
 
-What P5 genuinely prevents is **surprise**: an IR where a reader who understands the general concepts (graphs, tasks, loops, branches) but doesn't know this specific engine's conventions would mispredict the behavior. With explicit sentinels, required node type discriminants, and required data wiring, the IR says what it does.
+What P5 genuinely prevents is **surprise**: an IR where a reader who understands the general concepts (graphs, tasks, loops, branches) but doesn't know this specific engine's conventions would mispredict the behavior. With explicit iteration conditions, required node type discriminants, and required data wiring, the IR says what it does.
 
 ### Where predictability does NOT require explicitness
 
-| Case                                                 | Predictable without engine knowledge?             | Explicit required?                      |
-| ---------------------------------------------------- | ------------------------------------------------- | --------------------------------------- |
-| Missing `onError` -> run fails                       | Yes - failure propagation is universal            | No                                      |
-| Missing `next` in top-level -> terminal              | Yes - "no next step" means done                   | No                                      |
-| `maxIterations` default of 1000                      | Debatable - but safety limits are standard        | No (but documenting it is important)    |
-| Missing output declaration on loop -> no output      | Yes - "nothing declared" means nothing produced   | No                                      |
-| Missing `next` in loop body -> ???                   | No - could mean exit, re-enter, or error          | **Yes - must be explicit**              |
-| Pipeline mode -> predecessor output                  | No - which predecessor?                           | **Yes - must use explicit data wiring** |
-| Lifetime of a node's output -> released or retained? | No - depends on what other nodes may reference it | **Yes - publication must be declared**  |
+| Case                                                 | Predictable without engine knowledge?                                          | Explicit required?                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- |
+| Missing `onError` -> run fails                       | Yes - failure propagation is universal                                         | No                                             |
+| Missing `next` -> scope completes via this node      | Yes - same rule in every scope (top-level, loop body, branch arm, fork branch) | No                                             |
+| `maxIterations` default of 1000                      | Debatable - but safety limits are standard                                     | No (but documenting it is important)           |
+| Missing output declaration on loop -> no output      | Yes - "nothing declared" means nothing produced                                | No                                             |
+| Loop iteration decision                              | No - the reader would have to know what the engine watches inside the body     | **Yes - loop carries explicit `continueWhen`** |
+| Pipeline mode -> predecessor output                  | No - which predecessor?                                                        | **Yes - must use explicit data wiring**        |
+| Lifetime of a node's output -> released or retained? | No - depends on what other nodes may reference it                              | **Yes - publication must be declared**         |
 
 ### What this principle does NOT resolve alone
 
-- Whether loop bodies should be DAGs (both back-edges and `@iterate` can be made predictable with documentation; the preference for `@iterate` is stronger under P5 but not absolute).
 - Data flow mechanism choices (e.g., how mutations are declared) - multiple approaches are predictable to a reader.
 - Schema validation details - a reader doesn't need to know validation happens to predict behavior.
 
