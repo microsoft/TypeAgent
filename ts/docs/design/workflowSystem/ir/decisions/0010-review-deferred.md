@@ -36,6 +36,60 @@ point add a validator pass that flags constant-`true` `continueWhen`
 unless the body has a structural exit (throw, onError-terminating
 arm, etc.).
 
+## Phase 2 - test gap review round 2
+
+### `continueWhen` template references not validated
+
+**Raised by:** test-gap subagent (Phase 2 round 2).
+
+**Summary:** The validator confirms that `continueWhen` is present
+on a loop node, but it does not walk the Template to confirm that
+`$from:scope` (or `$from:state`) references resolve to names that
+actually exist in the body scope. A test that constructs a loop
+with `continueWhen: { $from:"scope", name:"doesNotExist" }`
+currently passes validation. The test is checked in as `.skip` in
+`ts/examples/workflow/model/test/validate.spec.ts` (id: "rejects
+continueWhen referencing an unknown scope name").
+
+**Why deferred:** `continueWhen` is one of several
+node-adjacent templates (alongside `iterateState` values,
+`output` templates, branch `selector`, etc.) that today are
+type-checked via `resolveTemplateType` but not name-resolved
+against scope. A focused fix should add name-resolution for all of
+them in one pass, not just `continueWhen`. Doing that is out of
+scope for the 0010 landing; runtime will currently fail on the
+first iteration with an unresolved-reference error, which is
+loud-but-late.
+
+**What would re-open this:** A separate task to add scope-aware
+name resolution to the template validator. When that lands, remove
+the `.skip` on the test and add equivalent coverage for
+`iterateState`, branch `selector`, and arm `inputs`.
+
+### Loop body state shallow-copy isolation runtime test
+
+**Raised by:** test-gap subagent (Phase 2 round 2).
+
+**Summary:** `executeLoop` shallow-copies `state` into the body
+scope at each iteration, which is the symmetric counterpart to
+`executeBranch`'s shallow copy into each arm. There is no direct
+runtime test that asserts a top-level state reassignment made by
+iteration N is invisible to iteration N+1.
+
+**Why deferred:** All current standard-library tasks are
+non-mutating with respect to scope (they bind a fresh value via
+`bind`, not by writing into state). Exercising the guarantee
+requires a custom mutating task fixture; that fixture has no other
+caller and would carry its own maintenance cost. The runner
+implementation is small and the guarantee is asserted in the
+code-review-deferred entry above.
+
+**What would re-open this:** Either a new built-in task that
+exposes a state-write capability, or a runtime regression that
+removes the per-iteration shallow copy. At that point add a
+fixture task `state.set(name, value)` and a two-iteration loop
+that proves iteration 2 does not observe iteration 1's writes.
+
 ## Phase 2 - code review round 1
 
 ### Deep-object mutation of inherited loop state

@@ -4380,6 +4380,44 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
+        // Decision 0010: continueWhen is a Template resolved against
+        // body scope on each iteration; ideally the validator would
+        // reject references to non-existent names. Today the validator
+        // only enforces presence and (where typed) primitive/boolean
+        // shape. Deferred — see 0010-review-deferred.md (phase 2 test
+        // gap r2 "continueWhen reference resolution"). When that is
+        // implemented this test should be enabled and pass.
+        it.skip("rejects continueWhen referencing an unknown scope name", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {},
+                        iterateState: {},
+                        continueWhen: {
+                            $from: "scope",
+                            name: "doesNotExist",
+                        } as any,
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("doesNotExist")),
+            ).toBe(true);
+        });
+
         it("rejects loop missing continueWhen entirely", () => {
             const ir = makeMinimalIR({
                 nodes: {
