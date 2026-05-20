@@ -2381,6 +2381,11 @@ export class Emitter {
         // captureOuterRefs also rewrites refs in the output template,
         // so e.g. `return x` in an else arm correctly threads `x` through
         // arm.inputs as $from:"input".
+        //
+        // MAINTENANCE NOTE: if any future template is added to a scope object
+        // (e.g. annotations, guards, preconditions) it must also be passed
+        // through extraVisit here. Omitting it produces an unresolvable ref
+        // at runtime with no validator error.
         const outer = this.captureOuterRefs(childScope, existingInputNames, {
             extraVisit: output !== undefined ? [output] : [],
         });

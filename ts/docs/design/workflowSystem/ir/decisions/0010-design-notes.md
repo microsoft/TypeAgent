@@ -46,39 +46,6 @@ Revisit when: <trigger that would justify reopening>
 
 
 
-
-### Output templates participate in arm capture
-
-**Category:** Non-obvious choice.
-
-**Phase:** 2 (DSL emitter, task 18 follow-up).
-
-**Where:** ts/examples/workflow/dsl/src/emitter.ts - `buildArmScope`,
-`captureOuterRefs` (`extraVisit` option).
-
-**Problem:** An arm scope's `output` template is set on the scope
-itself (not on any node). The first cut of `captureOuterRefs` only
-visited `scope.nodes`, so an else arm that did `return x` (where `x`
-is a workflow-level input) produced an arm with `inputs: {}` and an
-unresolvable `output: $from:"input", name:"x"`. Symptom: the else
-branch returned `undefined` at runtime.
-
-**Choice:** `captureOuterRefs` now accepts an `extraVisit` array
-that is scanned with the same rewrite logic as node inputs.
-`buildArmScope` passes the arm `output` template through this hook,
-so refs in the output are hoisted into `arm.inputs` and rewritten to
-`$from:"input"`. We also added every node's `bind` name to the local
-"do not hoist" set so branch-bind names like `updated_results` are
-not mistakenly captured as outer refs when seen from the output.
-
-**Why this is worth a re-read:** The `extraVisit` hook is generic;
-any future code that adds templates living on a scope (annotations,
-guards, etc.) should pass them through the same hook. If we forget,
-we'll see the same "ref unresolved at runtime, no validator error"
-class of bug.
-
----
-
 ### Phase 2 promote summary
 
 **Phase 2 = "DSL emitter rewrite + engine runner alignment".** Closed
