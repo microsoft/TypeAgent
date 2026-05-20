@@ -21,16 +21,11 @@ diff is the record.
 **Phase:** 1
 **Origin:** inline code review
 **Severity:** low
-**Status:** Still open (audited 2026-05-20)
-**Finding:** `pointRange(loc, length=1)` does not clamp `end.character`
-to the actual line length when the diagnostic location is at end-of-line
-or end-of-file. Most LSP clients (including VS Code) tolerate this and
-render the squiggle to end-of-line, but the spec allows clients to
-reject out-of-range positions.
-**Resolution:** Acceptable for Phase 1. The original plan was for the
-Phase 2 symbol-resolver pass to widen ranges using real token spans;
-that did not happen. `util/position.ts:40` remains unchanged. Low
-priority follow-up: clamp `end.character` to the document line length.
+**Status:** Resolved (2026-05-20) — `CompileError` now carries `length` threaded
+from all error sources (lex/parse/typecheck/emit). `diagnostics.ts` passes
+`error.length` to `pointRange` so squiggles span real token widths.
+The `pointRange` EOF-clamp concern is moot: errors at EOF will have a real
+token length (e.g. length of the unterminated literal consumed so far).
 
 ---
 
@@ -83,13 +78,11 @@ re-implement that. Revisit if user feedback wants member-aware hover.
 
 **Phase:** 4
 **Origin:** scope vs. plan table row 11 (rename)
-**Status:** Still open (DSL-team follow-up)
-**Resolution:** The `locateName` text scan in `symbolResolver.ts` is a
-pragmatic fix for recording precise name locations on const /
-destructured-const definitions. The cleaner solution is to extend the
-DSL AST with a separate `nameLoc` field on `Const` /
-`DestructuringConst` so the LSP doesn't need the document text to
-compute symbol ranges. Filed as a follow-up for the DSL team.
+**Status:** Resolved (2026-05-20) — `ConstStatement` gains `nameLoc` and
+`DestructuringConst` gains `nameLocs[]` directly in the DSL AST, populated
+by the parser from the identifier token. `symbolResolver.ts` now reads these
+fields directly; `locateName()` text-scan deleted; `buildSymbolTable()` no
+longer requires the source text.
 
 ---
 
@@ -115,14 +108,10 @@ compute symbol ranges. Filed as a follow-up for the DSL team.
 
 ---
 
-## 2026-05-20 — Open follow-ups snapshot
+## 2026-05-20 — Open follow-ups snapshot (updated)
 
-After pruning resolved entries, the live follow-ups are:
-
-| #   | Item                                                   | Notes                               |
-| --- | ------------------------------------------------------ | ----------------------------------- |
-| 1   | `pointRange` line-length clamp                         | `util/position.ts:40`; low priority |
-| 2   | Dotted-name hover beyond head segment                  | only if user feedback requests it   |
-| 3   | DSL AST `nameLoc` field on Const / DestructuringConst  | cross-team ask                      |
-| 4   | Graph preview webview + `elkjs` bundling               | needs GUI dev host                  |
-| 5   | Manual smoke-test walkthrough of `lsp-manual-tests.md` | needs GUI VS Code session           |
+| #   | Item                                                   | Notes                             |
+| --- | ------------------------------------------------------ | --------------------------------- |
+| 1   | Dotted-name hover beyond head segment                  | only if user feedback requests it |
+| 2   | Graph preview webview + `elkjs` bundling               | needs GUI dev host                |
+| 3   | Manual smoke-test walkthrough of `lsp-manual-tests.md` | needs GUI VS Code session         |
