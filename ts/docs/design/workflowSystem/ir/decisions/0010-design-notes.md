@@ -387,7 +387,7 @@ class of bug.
   validation (real validator gap surfaced); deferred loop body
   state isolation runtime test.
 
-**Open soundness gaps** (tracked in `0010-review-deferred.md`):
+**Open soundness gaps** (tracked in `0010-deferred-reviews.md`):
 1. Deep-object mutation of inherited loop/arm state.
 2. Literal `continueWhen: true` not flagged.
 3. `continueWhen` template references not name-resolved.
