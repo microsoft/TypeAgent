@@ -27,25 +27,22 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
     ///       "message": { "type": "invokeResult", "callId": N,
     ///                    "result": { "port": &lt;int|null&gt; } } }
     ///
-    /// Returns the port on success, or null when the agent isn't currently
-    /// registered (caller should retry with backoff). Throws on transport
-    /// failure so the outer reconnect loop can apply its own retry policy.
+    /// Returns the discovered port, or null when the agent isn't yet
+    /// registered with the agent-server (transient — caller should retry).
+    /// Throws on transport failure so the outer reconnect loop can apply
+    /// its own retry/backoff. There is intentionally no hardcoded fallback
+    /// port — the migrated TS clients (browser, code, coda) all return
+    /// "undefined" on discovery failure and rely on the reconnect loop;
+    /// dialing a stale well-known port would just connect to nothing.
     /// </summary>
     internal static class BridgeDiscovery
     {
-        // Env var read on every resolve so users can flip behavior without
+        // Read on every resolve so users can flip behavior without
         // restarting the IDE between debugging sessions.
         private const string AgentServerPortEnv = "AGENT_SERVER_PORT";
-        private const string UseDiscoveryEnv = "TYPEAGENT_VS_USE_DISCOVERY";
-        private const string FallbackPortEnv = "TYPEAGENT_VS_FALLBACK_PORT";
 
         // Must match AGENT_SERVER_DEFAULT_PORT in agentServer/protocol.
         private const int DefaultAgentServerPort = 8999;
-
-        // Hardcoded fallback when discovery is disabled or fails before the
-        // agent has registered. Matches the pre-discovery hardcoded port —
-        // ports 5678 + 5679 are taken by the Excel agent.
-        private const int DefaultFallbackBridgePort = 5680;
 
         // Names this client uses to look itself up. Must match the role
         // registered by visualStudioActionHandler.ts.
@@ -53,43 +50,25 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
         private const string Role = "default";
 
         /// <summary>
-        /// Resolve the bridge port. Returns the discovered port, or the
-        /// fallback when discovery is disabled / unreachable / returned
-        /// null. Never throws — callers expect a usable port.
+        /// Resolve the bridge port via discovery. Returns the discovered
+        /// port, or null when the agent has not yet registered (transient
+        /// — caller should retry on its reconnect loop).
+        /// Throws on transport failure (agent-server unreachable, timeout,
+        /// malformed response) so the caller can log and retry.
         /// </summary>
-        public static async Task<int> ResolveBridgePortAsync(CancellationToken cancellation)
+        public static async Task<int?> ResolveBridgePortAsync(CancellationToken cancellation)
         {
-            int fallback = GetFallbackPort();
-            if (!IsDiscoveryEnabled())
-            {
-                Debug.WriteLine($"[TypeAgent] Discovery disabled; using fallback port {fallback}");
-                return fallback;
-            }
             int agentServerPort = GetAgentServerPort();
-            try
+            int? discovered = await LookupPortAsync(agentServerPort, cancellation).ConfigureAwait(false);
+            if (discovered is int p)
             {
-                int? discovered = await LookupPortAsync(agentServerPort, cancellation).ConfigureAwait(false);
-                if (discovered is int p)
-                {
-                    Debug.WriteLine($"[TypeAgent] Discovery resolved bridge port {p}");
-                    return p;
-                }
-                Debug.WriteLine($"[TypeAgent] Discovery returned null for ({AgentName}, {Role}); using fallback {fallback}");
-                return fallback;
+                Debug.WriteLine($"[TypeAgent] Discovery resolved bridge port {p}");
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine($"[TypeAgent] Discovery failed ({ex.Message}); using fallback port {fallback}");
-                return fallback;
+                Debug.WriteLine($"[TypeAgent] Discovery returned null for ({AgentName}, {Role}); agent not yet registered");
             }
-        }
-
-        private static bool IsDiscoveryEnabled()
-        {
-            // Discovery is on by default; explicit "false"/"0" disables.
-            string? raw = Environment.GetEnvironmentVariable(UseDiscoveryEnv);
-            if (string.IsNullOrEmpty(raw)) return true;
-            return !(raw!.Equals("false", StringComparison.OrdinalIgnoreCase) || raw == "0");
+            return discovered;
         }
 
         private static int GetAgentServerPort()
@@ -100,16 +79,6 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                 return p;
             }
             return DefaultAgentServerPort;
-        }
-
-        private static int GetFallbackPort()
-        {
-            string? raw = Environment.GetEnvironmentVariable(FallbackPortEnv);
-            if (int.TryParse(raw, out int p) && p > 0 && p <= 65535)
-            {
-                return p;
-            }
-            return DefaultFallbackBridgePort;
         }
 
         private static async Task<int?> LookupPortAsync(int agentServerPort, CancellationToken cancellation)

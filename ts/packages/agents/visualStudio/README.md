@@ -53,14 +53,15 @@ Two WebSocket channels:
 `AgentBridgeClient` resolves the bridge port on each connect attempt by
 calling `lookupPort("visualStudio", "default")` against the
 agent-server's discovery channel (`ws://localhost:<AGENT_SERVER_PORT>/`,
-default 8999). Knobs:
+default 8999). If discovery is unreachable or the agent isn't yet
+registered, the reconnect loop simply retries — there is no silent
+fallback to a well-known port. Knobs:
 
-| Env var                                   | Default                 | Purpose                                                                     |
-| ----------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
-| `AGENT_SERVER_PORT`                       | `8999`                  | Where the dispatcher's discovery channel is hosted.                         |
-| `TYPEAGENT_VS_USE_DISCOVERY`              | `true`                  | Set to `false`/`0` to skip discovery and use the hardcoded fallback (5680). |
-| `TYPEAGENT_VS_FALLBACK_PORT`              | `5680`                  | Port to fall back to when discovery is disabled or returns null / fails.    |
-| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_ | Pin the agent's bridge to a specific port when debugging.                   |
+| Env var                                   | Default                   | Purpose                                                                                          |
+| ----------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `AGENT_SERVER_PORT`                       | `8999`                    | Where the dispatcher's discovery channel is hosted.                                              |
+| `TYPEAGENT_VS_BRIDGE_PORT` _(C# host)_    | _(unset → use discovery)_ | Pin the C# host to dial a specific bridge port; bypasses discovery. Useful for manual debugging. |
+| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_   | Pin the agent's bridge to a specific port when debugging.                                        |
 
 ## Action Categories
 
@@ -152,8 +153,9 @@ Any use of third-party trademarks or logos are subject to those third-party's po
   could not reach the agent's action port. Confirm `visualstudio-agent` is
   enabled in the dispatcher. Check the VS **Output → Debug** pane for
   `[TypeAgent] Bridge…` lines indicating whether discovery succeeded and
-  which port was used. Set `TYPEAGENT_VS_USE_DISCOVERY=false` to force the
-  hardcoded fallback (5680) if you suspect the discovery channel itself.
+  which port was used. To bypass discovery for diagnostics (e.g. dial a
+  manually-launched bridge), set `TYPEAGENT_VS_BRIDGE_PORT` to the port
+  you want to dial.
 - **Action ran but did nothing visible.** Check the Visual Studio **Output**
   window and the agent-server logs; EnvDTE silently no-ops on some commands
   when the relevant context (e.g. an active document, an active debug session)

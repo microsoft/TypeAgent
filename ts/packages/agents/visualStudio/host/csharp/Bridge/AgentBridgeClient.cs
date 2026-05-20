@@ -21,11 +21,14 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
     /// Port discovery:
     ///   The bridge port is no longer hardcoded. On each connect attempt
     ///   we ask the agent-server's discovery channel where the
-    ///   `(visualStudio, default)` allocation lives, falling back to the
-    ///   well-known port (5680) when discovery is disabled or fails.
+    ///   `(visualStudio, default)` allocation lives. If discovery is
+    ///   unreachable or the agent isn't yet registered, the reconnect
+    ///   loop simply retries — there is no silent fallback to a
+    ///   well-known port. To pin a specific port (e.g. when running the
+    ///   bridge against a manually-launched agent), set
+    ///   `TYPEAGENT_VS_BRIDGE_PORT`; that bypasses discovery entirely.
     ///   See <see cref="BridgeDiscovery"/> for the wire protocol and the
-    ///   env-var knobs (`AGENT_SERVER_PORT`,
-    ///   `TYPEAGENT_VS_USE_DISCOVERY`, `TYPEAGENT_VS_FALLBACK_PORT`).
+    ///   `AGENT_SERVER_PORT` env-var knob.
     ///
     /// Wire format (matches packages/agents/visualStudio/src/visualStudioActionHandler.ts):
     ///   request:  { id, actionName, parameters }
@@ -33,6 +36,7 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
     /// </summary>
     internal sealed class AgentBridgeClient : IDisposable
     {
+        private const string BridgePortOverrideEnv = "TYPEAGENT_VS_BRIDGE_PORT";
         private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(3);
 
         private readonly AsyncPackage _package;
@@ -58,8 +62,19 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                     // have restarted on a different ephemeral port since the
                     // last loop iteration, and the standalone shell may have
                     // come up while we were retrying.
-                    port = await BridgeDiscovery.ResolveBridgePortAsync(linked.Token).ConfigureAwait(false);
-                    await ConnectAndReceiveAsync(port, linked.Token).ConfigureAwait(false);
+                    int? resolved = ResolvePortOverride()
+                        ?? await BridgeDiscovery.ResolveBridgePortAsync(linked.Token).ConfigureAwait(false);
+                    if (resolved is null)
+                    {
+                        // Discovery succeeded but the agent isn't registered
+                        // yet — wait one reconnect cycle and try again.
+                        Debug.WriteLine("[TypeAgent] visualStudio agent not yet registered; will retry");
+                    }
+                    else
+                    {
+                        port = resolved.Value;
+                        await ConnectAndReceiveAsync(port, linked.Token).ConfigureAwait(false);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -78,6 +93,22 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                     return;
                 }
             }
+        }
+
+        // Returns an explicit port override from `TYPEAGENT_VS_BRIDGE_PORT`,
+        // or null when the env var is unset/malformed (caller falls through
+        // to discovery). Mirrors `CODE_WEBSOCKET_HOST` from coda.
+        private static int? ResolvePortOverride()
+        {
+            string? raw = Environment.GetEnvironmentVariable(BridgePortOverrideEnv);
+            if (string.IsNullOrEmpty(raw)) return null;
+            if (int.TryParse(raw, out int p) && p > 0 && p <= 65535)
+            {
+                Debug.WriteLine($"[TypeAgent] {BridgePortOverrideEnv} override active: {p}");
+                return p;
+            }
+            Debug.WriteLine($"[TypeAgent] Ignoring malformed {BridgePortOverrideEnv}={raw}");
+            return null;
         }
 
         private async Task ConnectAndReceiveAsync(int port, CancellationToken cancellation)

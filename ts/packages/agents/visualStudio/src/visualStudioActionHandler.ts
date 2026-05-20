@@ -199,10 +199,9 @@ class VisualStudioBridge {
 // ---- Port resolution ---------------------------------------------------
 
 // Optional fixed-port override. Useful when launching the Visual Studio
-// extension in a debugger that can't easily read the discovery channel,
-// or when reproducing a port-specific issue. The extension's
-// `UseDiscovery=false` config flag uses the same default fallback (5680)
-// so the two stay in sync.
+// extension in a debugger and you want both sides on a known port —
+// pair this with `TYPEAGENT_VS_BRIDGE_PORT=<same port>` on the C# host
+// to bypass discovery on both ends.
 //
 // Malformed values are warned and ignored — we fall through to the
 // OS-assigned port. If the requested port is already in use,
