@@ -21,3 +21,10 @@ export {
     getClientType,
     unregisterClient,
 } from "./protocol.js";
+
+export type {
+    QueueRequestState,
+    QueueCancelReason,
+    QueuedRequest,
+    QueueSnapshot,
+} from "./queue.js";

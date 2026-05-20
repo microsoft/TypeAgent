@@ -14,6 +14,8 @@ import type {
     DispatcherStatus,
     ProcessCommandOptions,
     PendingInteractionResponse,
+    QueuedRequest,
+    QueueSnapshot,
     RequestId,
     UserFeedbackCategory,
     UserFeedbackRating,
@@ -26,7 +28,17 @@ export type DispatcherInvokeFunctions = {
         clientRequestId?: unknown,
         attachments?: string[],
         options?: ProcessCommandOptions,
+        requestId?: string,
     ): Promise<CommandResult | undefined>;
+
+    submitCommand(
+        command: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<QueuedRequest>;
+
+    getQueueSnapshot(): Promise<QueueSnapshot>;
 
     getDynamicDisplay(
         appAgentName: string,

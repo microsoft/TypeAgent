@@ -16,6 +16,9 @@ import {
 import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
+    QueueCancelReason,
+    QueuedRequest,
+    QueueSnapshot,
 } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
@@ -23,6 +26,7 @@ import {
     createDispatcherFromContext,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
+import { MessageQueue } from "./messageQueue.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -358,6 +362,45 @@ export async function createSharedDispatcher(
     }
 
     const dispatchers = new Map<string, Dispatcher>();
+
+    // Bare per-connection dispatcher used by the queue's drain loop when
+    // the originator has disconnected — bypasses the per-connection
+    // wrappers (DisplayLog commandComplete, etc.) but still produces
+    // setUserRequest/setDisplay broadcasts to remaining clients.
+    const bareDispatcher = createDispatcherFromContext(context, undefined);
+
+    // ===== Message queue (Phase 1) =====
+    // One queue per conversation. Replaces implicit serialization-via-
+    // commandLock with an explicit FIFO that broadcasts lifecycle
+    // events to every connected client.
+    const messageQueue = new MessageQueue(
+        (entry: QueuedRequest) => {
+            const originator = dispatchers.get(entry.originatorConnectionId);
+            return originator ?? bareDispatcher;
+        },
+        {
+            requestQueued: (entry) => {
+                broadcast("requestQueued", undefined, (cio) =>
+                    cio.requestQueued?.(entry),
+                );
+            },
+            requestStarted: (entry) => {
+                broadcast("requestStarted", undefined, (cio) =>
+                    cio.requestStarted?.(entry),
+                );
+            },
+            requestCancelled: (requestId, reason) => {
+                broadcast("requestCancelled", undefined, (cio) =>
+                    cio.requestCancelled?.(requestId, reason),
+                );
+            },
+            queueStateChanged: (snapshot) => {
+                broadcast("queueStateChanged", undefined, (cio) =>
+                    cio.queueStateChanged?.(snapshot),
+                );
+            },
+        },
+    );
     const shared: SharedDispatcher = {
         get clientCount() {
             return clients.size;
@@ -394,6 +437,7 @@ export async function createSharedDispatcher(
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
+                    messageQueue.onClientDisconnect(connectionId);
 
                     closeFn();
                     debugConnect(
@@ -431,12 +475,14 @@ export async function createSharedDispatcher(
                 clientRequestId?: any,
                 attachments?: any,
                 processOptions?: any,
+                requestId?: any,
             ) => {
                 const result = await origProcessCommand(
                     command,
                     clientRequestId,
                     attachments,
                     processOptions,
+                    requestId,
                 );
                 try {
                     context.displayLog.logCommandResult(
@@ -500,6 +546,109 @@ export async function createSharedDispatcher(
                     debugCommand(`commandComplete broadcast failed: ${e}`);
                 }
                 return result;
+            };
+
+            // ===== Message-queue integration (Phase 1) =====
+            // Save the inner (wrapped) processCommand and replace the
+            // public method with one that submits to the queue and
+            // awaits completion. Direct callers continue to get
+            // Promise<CommandResult> semantics; the queue plus
+            // commandLock together preserve the "one in-flight per
+            // conversation" invariant.
+            const queuedProcessCommand =
+                dispatcher.processCommand.bind(dispatcher);
+            (dispatcher as any).__queueInnerProcessCommand =
+                queuedProcessCommand;
+            dispatcher.processCommand = async (
+                command: any,
+                clientRequestId?: any,
+                attachments?: any,
+                processOptions?: any,
+                requestId?: any,
+            ) => {
+                // Legacy "fire and await" path: enqueue and wait. If a
+                // caller supplied an explicit requestId, honor it by
+                // bypassing the queue (used by the queue's own drain
+                // loop when it re-enters the wrapped processCommand).
+                if (requestId !== undefined) {
+                    return queuedProcessCommand(
+                        command,
+                        clientRequestId,
+                        attachments,
+                        processOptions,
+                        requestId,
+                    );
+                }
+                const submitInput: any = {
+                    text: command,
+                    originatorConnectionId: connectionId,
+                };
+                if (attachments !== undefined)
+                    submitInput.attachments = attachments;
+                if (processOptions !== undefined)
+                    submitInput.options = processOptions;
+                if (clientRequestId !== undefined)
+                    submitInput.clientRequestId = clientRequestId;
+                const entry = messageQueue.submit(submitInput);
+                return entry.completion;
+            };
+
+            dispatcher.submitCommand = async (
+                command,
+                attachments,
+                options,
+                clientRequestId,
+            ) => {
+                const submitInput: any = {
+                    text: command,
+                    originatorConnectionId: connectionId,
+                };
+                if (attachments !== undefined)
+                    submitInput.attachments = attachments;
+                if (options !== undefined) submitInput.options = options;
+                if (clientRequestId !== undefined)
+                    submitInput.clientRequestId = clientRequestId;
+                const entry = messageQueue.submit(submitInput);
+                // Don't await completion — submitCommand returns as
+                // soon as the entry is queued. The InternalEntry's
+                // completion promise is awaited by the legacy
+                // processCommand wrapper (above).
+                const out: QueuedRequest = {
+                    requestId: entry.requestId,
+                    originatorConnectionId: entry.originatorConnectionId,
+                    text: entry.text,
+                    submittedAt: entry.submittedAt,
+                    state: entry.state,
+                };
+                if (entry.clientRequestId !== undefined)
+                    out.clientRequestId = entry.clientRequestId;
+                if (entry.attachments !== undefined)
+                    out.attachments = entry.attachments;
+                if (entry.options !== undefined) out.options = entry.options;
+                if (entry.startedAt !== undefined)
+                    out.startedAt = entry.startedAt;
+                if (entry.finishedAt !== undefined)
+                    out.finishedAt = entry.finishedAt;
+                if (entry.schemaHint !== undefined)
+                    out.schemaHint = entry.schemaHint;
+                if (entry.activityHint !== undefined)
+                    out.activityHint = entry.activityHint;
+                if (entry.error !== undefined) out.error = entry.error;
+                return out;
+            };
+
+            dispatcher.getQueueSnapshot = async () => {
+                return messageQueue.getSnapshot();
+            };
+
+            // Hook cancellation: a cancel for a queued entry should
+            // remove it from the queue (running entries flow through
+            // the existing AbortController path unchanged).
+            const origCancelCommand = dispatcher.cancelCommand.bind(dispatcher);
+            dispatcher.cancelCommand = (rid: string) => {
+                if (!messageQueue.cancelQueued(rid, "user")) {
+                    origCancelCommand(rid);
+                }
             };
 
             return dispatcher;
@@ -623,8 +772,21 @@ export async function createSharedDispatcher(
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
+            // Drain the message queue so any in-flight or queued
+            // entry settles before we tear down the dispatcher.
+            try {
+                await messageQueue.drainAndStop();
+            } catch {
+                // best-effort
+            }
             await this.closeAllClients();
             await closeCommandHandlerContext(context);
+        },
+        getQueueSnapshot(): QueueSnapshot {
+            return messageQueue.getSnapshot();
+        },
+        cancelQueued(requestId: string, reason: QueueCancelReason): boolean {
+            return messageQueue.cancelQueued(requestId, reason);
         },
     };
     return shared;
@@ -648,4 +810,8 @@ export type SharedDispatcher = {
     broadcastSystemMessage(message: string, excludeConnectionId?: string): void;
     closeAllClients(): Promise<void>;
     close(): Promise<void>;
+    /** Snapshot of the per-conversation message queue. */
+    getQueueSnapshot(): QueueSnapshot;
+    /** Cancel a queued (not running) entry by requestId. */
+    cancelQueued(requestId: string, reason: QueueCancelReason): boolean;
 };

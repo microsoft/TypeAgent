@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
+import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -25,6 +26,12 @@ export type JoinConversationResult = {
      * Sent on join so reconnecting clients can resume showing prompts.
      */
     pendingInteractions?: PendingInteractionRequest[];
+    /**
+     * Snapshot of the server-side message queue at join time. Omitted
+     * when the conversation has no queue activity (empty + idle).
+     * Older clients that don't understand the field simply ignore it.
+     */
+    queueSnapshot?: QueueSnapshot;
 };
 
 /**

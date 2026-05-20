@@ -14,6 +14,11 @@ import type {
     UserMessageHiddenEntry,
 } from "./displayLogEntry.js";
 import type { PendingInteractionRequest } from "./pendingInteraction.js";
+import type {
+    QueuedRequest,
+    QueueCancelReason,
+    QueueSnapshot,
+} from "./queue.js";
 
 export type TemplateData = {
     schema: TemplateSchema;
@@ -152,4 +157,30 @@ export interface ClientIO {
     // User-hide broadcast — fanned out when the user trashes or restores
     // a bubble via the UI, or when @shell trash flush/restore runs.
     onUserHide?(entry: UserMessageHiddenEntry): void;
+
+    // ===== Message-queue push events (Phase 1) =====
+    // All optional, all fire-and-forget. Existing clients that do not
+    // implement them continue to work; they simply won't render queue UI.
+
+    /** A new entry was appended to the queue tail. */
+    requestQueued?(entry: QueuedRequest): void;
+
+    /** The drain loop popped an entry and started executing it. */
+    requestStarted?(entry: QueuedRequest): void;
+
+    /**
+     * A queued or running entry was cancelled. Cancellation of a
+     * running entry continues to surface through the existing
+     * AbortController + `commandComplete` notify path; this is a
+     * supplementary signal so clients can update queue UI eagerly.
+     */
+    requestCancelled?(requestId: string, reason: QueueCancelReason): void;
+
+    /**
+     * Coarse-grained snapshot fired after every queue transition.
+     * Clients that prefer not to track fine-grained events can simply
+     * re-render from this. The snapshot reflects the state AFTER the
+     * transition.
+     */
+    queueStateChanged?(snapshot: QueueSnapshot): void;
 }

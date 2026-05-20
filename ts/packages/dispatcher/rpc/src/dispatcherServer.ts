@@ -29,6 +29,12 @@ export function createDispatcherRpcServer(
         processCommand: async (...args) => {
             return dispatcher.processCommand(...args);
         },
+        submitCommand: async (...args) => {
+            return dispatcher.submitCommand(...args);
+        },
+        getQueueSnapshot: async () => {
+            return dispatcher.getQueueSnapshot();
+        },
         getDynamicDisplay: async (...args) => {
             return dispatcher.getDynamicDisplay(...args);
         },

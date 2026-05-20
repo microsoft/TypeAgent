@@ -352,6 +352,7 @@ async function main() {
                             name: result.name,
                             pendingInteractions:
                                 result.pendingInteractions ?? [],
+                            queueSnapshot: result.queueSnapshot,
                         };
                     } catch (e) {
                         channelProvider.deleteChannel(

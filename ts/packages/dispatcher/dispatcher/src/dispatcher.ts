@@ -285,18 +285,64 @@ export function createDispatcherFromContext(
         get connectionId() {
             return connectionId;
         },
-        processCommand(command, clientRequestId, attachments, options) {
+        processCommand(
+            command,
+            clientRequestId,
+            attachments,
+            options,
+            requestId,
+        ) {
             return processCommand(
                 command,
                 context,
                 {
                     connectionId,
-                    requestId: randomUUID(),
+                    requestId: requestId ?? randomUUID(),
                     clientRequestId,
                 },
                 attachments,
                 options,
             );
+        },
+        async submitCommand(command, attachments, options, clientRequestId) {
+            // In-process / direct dispatcher fallback: there is no queue,
+            // so synthesize a single-entry "submitted then immediately
+            // started" view. SharedDispatcher overrides this with the
+            // real MessageQueue-backed implementation.
+            const id = randomUUID();
+            const entry: import("@typeagent/dispatcher-types").QueuedRequest = {
+                requestId: id,
+                originatorConnectionId: connectionId ?? "",
+                text: command,
+                submittedAt: Date.now(),
+                state: "queued",
+            };
+            if (clientRequestId !== undefined) {
+                entry.clientRequestId = clientRequestId;
+            }
+            if (attachments !== undefined) {
+                entry.attachments = attachments;
+            }
+            if (options !== undefined) {
+                entry.options = options;
+            }
+            // Fire-and-forget the actual execution; callers observe
+            // completion via setDisplay / commandComplete notify.
+            void processCommand(
+                command,
+                context,
+                {
+                    connectionId,
+                    requestId: id,
+                    clientRequestId,
+                },
+                attachments,
+                options,
+            );
+            return entry;
+        },
+        async getQueueSnapshot() {
+            return { running: null, queued: [], paused: false };
         },
         getCommandCompletion(prefix, direction) {
             return getCommandCompletion(prefix, direction, context);

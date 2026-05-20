@@ -9,7 +9,10 @@ import {
     ConversationInfo,
 } from "@typeagent/agent-server-protocol";
 import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
-import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
+import type {
+    PendingInteractionRequest,
+    QueueSnapshot,
+} from "@typeagent/dispatcher-types";
 import {
     createSharedDispatcher,
     SharedDispatcher,
@@ -67,6 +70,7 @@ export type ConversationManager = {
         connectionId: string;
         name: string;
         pendingInteractions: PendingInteractionRequest[];
+        queueSnapshot: QueueSnapshot;
     }>;
     leaveConversation(
         conversationId: string,
@@ -488,6 +492,7 @@ export async function createConversationManager(
             connectionId: string;
             name: string;
             pendingInteractions: PendingInteractionRequest[];
+            queueSnapshot: QueueSnapshot;
         }> {
             const record = conversations.get(conversationId);
             if (record === undefined) {
@@ -524,6 +529,7 @@ export async function createConversationManager(
                     dispatcher.connectionId!,
                     options?.filter ?? false,
                 ),
+                queueSnapshot: sharedDispatcher.getQueueSnapshot(),
             };
         },
 

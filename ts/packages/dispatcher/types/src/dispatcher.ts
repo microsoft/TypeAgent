@@ -16,6 +16,7 @@ import type {
     UserFeedbackRating,
 } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
+import type { QueuedRequest, QueueSnapshot } from "./queue.js";
 
 export const DispatcherName = "dispatcher";
 export const DispatcherEmoji = "🤖";
@@ -175,7 +176,35 @@ export interface Dispatcher {
         clientRequestId?: unknown,
         attachments?: string[],
         options?: ProcessCommandOptions,
+        requestId?: string,
     ): Promise<CommandResult | undefined>;
+
+    /**
+     * Submit a request for queued execution.
+     *
+     * Unlike `processCommand`, this resolves as soon as the request
+     * has been accepted onto the server-side message queue, returning
+     * the assigned `QueuedRequest`. Completion is observed via
+     * ClientIO push events (`requestStarted`, `queueStateChanged`, the
+     * existing `setDisplay`/`notify` flow, and ultimately the
+     * `commandComplete` notify already broadcast by SharedDispatcher).
+     *
+     * Implementations that do not own a queue (direct in-process
+     * dispatcher mode) may fall back to invoking `processCommand`
+     * synchronously and synthesizing a single-entry snapshot.
+     */
+    submitCommand(
+        command: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<QueuedRequest>;
+
+    /**
+     * Snapshot of the server-side queue. Cheap, in-memory. Returns an
+     * empty snapshot for dispatchers without a queue.
+     */
+    getQueueSnapshot(): Promise<QueueSnapshot>;
 
     /**
      * Close the dispatcher and release all resources.

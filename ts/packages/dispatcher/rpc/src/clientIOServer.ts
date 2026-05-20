@@ -49,6 +49,10 @@ export function createClientIORpcServer(
         takeAction: (...args) => clientIO.takeAction(...args),
         onUserFeedback: (...args) => clientIO.onUserFeedback?.(...args),
         onUserHide: (...args) => clientIO.onUserHide?.(...args),
+        requestQueued: (...args) => clientIO.requestQueued?.(...args),
+        requestStarted: (...args) => clientIO.requestStarted?.(...args),
+        requestCancelled: (...args) => clientIO.requestCancelled?.(...args),
+        queueStateChanged: (...args) => clientIO.queueStateChanged?.(...args),
     };
     createRpc(
         "clientio",
