@@ -240,7 +240,7 @@ Testable: look at the IR structure, then look at the execution trace and the set
 
 - _Intent:_ Express a simple retry pattern (try, check, retry) with minimal syntax - just 3 nodes pointing at each other in a cycle.
 - _Why P3 requires a different expression:_ A flat cycle hides the "this is a loop" pattern. You have to analyze the graph to discover it. P3 says the computational pattern should be visible in the IR structure.
-- _Alternative:_ Use a loop construct with body nodes, cross-iteration state declarations, and entry/exit sentinels.
+- _Alternative:_ Use a loop construct whose body is a `WorkflowScope` (with its own entry node, declared cross-iteration state, and `next: null` terminals) and whose boundary carries an explicit `continueWhen` template.
 - _Tradeoff:_ More verbose for simple cases. But the structure communicates intent (retry loop), enables visualization tools, and constrains LLM generation. The DSL can provide authoring sugar for common patterns (e.g., `retry(3) { ... }` compiling to a loop construct).
 
 **26. Emergent patterns.**
