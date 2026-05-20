@@ -129,3 +129,22 @@ describe("rename", () => {
         expect(edit).toBeNull();
     });
 });
+
+// Phase 4c: prepare-rename on a keyword should return null.
+// Phase 4d: prepare-rename on a built-in task name should return null.
+describe("prepareRename - non-renameable positions", () => {
+    it("returns null when cursor is on the 'const' keyword (not a user symbol)", () => {
+        const src = `workflow w(): string {\n    const x = "hi";\n    return x;\n}`;
+        // Line 1, char 4 = 'c' in "    const ..."
+        const r = computePrepareRename(doc(src), { line: 1, character: 4 });
+        expect(r).toBeNull();
+    });
+
+    it("returns null on a built-in task call name (not user-defined)", () => {
+        const src = `workflow w(a: string): string {\n    const x = a;\n    return string.join([x], ",");\n}`;
+        // Line 2: "    return string.join..." — 'string.join' starts at char 11
+        const col = "    return ".length; // 11
+        const r = computePrepareRename(doc(src), { line: 2, character: col });
+        expect(r).toBeNull();
+    });
+});
