@@ -5,6 +5,7 @@ export {
     JSONSchema,
     Template,
     TaskNode,
+    BranchArm,
     BranchNode,
     LoopStateVar,
     WorkflowScope,

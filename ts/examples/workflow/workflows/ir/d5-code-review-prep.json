@@ -162,6 +162,10 @@
           "name": "appended"
         }
       },
+      "continueWhen": {
+        "$from": "scope",
+        "name": "hasMore"
+      },
       "maxIterations": 500,
       "next": "joinSections",
       "bind": "fileSections",
@@ -479,19 +483,11 @@
             "bind": "hasMore"
           },
           "checkDone": {
-            "kind": "branch",
-            "selector": {
-              "$from": "scope",
-              "name": "hasMore"
-            },
-            "selectorSchema": {
-              "type": "boolean"
-            },
-            "cases": {
-              "true": "@iterate",
-              "false": "@exit"
-            },
-            "default": "@exit"
+            "kind": "task",
+            "task": "noop",
+            "inputSchema": {},
+            "outputSchema": {},
+            "inputs": {}
           }
         },
         "output": {

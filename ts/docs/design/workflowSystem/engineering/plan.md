@@ -250,16 +250,16 @@ and which do not.
 
 #### Decision records
 
-| Decision                     | Claim                                             | Validated? | Value?   | Choose again? | How                                                                   |
-| ---------------------------- | ------------------------------------------------- | ---------- | -------- | ------------- | --------------------------------------------------------------------- |
-| 0001 - Bound outputs         | `bind` + named scope refs beats positional wiring | Yes        | **High** | Yes           | Named refs are self-documenting; reordering nodes has no data impact  |
-| 0002 - CFG/DDG separation    | Control and data are separate concerns            | Implicitly | **High** | Yes           | Engine sequences producers correctly without coupling control to data |
-| 0003 - Task schema source    | Schemas live in IR, not in registry               | Yes        | **High** | Yes           | Enables schema validation without task implementation present         |
-| 0004 - Pure SSA              | Scope bindings are write-once                     | Yes        | Neutral  | Probably      | Harmless constraint; may matter more with mutation-heavy tasks later  |
-| 0006 - No expressions        | Stdlib tasks replace inline expressions           | Tracked    | Moderate | **Revisit**   | Works but scaling concern: every new operator = new task + node       |
-| 0007 - Template model        | Mixed literals + `$from` refs at any depth        | Partially  | **High** | Yes           | 50-line resolver handles all cases; no workflow hit depth limits      |
-| 0008 - Discriminant encoding | Case keys are strings; `String()` coercion        | Yes        | **High** | Yes (fixed)   | Booleans match `"true"`/`"false"` case keys; `bool.toLabel` removed   |
-| 0009 - Loop output source    | `output` resolves in full body scope at `@exit`   | Yes        | **High** | Yes           | Correct choice: body bindings are fresh, state is stale at exit       |
+| Decision                     | Claim                                                                                                                                         | Validated? | Value?   | Choose again? | How                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- | ------------- | --------------------------------------------------------------------- |
+| 0001 - Bound outputs         | `bind` + named scope refs beats positional wiring                                                                                             | Yes        | **High** | Yes           | Named refs are self-documenting; reordering nodes has no data impact  |
+| 0002 - CFG/DDG separation    | Control and data are separate concerns                                                                                                        | Implicitly | **High** | Yes           | Engine sequences producers correctly without coupling control to data |
+| 0003 - Task schema source    | Schemas live in IR, not in registry                                                                                                           | Yes        | **High** | Yes           | Enables schema validation without task implementation present         |
+| 0004 - Pure SSA              | Scope bindings are write-once                                                                                                                 | Yes        | Neutral  | Probably      | Harmless constraint; may matter more with mutation-heavy tasks later  |
+| 0006 - No expressions        | Stdlib tasks replace inline expressions                                                                                                       | Tracked    | Moderate | **Revisit**   | Works but scaling concern: every new operator = new task + node       |
+| 0007 - Template model        | Mixed literals + `$from` refs at any depth                                                                                                    | Partially  | **High** | Yes           | 50-line resolver handles all cases; no workflow hit depth limits      |
+| 0008 - Discriminant encoding | Case keys are strings; `String()` coercion                                                                                                    | Yes        | **High** | Yes (fixed)   | Booleans match `"true"`/`"false"` case keys; `bool.toLabel` removed   |
+| 0009 - Loop output source    | `output` resolves in full body scope at body completion of the final iteration (post-0010: the iteration whose `continueWhen` resolves false) | Yes        | **High** | Yes           | Correct choice: body bindings are fresh, state is stale at exit       |
 
 **Value assessment key:**
 
@@ -359,11 +359,13 @@ DSL layer addresses.
    TypeScript strictness issue, not an IR design problem.
 
 2. **Loop output resolves in body scope, not state.** The IR spec
-   says loop `output` resolves in the body scope at `@exit`. This is
-   correct but initially non-obvious: state reflects the _start_ of
-   the last iteration, while body bindings reflect the _end_. Once
-   understood, the engine code is straightforward. The spec's choice
-   is the right one.
+   says loop `output` resolves in the body scope at body completion
+   of the final iteration (post-decision 0010: the iteration whose
+   `continueWhen` resolves false; pre-0010 the same point was
+   named `@exit`). This is correct but initially non-obvious:
+   state reflects the _start_ of the last iteration, while body
+   bindings reflect the _end_. Once understood, the engine code is
+   straightforward. The spec's choice is the right one.
 
 3. **Boolean branching ceremony (resolved).** The original IR
    required `bool.toLabel` + branch node for boolean decisions (3
