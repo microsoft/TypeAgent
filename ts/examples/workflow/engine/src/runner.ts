@@ -962,8 +962,13 @@ export class WorkflowEngine {
             input: armInput,
             constants: resolveScope.constants,
             bindings: new Map(),
+            // Shallow-copy state to match loop body semantics (runner.ts
+            // executeLoop). Branch arms read ambient state but should not
+            // observe top-level mutations made by sibling arms or by the
+            // parent scope after the arm starts. Deep-object mutation by
+            // an in-arm task would still leak — see 0010-design-notes.md.
             ...(resolveScope.state !== undefined
-                ? { state: resolveScope.state }
+                ? { state: { ...resolveScope.state } }
                 : {}),
         };
         const armScopePath = [...scopePath, `${nodeId}.${caseKey}`];

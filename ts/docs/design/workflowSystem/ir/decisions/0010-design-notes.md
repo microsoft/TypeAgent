@@ -325,6 +325,16 @@ treat state as readable. Writes to state from inside an arm are not
 currently exercised - if we later allow that, we need an explicit
 decision about whether arm writes mutate the parent's state map.
 
+**Update (Phase 2 review round 1):** the arm scope now receives a
+**shallow copy** of `state` (`{ ...resolveScope.state }`) rather than
+the same reference. This matches loop body semantics (`executeLoop`
+already shallow-copies into `bodyScope.state`). Top-level reassignment
+inside an arm therefore does not leak to siblings or to the parent
+loop's `state`. Deep-object mutation (e.g. `state.results.push(...)`)
+would still leak — current standard-library tasks happen to be
+non-mutating, but this is a structural soundness gap. Either move to
+deep-copy on hand-off or document a non-mutation contract for tasks.
+
 ---
 
 ### Output templates participate in arm capture
