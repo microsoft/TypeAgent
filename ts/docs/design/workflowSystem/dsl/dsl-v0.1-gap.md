@@ -19,9 +19,9 @@ new surface area:
 3. **G14: Fix switch lowering always taking first case.** This is a core
    control-flow runtime correctness bug and should be fixed before richer switch
    typing or exhaustiveness work.
-4. **G15: Fix branch/ternary inside loop body runtime failure.** This exercises
-   nested scopes, branch lowering, and `$from` resolution after the validator can
-   recognize the normal convergence shapes.
+4. **G15: Dissolved by IR decision 0010.** Branch/ternary inside forkMap
+   body now works correctly; the bug was rooted in the old arm-as-noop-target
+   shape. Verified by integration test.
 5. **G16: Fix `throw` message propagation.** This is a direct user-visible
    correctness issue in already-supported error semantics.
 6. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
@@ -66,10 +66,9 @@ Dependency spine:
   assignability.
 - `G14 -> G18` ensures switch runtime behavior is correct before adding
   exhaustive union-typed switch support.
-- `G14 + G15 + G16` makes implemented control-flow and error features
-  trustworthy before adding major new DSL surface area. (G15's runtime
-  failure should be re-tested against the new 0010 lowering; the bug
-  may dissolve if it was rooted in arm-as-noop-target.)
+- `G14 + G16` makes implemented control-flow and error features
+  trustworthy before adding major new DSL surface area. (G15 dissolved
+  with 0010 lowering — verified by integration test.)
 
 ## G1: Sub-workflow calls
 
@@ -243,14 +242,12 @@ let result = (cond === "a") ? makeA(x) : makeB(y);
 ```
 
 **Coupling with G6 and G15.** G6 (validator branch-return convergence)
-and G15 (branch/ternary inside loop body fails at runtime) **dissolve
+and G15 (branch/ternary inside loop body fails at runtime) **dissolved
 under the same 0010 change**: the prefix-based "shared-bind through a
 merge `noop`" pattern that triggered both gaps does not exist after
 0010 lowering, and the dominator coverage required by §4.1 pass 6 is
 satisfied by the branch's own `bind` rather than by a phi across
-prefixed arm nodes. The recommended-sequence section above should be
-updated to drop G5/G6 (and reduce G15 to a runtime check that
-exercises the new lowering on a loop-body branch).
+prefixed arm nodes. G15 is confirmed dissolved by integration test.
 
 **What needs to happen:**
 
@@ -646,18 +643,16 @@ reversed.
 **Reproduction:** Compile a switch with string cases, run with a value
 matching the second case. Output is always from the first case.
 
-## G15: Branch/ternary inside loop body fails at runtime
+## G15: Branch/ternary inside loop body — dissolved by decision 0010
 
-**Spec:** dsl-v0.1.md sections 2.7, 3.2. Branches and ternary
-expressions should work inside map/filter/attempts bodies.
+**Status: Dissolved.** The runtime failure was rooted in the old
+arm-as-noop-target lowering shape. After the 0010 emitter rewrite,
+branch arms are `WorkflowScope`s with explicit `output`, and `$from`
+resolution inside forkMap body scopes works correctly.
 
-**Current state:** A ternary expression inside a map body compiles
-without errors but fails at runtime. The branch condition evaluation
-inside a loop body scope does not resolve correctly, possibly due to
-scope nesting issues in $from reference resolution.
-
-**Reproduction:** `map(nums, (n) => { const r = n > 10 ? "big" : "small"; return r })`
-compiles but the engine fails to execute the workflow.
+**Verified:** `map(nums, (n) => { const r = n > 10 ? "big" : "small"; return r })`
+compiles and executes correctly. Integration test added to
+`engine/test/dsl-integration.spec.ts` ("G15: ternary inside map body").
 
 ## G16: `throw` produces empty error message
 

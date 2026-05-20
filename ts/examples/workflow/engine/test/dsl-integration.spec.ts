@@ -1141,11 +1141,6 @@ describe("DSL -> Engine integration", () => {
     // branch condition routing appears broken.
     // describe("switch with default", () => { ... });
 
-    // BUG: ternary (and likely if/else) inside map body fails at runtime.
-    // The branch node's condition evaluation inside a loop body scope
-    // does not resolve correctly.
-    // describe("nested control flow: if/ternary inside map", () => { ... });
-
     // BUG: top-level throw produces an empty error message.
     // The error.fail task receives the value but the error propagation
     // loses the message.
@@ -1172,6 +1167,24 @@ describe("DSL -> Engine integration", () => {
             });
             expect(result.success).toBe(true);
             expect(result.output).toEqual([2, 8, 4]);
+        });
+
+        it("G15: ternary inside map body (branch in forkMap scope)", async () => {
+            const ir = compileOk(`
+                workflow test(nums: number[]): unknown {
+                    const result = map(nums, (n) => {
+                        const r = n > 10 ? "big" : "small";
+                        return r;
+                    });
+                    return result;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, {
+                input: { nums: [5, 15, 20, 3] },
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual(["small", "big", "big", "small"]);
         });
     });
 });
