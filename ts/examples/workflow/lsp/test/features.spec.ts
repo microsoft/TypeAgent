@@ -101,6 +101,41 @@ describe("completion", () => {
         expect(labels).toContain("x");
         expect(labels).toContain("string.join");
     });
+
+    it("includes DSL keywords when no dot prefix", () => {
+        const items = computeCompletions(doc(), schemas);
+        const labels = items.map((i) => i.label);
+        expect(labels).toContain("const");
+        expect(labels).toContain("if");
+        expect(labels).toContain("return");
+        expect(labels).toContain("true");
+    });
+
+    it("filters by namespace prefix when cursor is after a dot", () => {
+        // Build a doc where the cursor is after "string." (col 12 on line 2)
+        // line 2: "    return string.join([x], ","  — character 18 is after the dot
+        const d = doc();
+        // Position: line 2 "    return string.join..."  character 18 is after "string."
+        const pos = { line: 2, character: 18 };
+        const items = computeCompletions(d, schemas, pos);
+        const labels = items.map((i) => i.label);
+        // Should include string.* tasks with the "string." prefix stripped
+        expect(labels.every((l) => !l.startsWith("shell."))).toBe(true);
+        // Keywords should not appear
+        expect(labels).not.toContain("const");
+        // At least one string task (e.g. "join")
+        expect(labels.some((l) => l === "join" || l.startsWith("string"))).toBe(true);
+    });
+
+    it("includes no keywords when completing after a dot", () => {
+        const d = doc();
+        const pos = { line: 2, character: 18 }; // after "string."
+        const items = computeCompletions(d, schemas, pos);
+        const kws = ["const", "if", "else", "return", "true", "false"];
+        for (const kw of kws) {
+            expect(items.map((i) => i.label)).not.toContain(kw);
+        }
+    });
 });
 
 describe("semantic tokens", () => {

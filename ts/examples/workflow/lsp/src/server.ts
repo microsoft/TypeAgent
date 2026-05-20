@@ -30,7 +30,7 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 import type { Duplex } from "node:stream";
 import { computeDiagnostics } from "./features/diagnostics.js";
-import { formatDocument } from "./features/formatting.js";
+import { formatDocument, formatDocumentRange } from "./features/formatting.js";
 import { computeDocumentSymbols } from "./features/symbols.js";
 import { computeHover } from "./features/hover.js";
 import { computeDefinition } from "./features/definition.js";
@@ -96,6 +96,7 @@ export function createServer(
                     change: TextDocumentSyncKind.Incremental,
                 },
                 documentFormattingProvider: true,
+                documentRangeFormattingProvider: true,
                 documentSymbolProvider: true,
                 hoverProvider: true,
                 definitionProvider: true,
@@ -104,7 +105,7 @@ export function createServer(
                 signatureHelpProvider: { triggerCharacters: ["(", ","] },
                 inlayHintProvider: true,
                 renameProvider: { prepareProvider: true },
-                codeActionProvider: { codeActionKinds: ["refactor.rewrite", "refactor.extract"] },
+                codeActionProvider: { codeActionKinds: ["refactor.rewrite", "refactor.extract", "refactor.inline"] },
                 semanticTokensProvider: {
                     legend: semanticTokensLegend,
                     full: true,
@@ -158,6 +159,14 @@ export function createServer(
         return formatDocument(doc, { indent: params.options.tabSize });
     });
 
+    connection.onDocumentRangeFormatting((params) => {
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return [];
+        return formatDocumentRange(doc, params.range, {
+            indent: params.options.tabSize,
+        });
+    });
+
     connection.onDocumentSymbol((params) => {
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return [];
@@ -189,7 +198,7 @@ export function createServer(
     connection.onCompletion((params) => {
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return [];
-        return computeCompletions(doc, schemas);
+        return computeCompletions(doc, schemas, params.position);
     });
 
     connection.onSignatureHelp((params) => {

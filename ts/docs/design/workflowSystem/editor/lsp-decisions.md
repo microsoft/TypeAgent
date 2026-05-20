@@ -119,6 +119,60 @@ indefinitely as the canonical "LSP / static-analysis" entrypoint.
 
 ---
 
+## 2026-05-19 — @vscode/test-electron not used for automated extension tests
+
+**Phase:** 0
+**Status:** decided
+**Context:** The execution plan called for an end-to-end extension test
+spike using `@vscode/test-electron`. Running this package requires
+downloading a headless VS Code binary and a display server (Xvfb on
+Linux), neither of which is available in the restricted dev container
+used for this session.
+**Decision:** Skip `@vscode/test-electron` for automated testing.
+All LSP logic is exercised via the in-process server harness in
+`test/serverIntegration.spec.ts` (no child process, no display server
+required). A documented shell stub lives at
+`ts/examples/workflow/vscode/scripts/extension-test.sh` for future
+use when a GUI VS Code environment is available.
+**Alternatives considered:**
+- Run in a GitHub Actions workflow with `DISPLAY=:99 Xvfb :99 &` — viable
+  but sets a CI prerequisite that shouldn't be required for local
+  development in this container.
+- Write tests against the `vscode` mock package — covers some APIs but
+  misses real extension-host activation, IPC transport, and
+  `LanguageClient` lifecycle.
+**Revisit when:** This project runs in a devcontainer with full GUI VS
+Code support or in a CI job with `DISPLAY` configured.
+
+---
+
+## 2026-05-19 — Graph preview deferred (container constraint)
+
+**Phase:** 5
+**Status:** deferred
+**Context:** The plan's Phase 5 feature #15 specifies a graph preview
+webview powered by `elkjs` for layout. Implementation requires:
+(a) `elkjs` bundled into the extension or loaded as a web worker,
+(b) a `vscode.WebviewPanel` with correct content-security policy,
+(c) live VS Code window to validate the webview lifecycle.
+None of these can be verified inside the restricted dev container
+(no GUI VS Code, no display server).
+**Decision:** Register `workflow.previewGraph` as a command that surfaces
+a "coming soon" message. The stub keeps the command palette entry alive
+so users can discover the feature and the extension doesn't break when
+it is eventually implemented.
+**Alternatives considered:**
+- Ship a static JSON dump of the graph instead of a visual — easier to
+  implement but doesn't match the plan's intent; adds a UI element of
+  unclear value without the layout.
+- Use a plain `vscode.OutputChannel` with a text-art graph — not useful
+  for non-trivial workflows.
+**Revisit when:** Running in a full VS Code devcontainer. The elkjs
+layout pass and webview implementation should be a focused follow-up
+PR.
+
+---
+
 ## 2026-05-19 — Use `--forceExit` for workflow-lsp jest runs
 
 **Phase:** 0

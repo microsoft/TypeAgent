@@ -1,0 +1,10 @@
+{
+    "iconDefinitions": {
+        "_wf_file": {
+            "iconPath": "./wf.svg"
+        }
+    },
+    "fileExtensions": {
+        "wf": "_wf_file"
+    }
+}

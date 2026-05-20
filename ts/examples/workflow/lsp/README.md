@@ -12,7 +12,7 @@ phases per `ts/docs/design/workflowSystem/editor/lsp-plan.md`.
 - `src/index.ts` &mdash; bin entry; starts the server on stdio.
 - `src/server.ts` &mdash; connection / capability wiring; accepts an
   injected duplex transport for in-process tests.
-- `src/documentStore.ts` &mdash; URI-keyed document cache.
+- `src/parsedDocument.ts` &mdash; version-keyed lex+parse+symbol-table cache.
 - `src/taskSchemas.ts` &mdash; wraps `workflow-engine`'s schemas-only
   export so feature code never imports the engine runtime directly.
 - `src/util/position.ts` &mdash; DSL `SourceLocation` &harr; LSP

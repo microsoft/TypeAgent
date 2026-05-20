@@ -4,14 +4,13 @@
 /**
  * Workflow DSL VS Code extension.
  *
- * Phase 0 scope: register the `workflow` language (already declared in
- * package.json contributions) and start the LSP server. Custom
- * commands (IR preview, graph preview) and richer client behaviour are
- * added in later phases.
+ * Activates the LanguageClient, registers commands (IR preview, graph
+ * preview stub), and wires live-refresh of any open IR preview tab
+ * when the source `.wf` file is saved.
  */
 
 import * as path from "node:path";
-import { commands, ExtensionContext, window, workspace, Uri } from "vscode";
+import { commands, ExtensionContext, window, workspace, Uri, TextDocument as VsTextDocument, WorkspaceEdit, Range } from "vscode";
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -20,6 +19,11 @@ import {
 } from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
+
+/** URI scheme used for all IR preview documents. */
+const IR_PREVIEW_SCHEME = "untitled";
+/** A map from .wf URI → currently-open IR preview document. */
+const irPreviewDocs = new Map<string, VsTextDocument>();
 
 interface CompileIRResult {
     ir?: unknown;
@@ -65,7 +69,43 @@ export function activate(context: ExtensionContext): void {
         commands.registerCommand("workflow.previewGraph", previewGraph),
     );
 
+    // Live-refresh IR preview when a .wf file is saved.
+    context.subscriptions.push(
+        workspace.onDidSaveTextDocument(async (savedDoc) => {
+            if (savedDoc.languageId !== "workflow") return;
+            const previewDoc = irPreviewDocs.get(savedDoc.uri.toString());
+            if (!previewDoc) return;
+            await refreshIRPreview(savedDoc.uri.toString(), previewDoc);
+        }),
+    );
+
     client.start();
+}
+
+async function fetchIRContent(wfUri: string): Promise<string> {
+    if (!client) return JSON.stringify({ error: "Language client not ready" });
+    const result = await client.sendRequest<CompileIRResult>(
+        "workflow/compileIR",
+        { uri: wfUri },
+    );
+    return result.errors.length
+        ? JSON.stringify({ errors: result.errors }, null, 2)
+        : JSON.stringify(result.ir, null, 2);
+}
+
+async function refreshIRPreview(
+    wfUri: string,
+    previewDoc: VsTextDocument,
+): Promise<void> {
+    try {
+        const content = await fetchIRContent(wfUri);
+        const edit = new WorkspaceEdit();
+        const fullRange = new Range(0, 0, previewDoc.lineCount, 0);
+        edit.replace(previewDoc.uri, fullRange, content);
+        await workspace.applyEdit(edit);
+    } catch {
+        // Ignore refresh errors silently; the user can re-run the command.
+    }
 }
 
 async function previewIR(): Promise<void> {
@@ -78,17 +118,14 @@ async function previewIR(): Promise<void> {
     }
     if (!client) return;
     try {
-        const result = await client.sendRequest<CompileIRResult>(
-            "workflow/compileIR",
-            { uri: editor.document.uri.toString() },
-        );
-        const content = result.errors.length
-            ? JSON.stringify({ errors: result.errors }, null, 2)
-            : JSON.stringify(result.ir, null, 2);
+        const wfUri = editor.document.uri.toString();
+        const content = await fetchIRContent(wfUri);
         const doc = await workspace.openTextDocument({
             content,
             language: "json",
         });
+        // Track this preview doc so we can refresh it on save.
+        irPreviewDocs.set(wfUri, doc);
         await window.showTextDocument(doc, { preview: true });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -97,13 +134,9 @@ async function previewIR(): Promise<void> {
 }
 
 function previewGraph(): void {
-    // Graph preview (extractGraph + elkjs) is planned but not yet
-    // implemented. Surface a friendly message so the command isn't a
-    // silent no-op.
     window.showInformationMessage(
         "Workflow graph preview is coming in a follow-up release.",
     );
-    // Reference Uri to keep the import live for future use.
     void Uri.parse;
 }
 
