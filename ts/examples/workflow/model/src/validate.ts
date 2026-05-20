@@ -275,8 +275,7 @@ function detectCycles(cfg: ScopeCFG): string[][] {
  * outgoing edges). This applies uniformly across all scopes
  * (top-level, loop body, fork branch, forkMap body, and branch arm):
  * a terminal in a sub-scope is the scope's natural completion site
- * where its `output` resolves. The `@iterate` / `@exit` sentinels
- * have been retired.
+ * where its `output` resolves.
  */
 function checkTermination(cfg: ScopeCFG): Set<string> {
     const exitNodes = new Set<string>(cfg.terminals);
@@ -490,7 +489,7 @@ function buildOnErrorSplits(
             const errorSide = dominatedSet(errorTarget, idom);
             let successSide = new Set<string>();
             const nextTarget = node.next;
-            if (nextTarget && !isSentinel(nextTarget)) {
+            if (nextTarget) {
                 successSide = dominatedSet(nextTarget, idom);
             }
             // The trigger node itself is on the success side: its binding
@@ -1632,13 +1631,6 @@ function typeSetsOverlap(aType: unknown, bType: unknown): boolean {
     const aTypes = normalizeTypeSet(aType);
     const bTypes = normalizeTypeSet(bType);
     return aTypes.some((a) => bTypes.some((b) => typeAssignableTo(a, b)));
-}
-
-/** True when `target` is a loop sentinel. */
-/** Loop sentinels @iterate / @exit are retired;
- *  this helper survives only as a documentation hook. */
-function isSentinel(_target: string): _target is never {
-    return false;
 }
 
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
