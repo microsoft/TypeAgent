@@ -8,6 +8,7 @@ import {
     LoopNode,
     ForkNode,
     ForkMapNode,
+    BranchNode,
     Template,
     JSONSchema,
     ConstantDef,
@@ -922,25 +923,6 @@ function validateOnErrorRules(
                     onErrorTargetToTrigger.set(node.onError, id);
                 }
             }
-        } else if (node.kind === "branch") {
-            // Branch arms are independent sub-scopes; their edges do not
-            // flow into the outer scope. Treat the branch's own next /
-            // onError as the only outer-scope targets.
-            if (node.next) normalTargets.add(node.next);
-            if (node.onError) {
-                const existing = onErrorTargetToTrigger.get(node.onError);
-                if (existing) {
-                    errors.push({
-                        path: `${prefix}.${id}.onError`,
-                        message:
-                            `Recovery node "${node.onError}" is targeted by ` +
-                            `both "${existing}" and "${id}". A recovery ` +
-                            `target must have exactly one trigger in v1.`,
-                    });
-                } else {
-                    onErrorTargetToTrigger.set(node.onError, id);
-                }
-            }
         }
     }
 
@@ -1604,8 +1586,10 @@ function isSentinel(_target: string): _target is never {
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
 function isBindableNode(
     node: WorkflowNode,
-): node is TaskNode | LoopNode | ForkNode | ForkMapNode {
-    return node.kind !== "branch";
+): node is TaskNode | LoopNode | ForkNode | ForkMapNode | BranchNode {
+    // Per decision 0010, branch nodes can also bind a value when they
+    // carry both `bind` and `outputSchema` (uniform-output arms).
+    return true;
 }
 
 /** Type guard: node kinds that carry `inputs` (task and loop). */
@@ -1620,9 +1604,11 @@ function nodeInputSchema(node: TaskNode | LoopNode): JSONSchema {
 
 /** Get the effective output schema for a bindable node. */
 function nodeOutputSchema(
-    node: TaskNode | LoopNode | ForkNode | ForkMapNode,
+    node: TaskNode | LoopNode | ForkNode | ForkMapNode | BranchNode,
 ): JSONSchema {
-    return node.kind === "loop" ? node.body.outputSchema : node.outputSchema;
+    if (node.kind === "loop") return node.body.outputSchema;
+    if (node.kind === "branch") return node.outputSchema ?? {};
+    return node.outputSchema;
 }
 
 /**

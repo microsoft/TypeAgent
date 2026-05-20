@@ -211,3 +211,79 @@ it less readable than the current inline form.
 **Revisit when:** a third or fourth WorkflowScope-execution call site
 appears, or when test gaps reveal the per-scope event emission
 pattern needs to be unified across fork/branch/loop/forkMap.
+
+---
+
+### Validator must treat branch as a bindable node
+
+**Category:** Revised assumption.
+
+**Phase:** 2 (uncovered by Phase 2 positive coverage matrix, task 19).
+
+**Where:** ts/examples/workflow/model/src/validate.ts -
+`isBindableNode`, `nodeOutputSchema`, `buildBindingMap`.
+
+**Initial assumption:** Branch nodes were "control flow only", and
+`isBindableNode` excluded them (`return node.kind !== "branch"`).
+The validator's binding map was built only from task/loop/fork/forkMap
+nodes; consumers reading `$from: "scope", name: branchBind` would
+silently fail.
+
+**What broke:** Once 0010 made branches value-producing (carrying
+`bind` + `outputSchema` per spec §3 / §6), downstream consumers
+correctly emitted by the DSL referenced the branch's `bind` and the
+validator reported the bind name as "not bound by any node in this
+scope". The positive coverage matrix surfaced this immediately;
+existing negative tests passed because they targeted other failure
+modes (missing outputSchema, incompatible arms).
+
+**Fix applied:** `isBindableNode` returns true for all kinds.
+`nodeOutputSchema` was generalized to return `node.outputSchema ?? {}`
+for branch (branches without `bind` may legitimately omit
+`outputSchema`; consumers of those branches can never bind anyway, so
+returning the top type is safe). The dead `else if (node.kind ===
+"branch")` arm in `onError` validation was deleted - the `if
+(isBindableNode(...))` arm now covers it because `BranchNode` already
+carries `next` and `onError`.
+
+**Why this is worth a re-read:** the change widens the "bindable
+node" surface across the validator. Any pass that branches on
+`isBindableNode` now applies its logic to BranchNode too. We audited
+the call sites (lines 191, 487, 637, 909, 1493, 2330) and confirmed
+each is correct under the wider definition. New passes that assume
+`isBindableNode` excludes branch should be written against the new
+contract or guarded explicitly.
+
+---
+
+### Map/filter checkBranch outputSchema declares projected paths
+
+**Category:** Non-obvious choice.
+
+**Phase:** 2 (DSL emitter, task 18+19).
+
+**Where:** ts/examples/workflow/dsl/src/emitter.ts - `emitMap`,
+`emitFilter`.
+
+**Problem:** Map/filter lower to pre-check loops with a checkBranch
+that binds `_iter_out`. The loop's `iterateState` projects path
+references `_iter_out.newI` / `_iter_out.newResults` to update loop
+state. When the validator was first wired through (after fixing
+`isBindableNode`), it correctly resolved `_iter_out` to the branch's
+output schema and then tried to navigate the declared path - the
+schema was `{}` (top), so `newI` / `newResults` were "not declared in
+producer outputSchema".
+
+**Choice:** The checkBranch declares its `outputSchema` as an object
+with `newI: integer, newResults: array` (or the filter equivalent).
+This documents the contract the loop relies on, lets the validator
+verify the path projection, and matches what the arm's task actually
+binds.
+
+**Why this is worth a re-read:** Branch outputSchema declarations now
+have a concrete dependency from the iteration projection. If we later
+add a stricter producer-schema check that requires arm outputs to be
+*assignable* to the branch outputSchema (rather than just structurally
+compatible), the map/filter arms' task `outputSchema` should be
+audited to match - currently they declare `type: object, properties:
+{ newI, newResults }` for map and `{ newI, newResults }` for filter.

@@ -1558,7 +1558,13 @@ export class Emitter {
             cases: { true: workArm },
             default: falseArm,
             bind: "_iter_out",
-            outputSchema: {},
+            outputSchema: {
+                type: "object",
+                properties: {
+                    newI: { type: "integer" },
+                    newResults: { type: "array" },
+                },
+            },
         } as BranchNode;
         bodyScope.nodeOrder.push(checkId);
 
@@ -1827,7 +1833,13 @@ export class Emitter {
             cases: { true: workArm },
             default: falseArm,
             bind: "_iter_out",
-            outputSchema: {},
+            outputSchema: {
+                type: "object",
+                properties: {
+                    newI: { type: "integer" },
+                    newResults: { type: "array" },
+                },
+            },
         } as BranchNode;
         bodyScope.nodeOrder.push(checkId);
 
