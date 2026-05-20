@@ -10,41 +10,6 @@ Entries are appended in chronological order; newest at the bottom.
 
 ---
 
-## 2026-05-19 — Schemas are duplicated between builtinTasks.ts and builtinTaskSchemas.ts (provisional)
-
-**Phase:** 0
-**Status:** provisional
-**Context:** `workflow-engine/src/builtinTasks.ts` imports `aiclient`
-at the top of the module (transitively pulls in OpenAI SDK, dotenv).
-The LSP must not import this module. The plan chose "schemas-only
-export from workflow-engine" over duplication, but doing this without
-schema duplication requires refactoring 30+ TaskDefinition objects to
-reference externally-defined schemas — a large diff that risks
-breaking the engine.
-**Decision:** For Phase 0, introduce a new file
-`src/builtinTaskSchemas.ts` containing `getBuiltinTaskSchemas(): {name,
-inputSchema, outputSchema}[]` that **redeclares** the schemas. A jest
-spec asserts the two declarations stay in sync (deep-equal across all
-task names and schemas). This gives the LSP a clean import path now;
-the dedup refactor happens later.
-**Alternatives considered:**
-- Refactor builtinTasks.ts to import schemas — correct end state, but
-  ~30 careful edits; risk to the engine outweighs Phase 0 benefit.
-- Have the LSP duplicate schemas internally — worse: drift would be
-  silent across packages.
-- Move `llmGenerate` / `llmGenerateJson` into a separate file so the
-  remaining `builtinTasks.ts` doesn't import `aiclient` — would let
-  the LSP import `builtinTasks.ts` directly, but still requires
-  surgery and doesn't compose well if more LLM-using tasks land.
-**Revisit when:** Phase 5 (after feature work is stable), or when a
-schema drift is reported.
-**Planned follow-up (2026-05-20):** Address by refactoring
-`builtinTasks.ts` to import the schemas from `builtinTaskSchemas.ts`
-(the "correct end state" alternative above), removing the duplication
-and the sync test. Tracked as the resolution path for this entry.
-
----
-
 ## Update: @vscode/test-electron scaffolding added (still gated on display)
 
 **Phase:** 0/5

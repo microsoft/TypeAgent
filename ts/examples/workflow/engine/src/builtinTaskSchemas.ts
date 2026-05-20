@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Built-in task schemas.
+ * Built-in task schemas — single source of truth.
  *
  * This module declares just the JSON Schema shape (name, inputSchema,
  * outputSchema) of every built-in task. It is intentionally free of
@@ -11,10 +11,8 @@
  * Workflow LSP — can import it without pulling in the engine's
  * runtime stack.
  *
- * The schemas here MUST stay in sync with the actual TaskDefinitions
- * exported from `./builtinTasks.ts`. A jest spec
- * (`builtinTaskSchemas.spec.ts`) asserts deep equality across all
- * task names and schemas; CI will fail on drift.
+ * `builtinTasks.ts` imports from here via `BUILTIN_TASK_SCHEMAS` so
+ * there is exactly one place where schemas are declared.
  */
 
 import { JSONSchema } from "workflow-model";
@@ -29,7 +27,7 @@ export interface BuiltinTaskSchema {
 // the order matching `allBuiltinTasks` in builtinTasks.ts for easier
 // diffing.
 
-const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
+export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     // ---- standard library ----
     {
         name: "list.length",
