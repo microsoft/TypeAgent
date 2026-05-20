@@ -10,10 +10,8 @@ new surface area:
 
 1. **G5: Resolved by IR decision 0010** ([0010-finish-workflow-scope-unification.md](../ir/decisions/0010-finish-workflow-scope-unification.md)).
    Branch arms become `WorkflowScope`s; the `identity`-as-arm-target and
-   shared-bind merge `noop` patterns are retired. Implementation work
-   tracked under
-   [0010-implementation-plan.md](../ir/decisions/0010-implementation-plan.md)
-   Phase 2 (emitter rewrite).
+   shared-bind merge `noop` patterns are retired. Implementation complete
+   under decision 0010 Phase 2 (emitter rewrite).
 2. **G6: Dissolved by IR decision 0010** (same source). The validator
    does not need new convergence-pattern handling because the
    convergence shape is gone; the prefixed-node phi traversal is
@@ -259,9 +257,8 @@ exercises the new lowering on a loop-body branch).
 1. ~~Decide whether the spec should explicitly document `identity` as
    an accepted compiler/runtime lowering primitive for these cases.~~
    No longer needed.
-2. Implement the new lowering in the DSL emitter (Phase 2 of decision
-   0010's implementation plan; see
-   [0010-implementation-plan.md](../ir/decisions/0010-implementation-plan.md)).
+2. The new lowering is implemented in the DSL emitter (decision 0010
+   Phase 2, complete).
 3. Remove `identity`-as-arm-target and shared-bind merge `noop`s from
    the emitter.
 4. Update validator coverage tests to use the new lowering shape.
