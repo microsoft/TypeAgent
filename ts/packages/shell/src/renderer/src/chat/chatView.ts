@@ -19,6 +19,9 @@ import {
     NotifyExplainedData,
     PendingInteractionRequest,
     PendingInteractionResponse,
+    QueueCancelReason,
+    QueuedRequest,
+    QueueSnapshot,
     RequestId,
     TemplateEditConfig,
     UserFeedbackEntry,
@@ -78,6 +81,15 @@ export class ChatView {
 
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
+    private _queueBadge!: HTMLElement;
+
+    /**
+     * Latest server-side queue snapshot. Updated by the four queue
+     * push events (requestQueued/Started/Cancelled/queueStateChanged)
+     * and bootstrapped from `JoinConversationResult.queueSnapshot` on
+     * (re)connect. The badge UI re-renders from this object.
+     */
+    private queueSnapshot: QueueSnapshot | undefined;
 
     public userGivenName: string = "";
     /**
@@ -135,6 +147,21 @@ export class ChatView {
         this._reconnectBanner.className = "chat-reconnect-banner";
         this._reconnectBanner.style.display = "none";
         this.topDiv.insertBefore(this._reconnectBanner, this.messageDiv);
+
+        // Queue badge — shown when the server-side message queue has
+        // any running or queued requests. Phase 1 is read-only;
+        // steering UI lands in Phase 2. Styling intentionally minimal
+        // and inline so we don't pollute the global stylesheet for a
+        // status indicator.
+        this._queueBadge = document.createElement("div");
+        this._queueBadge.className = "chat-queue-badge";
+        this._queueBadge.style.display = "none";
+        this._queueBadge.style.padding = "2px 8px";
+        this._queueBadge.style.fontSize = "12px";
+        this._queueBadge.style.opacity = "0.85";
+        this._queueBadge.style.background = "rgba(255, 200, 0, 0.15)";
+        this._queueBadge.style.borderBottom = "1px solid rgba(0,0,0,0.08)";
+        this.topDiv.insertBefore(this._queueBadge, this.messageDiv);
 
         // wire up messages from iframes so we can resize them
         window.onmessage = (e) => {
@@ -354,6 +381,18 @@ export class ChatView {
         }
 
         this._dispatcher = dispatcher;
+
+        // Bootstrap the queue snapshot so the badge is correct
+        // immediately after (re)connect, even mid-queue. Best-effort:
+        // older servers may not implement getQueueSnapshot.
+        if (typeof dispatcher.getQueueSnapshot === "function") {
+            dispatcher
+                .getQueueSnapshot()
+                .then((snap) => this.applyQueueSnapshot(snap))
+                .catch(() => {
+                    // best-effort
+                });
+        }
 
         this.chatInput.textarea.enable(true);
         this.chatInput.focus();
@@ -981,6 +1020,97 @@ export class ChatView {
      */
     applyFeedback(entry: UserFeedbackEntry) {
         this.getMessageGroup(entry.requestId)?.applyFeedback(entry);
+    }
+
+    // ===== Server-side queue (Phase 1) =====
+    // The Shell mirrors the server-side message queue purely as a
+    // visibility surface: a single badge near the reconnect banner
+    // shows the combined "running + queued" count. There is no
+    // cancel/reorder/edit UI in Phase 1 — those land in Phase 2.
+
+    /** Bootstrap from `JoinConversationResult.queueSnapshot`. */
+    public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
+        this.queueSnapshot = snapshot
+            ? this.cloneSnapshot(snapshot)
+            : undefined;
+        this.renderQueueBadge();
+    }
+
+    public onRequestQueued(entry: QueuedRequest): void {
+        const snap = this.ensureSnapshot();
+        if (!snap.queued.some((e) => e.requestId === entry.requestId)) {
+            snap.queued.push({ ...entry });
+        }
+        this.renderQueueBadge();
+    }
+
+    public onRequestStarted(entry: QueuedRequest): void {
+        const snap = this.ensureSnapshot();
+        snap.queued = snap.queued.filter(
+            (e) => e.requestId !== entry.requestId,
+        );
+        snap.running = { ...entry };
+        this.renderQueueBadge();
+    }
+
+    public onRequestCancelled(
+        requestId: string,
+        _reason: QueueCancelReason,
+    ): void {
+        const snap = this.queueSnapshot;
+        if (!snap) return;
+        if (snap.running?.requestId === requestId) {
+            snap.running = null;
+        } else {
+            snap.queued = snap.queued.filter((e) => e.requestId !== requestId);
+        }
+        this.renderQueueBadge();
+    }
+
+    public onQueueStateChanged(snapshot: QueueSnapshot): void {
+        // Authoritative replacement.
+        this.queueSnapshot = this.cloneSnapshot(snapshot);
+        this.renderQueueBadge();
+    }
+
+    private cloneSnapshot(snap: QueueSnapshot): QueueSnapshot {
+        return {
+            running: snap.running ? { ...snap.running } : null,
+            queued: snap.queued.map((e) => ({ ...e })),
+            paused: snap.paused,
+        };
+    }
+
+    private ensureSnapshot(): QueueSnapshot {
+        if (!this.queueSnapshot) {
+            this.queueSnapshot = {
+                running: null,
+                queued: [],
+                paused: false,
+            };
+        }
+        return this.queueSnapshot;
+    }
+
+    private renderQueueBadge(): void {
+        const snap = this.queueSnapshot;
+        const queuedCount = snap?.queued.length ?? 0;
+        const runningCount = snap?.running ? 1 : 0;
+        // Display "Queue: N" where N = running + queued. We deliberately
+        // count both together because the user cares about "how many
+        // ahead of me" / "what's in flight"; running is shown via the
+        // existing chat bubble already.
+        const total = queuedCount + runningCount;
+        if (total === 0) {
+            this._queueBadge.style.display = "none";
+            this._queueBadge.textContent = "";
+            return;
+        }
+        const parts: string[] = [];
+        if (runningCount > 0) parts.push("1 running");
+        if (queuedCount > 0) parts.push(`${queuedCount} queued`);
+        this._queueBadge.textContent = `Queue: ${parts.join(", ")}`;
+        this._queueBadge.style.display = "";
     }
 
     /**

@@ -28,6 +28,9 @@ import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
     PendingInteractionEntry,
+    QueuedRequest,
+    QueueCancelReason,
+    QueueSnapshot,
 } from "@typeagent/dispatcher-types";
 import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
@@ -242,6 +245,32 @@ let currentRequestId: string | undefined;
 let currentClientRequestId: string | undefined;
 let isProcessing = false;
 let lastCtrlCTime = 0;
+
+// ===== Server-side queue state (Phase 1) =====
+// Latest snapshot pushed by the SharedDispatcher. Always reflects the
+// state AFTER the most recent transition. `undefined` means we are
+// either not connected through a queueing dispatcher (direct/local
+// mode) or no events have arrived yet.
+let cliQueueState: QueueSnapshot | undefined;
+// Server-assigned UUID of the request that this CLI instance most
+// recently submitted but has not yet seen `requestStarted` for. Used
+// to suppress the "▶ running" marker for the user's own next command,
+// which would otherwise be noisy on a quiet local session.
+let lastSubmittedRequestId: string | undefined;
+
+/** Snapshot getter — used by /queue list and tests. */
+export function getCliQueueState(): QueueSnapshot | undefined {
+    return cliQueueState;
+}
+
+/**
+ * Bootstrap the CLI's local queue state from a snapshot returned by
+ * `joinConversation`. Safe to call repeatedly (each call replaces the
+ * cached snapshot).
+ */
+export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
+    cliQueueState = snapshot;
+}
 
 // Grammar log file path
 const grammarLogPath = path.join(
@@ -1117,7 +1146,125 @@ export function createEnhancedClientIO(
             }
             throw new Error(`Action ${action} not supported`);
         },
+
+        // ===== Message-queue push events (Phase 1) =====
+        requestQueued(entry: QueuedRequest): void {
+            cliQueueState = applyEntryToSnapshot(
+                cliQueueState,
+                "queued",
+                entry,
+            );
+        },
+        requestStarted(entry: QueuedRequest): void {
+            cliQueueState = applyEntryToSnapshot(
+                cliQueueState,
+                "started",
+                entry,
+            );
+            // Suppress the marker for the request the user just
+            // submitted from THIS CLI — otherwise we double-print.
+            if (entry.requestId === lastSubmittedRequestId) {
+                lastSubmittedRequestId = undefined;
+                return;
+            }
+            writeQueueLine(
+                chalk.cyan("▶ running: ") +
+                    chalk.dim(truncateText(entry.text)),
+            );
+        },
+        requestCancelled(requestId: string, reason: QueueCancelReason): void {
+            const cancelledText = removeFromSnapshot(cliQueueState, requestId);
+            if (cancelledText !== undefined) {
+                writeQueueLine(
+                    chalk.yellow("✗ cancelled: ") +
+                        chalk.dim(truncateText(cancelledText)) +
+                        chalk.dim(` (${reason})`),
+                );
+            }
+        },
+        queueStateChanged(snapshot: QueueSnapshot): void {
+            // Authoritative replacement — clone to insulate from server-side
+            // mutations.
+            cliQueueState = {
+                running: snapshot.running ? { ...snapshot.running } : null,
+                queued: snapshot.queued.map((e) => ({ ...e })),
+                paused: snapshot.paused,
+            };
+        },
     };
+}
+
+/** Best-effort truncate for one-line markers. */
+function truncateText(text: string, max: number = 60): string {
+    const single = text.replace(/\s+/g, " ").trim();
+    return single.length > max ? single.slice(0, max - 1) + "…" : single;
+}
+
+/** Print a queue-related one-liner without disturbing readline state. */
+function writeQueueLine(text: string): void {
+    if (terminalLayout?.isActive) {
+        terminalLayout.writeContent(text);
+        activePromptRenderer?.redraw();
+        return;
+    }
+    if (activeRl) {
+        readline.cursorTo(process.stdout, 0);
+        readline.clearLine(process.stdout, 0);
+        process.stdout.write(text + "\n");
+        activeRl.prompt(true);
+        return;
+    }
+    process.stdout.write(text + "\n");
+}
+
+/**
+ * Apply a single queued/started transition to the cached snapshot
+ * locally. The authoritative source remains `queueStateChanged`; this
+ * keeps the cache fresh between full snapshots so the prompt badge
+ * updates as soon as the matching event arrives. Returns a new
+ * snapshot object (never mutates the input).
+ */
+function applyEntryToSnapshot(
+    snap: QueueSnapshot | undefined,
+    kind: "queued" | "started",
+    entry: QueuedRequest,
+): QueueSnapshot {
+    const base: QueueSnapshot = snap
+        ? {
+              running: snap.running ? { ...snap.running } : null,
+              queued: snap.queued.map((e) => ({ ...e })),
+              paused: snap.paused,
+          }
+        : { running: null, queued: [], paused: false };
+    if (kind === "queued") {
+        if (!base.queued.some((e) => e.requestId === entry.requestId)) {
+            base.queued.push({ ...entry });
+        }
+        return base;
+    }
+    // "started" — the entry left the queue head and is now running.
+    base.queued = base.queued.filter((e) => e.requestId !== entry.requestId);
+    base.running = { ...entry };
+    return base;
+}
+
+/** Remove an entry from the cached snapshot; returns its text if found. */
+function removeFromSnapshot(
+    snap: QueueSnapshot | undefined,
+    requestId: string,
+): string | undefined {
+    if (!snap) return undefined;
+    if (snap.running?.requestId === requestId) {
+        const t = snap.running.text;
+        snap.running = null;
+        return t;
+    }
+    const idx = snap.queued.findIndex((e) => e.requestId === requestId);
+    if (idx >= 0) {
+        const [removed] = snap.queued.splice(idx, 1);
+        return removed.text;
+    }
+    return undefined;
 }
 
 // Helper functions
@@ -1887,17 +2034,46 @@ function startExecutionKeyListener(
         return () => {};
     }
 
+    const tryCancelRunning = (): boolean => {
+        if (currentRequestId) {
+            dispatcher.cancelCommand(currentRequestId);
+            return true;
+        }
+        if (isProcessing && currentClientRequestId) {
+            // setUserRequest not yet received — cancel by client-assigned ID
+            dispatcher.cancelCommandByClientId(currentClientRequestId);
+            return true;
+        }
+        // Phase 1: also honour a server-side `running` head we know
+        // about via push events even if no inline await exists in
+        // this CLI instance.
+        const running = cliQueueState?.running;
+        if (running) {
+            dispatcher.cancelCommand(running.requestId);
+            return true;
+        }
+        return false;
+    };
+
+    const printNoRunningHint = () => {
+        const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
+        if (hasQueued) {
+            writeQueueLine(
+                chalk.dim(
+                    "No request currently running. Use /queue cancel <id> to cancel queued requests.",
+                ),
+            );
+        }
+    };
+
     const onData = (data: Buffer | string) => {
         // stdin encoding may be set to utf8 by questionWithCompletion,
         // so data can be a string. Use charCodeAt for consistent handling.
         const code = typeof data === "string" ? data.charCodeAt(0) : data[0];
         if (data.length === 1 && code === 0x1b) {
             // Escape key — cancel current command
-            if (currentRequestId) {
-                dispatcher.cancelCommand(currentRequestId);
-            } else if (isProcessing && currentClientRequestId) {
-                // setUserRequest not yet received — cancel by client-assigned ID
-                dispatcher.cancelCommandByClientId(currentClientRequestId);
+            if (!tryCancelRunning()) {
+                printNoRunningHint();
             }
         } else if (data.length === 1 && code === 4) {
             // Ctrl+D — toggle debug panel expand/collapse
@@ -1916,10 +2092,8 @@ function startExecutionKeyListener(
                 process.exit(0);
             }
             lastCtrlCTime = now;
-            if (currentRequestId) {
-                dispatcher.cancelCommand(currentRequestId);
-            } else if (isProcessing && currentClientRequestId) {
-                dispatcher.cancelCommandByClientId(currentClientRequestId);
+            if (!tryCancelRunning()) {
+                printNoRunningHint();
             }
         }
     };
@@ -1977,6 +2151,36 @@ export async function processCommandsEnhanced<T>(
               terminal: true,
           });
     activeRl = rl;
+
+    // ===== Queue-mode Ctrl+C handler (Phase 1) =====
+    // In the non-blocking submit path we never enter raw mode, so the
+    // legacy per-command key listener is bypassed. Install a readline
+    // SIGINT handler that cancels the running queue head when present
+    // and otherwise prints a hint. The original double-press-to-exit
+    // behavior is preserved.
+    if (rl && dispatcherForCancel?.submitCommand) {
+        rl.on("SIGINT", () => {
+            const now = Date.now();
+            if (now - lastCtrlCTime < 1000) {
+                process.exit(0);
+            }
+            lastCtrlCTime = now;
+            const running =
+                currentRequestId ?? cliQueueState?.running?.requestId;
+            if (running) {
+                dispatcherForCancel.cancelCommand(running);
+                return;
+            }
+            const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
+            if (hasQueued) {
+                writeQueueLine(
+                    chalk.dim(
+                        "No request currently running. Use /queue cancel <id> to cancel queued requests.",
+                    ),
+                );
+            }
+        });
+    }
 
     const promptColor = chalk.cyanBright;
 
@@ -2055,6 +2259,55 @@ export async function processCommandsEnhanced<T>(
             const panel = getDebugPanel();
             panel?.reset();
 
+            // ===== Non-blocking submit path (Phase 1) =====
+            // When the dispatcher exposes submitCommand the CLI uses
+            // ack-on-enqueue semantics: the call resolves as soon as
+            // the request hits the server-side queue, returning
+            // control to the prompt. Output and completion are
+            // observed via the existing setDisplay / commandComplete
+            // streams plus the new queue lifecycle events.
+            const submitCommand = dispatcherForCancel?.submitCommand;
+            if (typeof submitCommand === "function") {
+                isProcessing = true;
+                currentRequestId = undefined;
+                const clientRequestId = randomUUID();
+                currentClientRequestId = clientRequestId;
+                try {
+                    let entry: QueuedRequest | undefined;
+                    try {
+                        entry = await submitCommand.call(
+                            dispatcherForCancel,
+                            request,
+                            undefined,
+                            undefined,
+                            clientRequestId,
+                        );
+                    } catch (err) {
+                        console.log(chalk.red(`### ERROR: ${err}`));
+                        history.push(request);
+                        console.log("");
+                        continue;
+                    }
+                    if (entry) {
+                        // Track so requestStarted doesn't double-print
+                        // and the prompt badge doesn't double-count.
+                        lastSubmittedRequestId = entry.requestId;
+                        currentRequestId = entry.requestId;
+                    }
+                } finally {
+                    isProcessing = false;
+                    currentClientRequestId = undefined;
+                }
+                history.push(request);
+                console.log("");
+                fs.writeFileSync(
+                    historyFile,
+                    JSON.stringify({ commands: history }),
+                );
+                continue;
+            }
+
+            // ===== Legacy blocking path (no queueing) =====
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner
@@ -2147,10 +2400,29 @@ function getNextInput(
 
 /**
  * Get styled console prompt
- * Returns a clean prompt regardless of status text
+ * Returns a clean prompt regardless of status text.
+ *
+ * The optional queue snapshot drives a small badge appended after the
+ * verbose indicator: `(queue: N)` when there are queued entries that
+ * are NOT this client's currently-awaited submission. Running entries
+ * are tracked separately by the spinner / "▶ running" marker, so they
+ * are not double-counted.
  */
-export function getEnhancedConsolePrompt(_text: string): string {
-    return `${getVerboseIndicator()}❯ `;
+export function getEnhancedConsolePrompt(
+    _text: string,
+    queue?: QueueSnapshot | undefined,
+): string {
+    const snap = queue ?? cliQueueState;
+    const queuedCount = snap?.queued.length ?? 0;
+    const runningOther =
+        snap?.running &&
+        snap.running.requestId !== currentRequestId &&
+        snap.running.requestId !== lastSubmittedRequestId
+            ? 1
+            : 0;
+    const total = queuedCount + runningOther;
+    const badge = total > 0 ? chalk.yellow(`(queue: ${total}) `) : "";
+    return `${getVerboseIndicator()}${badge}❯ `;
 }
 
 /**

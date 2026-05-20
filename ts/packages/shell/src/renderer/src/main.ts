@@ -948,6 +948,19 @@ function registerClient(
         onUserHide: (entry) => {
             chatView.applyHide(entry);
         },
+        // ===== Server-side queue push events (Phase 1) =====
+        requestQueued: (entry) => {
+            chatView.onRequestQueued(entry);
+        },
+        requestStarted: (entry) => {
+            chatView.onRequestStarted(entry);
+        },
+        requestCancelled: (requestId, reason) => {
+            chatView.onRequestCancelled(requestId, reason);
+        },
+        queueStateChanged: (snapshot) => {
+            chatView.onQueueStateChanged(snapshot);
+        },
     };
 
     const client: Client = {

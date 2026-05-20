@@ -9,11 +9,13 @@ import {
     processCommandsEnhanced,
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
+    applyQueueSnapshot,
 } from "../enhancedConsole.js";
 import {
     setConversationCommandContext,
     setServerPort,
     setServerConnection,
+    setQueueDispatcher,
 } from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
@@ -337,6 +339,11 @@ export default class Connect extends Command {
                 saveLastConversationId(activeConversationId);
             }
             bindDispatcher(activeDispatcher);
+            // Wire the slash-command dispatcher accessor and bootstrap
+            // the queue snapshot so /queue list and the prompt badge
+            // are correct from the first prompt.
+            setQueueDispatcher(activeDispatcher);
+            applyQueueSnapshot(conversation.queueSnapshot);
             await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
             // Set up ConversationCommandContext for @conversation commands.
@@ -365,6 +372,8 @@ export default class Connect extends Command {
                         activeConversationId = newConversation.conversationId;
                         activeName = newConversation.name;
                         bindDispatcher(activeDispatcher);
+                        setQueueDispatcher(activeDispatcher);
+                        applyQueueSnapshot(newConversation.queueSnapshot);
                         if (!isEphemeral) {
                             saveLastConversationId(activeConversationId);
                         }

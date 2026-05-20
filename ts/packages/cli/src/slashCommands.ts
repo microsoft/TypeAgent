@@ -7,6 +7,7 @@ import {
     stopAgentServer,
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
+import type { Dispatcher, QueueSnapshot } from "@typeagent/dispatcher-types";
 import type { ConversationCommandContext } from "./conversationCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 
@@ -101,6 +102,116 @@ function handleVerbose(args: string): void {
         activeNamespaces = namespaces;
         console.log(chalk.dim(`Verbose mode enabled: ${namespaces}`));
     }
+}
+
+// Late-binding dispatcher accessor used by /queue commands.
+// The CLI bootstrap (commands/connect.ts) sets this after a successful
+// joinConversation so /queue list and /queue cancel can invoke
+// getQueueSnapshot()/cancelCommand() on the live dispatcher.
+let queueDispatcher: Dispatcher | undefined;
+
+export function setQueueDispatcher(d: Dispatcher | undefined): void {
+    queueDispatcher = d;
+}
+
+export function getQueueDispatcher(): Dispatcher | undefined {
+    return queueDispatcher;
+}
+
+function shortId(id: string): string {
+    return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function ageMs(start: number): string {
+    const ms = Date.now() - start;
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${Math.floor(ms / 60_000)}m`;
+}
+
+function truncateForList(s: string, max = 50): string {
+    const single = s.replace(/\s+/g, " ").trim();
+    return single.length > max ? single.slice(0, max - 1) + "…" : single;
+}
+
+function formatQueueSnapshot(snap: QueueSnapshot): string {
+    const lines: string[] = [];
+    lines.push(chalk.bold("Queue:"));
+    if (snap.running) {
+        lines.push(
+            `  ${chalk.greenBright("●")} ${chalk.cyan(shortId(snap.running.requestId))} ${chalk.dim("[running " + ageMs(snap.running.startedAt ?? snap.running.submittedAt) + "]")} ${truncateForList(snap.running.text)}`,
+        );
+    } else {
+        lines.push(`  ${chalk.dim("(idle)")}`);
+    }
+    if (snap.queued.length === 0) {
+        lines.push(`  ${chalk.dim("(no queued requests)")}`);
+    } else {
+        for (const e of snap.queued) {
+            lines.push(
+                `  ${chalk.yellow("○")} ${chalk.cyan(shortId(e.requestId))} ${chalk.dim("[queued " + ageMs(e.submittedAt) + "]")} ${truncateForList(e.text)}`,
+            );
+        }
+    }
+    return lines.join("\n");
+}
+
+/**
+ * Resolve a (possibly short) requestId prefix against the current
+ * snapshot. Returns the full requestId when exactly one match, or an
+ * error message otherwise.
+ */
+function resolveRequestIdPrefix(
+    prefix: string,
+    snap: QueueSnapshot,
+): { ok: true; requestId: string } | { ok: false; error: string } {
+    if (prefix.length < 4) {
+        return {
+            ok: false,
+            error: "Request id prefix must be at least 4 characters.",
+        };
+    }
+    const candidates: string[] = [];
+    if (snap.running && snap.running.requestId.startsWith(prefix)) {
+        candidates.push(snap.running.requestId);
+    }
+    for (const e of snap.queued) {
+        if (e.requestId.startsWith(prefix)) candidates.push(e.requestId);
+    }
+    if (candidates.length === 0) {
+        return {
+            ok: false,
+            error: `No queued or running request matches '${prefix}'.`,
+        };
+    }
+    if (candidates.length > 1) {
+        return {
+            ok: false,
+            error: `Ambiguous prefix '${prefix}': matches ${candidates.length} requests; use a longer prefix.`,
+        };
+    }
+    return { ok: true, requestId: candidates[0] };
+}
+
+async function refreshQueueSnapshot(): Promise<QueueSnapshot | undefined> {
+    const d = queueDispatcher;
+    if (!d || typeof d.getQueueSnapshot !== "function") {
+        return undefined;
+    }
+    try {
+        return await d.getQueueSnapshot();
+    } catch {
+        return undefined;
+    }
+}
+
+function printQueueHelp(): void {
+    console.log(chalk.bold("/queue"));
+    console.log("  /queue [list]       — show pending and running requests");
+    console.log(
+        "  /queue cancel <id>  — cancel a queued or running request (id prefix ≥4 chars)",
+    );
+    console.log("  /queue help         — show this help");
 }
 
 const slashCommands: SlashCommand[] = [
@@ -206,6 +317,73 @@ const slashCommands: SlashCommand[] = [
                 );
             }
             return { exit: true };
+        },
+    },
+    {
+        name: "queue",
+        description:
+            "Inspect or cancel queued / running requests on the server-side message queue",
+        handler: async (args) => {
+            const parts = args.trim().split(/\s+/).filter(Boolean);
+            const sub = parts[0]?.toLowerCase() ?? "list";
+            if (sub === "help") {
+                printQueueHelp();
+                return;
+            }
+            if (sub === "list" || parts.length === 0) {
+                const snap = await refreshQueueSnapshot();
+                if (!snap) {
+                    console.log(
+                        chalk.dim(
+                            "Queue is unavailable (dispatcher does not expose getQueueSnapshot).",
+                        ),
+                    );
+                    return;
+                }
+                console.log(formatQueueSnapshot(snap));
+                return;
+            }
+            if (sub === "cancel") {
+                const idPrefix = parts[1];
+                if (!idPrefix) {
+                    console.log(
+                        chalk.yellow(
+                            "Usage: /queue cancel <id>   (id prefix ≥4 chars)",
+                        ),
+                    );
+                    return;
+                }
+                const d = queueDispatcher;
+                if (!d || typeof d.cancelCommand !== "function") {
+                    console.log(
+                        chalk.dim(
+                            "Cancel is unavailable (no active dispatcher).",
+                        ),
+                    );
+                    return;
+                }
+                const snap = await refreshQueueSnapshot();
+                if (!snap) {
+                    console.log(
+                        chalk.dim("Queue is unavailable for resolution."),
+                    );
+                    return;
+                }
+                const resolved = resolveRequestIdPrefix(idPrefix, snap);
+                if (!resolved.ok) {
+                    console.log(chalk.yellow(resolved.error));
+                    return;
+                }
+                d.cancelCommand(resolved.requestId);
+                console.log(
+                    chalk.dim(
+                        `Cancel requested for ${shortId(resolved.requestId)}.`,
+                    ),
+                );
+                return;
+            }
+            console.log(chalk.yellow(`Unknown /queue subcommand: ${sub}`));
+            printQueueHelp();
         },
     },
     {

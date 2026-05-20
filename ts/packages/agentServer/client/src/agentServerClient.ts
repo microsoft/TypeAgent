@@ -88,6 +88,13 @@ export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
     name: string;
+    /**
+     * Snapshot of the per-conversation message queue at the moment of
+     * join. Phase 1 use: bootstrap CLI / Shell queue badges so they
+     * are correct even when joining mid-queue. May be omitted when the
+     * server does not provide a snapshot (older builds).
+     */
+    queueSnapshot?: JoinConversationResult["queueSnapshot"];
 };
 
 export type AgentServerConnection = {
@@ -188,6 +195,7 @@ export async function connectAgentServer(
                     dispatcher,
                     conversationId,
                     name: result.name,
+                    queueSnapshot: result.queueSnapshot,
                 };
             },
 
