@@ -4442,4 +4442,171 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
     });
+
+    describe("branch arm state isolation", () => {
+        it("rejects $from:state ref in a branch arm node input", () => {
+            // Branch arms are isolated sub-scopes with no state namespace.
+            // $from:"state" inside an arm is invalid; state must be threaded
+            // through arm.inputs.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "step",
+                                    nodes: {
+                                        step: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: {
+                                                type: "object",
+                                                properties: {
+                                                    x: { type: "integer" },
+                                                },
+                                            },
+                                            outputSchema: { type: "null" },
+                                            inputs: {
+                                                x: {
+                                                    $from: "state",
+                                                    name: "counter",
+                                                } as any,
+                                            },
+                                        },
+                                    },
+                                    output: null,
+                                    outputSchema: { type: "null" },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "noop",
+                                nodes: { noop: makeTaskNode() },
+                                output: null,
+                                outputSchema: { type: "null" },
+                            },
+                        },
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("counter") &&
+                        e.message.includes("state namespace"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts $from:state in arm.inputs (crosses the boundary correctly)", () => {
+            // State values may appear in arm.inputs (evaluated in outer scope).
+            // Inside the arm they are accessed via $from:"input".
+            const ir = makeMinimalIR({
+                entry: "loop",
+                output: null,
+                outputSchema: { type: "null" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            counter: {
+                                schema: { type: "integer" },
+                                initial: 0 as any,
+                            },
+                        },
+                        iterateState: {
+                            counter: { $from: "state", name: "counter" } as any,
+                        },
+                        continueWhen: false as any,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "branch",
+                            nodes: {
+                                branch: {
+                                    kind: "branch",
+                                    selector: "yes",
+                                    selectorSchema: { type: "string" },
+                                    cases: {
+                                        yes: {
+                                            inputs: {
+                                                // state value crosses boundary here
+                                                counter: {
+                                                    $from: "state",
+                                                    name: "counter",
+                                                } as any,
+                                            },
+                                            scope: {
+                                                inputSchema: {
+                                                    type: "object",
+                                                    properties: {
+                                                        counter: {
+                                                            type: "integer",
+                                                        },
+                                                    },
+                                                },
+                                                entry: "step",
+                                                nodes: {
+                                                    step: {
+                                                        kind: "task",
+                                                        task: "noop",
+                                                        inputSchema: {
+                                                            type: "object",
+                                                            properties: {
+                                                                counter: {
+                                                                    type: "integer",
+                                                                },
+                                                            },
+                                                        },
+                                                        outputSchema: {
+                                                            type: "null",
+                                                        },
+                                                        inputs: {
+                                                            // inside arm: $from:"input"
+                                                            counter: {
+                                                                $from: "input",
+                                                                name: "counter",
+                                                            } as any,
+                                                        },
+                                                    },
+                                                },
+                                                output: null,
+                                                outputSchema: { type: "null" },
+                                            },
+                                        },
+                                    },
+                                    default: {
+                                        inputs: {},
+                                        scope: {
+                                            inputSchema: { type: "object" },
+                                            entry: "noop",
+                                            nodes: { noop: makeTaskNode() },
+                                            output: null,
+                                            outputSchema: { type: "null" },
+                                        },
+                                    },
+                                } as any,
+                            },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                    } as any,
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
 });
