@@ -461,7 +461,7 @@ workflow call, and would otherwise be left referencing the local
 alias. Fixed by walking `param.default` for every parameter before
 descending into the workflow body.
 
-### P7-D6. Optional `workspaceRoot` containment, off by default
+### P7-D6. ✅ Optional `workspaceRoot` containment, off by default
 
 The default Node `FileResolver` allows imports to resolve anywhere on
 the filesystem (subject to the developer-supplied source tree). This
