@@ -1,10 +1,9 @@
 {
   "Workflow scaffold": {
-    "prefix": "workflow",
+    "prefix": ["wf", "workflow"],
     "body": [
-      "workflow ${1:name}(${2:input}: ${3:string}): ${4:string} {",
+      "workflow ${1:Name}(${2:param}: ${3:type}): ${4:ReturnType} {",
       "\t$0",
-      "\treturn ${2:input};",
       "}",
     ],
     "description": "Define a new workflow.",
