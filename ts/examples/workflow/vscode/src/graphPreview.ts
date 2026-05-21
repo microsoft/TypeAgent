@@ -257,6 +257,36 @@ const RENDER_SCRIPT = String.raw`
         }
     }
 
+    // Compute a center position for each group based on its member nodes.
+    // This allows edges whose source or target is a group ID to render.
+    for (const grp of g.groups) {
+        const memberIds = collectGroupMembersFwd(grp);
+        const ps = memberIds.map(id => positions.get(id)).filter(Boolean);
+        if (!ps.length) continue;
+        const minX = Math.min(...ps.map(p => p.x));
+        const minY = Math.min(...ps.map(p => p.y));
+        const maxX = Math.max(...ps.map(p => p.x + p.w));
+        const maxY = Math.max(...ps.map(p => p.y + p.h));
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        positions.set(grp.id, { x: cx - NODE_W / 2, y: cy - NODE_H / 2, w: NODE_W, h: NODE_H, kind: "group", label: grp.label });
+    }
+
+    // Forward declaration used by group-position loop above.
+    function collectGroupMembersFwd(grp) {
+        const out = [];
+        const seen = new Set();
+        function visit(id) {
+            if (seen.has(id)) return;
+            seen.add(id);
+            const sub = groupMap.get(id);
+            if (sub) { for (const c of sub.children) visit(c); }
+            else { out.push(id); }
+        }
+        for (const c of grp.children) visit(c);
+        return out;
+    }
+
     const totalH = PAD * 2 + layers.length * NODE_H + (layers.length - 1) * GAP_Y;
     const totalW = PAD * 2 + maxW;
 
@@ -330,8 +360,9 @@ const RENDER_SCRIPT = String.raw`
         }
     }
 
-    // Nodes.
+    // Nodes (skip synthetic group-center entries - groups are drawn as dashed boxes above).
     for (const [, p] of positions) {
+        if (p.kind === "group") continue;
         const cls = nodeClass(p.kind);
         const r = document.createElementNS(svgns, "rect");
         r.setAttribute("class", cls);
