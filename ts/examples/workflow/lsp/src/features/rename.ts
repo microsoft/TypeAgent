@@ -7,6 +7,8 @@ import {
     Range,
     WorkspaceEdit,
     TextEdit,
+    ResponseError,
+    ErrorCodes,
 } from "vscode-languageserver/node.js";
 import { getParsed } from "../parsedDocument.js";
 import { findReferenceAt, type SymbolDef } from "../symbolResolver.js";
@@ -83,6 +85,18 @@ export function computeRename(
     const parsed = getParsed(doc);
     if (!parsed.symbols) return null;
     const def = hit.def;
+
+    // Reject if the new name is already declared in the same scope.
+    const conflict = parsed.symbols.defs.find(
+        (d) => d !== def && d.name === newName,
+    );
+    if (conflict) {
+        throw new ResponseError(
+            ErrorCodes.InvalidRequest,
+            `"${newName}" is already declared in this workflow.`,
+        );
+    }
+
     const edits: TextEdit[] = [];
 
     edits.push(TextEdit.replace(pointRange(def.loc, def.name.length), newName));

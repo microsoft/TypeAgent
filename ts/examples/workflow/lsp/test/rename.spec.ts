@@ -128,6 +128,14 @@ describe("rename", () => {
         );
         expect(edit).toBeNull();
     });
+
+    it("throws when new name conflicts with an existing symbol", () => {
+        const text = `workflow w(): string {\n    const x = "a";\n    const y = "b";\n    return x;\n}`;
+        // rename 'x' to 'y' - conflict
+        expect(() =>
+            computeRename(doc(text), { line: 1, character: 10 }, "y"),
+        ).toThrow();
+    });
 });
 
 // Phase 4c: prepare-rename on a keyword should return null.
