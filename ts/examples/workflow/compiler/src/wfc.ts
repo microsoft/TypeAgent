@@ -36,6 +36,9 @@ Options:
                        stdout). With multiple inputs, <path> is treated as
                        a directory; each input is written to
                        <path>/<basename>.json.
+  --entry <name>       Name of the workflow to use as the IR entry. Defaults
+                       to the unique exported workflow, or the only workflow
+                       if just one is defined.
   --no-validate        Skip IR validation after emit (validation is on by
                        default).
   --pretty             Pretty-print the JSON output with 2-space indent
@@ -80,6 +83,7 @@ function formatError(inputDisplay: string, e: CompileError): string {
 interface ParsedArgs {
     inputs: string[];
     out?: string;
+    entry?: string;
     validate: boolean;
     pretty: boolean;
 }
@@ -87,6 +91,7 @@ interface ParsedArgs {
 function parseArgs(argv: string[]): ParsedArgs {
     const inputs: string[] = [];
     let out: string | undefined;
+    let entry: string | undefined;
     let validate = true;
     let pretty = true;
 
@@ -110,6 +115,13 @@ function parseArgs(argv: string[]): ParsedArgs {
                 out = v;
                 break;
             }
+            case "--entry": {
+                const v = argv[++i];
+                if (!v || v.startsWith("-"))
+                    fail("--entry requires a workflow name");
+                entry = v;
+                break;
+            }
             case "--no-validate":
                 validate = false;
                 break;
@@ -129,6 +141,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     if (inputs.length === 0) fail(usage);
     const parsed: ParsedArgs = { inputs, validate, pretty };
     if (out !== undefined) parsed.out = out;
+    if (entry !== undefined) parsed.entry = entry;
     return parsed;
 }
 
@@ -189,6 +202,7 @@ function compileOne(
     const { abs, source } = readSource(inputDisplay);
     const result = compile(source, builtinTaskSchemas(), {
         validate: args.validate,
+        ...(args.entry !== undefined ? { entry: args.entry } : {}),
     });
     if (result.errors.length > 0) {
         for (const e of result.errors) {
