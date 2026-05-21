@@ -52,9 +52,9 @@ The `@vscode/test-electron` harness lives under `src/test/`. It is
 run on a developer workstation or CI runner with `xvfb-run`:
 
 ```sh
-pnpm --filter workflow-vscode run test:e2e
+pnpm --filter workflow-vscode run test:ui
 # or with Xvfb on a headless CI host:
-xvfb-run -a pnpm --filter workflow-vscode run test:e2e
+xvfb-run -a pnpm --filter workflow-vscode run test:ui
 ```
 
 See `scripts/extension-test.sh` and

@@ -25,7 +25,7 @@
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test:compile": "tsc -p tsconfig.test.json",
-    "test:e2e": "npm run build && npm run test:compile && node ./dist/test/runTests.js",
+    "test:ui": "npm run build && npm run test:compile && node ./dist/test/runTests.js",
     "tsc": "tsc -p tsconfig.json --noEmit",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
@@ -127,5 +127,14 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "icon": "icons/wf.svg"
+  "icon": "icons/wf.svg",
+  "fluidBuild": {
+    "tasks": {
+      "build": {
+        "dependsOn": [
+          "workflow-lsp#build"
+        ]
+      }
+    }
+  }
 }

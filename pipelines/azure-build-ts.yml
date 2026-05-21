@@ -71,6 +71,14 @@ jobs:
         workingDirectory: $(buildDirectory)
 
       - script: |
+          Xvfb :99 -screen 0 1600x1200x24 &
+          export DISPLAY=:99
+          npm run test:ui
+        displayName: "UI tests (requires display)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+        workingDirectory: $(buildDirectory)
+
+      - script: |
           npm run lint
         displayName: "Lint"
         workingDirectory: $(buildDirectory)

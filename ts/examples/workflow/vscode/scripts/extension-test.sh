@@ -30,5 +30,5 @@ if [[ -z "${DISPLAY:-}" && "$(uname)" == "Linux" ]]; then
     exit 1
 fi
 
-exec npm run test:e2e
+exec npm run test:ui
 
