@@ -303,13 +303,28 @@ async function updateMontageContext(
                 agentContext.localHostPort,
             );
             if (viewServiceResult) {
-                agentContext.viewProcess = viewServiceResult.process;
+                const viewProcess = viewServiceResult.process;
+                agentContext.viewProcess = viewProcess;
                 agentContext.localHostPort = viewServiceResult.port;
                 agentContext.viewPortRegistration?.release();
                 agentContext.viewPortRegistration = context.registerPort(
                     "view",
                     viewServiceResult.port,
                 );
+                // Defensive cleanup if the child crashes mid-session.
+                // The identity guard prevents a late-firing `exit`
+                // event on a previously-replaced process from
+                // clobbering a newer registration; the explicit
+                // disable path (which also releases) is naturally
+                // idempotent under `?.release()`.
+                viewProcess.once("exit", () => {
+                    if (agentContext.viewProcess !== viewProcess) {
+                        return;
+                    }
+                    agentContext.viewPortRegistration?.release();
+                    agentContext.viewPortRegistration = undefined;
+                    agentContext.viewProcess = undefined;
+                });
             }
 
             // send the folder info

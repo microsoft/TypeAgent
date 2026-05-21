@@ -592,8 +592,31 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess =
-                await createViewServiceHost(context);
+            const viewProcess = await createViewServiceHost(context);
+            if (viewProcess) {
+                context.agentContext.viewProcess = viewProcess;
+                // Defensive cleanup if the child crashes mid-session.
+                // The dispatcher's PortRegistrar leaves stale entries
+                // bounded to "until respawn or session end", but a
+                // crashed child should release its registration eagerly
+                // so the entry doesn't shadow a fresh bind. The
+                // identity guard prevents a late-firing `exit` event on
+                // a previously-replaced process from clobbering a newer
+                // registration; the explicit disable path (which also
+                // releases) is naturally idempotent under `?.release()`.
+                viewProcess.once("exit", () => {
+                    if (context.agentContext.viewProcess !== viewProcess) {
+                        return;
+                    }
+                    context.agentContext.viewPortRegistration?.release();
+                    context.agentContext.viewPortRegistration = undefined;
+                    context.agentContext.viewProcess = undefined;
+                    // Reset cached port so respawn forks with arg "0"
+                    // (OS-assigned) instead of trying to re-bind the
+                    // stale port — mirrors the disable/close paths.
+                    context.agentContext.localHostPort = 0;
+                });
+            }
         }
 
         if (context.agentContext.browserSchemaEnabled) {

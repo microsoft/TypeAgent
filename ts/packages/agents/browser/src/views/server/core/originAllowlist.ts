@@ -21,6 +21,13 @@ import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
  * back any extension UI. See {@link createAgentOriginAllowlist} for the
  * shared loopback + no-Origin baseline.
  *
+ * `Origin: "null"` (sent by `file://` pages and sandboxed iframes) is
+ * rejected — only regular browser tabs and same-origin fetches are
+ * legitimate clients, so an opaque-origin caller is necessarily
+ * something we do not want to honor.
+ *
  * Anything else is rejected with HTTP 403 before the route handler runs.
  */
-export const isAllowedViewOrigin = createAgentOriginAllowlist();
+export const isAllowedViewOrigin = createAgentOriginAllowlist({
+    allowNullOrigin: false,
+});
