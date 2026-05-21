@@ -177,3 +177,63 @@ parameter's location.
 `a -> b -> c -> a`, with the trailing node repeated for legibility. The
 DFS dedups cycles by the sorted set of nodes (`a|b|c` key) so mutual
 recursion between A and B reports once, not at every visit.
+
+## Phase 4 — Emitter
+
+### P4-D1. New `emitAll(workflows, entryName)` API; old `emit(ast)` kept as shim
+
+`Emitter.emit(workflow)` used to be the only entry point. Multi-workflow
+emission needs the full set of workflows visible at emit time so that a
+`workflowCall` node can resolve the callee's input/output schemas and
+parameter list (used by default-arg inlining).
+
+Added `emitAll(workflows: WorkflowDecl[], entryName: string)` and made
+`emit(ast)` delegate to `emitAll([ast], ast.name)`. This preserves all
+existing single-workflow tests with no migration and gives the compiler
+a clean multi-workflow path.
+
+### P4-D2. Default-arg inlining via `kind: "literal"` scope bindings
+
+Callee defaults can reference earlier callee params (e.g.
+`workflow f(a, b = a) { ... }`). At emit time, the caller has already
+resolved templates for explicitly-supplied args (and for earlier
+defaults). The cleanest way to substitute callee-param references inside
+a default expression is to run `emitExpr` in a synthetic scope where
+each earlier callee param name binds to the caller-resolved template.
+
+We piggy-back on the existing `kind: "literal"` binding shape: the
+binding's `value` field carries the caller template; `resolveDottedName`
+already returns `binding.value` for literal bindings (emitter.ts:2103).
+No new binding kind required.
+
+Limitation: defaults of the form `a.foo` (path access on a literal-kind
+binding) currently fail with "Cannot access path on literal value". This
+limits defaults to identifier references and pure constants for now.
+Logged as a deferred enhancement; the type checker forbids the broken
+forms by typing the default expression in a partial scope.
+
+### P4-D3. Cache callee schemas in `workflowSchemas`
+
+`emitWorkflowCall` populates the workflowCall node's `inputSchema` and
+`outputSchema` from the callee's `WorkflowBody`. To avoid re-deriving
+schemas for every call site, the emitter caches them keyed by callee
+name during `emitAll` (computed once as each body is emitted; lookups
+inside `emitWorkflowCall` are cheap).
+
+### P4-D4. No emitter-side recursion check
+
+The type checker (`checkAll`) is responsible for cycle detection.
+Emitter trusts type-checker output and walks workflows in declaration
+order. If the type-check pass is bypassed (e.g. ad-hoc tests calling
+`emitAll` directly), recursion would manifest as caller schemas
+referencing a callee that has not yet been emitted; we tolerate this
+because the only consumer of `workflowSchemas` is the call-site node
+construction, which uses by-name lookup at runtime (post emit-all).
+
+### P4-D5. Test helper now picks first `export` workflow as entry
+
+`emitter.spec.ts` compiles a single source string with multiple
+workflows in some new tests. To keep the helper minimal we mirror the
+compiler's behavior: prefer the first exported workflow, fall back to
+the first workflow if none are exported. This avoids requiring tests to
+pass an explicit `--entry` analog and matches the user-facing default.

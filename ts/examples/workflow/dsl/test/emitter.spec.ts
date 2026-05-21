@@ -183,7 +183,13 @@ function compile(source: string): {
         return { ir: undefined, errors: [{ message: "No workflow found" }] };
     }
     const emitter = new Emitter(taskSchemas);
-    return emitter.emit(ast.workflows[0]);
+    // Use multi-workflow emit so workflow-to-workflow calls resolve.
+    // Pick the first 'export' workflow as the entry, or the first
+    // workflow if none exported (matches compiler.ts behavior for
+    // single-workflow tests).
+    const entry =
+        ast.workflows.find((w) => w.exported)?.name ?? ast.workflows[0].name;
+    return emitter.emitAll(ast.workflows, entry);
 }
 
 function compileOk(source: string): WorkflowIR {
@@ -829,17 +835,59 @@ describe("Emitter", () => {
 
     // ---- Workflow call ----
 
-    test("workflow call emits task node", () => {
-        // compile only the main workflow that calls helper
+    test("workflow call emits workflowCall node", () => {
         const ir = compileOk(`
-            workflow main(url: string): unknown {
+            workflow helper(url: string): unknown { return url; }
+            export workflow main(url: string): unknown {
                 const result = helper(url);
                 return result;
             }
         `);
-        // Should have a workflow.helper task node
-        const [, node] = findNodeByTask(ir, "workflow.helper");
-        expect(node).toBeDefined();
+        // Should emit a workflowCall node referencing helper.
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        );
+        expect(callNode).toBeDefined();
+        expect(
+            (callNode as { workflowRef: { name: string } }).workflowRef.name,
+        ).toBe("helper");
+        // helper body must also be present in the workflows table.
+        expect(ir.workflows.helper).toBeDefined();
+    });
+
+    test("workflow call inlines literal default for omitted arg", () => {
+        const ir = compileOk(`
+            workflow helper(a: string, n: number = 7): unknown { return a; }
+            export workflow main(s: string): unknown {
+                const r = helper(s);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // The omitted 'n' is filled from the default literal 7.
+        expect(callNode.inputs.n).toBe(7);
+    });
+
+    test("workflow call inlines default referencing earlier param", () => {
+        const ir = compileOk(`
+            workflow helper(a: number, b: number = a): number { return b; }
+            export workflow main(x: number): number {
+                const r = helper(x);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // 'a' resolved from caller input 'x'; 'b' inlined to same template.
+        expect(callNode.inputs.a).toEqual(callNode.inputs.b);
     });
 
     // ---- Error cases ----

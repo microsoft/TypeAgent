@@ -110,7 +110,10 @@ export function compile(
 
     // Emit
     const emitter = new Emitter(taskSchemas);
-    const { ir, errors: emitErrors } = emitter.emit(entry.value);
+    const { ir, errors: emitErrors } = emitter.emitAll(
+        workflows,
+        entry.value.name,
+    );
     for (const e of emitErrors) {
         errors.push({
             phase: "emit",
