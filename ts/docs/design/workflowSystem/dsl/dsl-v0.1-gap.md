@@ -35,24 +35,21 @@ sub-workflows are called by name and inlined at compile time.
 
 **Related decisions:**
 
-- Recursion is unsupported. The type checker resolves return types from
-  declared signatures (no divergence), but sub-workflow calls emit as
-  unregistered tasks that fail at runtime. Once inlining lands, true
-  recursion is structurally impossible (infinite inlining). A static
-  cycle check would give a better error but is low priority.
-- Sub-workflow emit strategy: the current `workflow.<name>` task-node
-  approach is a placeholder. The intended behavior is compile-time
-  inlining per dsl-v0.1.md section 4.
-- Call classification: the parser uses a syntactic rule to distinguish
-  task calls from workflow calls: dotted names (`ns.task()`) are task
-  calls, single-segment names (`fn()`) are workflow calls. There is no
-  way to call a task without a namespace prefix. This means task naming
-  must always use dotted form, and single-segment task names are
-  unreachable from DSL code. When sub-workflow calls are implemented,
-  this classification rule should be revisited together: if tasks can
-  ever have single-segment names, the disambiguation needs a different
-  strategy (e.g., checking whether the name matches a declared workflow
-  vs. a registered task schema).
+The design space for this gap is captured in
+[`workflow-composition.md`](./workflow-composition.md) (cross-cutting
+DSL + IR), with a phased implementation plan in
+[`workflow-composition-impl-plan.md`](./workflow-composition-impl-plan.md).
+Decisions resolved there (see §8 of the design):
+
+- Sub-workflow emit strategy: not inlining. Each call becomes a
+  `WorkflowCallNode` referencing a body in the IR's workflow table.
+  Inlining is reclassified as an optional engine optimization.
+- Recursion: statically rejected in v1 (cycle check on the call
+  graph). Bounded recursion is deferred to
+  `ir/future/workflow-recursion.md`.
+- Call classification: the dotted-vs-single-segment rule is dropped.
+  Name resolution decides workflow-vs-task at the call site;
+  workflows shadow tasks of the same name (§4.1 of the design).
 
 ## G2: Parallel branches missing IR schema fields
 
