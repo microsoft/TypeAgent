@@ -3171,6 +3171,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
+      websocket-utils:
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.20.1
         version: 8.20.1
