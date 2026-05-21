@@ -452,7 +452,7 @@ the entry file. This avoids the surprise of an imported library's
 `export workflow` being silently picked as the program entry. Imports
 are an inclusion mechanism, not an entry-point publication mechanism.
 
-### P7-D5. AST rewrite must cover parameter defaults
+### P7-D5. ✅ AST rewrite must cover parameter defaults
 
 The first pass of the rewriter only visited workflow bodies. Code
 review surfaced that a parameter default expression
