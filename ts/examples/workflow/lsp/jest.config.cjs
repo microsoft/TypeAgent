@@ -5,6 +5,7 @@ const base = require("../../../jest.config.js");
 
 module.exports = {
     ...base,
+    snapshotResolver: "./snapshotResolver.cjs",
     coverageDirectory: "coverage",
     coverageProvider: "v8",
     collectCoverageFrom: ["dist/src/**/*.js", "!dist/src/index.js"],
