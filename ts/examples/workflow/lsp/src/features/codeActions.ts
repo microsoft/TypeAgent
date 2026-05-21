@@ -220,14 +220,12 @@ export function computeCodeActions(
     ) {
         // Quick heuristic: selection looks like a sub-expression (no newlines,
         // reasonably short, not already the full RHS).
-        const fullRhsStart = text.indexOf("=", enclosing.loc.offset ?? 0);
-        const fullRhsText =
-            fullRhsStart >= 0
-                ? text
-                      .slice(fullRhsStart + 1)
-                      .split(";")[0]!
-                      .trim()
-                : "";
+        const rhsStart = enclosing.value.loc.offset;
+        let fullRhsText = "";
+        if (rhsStart !== undefined) {
+            const si = text.indexOf(";", rhsStart);
+            fullRhsText = text.slice(rhsStart, si >= 0 ? si : text.length).trim();
+        }
         const isFullRhs = selectionText === fullRhsText;
 
         if (
@@ -289,18 +287,17 @@ export function computeCodeActions(
                 (r) => r.name === constName && r.def?.kind === "const",
             );
             if (refs.length > 0) {
-                // Extract the RHS text (everything after `=` up to the next `;`).
-                const eqIdx = text.indexOf("=", enclosing.loc.offset ?? 0);
-                const rhsRaw =
-                    eqIdx >= 0
-                        ? (text
-                              .slice(eqIdx + 1)
-                              .split(";")[0]
-                              ?.trim() ?? "")
-                        : "";
+                // Extract the RHS text from the AST node's source offset.
+                const rhsStart = enclosing.value.loc.offset;
+                let rhsRaw = "";
+                if (rhsStart !== undefined) {
+                    const si = text.indexOf(";", rhsStart);
+                    rhsRaw = text.slice(rhsStart, si >= 0 ? si : text.length).trim();
+                }
                 if (rhsRaw.length > 0) {
                     // Build the edit: replace each reference, then delete the decl line.
-                    const refEdits: TextEdit[] = refs.map((r) => {
+                    const refEdits: TextEdit[] = refs.flatMap((r) => {
+                        if (r.loc.line < 1 || r.loc.col < 1) return [];
                         const refStart = {
                             line: r.loc.line - 1,
                             character: r.loc.col - 1,
@@ -309,10 +306,7 @@ export function computeCodeActions(
                             line: r.loc.line - 1,
                             character: r.loc.col - 1 + constName!.length,
                         };
-                        return TextEdit.replace(
-                            { start: refStart, end: refEnd },
-                            rhsRaw,
-                        );
+                        return [TextEdit.replace({ start: refStart, end: refEnd }, rhsRaw)];
                     });
 
                     // Delete the entire const statement line.

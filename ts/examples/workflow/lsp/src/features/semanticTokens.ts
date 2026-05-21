@@ -24,9 +24,7 @@ import {
     SemanticTokensLegend,
 } from "vscode-languageserver/node.js";
 import type { TextDocument } from "vscode-languageserver-textdocument";
-import { TypeChecker } from "workflow-dsl";
 import { getParsed } from "../parsedDocument.js";
-import { loadTaskSchemas } from "../taskSchemas.js";
 
 const TOKEN_TYPES = ["parameter", "variable", "function", "property"] as const;
 type TokenType = (typeof TOKEN_TYPES)[number];
@@ -84,17 +82,14 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
     }
 
     // Emit property tokens for resolved property accesses (e.g. `.stdout`).
-    if (parsed.ast) {
-        const checker = new TypeChecker(loadTaskSchemas());
-        for (const ref of checker.collectPropertyRefs(parsed.ast)) {
-            entries.push({
-                line: ref.line - 1,
-                col: ref.col - 1,
-                length: ref.length,
-                type: "property",
-                modifier: 0,
-            });
-        }
+    for (const ref of (parsed.propertyRefs ?? [])) {
+        entries.push({
+            line: ref.line - 1,
+            col: ref.col - 1,
+            length: ref.length,
+            type: "property",
+            modifier: 0,
+        });
     }
 
     entries.sort((a, b) => a.line - b.line || a.col - b.col);

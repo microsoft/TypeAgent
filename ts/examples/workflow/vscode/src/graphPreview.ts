@@ -191,16 +191,16 @@ const RENDER_SCRIPT = String.raw`
 
     // Layered layout. Params at depth 0; otherwise depth = 1 + max(depth(producer)).
     const depth = new Map();
-    for (const p of g.params) depth.set(p.id, 0);
+    for (const p of (g.params ?? [])) depth.set(p.id, 0);
     const incoming = new Map();
-    for (const n of g.nodes) incoming.set(n.id, []);
-    for (const e of g.edges) {
+    for (const n of (g.nodes ?? [])) incoming.set(n.id, []);
+    for (const e of (g.edges ?? [])) {
         const list = incoming.get(e.to) || [];
         list.push(e.from);
         incoming.set(e.to, list);
     }
     // groupMap must be available before depthOf is called.
-    const groupMap = new Map(g.groups.map((gr) => [gr.id, gr]));
+    const groupMap = new Map((g.groups ?? []).map((gr) => [gr.id, gr]));
     function depthOf(id, stack) {
         if (depth.has(id)) return depth.get(id);
         if (stack.has(id)) { depth.set(id, 0); return 0; } // cycle guard
@@ -223,7 +223,7 @@ const RENDER_SCRIPT = String.raw`
         depth.set(id, d);
         return d;
     }
-    for (const n of g.nodes) depthOf(n.id, new Set());
+    for (const n of (g.nodes ?? [])) depthOf(n.id, new Set());
 
     // Bucket all positioned items by depth.
     const byDepth = new Map();
@@ -231,15 +231,15 @@ const RENDER_SCRIPT = String.raw`
         if (!byDepth.has(d)) byDepth.set(d, []);
         byDepth.get(d).push(id);
     }
-    for (const p of g.params) push(p.id, 0);
-    for (const n of g.nodes) push(n.id, depth.get(n.id));
+    for (const p of (g.params ?? [])) push(p.id, 0);
+    for (const n of (g.nodes ?? [])) push(n.id, depth.get(n.id));
 
     const layers = [...byDepth.keys()].sort((a, b) => a - b);
     const NODE_W = 160, NODE_H = 36, GAP_X = 24, GAP_Y = 60, PAD = 20;
     const positions = new Map(); // id -> {x, y, w, h, kind, label, line}
 
-    const paramMap = new Map(g.params.map((p) => [p.id, p]));
-    const nodeMap = new Map(g.nodes.map((n) => [n.id, n]));
+    const paramMap = new Map((g.params ?? []).map((p) => [p.id, p]));
+    const nodeMap = new Map((g.nodes ?? []).map((n) => [n.id, n]));
 
     let maxW = 0;
     for (const d of layers) {

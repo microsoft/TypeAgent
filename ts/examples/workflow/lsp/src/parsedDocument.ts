@@ -18,12 +18,15 @@
 import {
     lex,
     Parser,
+    TypeChecker,
     type WorkflowDecl,
     type LexComment,
     type Token,
+    type PropertyRef,
 } from "workflow-dsl";
 import type { TextDocument } from "vscode-languageserver-textdocument";
 import { buildSymbolTable, type SymbolTable } from "./symbolResolver.js";
+import { loadTaskSchemas } from "./taskSchemas.js";
 
 export interface ParsedDocument {
     version: number;
@@ -32,6 +35,7 @@ export interface ParsedDocument {
     comments: LexComment[];
     ast?: WorkflowDecl;
     symbols?: SymbolTable;
+    propertyRefs?: PropertyRef[];
 }
 
 const cache = new Map<string, ParsedDocument>();
@@ -54,6 +58,8 @@ export function getParsed(doc: TextDocument): ParsedDocument {
         if (ast) {
             entry.ast = ast;
             entry.symbols = buildSymbolTable(ast);
+            const checker = new TypeChecker(loadTaskSchemas());
+            entry.propertyRefs = checker.collectPropertyRefs(ast);
         }
     }
     cache.set(doc.uri, entry);

@@ -1294,7 +1294,7 @@ export class Parser {
     private parseArrowBody(
         params: string[],
         paramLocs: SourceLocation[],
-        _l: SourceLocation,
+        _l: SourceLocation, // reserved: loc of arrow expression start (currently unused)
     ): ArrowPlaceholder {
         if (this.peek().kind === TokenKind.LBrace) {
             this.advance(); // {

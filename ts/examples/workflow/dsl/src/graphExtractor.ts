@@ -254,7 +254,7 @@ class GraphExtractor {
                 // label the group with the binding name so the dashed box is
                 // identifiable and edges to/from it render correctly.
                 const grp = this.groups.find((g) => g.id === exprId);
-                if (grp) {
+                if (grp && !grp.label.startsWith(`${stmt.name} =`)) {
                     grp.label = `${stmt.name} = ${grp.label}`;
                 }
                 this.bindings.set(stmt.name, exprId);
