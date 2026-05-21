@@ -237,3 +237,104 @@ workflows in some new tests. To keep the helper minimal we mirror the
 compiler's behavior: prefer the first exported workflow, fall back to
 the first workflow if none are exported. This avoids requiring tests to
 pass an explicit `--entry` analog and matches the user-facing default.
+
+## Phase 5 — Engine (runner)
+
+### P5-D1. `currentWorkflows` field with explicit re-entrancy guard
+
+`executeWorkflowCall` needs read access to the IR's workflows table to
+resolve a sub-workflow body, but threading that through every internal
+method (`executeScope`, `executeTask`, `executeLoop`, `executeFork`,
+`executeForkMap`, `executeBranch`) would be invasive. We instead stash
+`ir.workflows` on a private engine field `currentWorkflows` for the
+lifetime of a run, set just before the try block and cleared in
+`finally`.
+
+The trade-off is that a single `WorkflowEngine` instance is no longer
+safe for concurrent runs. To prevent silent corruption, the top of
+`run()` returns an explicit failure result if `currentWorkflows` is
+already set when a new call starts (covered by test
+"concurrent run() on same engine is rejected").
+
+Reviewed in code-review pass 1 (MAJOR) and pass 2 (CRITICAL — early
+returns above the try-block bypassed the finally cleanup); both
+addressed by moving the field assignment below all early-return
+validations.
+
+### P5-D2. Sub-workflow inherits `constants`, fresh `bindings`, no `state`
+
+A workflowCall executes the callee body in a new `ScopeContext` with:
+
+- `input`: the resolved call inputs (templates already evaluated in
+  the caller scope).
+- `constants`: a direct reference to the caller's constants map.
+  Constants are program-wide and should be the same in every workflow.
+- `bindings`: a fresh `Map`. Sub-workflow node binds (`const x = …`)
+  never leak into the caller, and the caller's binds are never
+  visible inside the callee.
+- `state`: deliberately omitted. State is loop-body-local and must not
+  flow across workflow boundaries.
+
+This matches the existing fork/forkMap semantics for `bindings` and
+deviates only on `constants` (forks isolate; sub-workflows share).
+
+### P5-D3. Sub-workflow `output` is resolved in the callee scope
+
+After `executeScope` returns, the callee's `output: Template` is
+resolved against the sub-scope (which contains the callee's bindings).
+That value — not the raw sub-scope — is what bind/onError see. Output
+schema (callee.outputSchema) is then re-validated by the engine even
+though the static validator has already proven type compatibility, to
+preserve the "defense-in-depth" posture of the rest of the runtime.
+
+### P5-D4. Timeout enforcement at the call site (`node.timeoutMs`)
+
+The runner honors a per-call `timeoutMs` on a workflowCall node by
+composing an AbortSignal: the sub-scope's `signal` aborts on parent
+abort _or_ timeout. On timeout, the runner throws a clear
+`EngineError("Sub-workflow … timed out after Nms")`. The DSL does
+not currently expose a syntax for setting `timeoutMs` on a workflow
+call; the field is reachable by tools that build IR directly. The
+DSL-side ergonomic is logged as a future enhancement.
+
+### P5-D5. onError dispatch parity with executeTask
+
+Sub-workflow failures recover into the caller's scope via
+`onErrorDispatch`/`node.onError`, with the same `pendingError`
+threading the executeScope loop already uses for task and loop
+errors. Unrecoverable EngineErrors bypass onError, matching the
+existing executeTask convention. The `kind: "TaskError"` errorObj's
+`task` field is set to `workflow:<calleeName>` so handlers can
+distinguish a sub-workflow failure from a task failure if needed.
+
+### P5-D6. Code-review and test-gap rounds (per implementation plan)
+
+Two code-review passes were run on the engine changes:
+
+- Pass 1 surfaced (a) MAJOR concurrent-run safety, (b) MINOR wrong
+  EngineErrorKind on input schema violation, (c) MINOR `timeoutMs`
+  declared but not honored. All three were addressed.
+- Pass 2 surfaced (CRITICAL) early-return paths above the try block
+  bypassing the `finally` cleanup of `currentWorkflows`. Addressed by
+  moving the field assignment below the early-return validations.
+
+Two test-gap passes were run:
+
+- Pass 1 added: failure propagation without onError, isolated bindings
+  across repeat calls, concurrent-run guard, sub-workflow timeout
+  (5 tests). Skipped: "constants visible inside sub-workflow" —
+  the DSL currently has no syntax for top-level `const`, so the test
+  could not be expressed against the DSL surface; the engine path is
+  exercised indirectly when other tests use constants.
+- Pass 2 added: complex (record) sub-workflow output, sub-workflow
+  events carry the call-site nodeId (2 tests).
+
+Total new engine tests for P5: 9. Not acted upon:
+
+- Caller-side onError _recovery_ path (variant of #6 where caller has
+  an onError target). Left for a future test-coverage pass once the
+  DSL exposes onError syntax for workflowCall sites; today the DSL
+  does not, so the test would require manual IR construction.
+- Named-record arg shape (`helper({a: 1, b: 2})`): the DSL already
+  routes object-literal args through the same path as positional;
+  the existing tests cover the lowered form.

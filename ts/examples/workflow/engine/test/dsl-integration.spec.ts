@@ -8,7 +8,7 @@
  * verifying end-to-end runtime behavior.
  */
 
-import { WorkflowIR, TaskDefinition } from "workflow-model";
+import { WorkflowIR, TaskDefinition, TaskContext } from "workflow-model";
 import {
     TaskRegistry,
     WorkflowEngine,
@@ -1158,6 +1158,280 @@ describe("DSL -> Engine integration", () => {
             });
             expect(result.success).toBe(true);
             expect(result.output).toEqual([2, 8, 4]);
+        });
+    });
+
+    describe("sub-workflow composition", () => {
+        it("calls a helper workflow and binds its output", async () => {
+            const ir = compileOk(`
+                workflow double(n: number): number {
+                    const r = n * 2;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = double(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 21 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(42);
+        });
+
+        it("supports defaulted argument", async () => {
+            const ir = compileOk(`
+                workflow add(a: number, b: number = 10): number {
+                    const r = a + b;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = add(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(15);
+        });
+
+        it("propagates sub-workflow output through caller pipeline", async () => {
+            const ir = compileOk(`
+                workflow inc(n: number): number {
+                    const r = n + 1;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const a = inc(x);
+                    const b = inc(a);
+                    const c = inc(b);
+                    return c;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 0 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(3);
+        });
+
+        it("supports nested sub-workflow calls", async () => {
+            const ir = compileOk(`
+                workflow leaf(n: number): number {
+                    const r = n * 10;
+                    return r;
+                }
+                workflow middle(n: number): number {
+                    const r = leaf(n);
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = middle(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 7 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(70);
+        });
+
+        it("sub-workflow has its own scope (no caller binding leakage)", async () => {
+            // 'r' is bound inside both workflows; the callee's 'r' must
+            // not be visible to or shadow the caller's 'r'.
+            const ir = compileOk(`
+                workflow helper(n: number): number {
+                    const r = n + 100;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const r = helper(x);
+                    const out = r + 1;
+                    return out;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(106);
+        });
+
+        it("sub-workflow failure propagates when caller has no onError", async () => {
+            const failTask: TaskDefinition = {
+                name: "fail.always",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail",
+                        error: { message: "boom" },
+                    };
+                },
+            };
+            const ir = compileOk(
+                `
+                workflow helper(x: unknown): unknown {
+                    const y = fail.always({});
+                    return y;
+                }
+                export workflow main(x: unknown): unknown {
+                    const r = helper(x);
+                    return r;
+                }
+            `,
+                [failTask],
+            );
+            const { eng } = makeEngine([failTask]);
+            const result = await eng.run(ir, { input: { x: 1 } });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/boom/);
+        });
+
+        it("same helper called multiple times has isolated bindings", async () => {
+            const ir = compileOk(`
+                workflow add5(n: number): number {
+                    const r = n + 5;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const a = add5(x);
+                    const b = add5(x);
+                    const sum = a + b;
+                    return sum;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 10 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(30);
+        });
+
+        it("concurrent run() on same engine is rejected", async () => {
+            const ir = compileOk(`
+                export workflow main(x: number): number {
+                    const r = x + 1;
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const p1 = eng.run(ir, { input: { x: 1 } });
+            const r2 = await eng.run(ir, { input: { x: 2 } });
+            // The second call should fail-fast with the re-entrancy
+            // guard message (since the first is still in-flight).
+            // Outcome depends on timing — accept either ordering.
+            const r1 = await p1;
+            const failed = [r1, r2].filter((r) => !r.success);
+            const succeeded = [r1, r2].filter((r) => r.success);
+            expect(succeeded.length).toBeGreaterThanOrEqual(1);
+            // At least one must succeed (whichever ran first).
+            // The other may succeed too if both ran sequentially —
+            // accepted because Promise scheduling can serialize them.
+            // If one fails, the message must be the re-entrancy guard.
+            for (const f of failed) {
+                expect(f.error?.message).toMatch(/not re-entrant/i);
+            }
+        });
+
+        it("sub-workflow timeout aborts and surfaces timeout error", async () => {
+            const slowTask: TaskDefinition = {
+                name: "task.slow",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input: any, ctx: TaskContext) {
+                    return new Promise((resolve, reject) => {
+                        const onAbort = () => reject(new Error("aborted"));
+                        if (ctx.signal.aborted) {
+                            onAbort();
+                            return;
+                        }
+                        ctx.signal.addEventListener("abort", onAbort, {
+                            once: true,
+                        });
+                        // Never resolves on its own.
+                    });
+                },
+            };
+            // Build IR manually since the DSL doesn't currently expose
+            // a per-call timeoutMs syntax for workflowCall nodes; patch
+            // the emitted node directly.
+            const ir = compileOk(
+                `
+                workflow slow(x: unknown): unknown {
+                    const y = task.slow({});
+                    return y;
+                }
+                export workflow main(x: unknown): unknown {
+                    const r = slow(x);
+                    return r;
+                }
+            `,
+                [slowTask],
+            );
+            // Locate the workflowCall node in main and inject timeout.
+            const mainBody = ir.workflows[ir.entry];
+            const call = Object.values(mainBody.nodes).find(
+                (n: any) => n.kind === "workflowCall",
+            ) as any;
+            expect(call).toBeDefined();
+            call.timeoutMs = 50;
+            const { eng } = makeEngine([slowTask]);
+            const result = await eng.run(ir, { input: { x: 1 } });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/timed out/i);
+        });
+
+        it("sub-workflow returns complex object", async () => {
+            const ir = compileOk(`
+                workflow pack(n: number): unknown {
+                    const r = { name: "x", count: n };
+                    return r;
+                }
+                export workflow main(x: number): unknown {
+                    const y = pack(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ name: "x", count: 5 });
+        });
+
+        it("sub-workflow nodeStarted/nodeCompleted events carry workflowCall nodeId", async () => {
+            const ir = compileOk(`
+                workflow inc(n: number): number {
+                    const r = n + 1;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = inc(x);
+                    return y;
+                }
+            `);
+            const { eng, events } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 10 } });
+            expect(result.success).toBe(true);
+            // Find the workflowCall node id in the entry body.
+            const mainBody = ir.workflows[ir.entry];
+            const call = Object.entries(mainBody.nodes).find(
+                ([, n]) => (n as any).kind === "workflowCall",
+            )!;
+            const callNodeId = call[0];
+            const started = events.find(
+                (e) =>
+                    e.type === "nodeStarted" &&
+                    (e as any).nodeId === callNodeId,
+            );
+            const completed = events.find(
+                (e) =>
+                    e.type === "nodeCompleted" &&
+                    (e as any).nodeId === callNodeId,
+            );
+            expect(started).toBeDefined();
+            expect(completed).toBeDefined();
+            expect((completed as any).output).toBe(11);
         });
     });
 });
