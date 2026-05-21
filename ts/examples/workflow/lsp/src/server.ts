@@ -88,6 +88,7 @@ export function createServer(
     const documents = new TextDocuments<TextDocument>(TextDocument);
     const schemas = loadTaskSchemas();
     const pendingDiagnostics = new Map<string, NodeJS.Timeout>();
+    let inlayHintsEnabled = false;
 
     connection.onInitialize((_params: InitializeParams): InitializeResult => {
         return {
@@ -127,6 +128,12 @@ export function createServer(
 
     connection.onInitialized(() => {
         connection.console.info("workflow-lsp initialized");
+    });
+
+    connection.onDidChangeConfiguration((change) => {
+        inlayHintsEnabled =
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (change.settings as any)?.workflow?.inlayHints?.enable ?? false;
     });
 
     function scheduleDiagnostics(uri: string) {
@@ -215,6 +222,7 @@ export function createServer(
     });
 
     connection.languages.inlayHint.on((params) => {
+        if (!inlayHintsEnabled) return [];
         const doc = documents.get(params.textDocument.uri);
         if (!doc) return [];
         return computeInlayHints(doc, schemas, params.range);

@@ -93,6 +93,12 @@
           ],
           "default": "off",
           "description": "Trace messages exchanged between VS Code and the workflow language server."
+        },
+        "workflow.inlayHints.enable": {
+          "type": "boolean",
+          "scope": "language-overridable",
+          "default": false,
+          "description": "Show inlay type hints for const bindings (e.g. `: string` after `const x = ...`)."
         }
       }
     },
