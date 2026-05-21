@@ -144,6 +144,11 @@ export interface ConstStatement {
     loc: SourceLocation;
     leadingComments?: Comment[];
     trailingComments?: Comment[];
+    /** True when there was at least one blank line before this statement
+     *  (or its leading comments) in the original source. The formatter
+     *  emits one blank line before the statement when `keepBlankLines`
+     *  is enabled in `FormatOptions`. */
+    blankLineBefore?: boolean;
     /** Line of the last token of this statement (used by the formatter
      * to decide whether a trailing comment is inline or block-style). */
     endLine?: number;
@@ -170,6 +175,7 @@ export interface DestructuringConst {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 export interface IfStatement {
@@ -181,6 +187,7 @@ export interface IfStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
     /** Comments inside an empty `then` block. */
     thenInnerComments?: Comment[];
     /** Comments inside an empty `else` block. */
@@ -215,6 +222,7 @@ export interface SwitchStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
     /** Comments inside an empty `default:` arm body. */
     defaultInnerComments?: Comment[];
     /** Comments that appear inside the switch body before any case/default
@@ -243,6 +251,7 @@ export interface ThrowStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 export interface ReturnStatement {
@@ -252,6 +261,7 @@ export interface ReturnStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 export interface BreakStatement {
@@ -260,6 +270,7 @@ export interface BreakStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 // ---- Expressions ----
