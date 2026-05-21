@@ -445,7 +445,7 @@ phase (name lookup, visibility, collision errors) reports under
 diagnostically equivalent to the in-file unknown-name errors the
 type checker already emits.
 
-### P7-D4. `selectEntry` runs against entry-file workflows only
+### P7-D4. ✅ `selectEntry` runs against entry-file workflows only
 
 The compiler restricts entry-point selection to workflows declared in
 the entry file. This avoids the surprise of an imported library's
