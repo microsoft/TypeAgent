@@ -6,7 +6,7 @@
  *
  * This exercises: template resolution ($from references, literal pass-through),
  * linear task chains, onError recovery dispatch, loop with state/iterateState/
- * sentinels, branch nodes, and all six standard-library tasks.
+ * continueWhen, branch nodes, and all six standard-library tasks.
  */
 
 import {
@@ -46,6 +46,26 @@ import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+import { compile as compileDsl, TaskSchemaInfo } from "workflow-dsl";
+
+function compileWfFile(relPath: string): WorkflowIR {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const abs = resolve(__dirname, relPath);
+    const source = readFileSync(abs, "utf8");
+    const schemas: TaskSchemaInfo[] = allBuiltinTasks.map((t) => ({
+        name: t.name,
+        inputSchema: t.inputSchema,
+        outputSchema: t.outputSchema,
+    }));
+    const result = compileDsl(source, schemas, { validate: true });
+    if (result.errors.length > 0 || !result.ir) {
+        const msg = result.errors
+            .map((e) => `${e.line}:${e.col} [${e.phase}] ${e.message}`)
+            .join("\n");
+        throw new Error(`Failed to compile ${relPath}:\n${msg}`);
+    }
+    return result.ir as WorkflowIR;
+}
 
 // Policy that allows all tasks (for tests not specifically exercising policy).
 // Uses a Proxy so any task name returns "allow", matching secure-by-default.
@@ -599,14 +619,59 @@ function makeA4IR(): WorkflowIR {
                                 name: "hasMore",
                             },
                             selectorSchema: { type: "boolean" },
-                            cases: { true: "@iterate", false: "@exit" },
-                            default: "@exit",
+                            cases: {
+                                true: {
+                                    inputs: {},
+                                    scope: {
+                                        inputSchema: { type: "object" },
+                                        entry: "noop",
+                                        nodes: {
+                                            noop: {
+                                                kind: "task",
+                                                task: "identity",
+                                                inputSchema: {
+                                                    type: "object",
+                                                    required: ["value"],
+                                                    properties: { value: {} },
+                                                },
+                                                outputSchema: { type: "null" },
+                                                inputs: { value: null },
+                                            },
+                                        },
+                                        output: null as Template,
+                                        outputSchema: { type: "null" },
+                                    },
+                                },
+                                false: {
+                                    inputs: {},
+                                    scope: {
+                                        inputSchema: { type: "object" },
+                                        entry: "noop",
+                                        nodes: {
+                                            noop: {
+                                                kind: "task",
+                                                task: "identity",
+                                                inputSchema: {
+                                                    type: "object",
+                                                    required: ["value"],
+                                                    properties: { value: {} },
+                                                },
+                                                outputSchema: { type: "null" },
+                                                inputs: { value: null },
+                                            },
+                                        },
+                                        output: null as Template,
+                                        outputSchema: { type: "null" },
+                                    },
+                                },
+                            },
                         },
                     },
                     // NOTE: output reads from scope (body binding), not state.
-                    // At @exit, state reflects the beginning of the last iteration
-                    // (set by the prior @iterate). The final appendSection result
-                    // is only in the scope binding "appended".
+                    // At loop exit (continueWhen=false), state reflects the
+                    // beginning of the last iteration. The final
+                    // appendSection result is only in the scope binding
+                    // "appended".
                     output: {
                         $from: "scope",
                         name: "appended",
@@ -623,6 +688,10 @@ function makeA4IR(): WorkflowIR {
                         name: "appended",
                     } as Template,
                 },
+                continueWhen: {
+                    $from: "scope",
+                    name: "hasMore",
+                } as Template,
                 maxIterations: 1000,
                 next: "compose",
                 bind: "repoSections",
@@ -934,38 +1003,74 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "branch",
                         selector: false as Template,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "onYes", false: "onNo" },
-                        default: "onNo",
-                    },
-                    onYes: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onYes",
+                                    nodes: {
+                                        onYes: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 1 as Template,
+                                                right: 1 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
+                            false: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onNo",
+                                    nodes: {
+                                        onNo: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 0 as Template,
+                                                right: 0 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
                             },
                         },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
-                    },
-                    onNo: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
                         outputSchema: { type: "number" },
-                        inputs: { left: 0 as Template, right: 0 as Template },
-                        bind: "answer",
                     },
                 },
                 entry: "decide",
@@ -1359,12 +1464,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D1 standup-prep workflow", () => {
         function loadD1(): WorkflowIR {
-            const __dirname = dirname(fileURLToPath(import.meta.url));
-            const path = resolve(
-                __dirname,
-                "../../../workflows/d1-standup-prep.json",
-            );
-            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+            return compileWfFile("../../../workflows/dsl/d1-standup-prep.wf");
         }
 
         it("validates against all builtins", async () => {
@@ -1459,7 +1559,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path = resolve(
                 __dirname,
-                "../../../workflows/d4-commit-summary.json",
+                "../../../workflows/ir/d4-commit-summary.json",
             );
             return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
@@ -1651,7 +1751,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path = resolve(
                 __dirname,
-                "../../../workflows/d5-code-review-prep.json",
+                "../../../workflows/ir/d5-code-review-prep.json",
             );
             return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
@@ -1952,12 +2052,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D8 summarize-url workflow", () => {
         function loadD8(): WorkflowIR {
-            const __dirname = dirname(fileURLToPath(import.meta.url));
-            const path = resolve(
-                __dirname,
-                "../../../workflows/d8-summarize-url.json",
-            );
-            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+            return compileWfFile("../../../workflows/dsl/d8-summarize-url.wf");
         }
 
         it("validates against all builtins", async () => {
@@ -2636,15 +2731,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                         left: 1 as Template,
                                         right: 1 as Template,
                                     },
-                                    next: "done",
                                     bind: "stepped",
-                                },
-                                done: {
-                                    kind: "branch",
-                                    selector: true as Template,
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { false: "@iterate", true: "@exit" },
-                                    default: "@exit",
                                 },
                             },
                             output: 0 as Template,
@@ -2657,6 +2744,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["nonexistent"],
                             } as Template,
                         },
+                        continueWhen: false as Template,
                         maxIterations: 1,
                         bind: "result",
                     },
@@ -2720,39 +2808,6 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    describe("sentinel validation", () => {
-        it("rejects @iterate in top-level branch node", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                name: "badSentinel",
-                version: "1",
-                inputSchema: { type: "object" },
-                outputSchema: { type: "number" },
-                nodes: {
-                    decide: {
-                        kind: "branch",
-                        selector: true as Template,
-                        selectorSchema: { type: "boolean" },
-                        cases: { true: "@iterate", false: "@exit" },
-                        default: "@exit",
-                    },
-                },
-                entry: "decide",
-                output: null as Template,
-            };
-
-            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
-            const validation = validateWorkflowIR(ir, tasks);
-            expect(validation.valid).toBe(false);
-            expect(validation.errors.length).toBeGreaterThanOrEqual(2);
-            expect(validation.errors[0].message).toContain(
-                "only valid inside a loop body",
-            );
-        });
-    });
-
     describe("branch node events", () => {
         it("emits nodeStarted and nodeCompleted for branch nodes", async () => {
             const ir: WorkflowIR = {
@@ -2766,38 +2821,74 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "branch",
                         selector: false as Template,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "onTrue", false: "onFalse" },
-                        default: "onFalse",
-                    },
-                    onTrue: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onTrue",
+                                    nodes: {
+                                        onTrue: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 1 as Template,
+                                                right: 1 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
+                            false: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onFalse",
+                                    nodes: {
+                                        onFalse: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 0 as Template,
+                                                right: 0 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
                             },
                         },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
-                    },
-                    onFalse: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
                         outputSchema: { type: "number" },
-                        inputs: { left: 0 as Template, right: 0 as Template },
-                        bind: "answer",
                     },
                 },
                 entry: "decide",
@@ -2874,6 +2965,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" } as Template,
                         },
+                        continueWhen: false as Template,
                         maxIterations: 1,
                         onError: "recover",
                     },
@@ -3267,46 +3359,71 @@ describe("WorkflowEngine (IR v1)", () => {
                         selector: "unknown" as Template,
                         selectorSchema: { type: "string" },
                         cases: {
-                            yes: "onYes",
-                            no: "onNo",
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onYes",
+                                    nodes: {
+                                        onYes: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: { value: 2 as Template },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
+                            no: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onNo",
+                                    nodes: {
+                                        onNo: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: { value: 0 as Template },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
                         },
+                        bind: "answer",
+                        outputSchema: { type: "number" },
                     } as any, // no default field
-                    onYes: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 1 as Template, right: 1 as Template },
-                        bind: "answer",
-                    },
-                    onNo: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 0 as Template, right: 0 as Template },
-                        bind: "answer",
-                    },
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
             };
 
-            const result = await eng.run(ir, { input: {} });
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
             expect(result.success).toBe(false);
             expect(result.error?.message).toBeDefined();
         });
@@ -3564,14 +3681,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                         } as Template,
                                     },
                                     bind: "incResult",
-                                    next: "check",
-                                },
-                                check: {
-                                    kind: "branch",
-                                    selector: false as Template,
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { true: "@exit" },
-                                    default: "@iterate",
                                 },
                             },
                             output: {
@@ -3586,6 +3695,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "incResult",
                             } as Template,
                         },
+                        continueWhen: true as Template,
                         maxIterations: 1000,
                         bind: "result",
                     },
@@ -3650,14 +3760,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                         right: 1 as Template,
                                     },
                                     bind: "next",
-                                    next: "cont",
-                                },
-                                cont: {
-                                    kind: "branch",
-                                    selector: false as Template,
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { true: "@exit" },
-                                    default: "@iterate",
                                 },
                             },
                             output: {
@@ -3672,6 +3774,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "next",
                             } as Template,
                         },
+                        continueWhen: true as Template,
                         maxIterations: 3,
                         bind: "result",
                     },
@@ -3769,14 +3872,25 @@ describe("WorkflowEngine (IR v1)", () => {
                                     next: "check",
                                 },
                                 check: {
-                                    kind: "branch",
-                                    selector: {
-                                        $from: "scope",
-                                        name: "nextIter",
-                                    } as Template,
-                                    selectorSchema: { type: "number" },
-                                    cases: { 2: "@exit" },
-                                    default: "@iterate",
+                                    kind: "task",
+                                    task: "compare.lessThan",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "boolean" },
+                                    inputs: {
+                                        left: {
+                                            $from: "scope",
+                                            name: "nextIter",
+                                        } as Template,
+                                        right: 2 as Template,
+                                    },
+                                    bind: "shouldContinue",
                                 },
                             },
                             output: {
@@ -3795,6 +3909,10 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "nextIter",
                             } as Template,
                         },
+                        continueWhen: {
+                            $from: "scope",
+                            name: "shouldContinue",
+                        } as Template,
                         maxIterations: 10,
                         bind: "result",
                     },
@@ -4908,23 +5026,46 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "branch",
                         selector: { $from: "input", name: "x" } as Template,
                         selectorSchema: { type: "string" },
-                        cases: { a: "done" },
+                        cases: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "done",
+                                    nodes: {
+                                        done: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: {},
+                                            inputs: { value: null },
+                                            bind: "result",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "result",
+                                    } as Template,
+                                    outputSchema: {},
+                                },
+                            },
+                        },
                         // no default — any value other than "a" is unmatched
                     } as any,
-                    done: {
-                        kind: "task",
-                        task: "identity",
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        inputs: {},
-                        bind: "result",
-                    },
                     recover: {
                         kind: "task",
                         task: "identity",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
+                        },
                         outputSchema: {},
-                        inputs: {},
+                        inputs: { value: null },
                         bind: "result",
                     },
                 },
@@ -5007,65 +5148,6 @@ describe("WorkflowEngine (IR v1)", () => {
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
             expect(validation.errors[0].message).toContain("Type mismatch");
-        });
-    });
-
-    describe("loop sentinel validation", () => {
-        it("rejects loop body without sentinel at validation time", async () => {
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                name: "noSentinel",
-                version: "1",
-                inputSchema: { type: "object" },
-                outputSchema: { type: "integer" },
-                nodes: {
-                    loop: {
-                        kind: "loop",
-                        inputs: {},
-                        state: {
-                            i: {
-                                schema: { type: "integer" },
-                                initial: 0 as Template,
-                            },
-                        },
-                        body: {
-                            inputSchema: { type: "object" },
-                            entry: "step",
-                            nodes: {
-                                step: {
-                                    kind: "task",
-                                    task: "math.add",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["left", "right"],
-                                        properties: {
-                                            left: { type: "number" },
-                                            right: { type: "number" },
-                                        },
-                                    },
-                                    outputSchema: { type: "number" },
-                                    inputs: {
-                                        left: 1 as Template,
-                                        right: 1 as Template,
-                                    },
-                                    bind: "r",
-                                },
-                            },
-                            output: 0 as Template,
-                            outputSchema: { type: "integer" },
-                        },
-                        iterateState: {},
-                        maxIterations: 10,
-                        bind: "result",
-                    },
-                },
-                entry: "loop",
-                output: { $from: "scope", name: "result" } as Template,
-            };
-
-            const result = await engine.run(ir, { input: {} });
-            expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("@iterate or @exit");
         });
     });
 
@@ -7907,16 +7989,26 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "counted",
                                 },
                                 check: {
-                                    kind: "branch",
-                                    selector: {
-                                        $from: "scope",
-                                        name: "counted",
-                                        path: ["next"],
-                                    } as Template,
-                                    selectorSchema: { type: "integer" },
-                                    // exit when counter reaches 3
-                                    cases: { "3": "@exit" },
-                                    default: "@iterate",
+                                    kind: "task",
+                                    task: "compare.notEquals",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: {},
+                                            right: {},
+                                        },
+                                    },
+                                    outputSchema: { type: "boolean" },
+                                    inputs: {
+                                        left: {
+                                            $from: "scope",
+                                            name: "counted",
+                                            path: ["next"],
+                                        } as Template,
+                                        right: 3 as Template,
+                                    },
+                                    bind: "shouldContinue",
                                 },
                             },
                             output: { $from: "state", name: "i" } as Template,
@@ -7929,6 +8021,10 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["next"],
                             } as Template,
                         },
+                        continueWhen: {
+                            $from: "scope",
+                            name: "shouldContinue",
+                        } as Template,
                         maxIterations: 10,
                         bind: "result",
                     },

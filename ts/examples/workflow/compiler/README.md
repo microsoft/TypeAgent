@@ -23,8 +23,8 @@ Options:
 Compile a workflow alongside the source:
 
 ```sh
-wfc examples/d1-standup-prep.wf
-# wrote examples/d1-standup-prep.json
+wfc ../workflows/dsl/d1-standup-prep.wf
+# wrote ../workflows/dsl/d1-standup-prep.json
 ```
 
 Pipe the IR into `workflow run`:

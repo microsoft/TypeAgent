@@ -49,6 +49,9 @@ function makeStubContext(agentContext: any): StubContext {
             registerCalls.push({ role, port });
             return { release: releaseSpy };
         },
+        notifyClientCountChanged(_role: string, _count: number) {
+            // no-op stub; tested elsewhere via registrar unit tests
+        },
         // The rest of SessionContext isn't touched by updateCodeContext.
     } as unknown as SessionContext<any>;
     return {

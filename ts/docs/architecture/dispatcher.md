@@ -507,6 +507,12 @@ Handles `@`-prefixed system commands:
 - `@explain` — Explanation of cached translations
 - `@feedback` — Inspect and export user-feedback entries
   recorded by the chat UI (`list`, `top`, `filter`, `export`, `count`)
+- `@ports` — List all registered TCP ports (per `(agent, role, port)`
+  group) with the agent-server's own listen port and the current number
+  of clients connected to each agent's WS server. Agents that don't
+  publish a count via `SessionContext.notifyClientCountChanged` render
+  `N/A` in the Clients column. Currently the browser and code agents
+  publish counts; others are diagnostics-only.
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.

@@ -678,6 +678,11 @@ async function updateBrowserContext(
                 // timeout from a stale "ready" cache.
                 void context.notifyReadinessChanged();
             },
+            onClientCountChanged: (count: number) => {
+                // Surface to `@system ports`. Best-effort; the SDK
+                // method swallows errors internally.
+                void context.notifyClientCountChanged("default", count);
+            },
             onWebAgentMessage: async (client: BrowserClient, data: any) => {
                 if (
                     data.method === "webAgent/message" &&

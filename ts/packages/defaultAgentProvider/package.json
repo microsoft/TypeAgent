@@ -89,7 +89,7 @@
     "weather-agent": "workspace:*",
     "windowsclock-agent": "workspace:*",
     "workflow-agent": "workspace:*",
-    "ws": "^8.17.1",
+    "ws": "^8.20.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {

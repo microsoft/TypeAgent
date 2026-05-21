@@ -3,6 +3,63 @@
 Tracked items where the DSL spec (dsl-v0.1.md) describes features that are
 not yet fully wired end-to-end.
 
+## Recommended implementation sequence
+
+Address the gaps in dependency order, with correctness and validation before
+new surface area:
+
+1. **G14: Fix switch lowering always taking first case.** This is a core
+   control-flow runtime correctness bug and should be fixed before richer switch
+   typing or exhaustiveness work.
+2. **G16: Fix `throw` message propagation.** This is a direct user-visible
+   correctness issue in already-supported error semantics.
+3. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
+   into the full sub-scope contract before improving fork runtime behavior.
+4. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
+   structurally valid, align fork execution with the spec's failure and cleanup
+   semantics.
+5. **G13: Fix structural type comparison for objects and arrays.** Type-system
+   expansions should build on sound object and array compatibility checks.
+6. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
+   one-way before adding more type-system expressiveness.
+7. **G3: Add TypeScript-style named type aliases.** Once structural
+   assignability is sound, add named type declarations and a type environment.
+8. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
+   parsing and checking, and becomes more ergonomic once named aliases exist.
+9. **G18: Add union/literal types.** This is the broadest type-system expansion
+   and should come after type soundness, named types, and switch runtime
+   correctness.
+10. **G1: Implement sub-workflow calls and compile-time inlining.** This is
+    strategically important, but touches compiler architecture and emitter
+    lowering, so it should follow the core correctness and type-system
+    foundations.
+11. **G11: Decide/document bind stripping for explicit user names.** This is
+    primarily debuggability and spec clarity.
+12. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+    AST honesty and visual-editor clarity, but current behavior works.
+13. **G12: Decide `list.append` naming/semantics.** This is naming/API
+    consistency with coordinated emitter, engine, and snapshot churn.
+14. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+    Decision 0010 removed `identity` / `noop` as load-bearing at branch
+    convergence, but the emitter still synthesizes them in several other
+    places. Classify each remaining usage as (a) reducible after 0010,
+    (b) forced by an IR shape that could be relaxed additively, or (c)
+    inherent to decision 0006 (no expressions). Pure audit; only
+    schedules follow-up work.
+15. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+    These patterns push against the visual-node discipline and should stay out
+    of scope until justified.
+
+Dependency spine:
+
+- `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
+- `G13 + G10 -> G3 -> G4 -> G18` builds type-system features on sound
+  assignability.
+- `G14 -> G18` ensures switch runtime behavior is correct before adding
+  exhaustive union-typed switch support.
+- `G14 + G16` makes implemented control-flow and error features
+  trustworthy before adding major new DSL surface area.
+
 ## G1: Sub-workflow calls
 
 **Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
@@ -123,147 +180,6 @@ to a variable and pass it opaquely to another task.
    type checker support for resolving generic instantiations, and emitter
    support for threading the resolved type into the schema.
 
-## G5: `identity` is covering two distinct IR gaps
-
-**Context:** The current emitter uses builtin `identity` nodes in several
-places where the DSL produces a value but the IR only allows control flow
-to continue through executable node IDs. The principle question is not just
-"can we remove `identity`?" but which uses reflect a real missing IR
-concept versus a reasonable lowering to existing task semantics.
-
-**Current state:** `identity` is doing two different jobs:
-
-- **Literal materialization:** turning a literal/template value into a
-  node result so the workflow or a branch arm can continue through a real
-  node.
-- **Shared-bind normalization:** ensuring both sides of a split publish the
-  same bound name before converging.
-
-In current emitter/runtime terms, that means four concrete behaviors:
-
-1. **Literal branch arms normalize through `identity`.**
-   Branch targets in the IR are node IDs, not inline values. When a DSL
-   branch arm computes a literal/template value instead of calling a task,
-   the emitter wraps that value in an `identity` node, binds the common
-   result name there, and then converges through a merge node.
-
-2. **Literal-only workflows normalize through `identity`.**
-   A workflow that returns a literal and would otherwise emit no executable
-   nodes still gets a real entry node. The emitter inserts an `identity`
-   node and returns its `result` field rather than emitting a zero-node
-   workflow. This keeps the runtime model uniform: executable workflows
-   start at an entry node.
-
-3. **Branch-returning control flow normalizes through a shared bind.**
-   When both sides of an `if/else` or ternary produce a value, the emitter
-   does not rely on branch-local bind names matching by accident. Instead,
-   each side writes through an `identity` node to the same post-merge bind
-   name, which downstream consumers read after control flow converges.
-
-4. **`noop` and `identity` are part of the compiler/runtime contract.**
-   The current lowering depends on these builtins existing in the runtime.
-   `identity` materializes values into ordinary node outputs; `noop` serves
-   as the convergence point after split control flow. They are not just
-   incidental implementation details if the emitter continues to generate
-   them.
-
-These are related in the emitter, but they are not the same design problem.
-
-**Design-principles analysis:**
-
-1. **Keep `identity` as a lowering primitive.**
-
-   - Strong on minimization: no new IR concept is added.
-   - Clean under P1/P2/P4: the value still crosses a normal task boundary,
-     remains traceable, and preserves local contracts.
-   - Slightly weak under P3/P5: some nodes exist only as compiler shims,
-     so IR structure does not always correspond to meaningful computation.
-
-2. **Add a dedicated `ConstNode` for literal materialization.**
-
-   - Best small IR improvement for literal-only cases.
-   - Improves P3/P5 by making "this path yields a value" structurally
-     visible instead of disguising it as a generic task call.
-   - Compatible with P1/P2/P4 if it keeps explicit schemas, output, and
-     control flow.
-   - Does **not** solve shared-bind normalization; it only replaces the
-     literal-materialization subset of current `identity` usage.
-
-3. **Add explicit merge / phi semantics for shared-bind normalization.**
-   - Best fit for the normalization subset of `identity` usage.
-   - Potentially strong under P3/P4/P5 because branch convergence would
-     explicitly describe how a common post-branch name is produced.
-   - Expensive under the minimization discipline: this adds a real new IR
-     behavioral concept with validator and runtime implications.
-
-**Conclusion:**
-
-- Keeping `identity` is acceptable under the current principles because it
-  preserves the existing task-centered computation boundary and avoids new
-  IR concepts.
-- The current lowering should be treated as intentional
-  compiler/runtime contract, not as an accidental workaround:
-  - literal branch arms lower through `identity`
-  - literal-only workflows lower through an `identity` entry node
-  - branch-produced values lower through shared-bind normalization
-  - `noop` and `identity` must exist as runtime builtins if the emitter
-    continues to generate them
-- If the IR is refined later, the problem should be split rather than
-  solved with one broad mechanism:
-  1.  `ConstNode` is the clean candidate for literal materialization.
-  2.  Explicit merge / phi semantics are the clean candidate for shared-bind
-      normalization.
-
-**What needs to happen:**
-
-1. Decide whether the spec should explicitly document `identity` as an
-   accepted compiler/runtime lowering primitive for these cases. The
-   explicit lowering rules above should be carried into the main spec
-   docs or kept here as the durable reference.
-2. If a later cleanup is desired, evaluate `ConstNode` and merge / phi
-   support separately rather than treating all `identity` uses as one
-   problem.
-
-## G6: Validator does not handle branch-return convergence patterns
-
-**Context:** The IR validator's domination analysis rejects some
-emitter-produced workflows that execute correctly in the runner. Four
-DSL-integration tests and several hand-built engine tests bypass
-validation to preserve behavioral coverage.
-
-**Current state:** The validator has three binding-coverage strategies
-in `isBindingCoveredAtNode`:
-
-- (a) Direct dominator coverage
-- (b) Joint coverage across onError splits
-- (c) Split-point phi coverage for branch nodes where both arms bind
-  the same name
-
-Strategy (c) was added for ternary and short-circuit `&&`/`||` patterns
-and works for those. But the emitter's branch-return lowering produces
-prefixed nodes (e.g. `then_taskCall_3`, `else_taskCall_5`) that converge
-through a merge `noop`, and the current phi check does not trace through
-the prefix-based convergence pattern.
-
-**Patterns that fail validation:**
-
-1. if/else where both arms return (branch-return with shared-bind
-   normalization through prefixed nodes converging at merge noop)
-2. switch where all arms return (multi-arm shared-bind convergence)
-3. if/else with arithmetic (mixed binary-op + branch lowering)
-4. task call + binary op + ternary (mixed lowering with multiple splits)
-
-**What needs to happen:**
-
-1. Extend the validator's CFG traversal to recognize the prefix-based
-   convergence shape the emitter produces for branch-return patterns.
-   The fix belongs in the validator, not the emitter.
-2. Once the validator handles these patterns, remove `NO_VALIDATE` from
-   the four DSL-integration tests and `skipValidation` from their
-   corresponding engine runs.
-3. The hand-built engine tests that use `skipValidation` for
-   error-handling paths are a separate concern and can stay as-is.
-
 ## G7: Composition patterns outside current scope
 
 **Context:** The DSL parser and type checker intentionally do not support
@@ -297,27 +213,6 @@ nested calls would obscure the step-by-step execution model.
    (error if not). There are no union types. This was an intentional
    simplification: returns the consequent type, rejects mismatches at
    compile time.
-
-## G8: Comments not preserved in AST
-
-**Spec:** dsl-v0.1.md section 6 states "The AST preserves comments.
-Each node has an optional `leadingComments` array of `Comment { text, pos }`
-attached to the following AST node." It also claims round-trip fidelity
-between source and AST.
-
-**Status: Resolved.**
-
-- The lexer (`lexer.ts`) now collects `//` and `/* */` comments into a
-  `comments: LexComment[]` side channel returned alongside tokens. The
-  full comment lexeme (including delimiters) is preserved.
-- The parser (`parser.ts`) accepts the comments list and attaches any
-  comment whose offset precedes a statement's (or workflow's) first
-  token as a `leadingComments` entry on that AST node.
-- A new formatter (`formatter.ts`, exported as `format`) lowers a
-  `WorkflowDecl` back to DSL source and emits `leadingComments` in
-  attached positions, completing the round trip.
-- See `formatter-design.md` for design notes (e.g., the full-text
-  comment representation, trailing-comment handling).
 
 ## G9: Bare task calls wrapped as synthetic ConstStatement
 
@@ -479,19 +374,6 @@ reversed.
 **Reproduction:** Compile a switch with string cases, run with a value
 matching the second case. Output is always from the first case.
 
-## G15: Branch/ternary inside loop body fails at runtime
-
-**Spec:** dsl-v0.1.md sections 2.7, 3.2. Branches and ternary
-expressions should work inside map/filter/attempts bodies.
-
-**Current state:** A ternary expression inside a map body compiles
-without errors but fails at runtime. The branch condition evaluation
-inside a loop body scope does not resolve correctly, possibly due to
-scope nesting issues in $from reference resolution.
-
-**Reproduction:** `map(nums, (n) => { const r = n > 10 ? "big" : "small"; return r })`
-compiles but the engine fails to execute the workflow.
-
 ## G16: `throw` produces empty error message
 
 **Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
@@ -594,3 +476,141 @@ case-literal check should land at the same time:
 5. Add tests for: union type parsing, case-literal type mismatch error,
    mixed-arm ternary returning a union, exhaustive non-boolean switch
    compiling without `default:`.
+
+## G19: IR features the emitter does not produce
+
+Surfaced when the hand-written IR for `d1-standup-prep` and
+`d8-summarize-url` was retired in favor of compiling the corresponding
+`.wf` sources. The DSL-compiled IR is functionally equivalent for the
+existing test cases, but several IR-level features the hand-written
+JSON exercised are no longer emitted by the DSL compiler.
+
+**Items the emitter does not produce today:**
+
+1. **`workflow.description`** &mdash; The IR allows a top-level
+   `description` string on a workflow. There is no DSL surface for it
+   (e.g. a doc-comment or attribute) and the emitter never sets it.
+2. **`loop.maxIterations`** &mdash; The IR loop node supports a
+   `maxIterations` safety cap (the hand-written d1 used `100`, d8 used
+   `3`). The DSL has no syntax for it and the emitter never sets it,
+   so DSL-authored loops run with no compile-time-declared cap.
+3. **Named numeric constants &rarr; `constants` + `$from: "constant"`**
+   &mdash; String `const` bindings round-trip through the
+   `constants` block as `$from constant` references, but numeric
+   literals (e.g. the `2` in `attempts(2, ...)`) are inlined into the
+   loop input rather than lifted to `constants.<name>` with a
+   `$from constant` reference. This loses the named-constant indirection
+   the hand-written d8 used for `maxRetries`.
+4. **Tight inner `outputSchema`s** &mdash; The emitter often produces
+   `{}` or generic `array` for task and loop-body output schemas where
+   the hand-written IR declared `{type: "string"}`, `{type: "integer"}`,
+   or typed `items`. The DSL has the type information at compile time
+   (since type-checking succeeds); the emitter could carry it through
+   to the emitted JSON Schema.
+
+**Behavioral divergence worth flagging (not strictly an emitter gap):**
+
+When a `attempts(N, ...)` loop in the DSL exhausts its retries, the
+emitter inserts an explicit `error.fail` task ("Attempts exhausted")
+that aborts the workflow. The hand-written d8 instead exited the loop
+silently and continued downstream with `undefined` along the optional
+path. The DSL behavior is arguably more correct, but it is a real
+semantic change &mdash; current tests do not exercise the exhaustion
+path either way.
+
+**Why this matters:** these are the only IR features no longer
+exercised end-to-end now that the hand-written d1/d8 are gone. d4, d5,
+and branch-reorganize still exercise some of them (verify which), but
+addressing items 1&ndash;4 would close the gap between what the IR
+model supports and what the DSL can actually produce.
+
+**What needs to happen:**
+
+1. Decide a DSL surface for `description` (doc-comment attaching to a
+   `workflow` declaration is the natural fit) and emit it.
+2. Decide a DSL surface for `loop.maxIterations` (e.g. an attribute on
+   `loop`/`for`/`attempts`, or a builtin parameter) and emit it.
+3. Lift numeric literals used as named `const` bindings into the
+   `constants` block, mirroring the existing string-constant path.
+4. Carry compile-time inferred types into emitted `outputSchema` /
+   `items` schemas for tasks and loop bodies.
+5. Decide and document the canonical retry-exhaustion semantics for
+   `attempts(...)` (silent exit vs. explicit fail) and add a test that
+   pins it down.
+
+## G20: Remaining `identity` / `noop` usage in the emitter
+
+**Context:** [Decision 0010](../ir/decisions/0010-finish-workflow-scope-unification.md)
+removed `identity` + shared-bind + `noop` as the load-bearing lowering
+for value-producing branches: with branch arms as `WorkflowScope`s,
+each arm's `output` is a normal reference and convergence does not
+need a carrier node. Resolved item G5 covered that specific pattern.
+
+The emitter still synthesizes `identity` and `noop` nodes in several
+other places. Whether each one is benign "DSL convenience" or evidence
+of a remaining IR friction is not yet decided.
+
+**Remaining categories** (snapshot of
+[emitter.ts](../../../examples/workflow/dsl/src/emitter.ts)):
+
+1. **Top-level / scope `output` materialization.** `output` must be a
+   `$from` reference; literal or computed return values get wrapped in
+   an `identity` node so they can be named. Affects `workflow.output`
+   for literal returns and several lowering paths (short-circuit RHS,
+   ternary literal consequents, etc.).
+2. **`makeNoopArm` placeholder.** A `WorkflowScope` requires `entry`,
+   `nodes`, and (in practice) something to reference from `output`.
+   The "missing else" of an `if` without `else`, and other defaulted
+   arms, emit a single `noop` whose bound output is the arm's value.
+3. **Loop "retry" arm body.** The `attempts(...)` lowering emits a
+   `noop` whose output (literal `true`) is the value `continueWhen`
+   reads. Same shape as item 2 specialized for loop termination.
+4. **Post-branch merge / continuation nodes.** Several lowering paths
+   still emit a trailing `noop` as a join point even though arms now
+   carry their own outputs. May be vestigial from the pre-0010 emitter.
+
+**Why this might point at an IR problem:**
+
+Each remaining usage is a place where the DSL has a _value_ but the
+IR rules ("every value is a node output" + `WorkflowScope` must
+declare `entry` / `nodes` / `output`, per
+[workflow-scope-proposal.md](../ir/workflow-scope-proposal.md)) force
+the emitter to invent a carrier node. The cost is real: synthetic IDs
+leak into IR (compare G9), execution traces include nodes the author
+never wrote, and node counts overstate the workflow's conceptual size.
+
+Three plausible end states, one per category:
+
+- **Reducible after 0010.** Category 4 (post-branch merge) may be
+  outright dead code now that branch arms have outputs. Removing it
+  costs nothing if true.
+- **Additive IR relaxation.** Categories 1, 2, and 3 could be
+  addressed by an additive IR change: allow `scope.output` (or
+  `WorkflowIR.output`) to be a literal-or-reference template rather
+  than strictly a reference, and treat "arm with no body" as a
+  syntactic shorthand. This trades one validator rule for a smaller
+  emitted IR. Needs an IR decision; the variance lens of
+  [revisit-triggers.md](../ir/revisit-triggers.md) applies (separate
+  concept vs. broadening an existing one).
+- **Inherent to decision 0006.** If the audit finds the remaining
+  carriers are the natural cost of "no expressions in the IR," then
+  G20 closes as "working as intended" and the row in
+  [revisit-triggers.md](../ir/revisit-triggers.md) for decision 0006
+  becomes the place to track if pressure grows.
+
+**What needs to happen:**
+
+1. Enumerate every remaining `identity` / `noop` emit site in
+   [emitter.ts](../../../examples/workflow/dsl/src/emitter.ts) and
+   tag each with its category above.
+2. For category 4, write the test that would fail if the node were
+   removed; if no such test exists, remove the node - if tests stay
+   green that confirms vestigial.
+3. For categories 1-3, draft the minimal IR relaxation that would
+   eliminate each, and decide per-category whether the relaxation is
+   worth the validator-rule cost or whether to accept the carrier
+   nodes as the cost of decision 0006.
+4. If any category triggers an IR relaxation, update
+   [revisit-triggers.md](../ir/revisit-triggers.md) and either
+   [ir-v0.1.md](../ir/ir-v0.1.md) or a new decision record.
+5. If all categories close as "working as intended," remove this gap.

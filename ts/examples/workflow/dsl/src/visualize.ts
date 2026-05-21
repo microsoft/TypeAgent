@@ -5,7 +5,7 @@
  * Generates a self-contained HTML page that visualizes a workflow
  * DSL file as a node graph using SVG.
  *
- * Usage: node dist/visualize.js examples/d1-standup-prep.wf > out.html
+ * Usage: node dist/visualize.js ../workflows/dsl/d1-standup-prep.wf > out.html
  */
 
 import * as fs from "fs";

@@ -44,7 +44,7 @@ import { WorkflowDecl } from "../src/ast.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Compiled tests run from dist/test, source examples live at src tree.
-const EXAMPLES_DIR = path.resolve(__dirname, "../../examples");
+const EXAMPLES_DIR = path.resolve(__dirname, "../../../workflows/dsl");
 
 function parseWithComments(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);

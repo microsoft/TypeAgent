@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WFC = resolve(__dirname, "../wfc.js");
-const DSL_EXAMPLES = resolve(__dirname, "../../../dsl/examples");
+const DSL_EXAMPLES = resolve(__dirname, "../../../workflows/dsl");
 
 interface CliResult {
     stdout: string;
