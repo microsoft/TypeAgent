@@ -435,7 +435,7 @@ files are free to declare workflows with the same name.
 
 Per-file namespacing for exported workflows is deferred to a future IR revision.
 
-### P7-D3. LoadError `"load"` phase maps to `"typecheck"` in CompileError
+### P7-D3. ✅ LoadError `"load"` phase maps to `"typecheck"` in CompileError
 
 `CompileError.phase` is the union `"lex" | "parse" | "typecheck" | "emit"
 | "validate"`. Rather than extend it with a new `"load"` value (which
