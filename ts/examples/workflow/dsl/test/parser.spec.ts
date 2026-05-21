@@ -712,4 +712,92 @@ describe("parser", () => {
             expect(errors).toEqual([]);
         });
     });
+
+    // ---- Phase 2: composition surface (export / import / defaults) ----
+
+    describe("composition surface", () => {
+        test("parses 'export workflow' prefix", () => {
+            const { tokens } = lex(
+                "export workflow foo(x: string): string { return x; }",
+            );
+            const { workflows, errors } = new Parser(tokens).parse();
+            expect(errors).toEqual([]);
+            expect(workflows).toHaveLength(1);
+            expect(workflows[0].name).toBe("foo");
+            expect(workflows[0].exported).toBe(true);
+        });
+
+        test("non-exported workflow has no 'exported' flag", () => {
+            const wf = parseWf("workflow foo(x: string): string { return x; }");
+            expect(wf.exported).toBeUndefined();
+        });
+
+        test("parses param default expression", () => {
+            const wf = parseWf(
+                "workflow foo(x: string, n: number = 5): string { return x; }",
+            );
+            expect(wf.params).toHaveLength(2);
+            expect(wf.params[0].default).toBeUndefined();
+            expect(wf.params[1].default).toBeDefined();
+            const def = wf.params[1].default!;
+            expect(def.kind).toBe("NumberLiteralExpr");
+        });
+
+        test("parses param default referencing earlier param", () => {
+            const wf = parseWf(
+                "workflow foo(a: number, b: number = a): number { return b; }",
+            );
+            const def = wf.params[1].default!;
+            expect(def.kind).toBe("DottedNameExpr");
+        });
+
+        test("parses import { name } from '...'", () => {
+            const src =
+                'import { helper } from "./util.wf";\nworkflow foo(): number { return 1; }';
+            const { tokens } = lex(src);
+            const { module, errors } = new Parser(tokens).parseModule();
+            expect(errors).toEqual([]);
+            expect(module.imports).toHaveLength(1);
+            expect(module.imports[0].source).toBe("./util.wf");
+            expect(module.imports[0].names).toHaveLength(1);
+            expect(module.imports[0].names[0].name).toBe("helper");
+            expect(module.imports[0].names[0].alias).toBeUndefined();
+            expect(module.workflows).toHaveLength(1);
+        });
+
+        test("parses import with alias and multiple names", () => {
+            const src =
+                'import { a, b as c, d } from "./m.wf";\nworkflow foo(): number { return 1; }';
+            const { tokens } = lex(src);
+            const { module, errors } = new Parser(tokens).parseModule();
+            expect(errors).toEqual([]);
+            expect(module.imports[0].names.map((n) => n.name)).toEqual([
+                "a",
+                "b",
+                "d",
+            ]);
+            expect(module.imports[0].names[1].alias).toBe("c");
+        });
+
+        test("parses multi-workflow file with mixed export/import", () => {
+            const src = [
+                'import { x } from "./a.wf";',
+                "workflow priv(): number { return 1; }",
+                "export workflow pub(): number { return 2; }",
+            ].join("\n");
+            const { tokens } = lex(src);
+            const { module, errors } = new Parser(tokens).parseModule();
+            expect(errors).toEqual([]);
+            expect(module.imports).toHaveLength(1);
+            expect(module.workflows).toHaveLength(2);
+            expect(module.workflows[0].exported).toBeUndefined();
+            expect(module.workflows[1].exported).toBe(true);
+        });
+
+        test("import without source string reports an error", () => {
+            const { tokens } = lex("import { a } from ;");
+            const { errors } = new Parser(tokens).parse();
+            expect(errors.length).toBeGreaterThan(0);
+        });
+    });
 });

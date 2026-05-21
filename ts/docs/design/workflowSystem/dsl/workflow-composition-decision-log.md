@@ -51,7 +51,7 @@ public API.
 
 For `WorkflowCallNode.inputSchema`/`outputSchema` matching the referenced
 body, the implementation compares with `JSON.stringify(a) === JSON.stringify(b)`.
-This is *order-sensitive* and stricter than the eventual semantic check.
+This is _order-sensitive_ and stricter than the eventual semantic check.
 For Phase 1 the emitter (Phase 4) is expected to copy the body's schemas
 verbatim, so strict equality is sound. A deep-equal helper or structural
 subtyping comparison may be substituted later if emitter behavior diverges.
@@ -78,3 +78,39 @@ can still pass a `workflows:` override.
 For `engine.spec.ts` and `compiler.spec.ts`, inline `const ir: WorkflowIR = { ... }`
 literals were rewritten programmatically (brace-counting Python script) to
 the new wrapped shape. Tests assert behavior unchanged.
+
+## Phase 2 — DSL parser
+
+### P2-D1. `as` for import alias is a contextual identifier, not a keyword
+
+The plan describes `import { a as b } from "./m.wf"`. Promoting `as` to a
+reserved keyword would unnecessarily break any existing `.wf` source that
+uses `as` as an identifier (e.g. a variable named `as`). The parser
+recognizes the literal text "as" at the alias position only — it remains a
+plain identifier everywhere else. This mirrors TypeScript's handling.
+
+### P2-D2. Object-literal shorthand was already supported
+
+The design's named-record call form (`summarize({ text, maxLen: 200 })`)
+requires `{ text }` to mean `{ text: text }`. The existing object-literal
+parser (`parseObjectLiteral`) already implements this shorthand, so no new
+parser code was needed for the named-record argument syntax — call sites
+already accept a single object-literal argument. Semantic destructuring
+against the callee's parameter names is a Phase 3 (type checker) concern.
+
+### P2-D3. New `Module` AST + `parseModule()`, existing `parse()` kept
+
+To house import declarations, introduced a `Module` AST node (kind:
+`"Module"`) wrapping `imports: ImportDecl[]` and `workflows: WorkflowDecl[]`.
+Rather than break the existing `parse(): { workflows, errors }` API, added
+`parseModule(): { module, errors }` as the new top-level entry point, and
+extended `parse()` to also return `imports: ImportDecl[]` for callers that
+want both. `parseSingle()` (single-workflow back-compat) is unchanged and
+does not accept imports.
+
+### P2-D4. Import source string is decoded, not raw
+
+The parser decodes the import path string through `decodeStringLiteral`
+(same path as `StringLiteralExpr`) so escape sequences (`"\u002f"` etc.)
+work consistently. The raw token text is also preserved on the underlying
+StringToken for round-trip emission in Phase 4.

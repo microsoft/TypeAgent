@@ -28,6 +28,45 @@ export const DEFAULT_FALLBACK_PARAM = "err";
 
 // ---- Top-level ----
 
+/**
+ * Top-level module: a sequence of imports followed by workflow
+ * declarations. A `.wf` source file parses to one Module.
+ *
+ * Phase 2 introduces this as a top-level container so import declarations
+ * have a place to live. The existing `parse()` API still returns a
+ * `WorkflowDecl[]` (extracted from the module's `workflows`) for backward
+ * compatibility with downstream code; new code should use `parseModule()`.
+ */
+export interface Module {
+    kind: "Module";
+    imports: ImportDecl[];
+    workflows: WorkflowDecl[];
+    loc: SourceLocation;
+}
+
+/**
+ * An `import { name1, name2 as alias } from "./path.wf"` declaration.
+ *
+ * Phase 2 only parses this syntax — semantic resolution (path resolution,
+ * symbol binding, visibility) lands in Phase 7.
+ */
+export interface ImportDecl {
+    kind: "ImportDecl";
+    names: ImportSpecifier[];
+    source: string;
+    loc: SourceLocation;
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+}
+
+export interface ImportSpecifier {
+    /** Name as exported by the source file. */
+    name: string;
+    /** Local alias, or `undefined` if imported under its original name. */
+    alias?: string;
+    loc: SourceLocation;
+}
+
 export interface WorkflowDecl {
     kind: "WorkflowDecl";
     name: string;
@@ -35,6 +74,12 @@ export interface WorkflowDecl {
     params: ParamDecl[];
     returnType: TypeExpr;
     body: Statement[];
+    /**
+     * True when the workflow declaration was preceded by the `export`
+     * keyword. Phase 2 parses this; Phase 3 enforces visibility; Phase 6
+     * makes only exported workflows eligible as the entry workflow.
+     */
+    exported?: boolean;
     loc: SourceLocation;
     leadingComments?: Comment[];
     /**
@@ -71,6 +116,14 @@ export interface WorkflowDecl {
 export interface ParamDecl {
     name: string;
     type: TypeExpr;
+    /**
+     * Optional default-expression. Evaluated at call-site lowering when
+     * the corresponding argument is omitted. May reference earlier
+     * parameters of the same workflow (see design §4.3). Phase 2 parses
+     * this; Phase 3 type-checks it; Phase 4 inlines defaults at call
+     * sites.
+     */
+    default?: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
     trailingComments?: Comment[];

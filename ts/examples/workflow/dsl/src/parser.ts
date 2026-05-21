@@ -41,6 +41,9 @@ import { Token, TokenKind, LexComment, StringToken } from "./lexer.js";
 import { decodeStringLiteral } from "./literal.js";
 import {
     WorkflowDecl,
+    ImportDecl,
+    ImportSpecifier,
+    Module,
     ParamDecl,
     TypeExpr,
     Statement,
@@ -321,14 +324,46 @@ export class Parser {
         return { items, innerComments };
     }
 
-    parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
+    parse(): {
+        workflows: WorkflowDecl[];
+        imports: ImportDecl[];
+        errors: ParseError[];
+    } {
         this.singleWorkflowMode = false;
         const workflows: WorkflowDecl[] = [];
+        const imports: ImportDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
-            const wf = this.parseWorkflow();
-            if (wf) workflows.push(wf);
+            const t = this.peek();
+            if (t.kind === TokenKind.Import) {
+                const imp = this.parseImport();
+                if (imp) imports.push(imp);
+                continue;
+            }
+            if (t.kind === TokenKind.Workflow || t.kind === TokenKind.Export) {
+                const wf = this.parseWorkflow();
+                if (wf) workflows.push(wf);
+                continue;
+            }
+            this.error(
+                `Expected 'workflow', 'export', or 'import', got ${t.kind}`,
+            );
+            this.advance();
         }
-        return { workflows, errors: this.errors };
+        return { workflows, imports, errors: this.errors };
+    }
+
+    /**
+     * Parse the source into a `Module` (top-level container holding
+     * imports and workflow declarations). New top-level API; existing
+     * `parse()` is preserved for callers that only need workflows.
+     */
+    parseModule(): { module: Module; errors: ParseError[] } {
+        const l = this.loc();
+        const { workflows, imports, errors } = this.parse();
+        return {
+            module: { kind: "Module", imports, workflows, loc: l },
+            errors,
+        };
     }
 
     /** Parse a single workflow (backward compat). */
@@ -433,6 +468,11 @@ export class Parser {
     private parseWorkflow(): WorkflowDecl | undefined {
         const leadingComments = this.takeLeadingComments();
         const l = this.loc();
+        let exported = false;
+        if (this.peek().kind === TokenKind.Export) {
+            exported = true;
+            this.advance();
+        }
         if (this.peek().kind !== TokenKind.Workflow) {
             this.error(`Expected 'workflow', got ${this.peek().kind}`);
             this.advance();
@@ -471,6 +511,7 @@ export class Parser {
             body,
             loc: l,
         };
+        if (exported) decl.exported = true;
         if (leadingComments) decl.leadingComments = leadingComments;
         if (innerComments) decl.innerComments = innerComments;
         if (paramInnerComments) decl.paramInnerComments = paramInnerComments;
@@ -491,12 +532,80 @@ export class Parser {
                 this.expect(TokenKind.Colon);
                 const type = this.parseTypeExpr();
                 const decl: ParamDecl = { name, type, loc: l };
+                if (this.peek().kind === TokenKind.Equals) {
+                    this.advance(); // =
+                    decl.default = this.parseExpression();
+                }
                 if (leading) decl.leadingComments = leading;
                 if (this.lastToken) decl.endLine = this.lastToken.line;
                 return decl;
             },
         );
         return { params: items, innerComments };
+    }
+
+    /**
+     * Parse an import declaration:
+     *   import { name1, name2 as alias } from "./path.wf";
+     * Phase 2 parses the syntax only — path resolution and symbol
+     * binding land in Phase 7.
+     */
+    private parseImport(): ImportDecl | undefined {
+        const leadingComments = this.takeLeadingComments();
+        const l = this.loc();
+        this.expect(TokenKind.Import);
+        this.expect(TokenKind.LBrace);
+        const names: ImportSpecifier[] = [];
+        if (this.peek().kind !== TokenKind.RBrace) {
+            names.push(this.parseImportSpecifier());
+            while (this.peek().kind === TokenKind.Comma) {
+                this.advance();
+                if (this.peek().kind === TokenKind.RBrace) break;
+                names.push(this.parseImportSpecifier());
+            }
+        }
+        this.expect(TokenKind.RBrace);
+        this.expect(TokenKind.From);
+        const sourceTok = this.peek();
+        let source = "";
+        if (sourceTok.kind === TokenKind.StringLiteral) {
+            this.advance();
+            const st = sourceTok as StringToken;
+            this.checkLiteralEscapes(st.value, st.quote, st);
+            const decoded = decodeStringLiteral(st.value, st.quote);
+            source = decoded.value;
+        } else {
+            this.error(
+                `Expected string literal for import source, got ${sourceTok.kind}`,
+            );
+        }
+        if (this.peek().kind === TokenKind.Semicolon) this.advance();
+        const decl: ImportDecl = {
+            kind: "ImportDecl",
+            names,
+            source,
+            loc: l,
+        };
+        if (leadingComments) decl.leadingComments = leadingComments;
+        return decl;
+    }
+
+    private parseImportSpecifier(): ImportSpecifier {
+        const l = this.loc();
+        const name = this.expect(TokenKind.Identifier).value;
+        let alias: string | undefined;
+        // `as` is not a reserved keyword; recognize it lexically as an
+        // identifier with text "as" to avoid stealing the bareword.
+        if (
+            this.peek().kind === TokenKind.Identifier &&
+            this.peek().value === "as"
+        ) {
+            this.advance();
+            alias = this.expect(TokenKind.Identifier).value;
+        }
+        const spec: ImportSpecifier = { name, loc: l };
+        if (alias !== undefined) spec.alias = alias;
+        return spec;
     }
 
     // ---- Types ----
