@@ -2,7 +2,6 @@
 
 > This document describes the implementation that lives in
 > `ts/examples/workflow/lsp/` and `ts/examples/workflow/vscode/`.
-> Design decisions are in [`lsp-decisions.md`](./lsp-decisions.md).
 > The original feature plan is in [`lsp-plan.md`](./lsp-plan.md).
 
 ---
@@ -71,12 +70,13 @@ features like hover continue working during incremental editing.
 
 ```typescript
 interface ParsedDocument {
-    version: number;
-    text: string;
-    tokens: Token[];
-    comments: Comment[];
-    ast?: WorkflowNode;      // absent on parse error
-    symbols?: SymbolTable;   // absent if ast is absent
+  version: number;
+  text: string;
+  tokens: Token[];
+  comments: LexComment[];
+  ast?: WorkflowDecl; // absent on parse error
+  symbols?: SymbolTable; // absent if ast is absent
+  propertyRefs?: PropertyRef[]; // cached by semanticTokens; lazy
 }
 ```
 
@@ -89,9 +89,9 @@ maintains its own symbol table built by a single AST walk:
 
 ```typescript
 interface SymbolTable {
-    defs: SymbolDef[];    // const / param / lambdaParam definitions
-    refs: SymbolRef[];    // references to consts / params
-    taskRefs: TaskRef[];  // task-call nodes
+  defs: SymbolDef[]; // const / param / lambdaParam definitions
+  refs: SymbolRef[]; // references to consts / params
+  taskRefs: TaskRef[]; // task-call nodes
 }
 ```
 
@@ -103,23 +103,23 @@ points to the `const` keyword; the actual name is scanned forward).
 
 ## Feature Inventory
 
-| Feature | LSP method | Source file |
-|---------|-----------|-------------|
-| Diagnostics | `textDocument/publishDiagnostics` | `features/diagnostics.ts` |
-| Formatting (full) | `textDocument/formatting` | `features/formatting.ts` |
-| Formatting (range) | `textDocument/rangeFormatting` | `features/formatting.ts` |
-| Document symbols | `textDocument/documentSymbol` | `features/symbols.ts` |
-| Hover | `textDocument/hover` | `features/hover.ts` |
-| Go-to-definition | `textDocument/definition` | `features/definition.ts` |
-| Find references | `textDocument/references` | `features/references.ts` |
-| Completion | `textDocument/completion` | `features/completion.ts` |
-| Signature help | `textDocument/signatureHelp` | `features/signatureHelp.ts` |
-| Inlay hints | `textDocument/inlayHint` | `features/inlayHints.ts` |
-| Semantic tokens | `textDocument/semanticTokens/full` | `features/semanticTokens.ts` |
-| Rename | `textDocument/rename` + `prepareRename` | `features/rename.ts` |
-| Code actions | `textDocument/codeAction` | `features/codeActions.ts` |
-| IR preview | `workflow/compileIR` (custom) | `features/compileIR.ts` |
-| Graph preview | `workflow/previewGraph` (custom) | `features/previewGraph.ts` |
+| Feature            | LSP method                              | Source file                  |
+| ------------------ | --------------------------------------- | ---------------------------- |
+| Diagnostics        | `textDocument/publishDiagnostics`       | `features/diagnostics.ts`    |
+| Formatting (full)  | `textDocument/formatting`               | `features/formatting.ts`     |
+| Formatting (range) | `textDocument/rangeFormatting`          | `features/formatting.ts`     |
+| Document symbols   | `textDocument/documentSymbol`           | `features/symbols.ts`        |
+| Hover              | `textDocument/hover`                    | `features/hover.ts`          |
+| Go-to-definition   | `textDocument/definition`               | `features/definition.ts`     |
+| Find references    | `textDocument/references`               | `features/references.ts`     |
+| Completion         | `textDocument/completion`               | `features/completion.ts`     |
+| Signature help     | `textDocument/signatureHelp`            | `features/signatureHelp.ts`  |
+| Inlay hints        | `textDocument/inlayHint`                | `features/inlayHints.ts`     |
+| Semantic tokens    | `textDocument/semanticTokens/full`      | `features/semanticTokens.ts` |
+| Rename             | `textDocument/rename` + `prepareRename` | `features/rename.ts`         |
+| Code actions       | `textDocument/codeAction`               | `features/codeActions.ts`    |
+| IR preview         | `workflow/compileIR` (custom)           | `features/compileIR.ts`      |
+| Graph preview      | `workflow/previewGraph` (custom)        | `features/previewGraph.ts`   |
 
 ---
 
@@ -177,14 +177,13 @@ the same document object is reused across saves.
 
 ## Testing Strategy
 
-| Layer | Tool | Location |
-|-------|------|----------|
-| Feature unit tests | Jest (ESM) | `lsp/test/*.spec.ts` |
-| In-process integration | Jest + PassThrough streams | `lsp/test/serverIntegration.spec.ts` |
-| Grammar / lexer snapshots | Jest snapshot | `lsp/test/grammar.spec.ts` |
-| Cancellation behaviour | Jest | `lsp/test/cancellation.spec.ts` |
-| Extension E2E | `@vscode/test-electron` (deferred) | `vscode/scripts/extension-test.sh` |
-| Manual smoke tests | Checklist | `lsp-manual-tests.md` |
+| Layer                     | Tool                       | Location                                               |
+| ------------------------- | -------------------------- | ------------------------------------------------------ |
+| Feature unit tests        | Jest (ESM)                 | `lsp/test/*.spec.ts`                                   |
+| In-process integration    | Jest + PassThrough streams | `lsp/test/serverIntegration.spec.ts`                   |
+| Grammar / lexer snapshots | Jest snapshot              | `lsp/test/grammar.spec.ts`                             |
+| Cancellation behaviour    | Jest                       | `lsp/test/cancellation.spec.ts`                        |
+| Extension UI tests        | `@vscode/test-electron`    | `vscode/src/test/`, `vscode/scripts/extension-test.sh` |
 
 Coverage thresholds (v8): branches 60%, functions/lines/statements 70%.
 
@@ -192,8 +191,9 @@ Coverage thresholds (v8): branches 60%, functions/lines/statements 70%.
 
 ## Known Limitations / Deferred Work
 
-- **Graph preview webview** — requires `elkjs`, a `WebviewPanel`, and
-  a GUI VS Code host. Deferred; see `lsp-decisions.md`.
+- **Graph layout** — uses an inline layered top-down algorithm. Revisit
+  a real layout engine (e.g. `elkjs` or `dagre`) if workflows routinely
+  exceed ~30 nodes or users ask for cleaner edge routing.
 - **Incremental re-parse** — currently re-lexes and re-parses the full
   document on every change. For very large `.wf` files a tree-sitter
   incremental parse would be faster. Not a bottleneck for current file
@@ -202,4 +202,4 @@ Coverage thresholds (v8): branches 60%, functions/lines/statements 70%.
   once at startup. A `FileSystemWatcher` is planned but not yet wired.
 - **`builtinTaskSchemas.ts` sync** — schemas are duplicated between
   `builtinTasks.ts` and `builtinTaskSchemas.ts`; a jest spec asserts
-  parity. See `lsp-decisions.md` for the dedup plan.
+  parity. A future cleanup can generate one from the other.
