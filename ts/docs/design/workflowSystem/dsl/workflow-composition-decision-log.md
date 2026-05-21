@@ -114,3 +114,66 @@ The parser decodes the import path string through `decodeStringLiteral`
 (same path as `StringLiteralExpr`) so escape sequences (`"\u002f"` etc.)
 work consistently. The raw token text is also preserved on the underlying
 StringToken for round-trip emission in Phase 4.
+
+## Phase 3 — Type checker
+
+### P3-D1. New `checkAll(workflows)` API; existing `check(wf)` preserved
+
+Phase 3 needs cross-workflow concerns (shadow detection, recursion, full
+workflowMap). Rather than overload `check()`, added `checkAll(workflows):
+TypeError[]` as the multi-workflow entry. The single-workflow `check(wf)`
+is still used directly by some adjacent test helpers (e.g.,
+`commentNeutrality.spec.ts`) and is preserved unchanged behaviorally. The
+compiler now calls `checkAll`.
+
+### P3-D2. `checkAll` accumulates errors across all workflows
+
+The original `check(wf)` resets `this.errors`. `checkAll` was designed to
+not short-circuit on the first workflow's errors — it accumulates errors
+from every workflow plus the shadow / duplicate-name checks at the start
+and the recursion check at the end. Accumulation goes via a local
+`allErrors: TypeError[]` because `check(w)` resets `this.errors` each
+call. Order: shadow → duplicate → per-workflow → recursion.
+
+### P3-D3. Task/workflow shadow is an error, not silent precedence
+
+The design ("workflows shadow tasks of the same name. Ambiguity is a
+compile error") reads as both "shadow" and "error". Implementation
+chooses: any name registered as both a task and a workflow in the same
+translation unit is an error. This avoids the design's tension and gives
+users an immediate fix-it message.
+
+### P3-D4. Single-arg object literal triggers named-record form
+
+A workflow call form `helper({ n: 1, m: 2 })` is detected as a
+named-record call when (and only when) the call has exactly one
+positional argument whose value is an `ObjectLiteralExpr`. Any other
+shape (e.g., variable holding an object) is treated as a positional
+argument with object type. This matches the design's intent: the
+named-record form is a syntactic alternative, not a runtime
+destructuring of object values.
+
+### P3-D5. Multi-workflow compile() requires an entry workflow
+
+`compile()` accepts multi-workflow files but must pick exactly one entry
+to emit (until Phase 4 rewires the emitter to produce a workflow table).
+Selection rule:
+
+- single workflow → that one;
+- multiple workflows + exactly one `export workflow` → that one;
+- otherwise → compile error directing the user to mark one `export` or
+  pass `--entry` (the latter wired in Phase 6).
+
+### P3-D6. Duplicate parameter names are an error (gap-analysis finding)
+
+Caught by the second test-gap pass: the original `check()` happily set
+both params in the same scope (later overwriting the first). Added a
+seen-set check at the top of `check()`. Reported at the second
+parameter's location.
+
+### P3-D7. Recursion message includes the full cycle path
+
+`checkRecursion()` reports cycles in the form
+`a -> b -> c -> a`, with the trailing node repeated for legibility. The
+DFS dedups cycles by the sorted set of nodes (`a|b|c` key) so mutual
+recursion between A and B reports once, not at every visit.

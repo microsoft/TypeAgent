@@ -261,8 +261,35 @@ export class TypeChecker {
     check(wf: WorkflowDecl): TypeError[] {
         this.errors = [];
         const scope = new Scope();
+        const seenParams = new Set<string>();
         for (const p of wf.params) {
-            scope.set(p.name, this.resolveTypeExpr(p.type));
+            if (seenParams.has(p.name)) {
+                this.addError(
+                    `Duplicate parameter '${p.name}' in workflow '${wf.name}'`,
+                    p.loc.line,
+                    p.loc.col,
+                );
+            }
+            seenParams.add(p.name);
+            const paramType = this.resolveTypeExpr(p.type);
+            if (p.default) {
+                // Defaults may reference earlier parameters of the same
+                // workflow (§4.3); type-check in the partial scope built
+                // so far, before binding this parameter.
+                const defaultType = this.inferExpr(p.default, scope);
+                if (
+                    !isUnresolved(defaultType) &&
+                    defaultType.kind !== "unknown" &&
+                    !typeEq(paramType, defaultType)
+                ) {
+                    this.addError(
+                        `Default value of type '${typeName(defaultType)}' is not assignable to parameter '${p.name}' of type '${typeName(paramType)}'`,
+                        p.default.loc.line,
+                        p.default.loc.col,
+                    );
+                }
+            }
+            scope.set(p.name, paramType);
         }
         const returnType = this.checkStatements(wf.body, scope);
         // Validate return type matches declaration
@@ -275,6 +302,115 @@ export class TypeChecker {
             );
         }
         return this.errors;
+    }
+
+    /**
+     * Type-check a whole module of workflows (Phase 3).
+     *
+     * Performs:
+     *  - Task/workflow name-shadow ambiguity detection (a name declared as
+     *    both a task and a workflow in the same file is an error).
+     *  - Per-workflow type checking with the full workflow map in scope.
+     *  - Static recursion detection across the workflow-call graph
+     *    (direct or mutual cycles are an error; §2.4 of the design).
+     */
+    checkAll(workflows: WorkflowDecl[]): TypeError[] {
+        this.errors = [];
+        this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
+
+        // Ambiguous shadow: same name registered as both a task and a
+        // workflow in the same translation unit.
+        for (const w of workflows) {
+            if (this.taskSchemaMap.has(w.name)) {
+                this.addError(
+                    `Workflow '${w.name}' shadows a task of the same name; rename one of them`,
+                    w.loc.line,
+                    w.loc.col,
+                );
+            }
+        }
+
+        // Duplicate workflow names: the parser does not enforce
+        // uniqueness, so the type checker is the first place we catch
+        // them.
+        const seen = new Set<string>();
+        for (const w of workflows) {
+            if (seen.has(w.name)) {
+                this.addError(
+                    `Duplicate workflow declaration '${w.name}'`,
+                    w.loc.line,
+                    w.loc.col,
+                );
+            }
+            seen.add(w.name);
+        }
+
+        // Per-workflow type check. We accumulate errors across all
+        // workflows rather than short-circuiting; calling `check()`
+        // resets `this.errors`, so capture and restore around each call.
+        const allErrors: TypeError[] = [...this.errors];
+        for (const w of workflows) {
+            const wfErrors = this.check(w);
+            allErrors.push(...wfErrors);
+        }
+        this.errors = allErrors;
+
+        // Static recursion check across the call graph.
+        this.checkRecursion(workflows);
+
+        return this.errors;
+    }
+
+    /**
+     * DFS the workflow call graph and report any cycle (direct or
+     * mutual recursion). Each WorkflowDecl is a node; its edges are
+     * the targets of every `WorkflowCallExpr` found anywhere in its
+     * body (including inside builtins / nested control flow).
+     */
+    private checkRecursion(workflows: WorkflowDecl[]): void {
+        const edges = new Map<string, string[]>();
+        for (const w of workflows) {
+            const targets: string[] = [];
+            collectWorkflowCalls(w.body, targets);
+            edges.set(w.name, targets);
+        }
+        const WHITE = 0,
+            GRAY = 1,
+            BLACK = 2;
+        const color = new Map<string, number>();
+        for (const w of workflows) color.set(w.name, WHITE);
+        const reported = new Set<string>();
+
+        const visit = (name: string, stack: string[]): void => {
+            color.set(name, GRAY);
+            stack.push(name);
+            for (const tgt of edges.get(name) ?? []) {
+                if (!edges.has(tgt)) continue;
+                const c = color.get(tgt) ?? WHITE;
+                if (c === GRAY) {
+                    // Found a cycle: stack[stack.indexOf(tgt) ...] -> tgt
+                    const idx = stack.indexOf(tgt);
+                    const cycle = stack.slice(idx).concat(tgt);
+                    const key = [...cycle].sort().join("|");
+                    if (!reported.has(key)) {
+                        reported.add(key);
+                        const wf = this.workflowMap.get(tgt);
+                        this.addError(
+                            `Recursive workflow call detected: ${cycle.join(" -> ")} (workflow recursion is not supported; see design §2.4)`,
+                            wf?.loc.line ?? 0,
+                            wf?.loc.col ?? 0,
+                        );
+                    }
+                } else if (c === WHITE) {
+                    visit(tgt, stack);
+                }
+            }
+            stack.pop();
+            color.set(name, BLACK);
+        };
+        for (const w of workflows) {
+            if ((color.get(w.name) ?? WHITE) === WHITE) visit(w.name, []);
+        }
     }
 
     private addError(msg: string, line: number, col: number): void {
@@ -527,7 +663,7 @@ export class TypeChecker {
                     );
                     return UNRESOLVED;
                 }
-                this.checkArgs(e.args, scope);
+                this.checkWorkflowCallArgs(wf, e.args, scope, e.loc);
                 return this.resolveTypeExpr(wf.returnType);
             }
             case "BinaryExpr":
@@ -820,5 +956,239 @@ export class TypeChecker {
         for (const arg of args) {
             this.inferExpr(arg.value, scope);
         }
+    }
+
+    /**
+     * Check arguments for a workflow call against the callee's parameters.
+     *
+     * Accepts three surface forms (P3):
+     *   - Positional only: arguments map by index.
+     *   - Mixed positional + named: positional must come first; the
+     *     first named arg marks the end of positional binding.
+     *   - Single object-literal argument (named-record): destructures
+     *     against parameter names.
+     *
+     * Reports type errors for arity mismatch (after defaults), unknown
+     * named keys, duplicate bindings, and per-argument type mismatch.
+     */
+    private checkWorkflowCallArgs(
+        wf: WorkflowDecl,
+        args: TaskArg[],
+        scope: Scope,
+        loc: SourceLocationLike,
+    ): void {
+        // Detect named-record form: single positional argument that is
+        // an object literal expression.
+        const recordForm =
+            args.length === 1 &&
+            args[0].kind === "PositionalArg" &&
+            args[0].value.kind === "ObjectLiteralExpr";
+
+        type Binding = { value: Expr; from: "positional" | "named" | "record" };
+        const bound = new Map<string, Binding>();
+        if (recordForm) {
+            const obj = args[0].value as Extract<
+                Expr,
+                { kind: "ObjectLiteralExpr" }
+            >;
+            const paramNames = new Set(wf.params.map((p) => p.name));
+            for (const entry of obj.entries) {
+                if (!paramNames.has(entry.key)) {
+                    this.addError(
+                        `Unknown parameter '${entry.key}' in call to workflow '${wf.name}'`,
+                        entry.loc.line,
+                        entry.loc.col,
+                    );
+                    continue;
+                }
+                if (bound.has(entry.key)) {
+                    this.addError(
+                        `Parameter '${entry.key}' is bound more than once in call to '${wf.name}'`,
+                        entry.loc.line,
+                        entry.loc.col,
+                    );
+                    continue;
+                }
+                bound.set(entry.key, { value: entry.value, from: "record" });
+            }
+        } else {
+            // Positional and named mix; positional must come first.
+            let seenNamed = false;
+            let posIdx = 0;
+            for (const arg of args) {
+                if (arg.kind === "NamedArg") {
+                    seenNamed = true;
+                    const param = wf.params.find((p) => p.name === arg.name);
+                    if (!param) {
+                        this.addError(
+                            `Unknown parameter '${arg.name}' in call to workflow '${wf.name}'`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    if (bound.has(arg.name)) {
+                        this.addError(
+                            `Parameter '${arg.name}' is bound more than once in call to '${wf.name}'`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    bound.set(arg.name, { value: arg.value, from: "named" });
+                } else {
+                    if (seenNamed) {
+                        this.addError(
+                            `Positional argument follows named argument in call to '${wf.name}'`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    if (posIdx >= wf.params.length) {
+                        this.addError(
+                            `Too many arguments in call to workflow '${wf.name}' (expected at most ${wf.params.length})`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    const param = wf.params[posIdx++];
+                    bound.set(param.name, {
+                        value: arg.value,
+                        from: "positional",
+                    });
+                }
+            }
+        }
+
+        // Missing parameters: ones with no binding and no default.
+        for (const p of wf.params) {
+            if (!bound.has(p.name) && !p.default) {
+                this.addError(
+                    `Missing required parameter '${p.name}' in call to workflow '${wf.name}'`,
+                    loc.line,
+                    loc.col,
+                );
+            }
+        }
+
+        // Per-argument type check.
+        for (const p of wf.params) {
+            const b = bound.get(p.name);
+            if (!b) continue;
+            const declared = this.resolveTypeExpr(p.type);
+            const actual = this.inferExpr(b.value, scope);
+            if (
+                !isUnresolved(actual) &&
+                actual.kind !== "unknown" &&
+                !typeEq(declared, actual)
+            ) {
+                this.addError(
+                    `Argument of type '${typeName(actual)}' is not assignable to parameter '${p.name}' of type '${typeName(declared)}'`,
+                    b.value.loc.line,
+                    b.value.loc.col,
+                );
+            }
+        }
+    }
+}
+
+interface SourceLocationLike {
+    line: number;
+    col: number;
+}
+
+/**
+ * Walk a statement list and collect the names of every workflow call
+ * expression encountered (used for the static recursion check). The
+ * traversal descends into nested control flow and builtin nodes.
+ */
+function collectWorkflowCalls(stmts: Statement[], out: string[]): void {
+    for (const s of stmts) {
+        walkStmt(s, out);
+    }
+}
+
+function walkStmt(s: Statement, out: string[]): void {
+    switch (s.kind) {
+        case "ConstStatement":
+        case "DestructuringConst":
+            walkExpr(s.value, out);
+            return;
+        case "ReturnStatement":
+            if (s.value) walkExpr(s.value, out);
+            return;
+        case "ThrowStatement":
+            walkExpr(s.value, out);
+            return;
+        case "IfStatement":
+            walkExpr(s.condition, out);
+            collectWorkflowCalls(s.then, out);
+            if (s.else_) collectWorkflowCalls(s.else_, out);
+            return;
+        case "SwitchStatement":
+            walkExpr(s.discriminant, out);
+            for (const arm of s.arms) collectWorkflowCalls(arm.body, out);
+            if (s.default_) collectWorkflowCalls(s.default_, out);
+            return;
+        case "BreakStatement":
+            return;
+    }
+}
+
+function walkExpr(e: Expr, out: string[]): void {
+    switch (e.kind) {
+        case "WorkflowCallExpr":
+            out.push(e.name);
+            for (const a of e.args) walkExpr(a.value, out);
+            return;
+        case "TaskCallExpr":
+            for (const a of e.args) walkExpr(a.value, out);
+            return;
+        case "BinaryExpr":
+            walkExpr(e.left, out);
+            walkExpr(e.right, out);
+            return;
+        case "UnaryExpr":
+            walkExpr(e.operand, out);
+            return;
+        case "TernaryExpr":
+            walkExpr(e.condition, out);
+            walkExpr(e.consequent, out);
+            walkExpr(e.alternate, out);
+            return;
+        case "DottedNameExpr":
+        case "StringLiteralExpr":
+        case "NumberLiteralExpr":
+        case "BooleanLiteralExpr":
+        case "NullLiteralExpr":
+            return;
+        case "TemplateLiteralExpr":
+            for (const part of e.expressions) walkExpr(part, out);
+            return;
+        case "ArrayLiteralExpr":
+            for (const el of e.elements) walkExpr(el, out);
+            return;
+        case "ObjectLiteralExpr":
+            for (const en of e.entries) walkExpr(en.value, out);
+            return;
+        case "AttemptsNode":
+            walkExpr(e.count, out);
+            collectWorkflowCalls(e.body, out);
+            if (e.fallback) collectWorkflowCalls(e.fallback.body, out);
+            return;
+        case "MapNode":
+        case "FilterNode":
+            walkExpr(e.collection, out);
+            collectWorkflowCalls(e.body, out);
+            return;
+        case "ParallelNode":
+            for (const br of e.bodies) collectWorkflowCalls(br.body, out);
+            return;
+        case "ParallelMapNode":
+            walkExpr(e.collection, out);
+            collectWorkflowCalls(e.body, out);
+            return;
     }
 }

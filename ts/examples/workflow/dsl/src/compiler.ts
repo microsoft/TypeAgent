@@ -23,6 +23,15 @@ export interface CompileError {
 export interface CompileOptions {
     /** Run IR validation after emit. Defaults to false. */
     validate?: boolean;
+    /**
+     * Name of the workflow to use as the IR entry point. Defaults to:
+     *  - the only workflow in the file, if there is exactly one;
+     *  - the only `export workflow` declaration, if exactly one is
+     *    marked exported;
+     *  - otherwise a compile error (caller must specify).
+     * Phase 6 wires this to the `wfc` CLI's `--entry` flag.
+     */
+    entry?: string;
 }
 
 export interface CompileResult {
@@ -51,9 +60,11 @@ export function compile(
         return { errors };
     }
 
-    // Parse
+    // Parse (multi-workflow). The Phase 3 type checker needs the full
+    // workflow table to resolve `WorkflowCallExpr`, so we use parse()
+    // (which returns every workflow) instead of parseSingle().
     const parser = new Parser(tokens, comments);
-    const { ast, errors: parseErrors } = parser.parseSingle();
+    const { workflows, errors: parseErrors } = parser.parse();
     for (const e of parseErrors) {
         errors.push({
             phase: "parse",
@@ -62,13 +73,14 @@ export function compile(
             col: e.col,
         });
     }
-    if (!ast || parseErrors.length > 0) {
+    if (workflows.length === 0 || parseErrors.length > 0) {
         return { errors };
     }
 
-    // Type check
+    // Type check all workflows together so cross-workflow calls
+    // resolve and recursion is detectable.
     const checker = new TypeChecker(taskSchemas);
-    const typeErrors = checker.check(ast);
+    const typeErrors = checker.checkAll(workflows);
     for (const e of typeErrors) {
         errors.push({
             phase: "typecheck",
@@ -81,9 +93,24 @@ export function compile(
         return { errors };
     }
 
+    // Pick the entry workflow. Phase 4 will rewire the emitter to take
+    // the full workflow list and emit a workflow table; until then we
+    // emit only the entry workflow so existing IR consumers keep
+    // working.
+    const entry = selectEntry(workflows, options?.entry);
+    if (!entry.ok) {
+        errors.push({
+            phase: "typecheck",
+            message: entry.message,
+            line: entry.line,
+            col: entry.col,
+        });
+        return { errors };
+    }
+
     // Emit
     const emitter = new Emitter(taskSchemas);
-    const { ir, errors: emitErrors } = emitter.emit(ast);
+    const { ir, errors: emitErrors } = emitter.emit(entry.value);
     for (const e of emitErrors) {
         errors.push({
             phase: "emit",
@@ -96,6 +123,51 @@ export function compile(
     maybeValidate(ir ?? null, errors, options);
 
     return { ir: ir ?? undefined, errors };
+}
+
+type EntrySelection =
+    | { ok: true; value: import("./ast.js").WorkflowDecl }
+    | { ok: false; message: string; line: number; col: number };
+
+function selectEntry(
+    workflows: import("./ast.js").WorkflowDecl[],
+    requested: string | undefined,
+): EntrySelection {
+    if (requested) {
+        const found = workflows.find((w) => w.name === requested);
+        if (!found) {
+            return {
+                ok: false,
+                message: `Entry workflow '${requested}' not found in source`,
+                line: 0,
+                col: 0,
+            };
+        }
+        return { ok: true, value: found };
+    }
+    if (workflows.length === 1) {
+        return { ok: true, value: workflows[0] };
+    }
+    const exported = workflows.filter((w) => w.exported);
+    if (exported.length === 1) {
+        return { ok: true, value: exported[0] };
+    }
+    if (exported.length === 0) {
+        return {
+            ok: false,
+            message: `Multiple workflows declared but none marked 'export'; mark one as the entry or pass --entry`,
+            line: workflows[0].loc.line,
+            col: workflows[0].loc.col,
+        };
+    }
+    return {
+        ok: false,
+        message: `Multiple 'export workflow' declarations (${exported
+            .map((w) => `'${w.name}'`)
+            .join(", ")}); choose one with --entry`,
+        line: workflows[0].loc.line,
+        col: workflows[0].loc.col,
+    };
 }
 
 function maybeValidate(
