@@ -390,16 +390,22 @@ Private (non-exported) workflows are never candidates in the multi-workflow sele
 
 ## Phase 7 — Imports (cross-file composition)
 
-### P7-D1. Alias resolution via pre-typecheck AST rewrite
+### P7-D1. ✅ Alias resolution via pre-typecheck AST rewrite
 
 Local-import aliases (`import { foo as bar }`) could be resolved either by
 threading a per-file local-name table through the type checker, or by
 rewriting the AST in the loader so that every `WorkflowCallExpr.name`
-holds the canonical declared name before type-check runs. Picked the AST
+holds the canonical name before type-check runs. Picked the AST
 rewrite path: it keeps the existing single-namespace `TypeChecker.checkAll`
 untouched, and the rewrite is a small recursive descent over the AST
 shapes that can contain a workflow call (statements, expressions, AND
 parameter-default expressions — see P7-D5).
+
+The rewrite maps every local name (alias or own declaration) to its
+**mangled canonical name** — `__f{N}_{name}` for non-entry-file workflows,
+original name for entry-file workflows (see P7-D2). This means the type
+checker and emitter always operate on globally unique names with no
+per-file context needed.
 
 ### P7-D2. ✅ All non-entry-file workflows mangled; collision checked at import site only
 
