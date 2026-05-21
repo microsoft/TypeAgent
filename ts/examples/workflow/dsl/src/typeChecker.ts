@@ -74,6 +74,13 @@ export interface TypeError {
     length: number;
 }
 
+/** Source location of a successfully resolved property access segment (e.g. `.stdout`). */
+export interface PropertyRef {
+    line: number;
+    col: number;
+    length: number;
+}
+
 // ---- Helpers ----
 
 const STRING: PrimitiveType = { kind: "primitive", name: "string" };
@@ -253,6 +260,7 @@ export class TypeChecker {
     private errors: TypeError[] = [];
     private taskSchemaMap: Map<string, TaskSchemaInfo>;
     private workflowMap: Map<string, WorkflowDecl>;
+    private _propertyRefs: PropertyRef[] | null = null;
 
     constructor(taskSchemas: TaskSchemaInfo[], workflows: WorkflowDecl[] = []) {
         this.taskSchemaMap = new Map(taskSchemas.map((s) => [s.name, s]));
@@ -276,6 +284,23 @@ export class TypeChecker {
             );
         }
         return this.errors;
+    }
+
+    /**
+     * Walk the workflow and return source locations of every successfully
+     * resolved property-access segment (segments[1..n] of a DottedNameExpr).
+     * Used by the LSP to emit `property` semantic tokens for `.stdout` etc.
+     */
+    collectPropertyRefs(wf: WorkflowDecl): PropertyRef[] {
+        this._propertyRefs = [];
+        const scope = new Scope();
+        for (const p of wf.params) {
+            scope.set(p.name, this.resolveTypeExpr(p.type));
+        }
+        this.checkStatements(wf.body, scope);
+        const refs = this._propertyRefs;
+        this._propertyRefs = null;
+        return refs;
     }
 
     private addError(
@@ -511,6 +536,15 @@ export class TypeChecker {
                         return UNRESOLVED;
                     }
                     current = field.type;
+                    // Record this segment as a successfully resolved property.
+                    if (this._propertyRefs && e.segmentLocs?.[i]) {
+                        const loc = e.segmentLocs[i]!;
+                        this._propertyRefs.push({
+                            line: loc.line,
+                            col: loc.col,
+                            length: e.segments[i].length,
+                        });
+                    }
                 }
                 return current;
             }

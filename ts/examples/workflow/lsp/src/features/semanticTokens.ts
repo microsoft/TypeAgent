@@ -8,6 +8,7 @@
  *  - workflow parameters and lambda parameters    -> "parameter"
  *  - top-level const bindings                     -> "variable"
  *  - task calls (e.g. `shell.exec`)               -> "function"
+ *  - resolved property accesses (e.g. `.stdout`)  -> "property"
  *
  * Bare identifiers that don't resolve to anything (parse errors,
  * unknown names) are skipped — the diagnostics feature already
@@ -23,15 +24,18 @@ import {
     SemanticTokensLegend,
 } from "vscode-languageserver/node.js";
 import type { TextDocument } from "vscode-languageserver-textdocument";
+import { TypeChecker } from "workflow-dsl";
 import { getParsed } from "../parsedDocument.js";
+import { loadTaskSchemas } from "../taskSchemas.js";
 
-const TOKEN_TYPES = ["parameter", "variable", "function"] as const;
+const TOKEN_TYPES = ["parameter", "variable", "function", "property"] as const;
 type TokenType = (typeof TOKEN_TYPES)[number];
 
 const TYPE_INDEX: Record<TokenType, number> = {
     parameter: 0,
     variable: 1,
     function: 2,
+    property: 3,
 };
 
 export const semanticTokensLegend: SemanticTokensLegend = {
@@ -67,6 +71,19 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
             length: task.name.length,
             type: "function",
         });
+    }
+
+    // Emit property tokens for resolved property accesses (e.g. `.stdout`).
+    if (parsed.ast) {
+        const checker = new TypeChecker(loadTaskSchemas());
+        for (const ref of checker.collectPropertyRefs(parsed.ast)) {
+            entries.push({
+                line: ref.line - 1,
+                col: ref.col - 1,
+                length: ref.length,
+                type: "property",
+            });
+        }
     }
 
     entries.sort((a, b) => a.line - b.line || a.col - b.col);

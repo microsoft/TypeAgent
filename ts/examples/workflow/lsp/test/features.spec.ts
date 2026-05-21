@@ -217,6 +217,23 @@ describe("semantic tokens", () => {
         expect(tokenTypes.has(2)).toBe(true);
     });
 
+    it("emits property tokens for resolved property accesses", () => {
+        const src = [
+            "workflow w(s: string): string {",
+            "    const r = shell.exec(s);",
+            "    return r.stdout;",
+            "}",
+        ].join("\n");
+        const tokens = computeSemanticTokens(doc(src));
+        expect(tokens.data.length % 5).toBe(0);
+        const tokenTypes = new Set<number>();
+        for (let i = 3; i < tokens.data.length; i += 5) {
+            tokenTypes.add(tokens.data[i]!);
+        }
+        // type 3 = property
+        expect(tokenTypes.has(3)).toBe(true);
+    });
+
     it("delta-decoded positions are non-decreasing in (line, col)", () => {
         const src = `workflow w(a: string, b: number): string {\n    const x = a;\n    return string.join([x, b], ",");\n}`;
         const tokens = computeSemanticTokens(doc(src));

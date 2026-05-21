@@ -1329,10 +1329,15 @@ export class Parser {
 
         // Collect dotted segments
         const segments: string[] = [firstName];
+        const segmentLocs: SourceLocation[] = [
+            { line: l.line, col: l.col, offset: l.offset, length: firstName.length },
+        ];
         while (this.peek().kind === TokenKind.Dot) {
             this.advance(); // .
             if (this.peek().kind === TokenKind.Identifier) {
-                segments.push(this.advance().value);
+                const tok = this.advance();
+                segments.push(tok.value);
+                segmentLocs.push({ line: tok.line, col: tok.col, offset: tok.offset, length: tok.value.length });
             } else {
                 this.error("Expected identifier after '.'");
                 break;
@@ -1354,7 +1359,7 @@ export class Parser {
         }
 
         // Otherwise it's a dotted name reference
-        return { kind: "DottedNameExpr", segments, loc: l };
+        return { kind: "DottedNameExpr", segments, segmentLocs, loc: l };
     }
 
     // ---- Built-in function parsing ----

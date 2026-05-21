@@ -314,6 +314,8 @@ export interface NamedArg {
 export interface DottedNameExpr {
     kind: "DottedNameExpr";
     segments: string[];
+    /** Source location of each segment token; parallel to `segments`. */
+    segmentLocs?: SourceLocation[];
     loc: SourceLocation;
 }
 
