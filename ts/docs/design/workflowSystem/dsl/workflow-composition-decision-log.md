@@ -401,7 +401,7 @@ untouched, and the rewrite is a small recursive descent over the AST
 shapes that can contain a workflow call (statements, expressions, AND
 parameter-default expressions — see P7-D5).
 
-### P7-D2. All non-entry-file workflows mangled; collision checked at import site only
+### P7-D2. ✅ All non-entry-file workflows mangled; collision checked at import site only
 
 After import resolution the IR `workflows[name]` map is name-keyed and the
 engine resolves `WorkflowCallNode.workflowRef.name` by exact lookup. To keep
