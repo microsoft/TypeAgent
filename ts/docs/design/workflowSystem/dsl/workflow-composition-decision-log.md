@@ -401,25 +401,31 @@ untouched, and the rewrite is a small recursive descent over the AST
 shapes that can contain a workflow call (statements, expressions, AND
 parameter-default expressions — see P7-D5).
 
-### P7-D2. Flat global namespace for exported workflows; private workflows mangled
+### P7-D2. All non-entry-file workflows mangled; collision checked at import site only
 
-After import resolution, all **exported** workflows share a single global name
-table — the IR `workflows[name]` map is name-keyed, and the engine resolves
-`WorkflowCallNode.workflowRef.name` by exact name lookup. Duplicate exported
-names anywhere in the transitive import graph are a compile error.
+After import resolution the IR `workflows[name]` map is name-keyed and the
+engine resolves `WorkflowCallNode.workflowRef.name` by exact lookup. To keep
+all names globally unique without imposing a global-uniqueness constraint on
+workflow authors, the loader mangles **all** workflows from non-entry files
+(exported and private alike) to `__f{fileIndex}_{name}` in Phase 4. Entry-file
+workflows keep their original names.
 
-**Private (non-exported) workflows** are file-scoped. Two dependency files may
-each declare a private `workflow helper` without conflict. The loader handles
-this by mangling private workflow names from non-entry files to
-`__f{fileIndex}_{name}` in Phase 4, giving each a globally unique identity in
-the flat list. The per-file local map is extended so same-file calls to the
-private name are transparently rewritten to the mangled name. Entry-file private
-workflows keep their original names (they can be `--entry` targets).
+Each file's local-name map (built in Phase 3) maps every name—own declarations
+and imports alike—to its mangled canonical form, so the Phase 4 AST rewriter
+transparently rewrites all call references. From within a file, developers
+always write the declared or imported name; the mangling is invisible.
 
-**Bug fixed during review:** the original implementation checked ALL workflows
-(including private) for cross-file name collisions, and also did not mangle
-private names — if two dependency files had same-named private helpers, one
-would silently overwrite the other in the IR. Both issues were corrected.
+**Collision detection** is scoped to the per-file import namespace: if an
+`import { x }` statement would bind a name that is already occupied by a local
+declaration or an earlier import in the same file, that is a compile error.
+There is no global check over the transitive import graph; authors in different
+files are free to declare workflows with the same name.
+
+**Bugs fixed during review:**
+1. Original Phase 2 checked ALL workflows (including private) for cross-file
+   name collisions — wrong for private workflows, which are file-scoped.
+2. Private same-named helpers in two dependency files would silently overwrite
+   each other in the IR. Both issues were resolved by the full-mangle approach.
 
 Per-file namespacing for exported workflows is deferred to a future IR revision.
 
