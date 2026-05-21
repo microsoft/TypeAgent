@@ -79,6 +79,30 @@ For `engine.spec.ts` and `compiler.spec.ts`, inline `const ir: WorkflowIR = { ..
 literals were rewritten programmatically (brace-counting Python script) to
 the new wrapped shape. Tests assert behavior unchanged.
 
+### P1-D8. Adapter + CLI fixture migration missed in Phase 1; caught in post-P8 sweep
+
+The Phase 1 fixture-migration pass updated `workflow-dsl`, `workflow-engine`,
+`workflow-model`, and `workflow-compiler` test fixtures, but missed two
+downstream packages:
+
+- `examples/workflow/adapter/test/discovery.spec.ts` — its
+  `validWorkflowJson()` helper still emitted the legacy single-workflow IR
+  shape (`name`, top-level `nodes`/`entry`/`output`), causing
+  `validateWorkflowIR` to reject every fixture after P1's shape change.
+  4 of 18 tests failed.
+- `examples/workflow/cli/test/cli.spec.ts` — (a) used the legacy
+  `compile(source)` API on every `.wf` in `workflows/dsl/`, which broke
+  when `pipeline.wf` (cross-file import) was added in P8; (b) the
+  `rejects invalid workflow file` test wrote a legacy-shape IR literal.
+
+Fix: rewrote both helpers/fixtures to the new multi-workflow shape and
+switched the CLI test to `compileFile` (skipping `writing.wf` as a
+library-only file). All 18 adapter tests and 11 CLI tests now pass.
+
+Lesson for future IR-shape changes: the fixture-migration checklist must
+enumerate **every** package that constructs `WorkflowIR` literals, not
+just the core compiler/engine packages.
+
 ## Phase 2 — DSL parser
 
 ### P2-D1. `as` for import alias is a contextual identifier, not a keyword

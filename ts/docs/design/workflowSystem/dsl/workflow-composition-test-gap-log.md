@@ -119,3 +119,21 @@ address them. Filled gaps are tracked by the test diff itself.
   paths. The risk is one of regression-detection breadth, not
   current correctness. Add if the rewriter is ever rewritten to use
   per-kind handlers rather than uniform descent.
+
+## Phase 1 / Phase 7 follow-up — fixture sweep
+
+### P1F-T1. Multi-workflow content fidelity
+
+- **Gap:** `contentFidelity.spec.ts` filters out any `examples/*.wf`
+  containing `import` or `export` (i.e. `pipeline.wf`, `writing.wf`),
+  so identifier/literal/comment fidelity is not asserted for
+  multi-workflow sources.
+- **Reason not filled:** `format()` and `Parser.parseSingle()`
+  operate on a single `WorkflowDecl`; there is no `formatModule()`
+  yet that round-trips imports + multiple workflow decls. Adding
+  that is a formatter work item, not a composition correctness
+  one — the per-workflow body uses the same emit paths already
+  exercised by single-workflow files.
+- **Re-trigger:** Add when a `formatModule` (or equivalent
+  multi-decl emitter) lands, or when prettier/IDE formatting of
+  `.wf` files is wired up.

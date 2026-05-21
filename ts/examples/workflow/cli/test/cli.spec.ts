@@ -10,17 +10,11 @@
  */
 
 import { execFile, execFileSync } from "node:child_process";
-import {
-    mkdtempSync,
-    writeFileSync,
-    readFileSync,
-    rmSync,
-    readdirSync,
-} from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { compile as compileDsl, TaskSchemaInfo } from "workflow-dsl";
+import { compileFile as compileDslFile, TaskSchemaInfo } from "workflow-dsl";
 import { allBuiltinTasks } from "workflow-engine";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,8 +35,11 @@ beforeAll(() => {
     }));
     for (const f of readdirSync(WORKFLOWS_DSL)) {
         if (!f.endsWith(".wf")) continue;
-        const source = readFileSync(join(WORKFLOWS_DSL, f), "utf8");
-        const res = compileDsl(source, schemas, { validate: true });
+        // Skip library files (only consumed via cross-file import).
+        if (f === "writing.wf") continue;
+        const res = compileDslFile(join(WORKFLOWS_DSL, f), schemas, {
+            validate: true,
+        });
         if (res.errors.length > 0 || !res.ir) {
             const msg = res.errors
                 .map((e) => `${e.line}:${e.col} ${e.message}`)
@@ -155,22 +152,27 @@ describe("CLI integration", () => {
                 bad,
                 JSON.stringify({
                     kind: "workflow",
-                    name: "bad",
                     version: "1",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    nodes: {
-                        step: {
-                            kind: "task",
-                            task: "nonexistent.task",
+                    entry: "bad",
+                    workflows: {
+                        bad: {
                             inputSchema: { type: "object" },
                             outputSchema: { type: "object" },
                             inputs: {},
-                            bind: "r",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "nonexistent.task",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                            entry: "step",
+                            output: { $from: "scope", name: "r" },
                         },
                     },
-                    entry: "step",
-                    output: { $from: "scope", name: "r" },
                 }),
             );
 

@@ -365,6 +365,12 @@ describe("content fidelity (data): examples/*.wf preserve all identifiers, liter
     const files = fs
         .readdirSync(EXAMPLES_DIR)
         .filter((f) => f.endsWith(".wf"))
+        .filter((f) => {
+            // parseSingle / format work on single-workflow sources only.
+            // Skip multi-workflow files (those using `import` or `export`).
+            const src = fs.readFileSync(path.join(EXAMPLES_DIR, f), "utf8");
+            return !/^\s*(import|export)\b/m.test(src);
+        })
         .sort();
     if (files.length === 0) {
         test.skip("no .wf example files found", () => {});
