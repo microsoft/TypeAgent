@@ -199,10 +199,23 @@ const RENDER_SCRIPT = String.raw`
         list.push(e.from);
         incoming.set(e.to, list);
     }
+    // groupMap must be available before depthOf is called.
+    const groupMap = new Map(g.groups.map((gr) => [gr.id, gr]));
     function depthOf(id, stack) {
         if (depth.has(id)) return depth.get(id);
         if (stack.has(id)) { depth.set(id, 0); return 0; } // cycle guard
         stack.add(id);
+        // For group IDs, depth = max depth of their member nodes so that
+        // nodes consuming the group's output are placed below all inner nodes.
+        const grp = groupMap.get(id);
+        if (grp) {
+            const memberIds = collectGroupMembersFwd(grp);
+            let d = 0;
+            for (const mid of memberIds) d = Math.max(d, depthOf(mid, stack));
+            stack.delete(id);
+            depth.set(id, d);
+            return d;
+        }
         const ins = incoming.get(id) || [];
         let d = 0;
         for (const src of ins) d = Math.max(d, depthOf(src, stack) + 1);
@@ -227,7 +240,6 @@ const RENDER_SCRIPT = String.raw`
 
     const paramMap = new Map(g.params.map((p) => [p.id, p]));
     const nodeMap = new Map(g.nodes.map((n) => [n.id, n]));
-    const groupMap = new Map(g.groups.map((gr) => [gr.id, gr]));
 
     let maxW = 0;
     for (const d of layers) {
