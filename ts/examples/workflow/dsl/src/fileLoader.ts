@@ -145,40 +145,40 @@ export function loadModuleTree(
         return { modules: [], workflows: [], entryWorkflows: [], errors };
     }
 
-    // Phase 2 — global declared-name table. Reject collisions.
-    const declared = new Map<string, { decl: WorkflowDecl; file: string }>();
-    for (const { path, module } of loaded.values()) {
-        for (const wf of module.workflows) {
-            const existing = declared.get(wf.name);
-            if (existing) {
-                errors.push({
-                    phase: "load",
-                    message: `Duplicate workflow name '${wf.name}' (also declared in ${existing.file}); aliasing is not supported across files in v1`,
-                    line: wf.loc.line,
-                    col: wf.loc.col,
-                    file: path,
-                });
-                continue;
-            }
-            declared.set(wf.name, { decl: wf, file: path });
-        }
-    }
-
-    if (errors.length > 0) {
-        return { modules: [], workflows: [], entryWorkflows: [], errors };
-    }
+    // Phase 2 — no global name collision check needed. Every workflow from
+    // a non-entry file (exported or private) is mangled with a file-scoped
+    // prefix in Phase 4, making all flat-list names globally unique.
+    // The only collision that matters is within a single file's local
+    // namespace (e.g. importing the same local name from two different
+    // files), which is caught by Phase 3.
 
     // Phase 3 — per-file local-name maps. A local name resolves to a
     // declared (canonical) workflow name.
     //   - declared workflows: local === canonical
-    //   - imports: local = alias ?? import.name; canonical = import.name
+    //   - imports: local = alias ?? import.name; canonical = mangled name from source file
     // Validate that imported names are present in the source file and
     // are marked `export`.
+
+    // Pre-compute file indexes here so Phase 3 can resolve mangled canonical names.
+    const fileIndexes = new Map<string, number>();
+    let fileIdx = 0;
+    for (const { path } of loaded.values()) {
+        fileIndexes.set(path, fileIdx++);
+    }
+
+    // Helper: returns the mangled canonical name for a workflow in a given file.
+    // Entry-file workflows keep their original names; all others are mangled.
+    function mangledName(wfName: string, filePath: string): string {
+        if (filePath === entryPath) return wfName;
+        return `__f${fileIndexes.get(filePath)}_${wfName}`;
+    }
+
     const fileLocalMaps = new Map<string, Map<string, string>>();
     for (const { path, module } of loaded.values()) {
         const local = new Map<string, string>();
         for (const wf of module.workflows) {
-            local.set(wf.name, wf.name);
+            // Own declarations always map local name → mangled canonical name.
+            local.set(wf.name, mangledName(wf.name, path));
         }
         for (const imp of module.imports) {
             const sourcePath = resolver.resolve(imp.source, path);
@@ -229,7 +229,8 @@ export function loadModuleTree(
                     });
                     continue;
                 }
-                local.set(localName, spec.name);
+                // Map local alias/name → mangled canonical name in source file.
+                local.set(localName, mangledName(spec.name, sourcePath));
             }
         }
         fileLocalMaps.set(path, local);
@@ -239,16 +240,24 @@ export function loadModuleTree(
         return { modules: [], workflows: [], entryWorkflows: [], errors };
     }
 
-    // Phase 4 — AST rewrite. Within each file's workflow bodies,
-    // rewrite every WorkflowCallExpr.name from the local name to the
-    // canonical declared name. Calls that don't resolve in the local
-    // map are left alone; the type checker will surface them as
-    // "unknown workflow" using the global table — that gives the
-    // same diagnostic shape as in-file unknown-name errors.
+    // Phase 4 — AST rewrite + name mangling.
+    //
+    // All workflows from non-entry files (exported or private) are mangled
+    // to `__f{index}_{name}` so the flat merged list is globally unique.
+    // Entry-file workflows keep their original names.
+    //
+    // The per-file local map (built in Phase 3) already maps original names
+    // to mangled canonical names, so the AST rewriter transparently rewrites
+    // all call references to their mangled targets.
     const workflows: WorkflowDecl[] = [];
     for (const { path, module } of loaded.values()) {
         const local = fileLocalMaps.get(path)!;
+
         for (const wf of module.workflows) {
+            // Mangle the declaration name for all non-entry-file workflows.
+            if (path !== entryPath) {
+                wf.name = mangledName(wf.name, path);
+            }
             for (const param of wf.params) {
                 if (param.default) {
                     rewriteExpr(param.default, local);
@@ -260,6 +269,7 @@ export function loadModuleTree(
     }
 
     const entryFile = loaded.get(entryPath);
+    // entryWorkflows: use the already-mangled names from the entry file's workflows.
     const entryWorkflows = entryFile ? entryFile.module.workflows : [];
     return {
         modules: [...loaded.values()],

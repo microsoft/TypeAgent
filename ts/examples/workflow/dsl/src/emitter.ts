@@ -2267,12 +2267,20 @@ export class Emitter {
                     }
                     case "literal":
                         if (rest.length > 0) {
-                            this.emitError(
-                                `Cannot access path on literal value '${first}'`,
-                                expr.loc.line,
-                                expr.loc.col,
-                            );
-                            return null;
+                            // Forward the path onto the resolved template so
+                            // that default expressions like `b = a.foo` work
+                            // when `a` was inlined as a caller-resolved ref.
+                            const base = binding.value as Record<
+                                string,
+                                unknown
+                            >;
+                            const existingPath = Array.isArray(base.path)
+                                ? (base.path as string[])
+                                : [];
+                            return {
+                                ...base,
+                                path: [...existingPath, ...rest],
+                            } as unknown as Template;
                         }
                         return binding.value!;
                 }

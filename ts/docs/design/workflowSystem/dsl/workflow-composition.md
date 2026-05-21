@@ -232,9 +232,11 @@ rule is an implementation leak.
 
 Resolution:
 
-1. Workflows in scope shadow tasks of the same name.
-2. Ambiguity is a compile error with a suggestion.
-3. Promoting an inline block into a named workflow does not change
+1. A workflow name that collides with a registered task name is a **compile
+   error**. The user must rename one or the other. (A workflow silently
+   shadowing a task would be difficult to debug and is almost certainly a
+   mistake — see `workflow-composition-decision-log.md` P3-D3.)
+2. Promoting an inline block into a named workflow does not change
    call syntax at any call site.
 
 ### 4.2 Workflows are named callable computations
@@ -377,18 +379,21 @@ does not.
 A file may export multiple workflows. The engine needs to know which
 one to invoke when the file is run as an entry point. The rule:
 
-- The runner may specify the entry workflow by name at invocation
-  time (e.g. an `--entry <name>` flag, or the equivalent API
-  parameter).
-- If no entry is specified, the engine looks for an exported
-  workflow named `main`. If found, it is the entry.
-- If neither is satisfied (no entry specified and no `main` export),
-  loading the file as an entry point is a compile/load error.
+1. If an explicit entry name is supplied at invocation time
+   (`--entry <name>` flag or equivalent API parameter), that workflow
+   is used (it must exist and be exported).
+2. If the file contains exactly one workflow (exported or not), it is
+   the entry automatically.
+3. Otherwise, if exactly one `export workflow` is declared, it is the
+   entry.
+4. If neither is satisfied (multiple exports without an explicit entry,
+   or multiple workflows with none exported), loading the file as an
+   entry point is a compile/load error with a clear message.
 
-The entry workflow must be `export`ed. Private workflows are never
-callable as entries. There is no special `entry` keyword in v1;
-`main` is just a conventional name the engine looks for as a
-fallback.
+The entry workflow must be `export`ed (except in rule 2 where a lone
+workflow is always the entry). Private workflows are never callable as
+entries from outside the file. There is no special `entry` keyword in
+v1; `export` combined with uniqueness is the signal.
 
 ### 4.7 Effects stay implicit
 
@@ -496,7 +501,7 @@ IR spec's node-kind table all need updating when this lands.
 | Q4  | Anonymous workflow values / lambdas | Deferred. Workflows are named callable computations only; not first-class values. Higher-order positions take block bodies.                                                                                  | §4.2, §4.5 | `dsl/future/anonymous-workflow-values.md`                                                 |
 | Q5  | Default argument values             | Arbitrary-expression defaults, inlined at every defaulted call site. No new IR concept; some IR duplication.                                                                                                 | §4.3       | `ir/future/workflow-default-arguments.md` (alternatives if duplication becomes a problem) |
 | Q6  | Recursion / call-graph cycles       | Statically rejected in v1. Bounded recursion deferred.                                                                                                                                                       | §2.4       | `ir/future/workflow-recursion.md`                                                         |
-| Q7  | Entry workflow identification       | Runner-specified by name; falls back to exported `main`.                                                                                                                                                     | §4.6       | &mdash;                                                                                   |
+| Q7  | Entry workflow identification       | Explicit `--entry` > single workflow > single `export workflow` > error.                                                                                                                                     | §4.6       | &mdash;                                                                                   |
 
 ## 9. Non-goals
 

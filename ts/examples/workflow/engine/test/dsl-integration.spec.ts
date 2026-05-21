@@ -15,7 +15,13 @@ import {
     WorkflowEvent,
     allBuiltinTasks,
 } from "../src/index.js";
-import { compile, TaskSchemaInfo, CompileOptions } from "workflow-dsl";
+import {
+    compile,
+    compileFile,
+    FileResolver,
+    TaskSchemaInfo,
+    CompileOptions,
+} from "workflow-dsl";
 
 // ---- Helpers ----
 
@@ -1196,6 +1202,24 @@ describe("DSL -> Engine integration", () => {
             expect(result.output).toBe(15);
         });
 
+        it("supports defaulted argument with path access on earlier param", async () => {
+            const ir = compileOk(`
+                workflow add(opts: { a: number, b: number }, extra: number = opts.a): number {
+                    const r = opts.a + opts.b + extra;
+                    return r;
+                }
+                export workflow main(o: { a: number, b: number }): number {
+                    const y = add(o);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            // o = { a: 3, b: 4 }; extra defaults to o.a = 3; result = 3+4+3 = 10
+            const result = await eng.run(ir, { input: { o: { a: 3, b: 4 } } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(10);
+        });
+
         it("propagates sub-workflow output through caller pipeline", async () => {
             const ir = compileOk(`
                 workflow inc(n: number): number {
@@ -1432,6 +1456,233 @@ describe("DSL -> Engine integration", () => {
             expect(started).toBeDefined();
             expect(completed).toBeDefined();
             expect((completed as any).output).toBe(11);
+        });
+    });
+
+    // ---- Cross-file imports ----
+
+    class MemoryResolver implements FileResolver {
+        constructor(private files: Record<string, string>) {}
+        resolve(spec: string, importerAbsPath: string): string {
+            const parts = importerAbsPath.split("/").slice(0, -1);
+            for (const segment of spec.split("/")) {
+                if (segment === "." || segment === "") continue;
+                if (segment === "..") parts.pop();
+                else parts.push(segment);
+            }
+            return parts.join("/");
+        }
+        read(absPath: string): string {
+            const src = this.files[absPath];
+            if (src === undefined) throw new Error(`No such file: ${absPath}`);
+            return src;
+        }
+    }
+
+    function compileFileOk(
+        entryPath: string,
+        files: Record<string, string>,
+        extraTasks: TaskDefinition[] = [],
+    ): WorkflowIR {
+        const schemas = taskSchemasFrom([...allBuiltinTasks, ...extraTasks]);
+        const resolver = new MemoryResolver(files);
+        const result = compileFile(entryPath, schemas, {
+            resolver,
+            validate: true,
+        });
+        if (result.errors.length > 0) {
+            throw new Error(
+                `Compile errors:\n${result.errors.map((e) => e.message).join("\n")}`,
+            );
+        }
+        return result.ir!;
+    }
+
+    describe("cross-file imports", () => {
+        it("executes an imported helper workflow", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/helper.wf": `
+                    export workflow double(n: number): number {
+                        const r = n * 2;
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { double } from "./helper.wf";
+                    export workflow main(x: number): number {
+                        const y = double(x);
+                        return y;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 7 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(14);
+        });
+
+        it("executes an imported helper via alias", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/lib.wf": `
+                    export workflow triple(n: number): number {
+                        const r = n * 3;
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { triple as mul3 } from "./lib.wf";
+                    export workflow main(x: number): number {
+                        const y = mul3(x);
+                        return y;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 4 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(12);
+        });
+
+        it("chains two imported helpers", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/math.wf": `
+                    export workflow inc(n: number): number {
+                        const r = n + 1;
+                        return r;
+                    }
+                    export workflow double(n: number): number {
+                        const r = n * 2;
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { inc, double } from "./math.wf";
+                    export workflow main(x: number): number {
+                        const a = inc(x);
+                        const b = double(a);
+                        return b;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            // inc(3) = 4, double(4) = 8
+            const result = await eng.run(ir, { input: { x: 3 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(8);
+        });
+
+        it("private workflows with same name in different files execute independently", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/helper.wf": `
+                    workflow scale(x: number): number {
+                        const r = x * 10;
+                        return r;
+                    }
+                    export workflow process(n: number): number {
+                        const r = scale(n);
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { process } from "./helper.wf";
+                    workflow scale(x: number): number {
+                        const r = x + 1;
+                        return r;
+                    }
+                    export workflow main(x: number): number {
+                        const a = scale(x);
+                        const b = process(x);
+                        return a + b;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            // main.scale(3) = 4, helper.scale(3) = 30, result = 4 + 30 = 34
+            const result = await eng.run(ir, { input: { x: 3 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(34);
+        });
+    });
+
+    // ---- Destructuring ----
+
+    describe("destructuring", () => {
+        it("destructures an array literal and returns first element", async () => {
+            const ir = compileOk(`
+                workflow main(): unknown {
+                    const [a, b] = ["hello", "world"];
+                    return a;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe("hello");
+        });
+
+        it("destructures an array literal and returns second element", async () => {
+            const ir = compileOk(`
+                workflow main(): unknown {
+                    const [a, b] = ["hello", "world"];
+                    return b;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe("world");
+        });
+
+        it("destructures a number array and uses elements in arithmetic", async () => {
+            const ir = compileOk(`
+                workflow main(): number {
+                    const [x, y] = [3, 4];
+                    const r = x + y;
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(7);
+        });
+    });
+
+    // ---- Named-record call syntax ----
+
+    describe("named-record call syntax", () => {
+        it("calls a workflow with named-record object literal", async () => {
+            const ir = compileOk(`
+                workflow add(a: number, b: number): number {
+                    const r = a + b;
+                    return r;
+                }
+                export workflow main(): number {
+                    const r = add({ a: 3, b: 4 });
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(7);
+        });
+
+        it("named-record with default for omitted key", async () => {
+            const ir = compileOk(`
+                workflow addWithDefault(a: number, b: number = 10): number {
+                    const r = a + b;
+                    return r;
+                }
+                export workflow main(): number {
+                    const r = addWithDefault({ a: 5 });
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(15);
         });
     });
 });

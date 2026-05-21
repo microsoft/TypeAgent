@@ -890,6 +890,31 @@ describe("Emitter", () => {
         expect(callNode.inputs.a).toEqual(callNode.inputs.b);
     });
 
+    test("workflow call inlines default with path access on earlier param", () => {
+        const ir = compileOk(`
+            workflow helper(a: { n: number }, b: number = a.n): number { return b; }
+            export workflow main(obj: { n: number }): number {
+                const r = helper(obj);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // 'b' default = a.n; 'a' was resolved to the input ref for 'obj',
+        // so 'b' should be that same ref with path ["n"] appended.
+        const bInput = callNode.inputs.b as {
+            $from: string;
+            name: string;
+            path: string[];
+        };
+        expect(bInput.$from).toBe("input");
+        expect(bInput.name).toBe("obj");
+        expect(bInput.path).toEqual(["n"]);
+    });
+
     // ---- Error cases ----
 
     test("unknown task produces error", () => {

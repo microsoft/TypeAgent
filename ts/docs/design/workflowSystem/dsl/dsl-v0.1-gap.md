@@ -643,3 +643,115 @@ model supports and what the DSL can actually produce.
 5. Decide and document the canonical retry-exhaustion semantics for
    `attempts(...)` (silent exit vs. explicit fail) and add a test that
    pins it down.
+
+## G20: Named-record call syntax diverges from TypeScript
+
+**Spec/intent:** The DSL supports a "named-record" call form where a
+workflow with positional params can be called with a single object
+literal: `summarize({ text: "hello", maxLen: 100 })`. This is a DSL
+convenience that maps object keys to the callee's named params.
+
+**The gap:** In TypeScript, `f({ a, b })` only works if `f` is declared
+with a destructured parameter (`f({ a, b }: T)`). Positional-param
+functions (`f(a: string, b: number)`) cannot be called with an object
+— TypeScript produces a type error. The DSL's named-record form is
+therefore a non-standard extension with no TypeScript precedent.
+
+**Consequences:**
+
+1. `summarize(myObj)` where `myObj` is a variable (not an inline literal)
+   is treated as a single positional arg in the DSL today — it does NOT
+   trigger named-record matching. This means named-record semantics are
+   only available via inline object literals, limiting use in `map`
+   bodies and other computed-argument contexts.
+
+2. There is a semantic gap: DSL callers can write
+   `summarize({ text: "x", maxLen: 1 })` but TypeScript callers of the
+   same interface would not be able to. If the DSL ever emits TypeScript
+   stubs, this call form has no direct equivalent.
+
+**Options for alignment:**
+
+- **Drop named-record syntax** and require callers to pass positional
+  args (`summarize("hello", 100)`). Aligns with TypeScript exactly.
+- **Adopt TypeScript destructuring convention**: a workflow declared
+  as `workflow summarize({ text, maxLen }: SummarizeArgs)` takes a
+  single object param — then both inline literals and variables work,
+  matching TypeScript exactly.
+- **Keep named-record as DSL sugar** (current) but document it as a
+  DSL-only convenience that does not map to TypeScript call semantics.
+
+**Decision needed:** Should DSL workflow call syntax align with
+TypeScript (positional only, or explicit destructuring) or keep the
+named-record convenience syntax as a DSL-specific ergonomic feature?
+
+**Raised during:** review of `workflow-composition-decision-log.md`
+P3-D4, post-G1 implementation.
+
+## G21: `export` conflates entry-point selection with cross-file importability; no library compile mode
+
+**Spec/intent:** `export workflow` was introduced to (1) allow a workflow to
+be imported by other `.wf` files and (2) act as the tiebreaker for which
+workflow is the entry point when a file contains multiple workflows.
+
+**The gap:** These are two distinct concerns collapsed onto one keyword:
+
+- **Importability** — whether other files can `import { foo } from "./m.wf"`.
+  This is a module-visibility concern, analogous to TypeScript `export`.
+- **Entry selection** — which workflow `compile()` / `compileFile()` treats
+  as the root to execute. This is a bundler/runner concern with no TypeScript
+  equivalent.
+
+Because they share one keyword, a workflow marked `export` for importability
+automatically becomes an entry candidate, and vice versa. This causes two
+concrete problems:
+
+1. A file intended as a pure library (multiple exported helpers, no single
+   entry) cannot be compiled today — the compiler requires exactly one entry,
+   so two `export workflow` declarations are an error unless `--entry` is
+   passed. There is no "library mode" that skips entry resolution and emits
+   all exported workflows.
+
+2. A single-purpose helper marked `export` just to be importable raises
+   ambiguity if a second `export workflow` exists in the same file, even
+   though neither was intended as the entry.
+
+**Options:**
+
+- **Separate keywords / annotations**: e.g., `export workflow` for
+  importability only, and a separate marker (`@entry`, `main workflow`, etc.)
+  for entry selection. Matches TypeScript's model more closely.
+- **Library compile mode**: keep one keyword but add a `--library` flag to
+  `compile()`/`compileFile()` that skips entry resolution and emits all
+  exported workflows as a `WorkflowIR[]` or a named map. Entry-selection
+  behavior is unchanged for non-library builds.
+- **Implicit entry by name**: treat a workflow named `main` (or the file
+  stem) as the entry when no explicit `--entry` is given, making `export`
+  purely a visibility qualifier.
+
+**Raised during:** P3-D5 decision log review; related IR future work
+would be a multi-workflow / library IR shape.
+
+## G22: No DSL syntax for `timeoutMs` on workflow calls
+
+**Spec/intent:** The IR `WorkflowCallNode` has an optional `timeoutMs` field.
+When set, the engine enforces it by composing an `AbortSignal` that fires
+after the deadline, aborting the sub-workflow with a clear
+`"Sub-workflow … timed out after Nms"` error.
+
+**The gap:** The DSL compiler never emits `timeoutMs` on a `workflowCall`
+node. There is no syntax for a caller to declare a per-call timeout. The
+field is only reachable by tools that build IR directly.
+
+**Options:**
+
+- **Call-site annotation**: `const r = helper(x) timeout 5000;` — reads
+  naturally, consistent with task-level timeout style.
+- **Named argument**: `const r = helper(x, @timeout: 5000);` — uses a
+  special reserved keyword argument, similar to how some languages
+  handle call-site options.
+- **Workflow-level declaration**: `workflow helper(…) timeout 5000 { … }`
+  — declares max runtime on the callee declaration rather than each call
+  site. Simpler but less flexible (no per-call override).
+
+**Raised during:** P5-D4 decision log review.

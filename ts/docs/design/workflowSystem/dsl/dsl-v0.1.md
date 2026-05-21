@@ -753,6 +753,9 @@ workflow main(text: string): string {
 }
 ```
 
+`as` is a **contextual keyword**: it is only special inside an import
+specifier and remains a valid identifier name elsewhere in `.wf` source.
+
 A workflow is the program entry when (a) it is the only workflow in the
 entry file, (b) it is the only `export workflow` in the entry file, or
 (c) it is named explicitly via `wfc --entry <name>`. Imports never

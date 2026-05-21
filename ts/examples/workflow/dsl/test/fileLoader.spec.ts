@@ -29,6 +29,24 @@ class MemoryResolver implements FileResolver {
 
 const taskSchemas: TaskSchemaInfo[] = [];
 
+/**
+ * Workflows from non-entry files are mangled to `__f{N}_{name}` to ensure
+ * globally unique names in the flat IR map.  Tests that check for IR presence
+ * by original name should use this helper instead of `ir.workflows[name]`.
+ */
+function hasWorkflow(
+    ir: ReturnType<typeof compileFile>["ir"],
+    name: string,
+): boolean {
+    if (!ir) return false;
+    return Object.keys(ir.workflows).some(
+        (k) =>
+            k === name ||
+            k === `__f0_${name}` ||
+            (/^__f\d+_/.test(k) && k.endsWith(`_${name}`)),
+    );
+}
+
 describe("compileFile (Phase 7 — cross-file imports)", () => {
     test("loads a single file with no imports", () => {
         const resolver = new MemoryResolver({
@@ -64,7 +82,7 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         expect(result.errors).toEqual([]);
         expect(result.ir?.entry).toBe("main");
         // Helper workflow body must be present in the workflows table.
-        expect(result.ir?.workflows["double"]).toBeDefined();
+        expect(hasWorkflow(result.ir, "double")).toBe(true);
     });
 
     test("rejects import of a non-exported workflow", () => {
@@ -131,11 +149,11 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         const result = compileFile("/p/main.wf", taskSchemas, { resolver });
         expect(result.errors).toEqual([]);
         // The IR carries the canonical workflow name, not the alias.
-        expect(result.ir?.workflows["summarize"]).toBeDefined();
+        expect(hasWorkflow(result.ir, "summarize")).toBe(true);
         expect(result.ir?.workflows["articleSummarize"]).toBeUndefined();
     });
 
-    test("rejects duplicate workflow names across files", () => {
+    test("rejects duplicate exported workflow names across files", () => {
         const resolver = new MemoryResolver({
             "/p/a.wf": `
                 export workflow shared(x: number): number {
@@ -144,7 +162,7 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
             `,
             "/p/main.wf": `
                 import { shared } from "./a.wf";
-                workflow shared(x: number): number {
+                export workflow shared(x: number): number {
                     return x;
                 }
                 export workflow main(x: number): number {
@@ -155,9 +173,39 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         });
         const result = compileFile("/p/main.wf", taskSchemas, { resolver });
         expect(result.errors.length).toBeGreaterThan(0);
-        expect(result.errors.some((e) => /duplicate/i.test(e.message))).toBe(
-            true,
-        );
+        expect(
+            result.errors.some((e) => /collide|duplicate/i.test(e.message)),
+        ).toBe(true);
+    });
+
+    test("private workflows with the same name in different files do not conflict", () => {
+        const resolver = new MemoryResolver({
+            "/p/helper.wf": `
+                workflow helper(x: number): number {
+                    const r = x * 2;
+                    return r;
+                }
+                export workflow double(x: number): number {
+                    const r = helper(x);
+                    return r;
+                }
+            `,
+            "/p/main.wf": `
+                import { double } from "./helper.wf";
+                workflow helper(x: number): number {
+                    const r = x + 1;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const a = helper(x);
+                    const b = double(a);
+                    return b;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        expect(result.errors).toEqual([]);
+        expect(result.ir?.entry).toBe("main");
     });
 
     test("missing file is reported as a compile error", () => {
@@ -204,8 +252,8 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         });
         const result = compileFile("/p/main.wf", taskSchemas, { resolver });
         expect(result.errors).toEqual([]);
-        expect(result.ir?.workflows["inc"]).toBeDefined();
-        expect(result.ir?.workflows["incTwice"]).toBeDefined();
+        expect(hasWorkflow(result.ir, "inc")).toBe(true);
+        expect(hasWorkflow(result.ir, "incTwice")).toBe(true);
     });
 
     test("entry selection considers only the entry file", () => {
@@ -257,7 +305,7 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         });
         const result = compileFile("/p/main.wf", taskSchemas, { resolver });
         expect(result.errors).toEqual([]);
-        expect(result.ir?.workflows["getDefault"]).toBeDefined();
+        expect(hasWorkflow(result.ir, "getDefault")).toBe(true);
     });
 
     test("mutually-importing files load without infinite loop", () => {
@@ -397,7 +445,7 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         expect(result.errors).toEqual([]);
         // The canonical name reaches the IR even though the alias was
         // used inside a map() body.
-        expect(result.ir?.workflows["inc"]).toBeDefined();
+        expect(hasWorkflow(result.ir, "inc")).toBe(true);
     });
 
     test("parse errors in imported files are reported with file path", () => {
