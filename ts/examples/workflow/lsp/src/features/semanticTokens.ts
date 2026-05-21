@@ -6,7 +6,7 @@
  *
  * Colorizes identifier references by what they resolve to:
  *  - workflow parameters and lambda parameters    -> "parameter"
- *  - top-level const bindings                     -> "variable"
+ *  - top-level const bindings                     -> "variable" + "readonly" modifier
  *  - task calls (e.g. `shell.exec`)               -> "function"
  *  - resolved property accesses (e.g. `.stdout`)  -> "property"
  *
@@ -38,9 +38,17 @@ const TYPE_INDEX: Record<TokenType, number> = {
     property: 3,
 };
 
+const TOKEN_MODIFIERS = ["readonly"] as const;
+type TokenModifier = (typeof TOKEN_MODIFIERS)[number];
+
+/** Bitmask for a set of modifiers. */
+function modifierMask(...mods: TokenModifier[]): number {
+    return mods.reduce((acc, m) => acc | (1 << TOKEN_MODIFIERS.indexOf(m)), 0);
+}
+
 export const semanticTokensLegend: SemanticTokensLegend = {
     tokenTypes: [...TOKEN_TYPES],
-    tokenModifiers: [],
+    tokenModifiers: [...TOKEN_MODIFIERS],
 };
 
 export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
@@ -49,19 +57,20 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
     if (!parsed.symbols) return builder.build();
 
     // Sort by (line, col) so the LSP delta encoding is monotonic.
-    type Entry = { line: number; col: number; length: number; type: TokenType };
+    type Entry = { line: number; col: number; length: number; type: TokenType; modifier: number };
     const entries: Entry[] = [];
 
     for (const ref of parsed.symbols.refs) {
         if (!ref.def) continue;
+        const isParam = ref.def.kind === "param" || ref.def.kind === "lambdaParam";
         entries.push({
             line: ref.loc.line - 1,
             col: ref.loc.col - 1,
             length: ref.name.length,
-            type:
-                ref.def.kind === "param" || ref.def.kind === "lambdaParam"
-                    ? "parameter"
-                    : "variable",
+            type: isParam ? "parameter" : "variable",
+            // Const bindings are immutable - mark readonly so themes color them
+            // distinctly from mutable variables (matches TypeScript behavior).
+            modifier: !isParam ? modifierMask("readonly") : 0,
         });
     }
     for (const task of parsed.symbols.taskRefs) {
@@ -70,6 +79,7 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
             col: task.loc.col - 1,
             length: task.name.length,
             type: "function",
+            modifier: 0,
         });
     }
 
@@ -82,6 +92,7 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
                 col: ref.col - 1,
                 length: ref.length,
                 type: "property",
+                modifier: 0,
             });
         }
     }
@@ -89,7 +100,7 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
     entries.sort((a, b) => a.line - b.line || a.col - b.col);
 
     for (const e of entries) {
-        builder.push(e.line, e.col, e.length, TYPE_INDEX[e.type], 0);
+        builder.push(e.line, e.col, e.length, TYPE_INDEX[e.type], e.modifier);
     }
     return builder.build();
 }
