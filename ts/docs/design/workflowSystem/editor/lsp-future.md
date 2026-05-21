@@ -20,6 +20,7 @@ the `TypeChecker`'s inferred output types for each step in the chain;
 the current resolver intentionally does not re-implement that.
 
 **What "done" looks like:**
+
 - `TypeChecker` exposes a `resolvedOutputType(taskName)` API (or
   equivalent) that maps a task's output-schema property names to their
   types.

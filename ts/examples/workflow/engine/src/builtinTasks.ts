@@ -36,7 +36,11 @@ function taskSchema(
             `No schema declared for builtin task '${name}' in builtinTaskSchemas.ts`,
         );
     }
-    return { name: s.name, inputSchema: s.inputSchema, outputSchema: s.outputSchema };
+    return {
+        name: s.name,
+        inputSchema: s.inputSchema,
+        outputSchema: s.outputSchema,
+    };
 }
 
 /**
@@ -258,13 +262,13 @@ export const llmGenerateJson: TaskDefinition<
         const outSchema = ctx.outputSchema;
         const jsonSchema =
             outSchema &&
-                typeof outSchema !== "boolean" &&
-                Object.keys(outSchema).length > 0
+            typeof outSchema !== "boolean" &&
+            Object.keys(outSchema).length > 0
                 ? {
-                    name: "response",
-                    strict: true as const,
-                    schema: sealObjects(outSchema) as Record<string, unknown>,
-                }
+                      name: "response",
+                      strict: true as const,
+                      schema: sealObjects(outSchema) as Record<string, unknown>,
+                  }
                 : undefined;
         const result = await model.complete(
             input.prompt,
@@ -616,13 +620,13 @@ export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
 // ---- math tasks ----
 
 export const mathAdd: TaskDefinition<{ left: number; right: number }, number> =
-{
-    ...taskSchema("math.add"),
-    sideEffects: false,
-    async execute(input) {
-        return { kind: "ok", output: input.left + input.right };
-    },
-};
+    {
+        ...taskSchema("math.add"),
+        sideEffects: false,
+        async execute(input) {
+            return { kind: "ok", output: input.left + input.right };
+        },
+    };
 
 export const mathSubtract: TaskDefinition<
     { left: number; right: number },

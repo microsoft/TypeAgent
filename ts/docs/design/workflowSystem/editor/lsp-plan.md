@@ -73,23 +73,23 @@ Key design choices:
 
 ## Features (in order of implementation)
 
-| #   | Feature              | LSP method                                | Backed by                                |
-| --- | -------------------- | ----------------------------------------- | ---------------------------------------- |
-| 1   | Syntax highlight     | TextMate grammar (client-side)            | hand-written `.tmLanguage.json`          |
-| 2   | Diagnostics          | `textDocument/publishDiagnostics`         | `compile()` errors (lex/parse/typecheck) |
-| 3   | Formatting           | `textDocument/formatting`, `rangeFormatting` | `format()`                            |
-| 4   | Hover                | `textDocument/hover`                      | `TypeChecker` symbol/type info, task schema descriptions |
-| 5   | Document symbols     | `textDocument/documentSymbol`             | AST walk: workflows, params, lets        |
-| 6   | Semantic tokens      | `textDocument/semanticTokens/full`        | Lexer + symbol table (params vs locals vs builtins) |
-| 7   | Completion           | `textDocument/completion`                 | Keywords, in-scope identifiers, dotted builtins (`shell.exec`, `string.join`, ...), task names, member access on typed values |
-| 8   | Signature help       | `textDocument/signatureHelp`              | Task schema parameters at call site      |
-| 9   | Go-to-definition     | `textDocument/definition`                 | Symbol table from `TypeChecker`          |
-| 10  | Find references      | `textDocument/references`                 | AST walk over identifiers                |
-| 11  | Rename               | `textDocument/rename` + `prepareRename`   | Symbol table; rename param/local across scope |
-| 12  | Code actions         | `textDocument/codeAction`                 | Quick fixes: insert missing param, inline let, extract let, convert template to concat |
-| 13  | Inlay hints          | `textDocument/inlayHint`                  | Inferred types on `const`, return-type on task calls |
-| 14  | IR preview           | Custom command `workflow.previewIR`       | `compile()` -> JSON in a side webview, updated on save |
-| 15  | Graph preview        | Custom command `workflow.previewGraph`    | `extractGraph()` rendered as inline SVG (layered top-down) in a webview. A real layout engine (`elkjs`, `dagre`, …) was considered and deferred — bundle cost not justified for typical workflow sizes; revisit if graphs exceed ~30 nodes or routing complaints arrive. |
+| #   | Feature          | LSP method                                   | Backed by                                                                                                                                                                                                                                                                |
+| --- | ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Syntax highlight | TextMate grammar (client-side)               | hand-written `.tmLanguage.json`                                                                                                                                                                                                                                          |
+| 2   | Diagnostics      | `textDocument/publishDiagnostics`            | `compile()` errors (lex/parse/typecheck)                                                                                                                                                                                                                                 |
+| 3   | Formatting       | `textDocument/formatting`, `rangeFormatting` | `format()`                                                                                                                                                                                                                                                               |
+| 4   | Hover            | `textDocument/hover`                         | `TypeChecker` symbol/type info, task schema descriptions                                                                                                                                                                                                                 |
+| 5   | Document symbols | `textDocument/documentSymbol`                | AST walk: workflows, params, lets                                                                                                                                                                                                                                        |
+| 6   | Semantic tokens  | `textDocument/semanticTokens/full`           | Lexer + symbol table (params vs locals vs builtins)                                                                                                                                                                                                                      |
+| 7   | Completion       | `textDocument/completion`                    | Keywords, in-scope identifiers, dotted builtins (`shell.exec`, `string.join`, ...), task names, member access on typed values                                                                                                                                            |
+| 8   | Signature help   | `textDocument/signatureHelp`                 | Task schema parameters at call site                                                                                                                                                                                                                                      |
+| 9   | Go-to-definition | `textDocument/definition`                    | Symbol table from `TypeChecker`                                                                                                                                                                                                                                          |
+| 10  | Find references  | `textDocument/references`                    | AST walk over identifiers                                                                                                                                                                                                                                                |
+| 11  | Rename           | `textDocument/rename` + `prepareRename`      | Symbol table; rename param/local across scope                                                                                                                                                                                                                            |
+| 12  | Code actions     | `textDocument/codeAction`                    | Quick fixes: insert missing param, inline let, extract let, convert template to concat                                                                                                                                                                                   |
+| 13  | Inlay hints      | `textDocument/inlayHint`                     | Inferred types on `const`, return-type on task calls                                                                                                                                                                                                                     |
+| 14  | IR preview       | Custom command `workflow.previewIR`          | `compile()` -> JSON in a side webview, updated on save                                                                                                                                                                                                                   |
+| 15  | Graph preview    | Custom command `workflow.previewGraph`       | `extractGraph()` rendered as inline SVG (layered top-down) in a webview. A real layout engine (`elkjs`, `dagre`, …) was considered and deferred — bundle cost not justified for typical workflow sizes; revisit if graphs exceed ~30 nodes or routing complaints arrive. |
 
 ## Packages and files
 
@@ -412,8 +412,8 @@ For each round:
    - **Should fix (nice-to-have, fix if cheap):** unclear naming,
      duplication, missing comment on non-obvious code.
    - **Reject / defer:** style or preference, or scope creep.
-   Any finding that is **not** addressed in this phase — regardless of
-   severity — is logged with its disposition and rationale.
+     Any finding that is **not** addressed in this phase — regardless of
+     severity — is logged with its disposition and rationale.
 3. Re-run the reviewer for round 2 against the updated diff.
 4. Phase is not done until round-2 review surfaces **no must-fix items**.
    Should-fix items in round 2 may be deferred with a logged entry.
@@ -423,10 +423,10 @@ For each round:
 For each round:
 
 1. Launch a `general-purpose` (or `code-review`) subagent with the
-   prompt: *"Audit the test coverage for phase N of the workflow LSP.
+   prompt: _"Audit the test coverage for phase N of the workflow LSP.
    List feature behaviors, edge cases, and error paths that the
    current jest specs do not exercise. Do not suggest style changes;
-   only missing coverage."* Provide the phase's exit criteria, the
+   only missing coverage."_ Provide the phase's exit criteria, the
    list of test files, and the current coverage report.
 2. For each gap, decide against this bar:
    - **Must add:** any behavior named in the phase exit criteria;
@@ -435,8 +435,8 @@ For each round:
    - **Should add:** edge cases not in exit criteria but in the
      feature spec.
    - **Defer:** combinatorial cases, perf benchmarks.
-   Any gap that is **not** filled in this phase — regardless of
-   severity — is logged with its disposition and rationale.
+     Any gap that is **not** filled in this phase — regardless of
+     severity — is logged with its disposition and rationale.
 3. Run the reviewer again for round 2 after gaps are addressed.
 4. Phase is not done until round-2 surfaces no must-add tests and
    overall coverage has not regressed from the prior phase.
