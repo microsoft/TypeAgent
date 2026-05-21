@@ -21,6 +21,7 @@
 
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     TaskNode,
     BranchNode,
@@ -185,21 +186,24 @@ export class Emitter {
 
         this.stripUnreferencedBinds(rootScope);
 
-        const ir: WorkflowIR = {
-            kind: "workflow",
-            name: ast.name,
-            ...(ast.description ? { description: ast.description } : {}),
-            version: "1",
+        const body: WorkflowBody = {
             inputSchema,
             outputSchema,
-            ...(Object.keys(this.constants).length > 0
-                ? { constants: this.constants }
-                : {}),
             nodes: rootScope.nodes,
             entry: rootScope.nodeOrder.length > 0 ? rootScope.nodeOrder[0] : "",
             output:
                 outputTemplate ??
                 ({ $from: "input", name: "" } as unknown as Template),
+        };
+        const ir: WorkflowIR = {
+            kind: "workflow",
+            version: "1",
+            ...(ast.description ? { description: ast.description } : {}),
+            ...(Object.keys(this.constants).length > 0
+                ? { constants: this.constants }
+                : {}),
+            entry: ast.name,
+            workflows: { [ast.name]: body },
         };
 
         return {

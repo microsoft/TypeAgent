@@ -3,11 +3,13 @@
 
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     TaskNode,
     LoopNode,
     ForkNode,
     ForkMapNode,
+    WorkflowCallNode,
     Template,
     JSONSchema,
     ConstantDef,
@@ -52,6 +54,16 @@ export function isNeverSchema(schema: JSONSchema | undefined): boolean {
  * - Static schema compatibility: verifies that scope references point to
  *   producers whose outputSchema declares the referenced path.
  */
+/**
+ * Structural validation for an IR v1 document.
+ *
+ * Checks:
+ * - Top-level: workflows table, entry resolution.
+ * - Per workflow body: entry existence and node reference integrity,
+ *   task registration, static schema compatibility, CFG passes,
+ *   template passes, type compatibility.
+ * - WorkflowCallNode: ref resolution, schema match, acyclic call graph.
+ */
 export function validateWorkflowIR(
     ir: WorkflowIR,
     tasks?: ReadonlyMap<string, TaskDefinition>,
@@ -69,10 +81,30 @@ export function validateWorkflowIR(
         });
     }
 
-    if (!(ir.entry in ir.nodes)) {
+    if (!ir.workflows || typeof ir.workflows !== "object") {
+        errors.push({
+            path: "workflows",
+            message: `Missing or invalid "workflows" table.`,
+        });
+        return { valid: false, errors };
+    }
+
+    if (Object.keys(ir.workflows).length === 0) {
+        errors.push({
+            path: "workflows",
+            message: `Workflows table must contain at least one workflow.`,
+        });
+    }
+
+    if (typeof ir.entry !== "string" || ir.entry.length === 0) {
         errors.push({
             path: "entry",
-            message: `Entry node "${ir.entry}" does not exist.`,
+            message: `Missing or invalid "entry" workflow name.`,
+        });
+    } else if (!(ir.entry in ir.workflows)) {
+        errors.push({
+            path: "entry",
+            message: `Entry workflow "${ir.entry}" does not exist in workflows table.`,
         });
     }
 
@@ -94,16 +126,52 @@ export function validateWorkflowIR(
         }
     }
 
-    validateScope(ir.nodes, "nodes", tasks, errors, false);
+    // Validate each workflow body.
+    for (const [wfName, body] of Object.entries(ir.workflows)) {
+        validateWorkflowBody(ir, wfName, body, tasks, errors);
+    }
 
-    // Static schema compatibility for the top-level scope.
-    validateSchemaCompat(ir.nodes, "nodes", errors);
+    // Validate WorkflowCallNode references and acyclic call graph.
+    validateWorkflowCalls(ir, errors);
 
-    // Validate that the workflow output template only references existing
-    // bindings. This catches references to names that no node binds.
-    if (ir.output) {
-        const bindings = buildBindingMap(ir.nodes);
-        const outputRefs = collectTemplateRefs(ir.output, "output", "scope");
+    return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate a single workflow body within an IR artifact.
+ *
+ * Each body is validated as a self-contained scope (entry, nodes, output,
+ * schemas). Cross-workflow concerns (call resolution, acyclic call graph)
+ * are validated at the IR level by `validateWorkflowCalls`.
+ */
+function validateWorkflowBody(
+    ir: WorkflowIR,
+    wfName: string,
+    body: WorkflowBody,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    const basePath = `workflows.${wfName}`;
+    const nodesPath = `${basePath}.nodes`;
+
+    if (!(body.entry in body.nodes)) {
+        errors.push({
+            path: `${basePath}.entry`,
+            message: `Entry node "${body.entry}" does not exist in workflow "${wfName}".`,
+        });
+    }
+
+    validateScope(body.nodes, nodesPath, tasks, errors, false);
+
+    validateSchemaCompat(body.nodes, nodesPath, errors);
+
+    if (body.output) {
+        const bindings = buildBindingMap(body.nodes);
+        const outputRefs = collectTemplateRefs(
+            body.output,
+            `${basePath}.output`,
+            "scope",
+        );
         for (const ref of outputRefs) {
             if (!bindings.has(ref.name)) {
                 if (!ref.optional) {
@@ -128,27 +196,210 @@ export function validateWorkflowIR(
         }
     }
 
-    // CFG-based passes: acyclicity, onError rules, termination,
-    // scope closure, dominator analysis, state soundness, output binding.
-    validateCFGPasses(ir, errors);
-
-    // Pass: reserved $-key check (§3.4)
-    validateAllTemplates(ir, errors);
-
-    // Pass 7: Type compatibility (compositional resolved types).
-    validateTypeCompatibility(
-        ir.nodes,
-        "nodes",
+    validateScopeCFG(
+        body.nodes,
+        body.entry,
+        nodesPath,
         errors,
-        ir.inputSchema,
-        undefined,
-        ir.constants,
-        ir.output,
-        "output",
-        ir.outputSchema,
+        false,
+        body.output,
+        `${basePath}.output`,
     );
 
-    return { valid: errors.length === 0, errors };
+    checkReservedTemplateKeys(body.output, `${basePath}.output`, errors);
+    validateScopeTemplates(body.nodes, nodesPath, errors);
+
+    validateTypeCompatibility(
+        body.nodes,
+        nodesPath,
+        errors,
+        body.inputSchema,
+        undefined,
+        ir.constants,
+        body.output,
+        `${basePath}.output`,
+        body.outputSchema,
+    );
+}
+
+/**
+ * Validate all WorkflowCallNodes across the IR.
+ *
+ * Checks:
+ * - `workflowRef.name` resolves to a workflow in `ir.workflows`.
+ * - `inputSchema` and `outputSchema` match the referenced body.
+ * - The call graph (workflow A calls workflow B) is acyclic.
+ */
+function validateWorkflowCalls(
+    ir: WorkflowIR,
+    errors: ValidationError[],
+): void {
+    // First pass: per-call resolution + schema match.
+    for (const [wfName, body] of Object.entries(ir.workflows)) {
+        for (const [nodeId, node] of Object.entries(body.nodes)) {
+            collectCallsInNode(
+                node,
+                `workflows.${wfName}.nodes.${nodeId}`,
+                ir,
+                errors,
+            );
+        }
+    }
+
+    // Second pass: acyclic call graph (workflow -> referenced workflows).
+    const callGraph = new Map<string, Set<string>>();
+    for (const [wfName, body] of Object.entries(ir.workflows)) {
+        const callees = new Set<string>();
+        for (const node of Object.values(body.nodes)) {
+            collectCalleesInNode(node, callees);
+        }
+        callGraph.set(wfName, callees);
+    }
+    const cycle = findCallGraphCycle(callGraph);
+    if (cycle) {
+        errors.push({
+            path: "workflows",
+            message: `Workflow call graph contains a cycle: ${cycle.join(" -> ")}. Recursion is not supported in IR v1.`,
+        });
+    }
+}
+
+function collectCallsInNode(
+    node: WorkflowNode,
+    path: string,
+    ir: WorkflowIR,
+    errors: ValidationError[],
+): void {
+    if (node.kind === "workflowCall") {
+        const refName = node.workflowRef?.name;
+        if (typeof refName !== "string" || refName.length === 0) {
+            errors.push({
+                path: `${path}.workflowRef.name`,
+                message: `Missing or invalid workflow reference name.`,
+            });
+            return;
+        }
+        const source = node.workflowRef.source ?? "bundle";
+        if (source !== "bundle") {
+            errors.push({
+                path: `${path}.workflowRef.source`,
+                message: `Unsupported workflow reference source "${source}". Only "bundle" is supported in IR v1.`,
+            });
+            return;
+        }
+        const target = ir.workflows[refName];
+        if (!target) {
+            errors.push({
+                path: `${path}.workflowRef.name`,
+                message: `Workflow "${refName}" not found in workflows table.`,
+            });
+            return;
+        }
+        if (
+            JSON.stringify(node.inputSchema) !==
+            JSON.stringify(target.inputSchema)
+        ) {
+            errors.push({
+                path: `${path}.inputSchema`,
+                message: `Call inputSchema does not match referenced workflow "${refName}" inputSchema.`,
+            });
+        }
+        if (
+            JSON.stringify(node.outputSchema) !==
+            JSON.stringify(target.outputSchema)
+        ) {
+            errors.push({
+                path: `${path}.outputSchema`,
+                message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
+            });
+        }
+        return;
+    }
+    if (node.kind === "loop" || node.kind === "forkMap") {
+        for (const [innerId, innerNode] of Object.entries(node.body.nodes)) {
+            collectCallsInNode(
+                innerNode,
+                `${path}.body.nodes.${innerId}`,
+                ir,
+                errors,
+            );
+        }
+    }
+    if (node.kind === "fork") {
+        for (const [branchName, branch] of Object.entries(node.branches)) {
+            for (const [innerId, innerNode] of Object.entries(
+                branch.scope.nodes,
+            )) {
+                collectCallsInNode(
+                    innerNode,
+                    `${path}.branches.${branchName}.scope.nodes.${innerId}`,
+                    ir,
+                    errors,
+                );
+            }
+        }
+    }
+}
+
+function collectCalleesInNode(node: WorkflowNode, callees: Set<string>): void {
+    if (node.kind === "workflowCall") {
+        if (node.workflowRef?.name) {
+            callees.add(node.workflowRef.name);
+        }
+        return;
+    }
+    if (node.kind === "loop" || node.kind === "forkMap") {
+        for (const inner of Object.values(node.body.nodes)) {
+            collectCalleesInNode(inner, callees);
+        }
+    }
+    if (node.kind === "fork") {
+        for (const branch of Object.values(node.branches)) {
+            for (const inner of Object.values(branch.scope.nodes)) {
+                collectCalleesInNode(inner, callees);
+            }
+        }
+    }
+}
+
+function findCallGraphCycle(graph: Map<string, Set<string>>): string[] | null {
+    const WHITE = 0,
+        GRAY = 1,
+        BLACK = 2;
+    const color = new Map<string, number>();
+    for (const name of graph.keys()) color.set(name, WHITE);
+
+    const stack: string[] = [];
+    function dfs(node: string): string[] | null {
+        color.set(node, GRAY);
+        stack.push(node);
+        const callees = graph.get(node);
+        if (callees) {
+            for (const next of callees) {
+                if (!graph.has(next)) continue;
+                const c = color.get(next);
+                if (c === GRAY) {
+                    const i = stack.indexOf(next);
+                    return [...stack.slice(i), next];
+                }
+                if (c === WHITE) {
+                    const cycle = dfs(next);
+                    if (cycle) return cycle;
+                }
+            }
+        }
+        stack.pop();
+        color.set(node, BLACK);
+        return null;
+    }
+
+    for (const name of graph.keys()) {
+        if (color.get(name) === WHITE) {
+            const cycle = dfs(name);
+            if (cycle) return cycle;
+        }
+    }
+    return null;
 }
 
 // ---- CFG data structure ----
@@ -792,19 +1043,7 @@ function checkDominance(
     checkPhiMergeTypes(nodes, binders, prefix, errors);
 }
 
-// ---- Orchestrate CFG-based passes ----
-
-function validateCFGPasses(ir: WorkflowIR, errors: ValidationError[]): void {
-    validateScopeCFG(
-        ir.nodes,
-        ir.entry,
-        "nodes",
-        errors,
-        false,
-        ir.output,
-        "output",
-    );
-}
+// ---- Scope-level CFG validation entry ----
 
 function validateScopeCFG(
     nodes: Record<string, WorkflowNode>,
@@ -1620,23 +1859,31 @@ function isSentinel(target: string): target is "@iterate" | "@exit" {
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
 function isBindableNode(
     node: WorkflowNode,
-): node is TaskNode | LoopNode | ForkNode | ForkMapNode {
+): node is TaskNode | LoopNode | ForkNode | ForkMapNode | WorkflowCallNode {
     return node.kind !== "branch";
 }
 
-/** Type guard: node kinds that carry `inputs` (task and loop). */
-function hasInputs(node: WorkflowNode): node is TaskNode | LoopNode {
-    return node.kind === "task" || node.kind === "loop";
+/** Type guard: node kinds that carry `inputs` (task, loop, workflowCall). */
+function hasInputs(
+    node: WorkflowNode,
+): node is TaskNode | LoopNode | WorkflowCallNode {
+    return (
+        node.kind === "task" ||
+        node.kind === "loop" ||
+        node.kind === "workflowCall"
+    );
 }
 
-/** Get the effective input schema for a task or loop node. */
-function nodeInputSchema(node: TaskNode | LoopNode): JSONSchema {
+/** Get the effective input schema for an input-bearing node. */
+function nodeInputSchema(
+    node: TaskNode | LoopNode | WorkflowCallNode,
+): JSONSchema {
     return node.kind === "loop" ? node.body.inputSchema : node.inputSchema;
 }
 
 /** Get the effective output schema for a bindable node. */
 function nodeOutputSchema(
-    node: TaskNode | LoopNode | ForkNode | ForkMapNode,
+    node: TaskNode | LoopNode | ForkNode | ForkMapNode | WorkflowCallNode,
 ): JSONSchema {
     return node.kind === "loop" ? node.body.outputSchema : node.outputSchema;
 }
@@ -2569,16 +2816,6 @@ function checkReservedTemplateKeys(
     for (const [, value] of Object.entries(obj)) {
         checkReservedTemplateKeys(value as Template, templatePath, errors);
     }
-}
-
-/**
- * Apply checkReservedTemplateKeys to every template position in the IR:
- * node inputs, branch selectors, loop outputs, iterateState entries,
- * and the top-level workflow output.
- */
-function validateAllTemplates(ir: WorkflowIR, errors: ValidationError[]): void {
-    checkReservedTemplateKeys(ir.output, "output", errors);
-    validateScopeTemplates(ir.nodes, "nodes", errors);
 }
 
 function validateScopeTemplates(

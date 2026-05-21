@@ -374,11 +374,22 @@ export class WorkflowEngine {
         const runId = `run-${randomUUID()}`;
         const abortSignal = abortSignalArg ?? new AbortController().signal;
 
-        debug("run %s started (workflow: %s)", runId, ir.name);
+        const entryBody = ir.workflows[ir.entry];
+        if (!entryBody) {
+            return {
+                runId: "",
+                success: false,
+                error: {
+                    message: `Entry workflow "${ir.entry}" not found in workflows table.`,
+                },
+            };
+        }
+
+        debug("run %s started (workflow: %s)", runId, ir.entry);
 
         // Validate workflow input against inputSchema.
-        if (ir.inputSchema) {
-            const validate = this.getValidator(ir.inputSchema);
+        if (entryBody.inputSchema) {
+            const validate = this.getValidator(entryBody.inputSchema);
             if (!validate(input ?? {})) {
                 const msg = this.ajv.errorsText(validate.errors);
                 return {
@@ -418,19 +429,19 @@ export class WorkflowEngine {
             bindings: new Map(),
         };
 
-        const scopePath = [ir.name];
+        const scopePath = [ir.entry];
 
         this.emit({
             type: "runStarted",
             runId,
-            workflowName: ir.name,
+            workflowName: ir.entry,
             timestamp: Date.now(),
         });
 
         try {
             const exit = await this.executeScope(
-                ir.nodes,
-                ir.entry,
+                entryBody.nodes,
+                entryBody.entry,
                 scope,
                 scopePath,
                 runId,
@@ -443,7 +454,7 @@ export class WorkflowEngine {
 
             let output: unknown;
             try {
-                output = resolveTemplate(ir.output, scope);
+                output = resolveTemplate(entryBody.output, scope);
             } catch (resolveErr) {
                 // Output resolution failed. If we went through an error
                 // recovery path (e.g. cleanup), report the original error
@@ -475,8 +486,8 @@ export class WorkflowEngine {
             // Defense-in-depth: static validator checks output template type
             // compatibility; runtime #9 (task output schema) ensures upstream
             // values match declared types, so this is redundant.
-            if (this.defenseInDepth && ir.outputSchema) {
-                const validate = this.getValidator(ir.outputSchema);
+            if (this.defenseInDepth && entryBody.outputSchema) {
+                const validate = this.getValidator(entryBody.outputSchema);
                 if (!validate(output)) {
                     const msg = this.ajv.errorsText(validate.errors);
                     throw new EngineError(

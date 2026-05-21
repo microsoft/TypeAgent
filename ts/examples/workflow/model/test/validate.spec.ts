@@ -3,25 +3,63 @@
 
 import {
     WorkflowIR,
+    WorkflowBody,
     TaskNode,
     LoopNode,
     BranchNode,
     ForkNode,
     ForkMapNode,
+    JSONSchema,
+    Template,
+    ConstantDef,
+    WorkflowNode,
     TaskDefinition,
     validateWorkflowIR,
     isNeverSchema,
 } from "../src/index.js";
 
-function makeMinimalIR(overrides?: Partial<WorkflowIR>): WorkflowIR {
-    return {
-        kind: "workflow",
-        name: "test-workflow",
-        version: "1",
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
-        entry: "start",
-        nodes: {
+/**
+ * Test override shape. Accepts legacy single-workflow fields (`nodes`, `entry`,
+ * `output`, `inputSchema`, `outputSchema`) which are routed into the synthetic
+ * body, plus IR-level fields. `name` overrides the synthetic workflow's name.
+ */
+type IROverrides = {
+    kind?: "workflow";
+    name?: string;
+    version?: string;
+    description?: string;
+    types?: Record<string, JSONSchema>;
+    constants?: Record<string, ConstantDef>;
+    // Body fields (legacy compat — routed into workflows[name]):
+    entry?: string;
+    nodes?: Record<string, WorkflowNode>;
+    output?: Template;
+    inputSchema?: JSONSchema;
+    outputSchema?: JSONSchema;
+    // New: full workflows table override.
+    workflows?: Record<string, WorkflowBody>;
+};
+
+function makeMinimalIR(overrides?: IROverrides): WorkflowIR {
+    const o = overrides ?? {};
+    const name = o.name ?? "test-workflow";
+    if (o.workflows) {
+        const ir: WorkflowIR = {
+            kind: "workflow",
+            version: o.version ?? "1",
+            entry: name,
+            workflows: o.workflows,
+        };
+        if (o.description !== undefined) ir.description = o.description;
+        if (o.types !== undefined) ir.types = o.types;
+        if (o.constants !== undefined) ir.constants = o.constants;
+        return ir;
+    }
+    const body: WorkflowBody = {
+        inputSchema: o.inputSchema ?? { type: "object" },
+        outputSchema: o.outputSchema ?? { type: "object" },
+        entry: o.entry ?? "start",
+        nodes: o.nodes ?? {
             start: {
                 kind: "task",
                 task: "noop",
@@ -31,9 +69,18 @@ function makeMinimalIR(overrides?: Partial<WorkflowIR>): WorkflowIR {
                 bind: "out",
             },
         },
-        output: { $from: "scope", name: "out" },
-        ...overrides,
+        output: o.output ?? { $from: "scope", name: "out" },
     };
+    const ir: WorkflowIR = {
+        kind: "workflow",
+        version: o.version ?? "1",
+        entry: name,
+        workflows: { [name]: body },
+    };
+    if (o.description !== undefined) ir.description = o.description;
+    if (o.types !== undefined) ir.types = o.types;
+    if (o.constants !== undefined) ir.constants = o.constants;
+    return ir;
 }
 
 /** Build a task node with sensible defaults. */
@@ -2747,7 +2794,7 @@ describe("validateWorkflowIR", () => {
             expect(
                 result.errors.some(
                     (e) =>
-                        e.path === "output" &&
+                        e.path.endsWith(".output") &&
                         e.message.includes("not compatible"),
                 ),
             ).toBe(true);
@@ -3359,7 +3406,10 @@ describe("validateWorkflowIR", () => {
                 { next: "after" },
                 { after: makeTaskNode({ bind: "afterOut" }) },
             );
-            ir.output = { $from: "scope", name: "afterOut" };
+            ir.workflows[ir.entry].output = {
+                $from: "scope",
+                name: "afterOut",
+            };
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
         });
@@ -3519,8 +3569,11 @@ describe("validateWorkflowIR", () => {
                 { next: "after" },
                 { after: makeTaskNode({ bind: "afterOut" }) },
             );
-            ir.output = { $from: "scope", name: "afterOut" };
-            ir.outputSchema = { type: "object" };
+            ir.workflows[ir.entry].output = {
+                $from: "scope",
+                name: "afterOut",
+            };
+            ir.workflows[ir.entry].outputSchema = { type: "object" };
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
         });

@@ -133,12 +133,51 @@ export interface ForkMapNode {
     bind?: string;
 }
 
+// ---- Workflow call (sub-workflow invocation) ----
+
+/**
+ * Reference to a workflow. Currently only intra-artifact ("bundle") references
+ * are supported; cross-file imports are deferred to Phase 7.
+ */
+export interface WorkflowRef {
+    /** Name of the referenced workflow (key in `WorkflowIR.workflows`). */
+    name: string;
+    /**
+     * Resolution source. `"bundle"` means the referenced workflow lives in the
+     * same artifact's `workflows` table. Omitted defaults to `"bundle"`.
+     */
+    source?: "bundle";
+}
+
+/**
+ * A node that invokes another workflow as a sub-workflow.
+ *
+ * Note: the discriminant is `"workflowCall"`, not `"workflow"`, to avoid
+ * confusion with the artifact-level `kind: "workflow"` discriminant.
+ *
+ * The `inputSchema` and `outputSchema` mirror the referenced workflow's body
+ * and are authoritatively populated by the emitter; the validator verifies they
+ * match the resolved body's schemas.
+ */
+export interface WorkflowCallNode {
+    kind: "workflowCall";
+    workflowRef: WorkflowRef;
+    inputSchema: JSONSchema;
+    outputSchema: JSONSchema;
+    inputs: Record<string, Template>;
+    next?: string;
+    onError?: string;
+    bind?: string;
+    timeoutMs?: number;
+}
+
 export type WorkflowNode =
     | TaskNode
     | BranchNode
     | LoopNode
     | ForkNode
-    | ForkMapNode;
+    | ForkMapNode
+    | WorkflowCallNode;
 
 // ---- Top-level IR ----
 
@@ -147,11 +186,31 @@ export interface ConstantDef {
     value: unknown;
 }
 
-export interface WorkflowIR extends WorkflowScope {
+/**
+ * Body of a single workflow: structurally identical to a loop body / fork
+ * branch scope, but used as a top-level entry in `WorkflowIR.workflows`.
+ *
+ * Currently aliased to `WorkflowScope`; kept as a distinct named type so the
+ * workflows-table semantics are visible at the API surface.
+ */
+export type WorkflowBody = WorkflowScope;
+
+/**
+ * Top-level workflow artifact.
+ *
+ * Multiple workflows live in the `workflows` table keyed by name. The `entry`
+ * field names the workflow that runs when this artifact is invoked at the top
+ * level. Other workflows in the table are reachable via `WorkflowCallNode`
+ * (the call graph is required to be acyclic).
+ */
+export interface WorkflowIR {
     kind: "workflow";
-    name: string;
-    description?: string;
     version: string;
+    description?: string;
     types?: Record<string, JSONSchema>;
     constants?: Record<string, ConstantDef>;
+    /** Name of the entry workflow (must be a key in `workflows`). */
+    entry: string;
+    /** Workflow definitions, keyed by name. */
+    workflows: Record<string, WorkflowBody>;
 }

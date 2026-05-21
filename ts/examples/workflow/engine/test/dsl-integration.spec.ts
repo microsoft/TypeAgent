@@ -427,11 +427,11 @@ describe("DSL -> Engine integration", () => {
                 }
             `);
             // Find the RHS-evaluation and short-circuit arm node IDs
-            const rhsNode = Object.keys(ir.nodes).find((id) =>
-                id.startsWith("and_rhs"),
+            const rhsNode = Object.keys(ir.workflows[ir.entry].nodes).find(
+                (id) => id.startsWith("and_rhs"),
             )!;
-            const shortNode = Object.keys(ir.nodes).find((id) =>
-                id.startsWith("and_short"),
+            const shortNode = Object.keys(ir.workflows[ir.entry].nodes).find(
+                (id) => id.startsWith("and_short"),
             )!;
             expect(rhsNode).toBeDefined();
             expect(shortNode).toBeDefined();
@@ -464,11 +464,11 @@ describe("DSL -> Engine integration", () => {
                     return r;
                 }
             `);
-            const rhsNode = Object.keys(ir.nodes).find((id) =>
-                id.startsWith("or_rhs"),
+            const rhsNode = Object.keys(ir.workflows[ir.entry].nodes).find(
+                (id) => id.startsWith("or_rhs"),
             )!;
-            const shortNode = Object.keys(ir.nodes).find((id) =>
-                id.startsWith("or_short"),
+            const shortNode = Object.keys(ir.workflows[ir.entry].nodes).find(
+                (id) => id.startsWith("or_short"),
             )!;
             expect(rhsNode).toBeDefined();
             expect(shortNode).toBeDefined();
