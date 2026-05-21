@@ -1,6 +1,6 @@
 {
   "Workflow scaffold": {
-    "prefix": ["wf", "workflow"],
+    "prefix": "workflow",
     "body": [
       "workflow ${1:Name}(${2:param}: ${3:type}): ${4:ReturnType} {",
       "\t$0",

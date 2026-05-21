@@ -92,9 +92,13 @@ suite("Snippet structure", () => {
         const json = raw.replace(/,(\s*[}\]])/g, "$1");
         const snippets = JSON.parse(json) as Record<
             string,
-            { prefix: string; body: string[] }
+            { prefix: string | string[]; body: string[] }
         >;
-        const wf = Object.values(snippets).find((s) => s.prefix === "workflow");
+        const wf = Object.values(snippets).find((s) =>
+            Array.isArray(s.prefix)
+                ? s.prefix.includes("workflow")
+                : s.prefix === "workflow",
+        );
         assert.ok(wf, "a snippet with prefix 'workflow' should exist");
         const body = wf.body.join("\n");
         // Tab stops use ${n:placeholder} syntax, not bare $n.
