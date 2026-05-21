@@ -221,7 +221,11 @@ class Resolver {
             case "ParallelMapNode": {
                 this.visitExpr(expr.collection, scope);
                 const inner = new Scope(scope);
-                this.defineLambdaParam(expr.param, expr.paramLoc ?? expr.loc, inner);
+                this.defineLambdaParam(
+                    expr.param,
+                    expr.paramLoc ?? expr.loc,
+                    inner,
+                );
                 this.visitStatements(expr.body, inner);
                 if (expr.kind === "ParallelMapNode" && expr.maxConcurrency) {
                     this.visitExpr(expr.maxConcurrency, scope);

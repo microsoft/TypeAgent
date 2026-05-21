@@ -224,7 +224,9 @@ export function computeCodeActions(
         let fullRhsText = "";
         if (rhsStart !== undefined) {
             const si = text.indexOf(";", rhsStart);
-            fullRhsText = text.slice(rhsStart, si >= 0 ? si : text.length).trim();
+            fullRhsText = text
+                .slice(rhsStart, si >= 0 ? si : text.length)
+                .trim();
         }
         const isFullRhs = selectionText === fullRhsText;
 
@@ -292,7 +294,9 @@ export function computeCodeActions(
                 let rhsRaw = "";
                 if (rhsStart !== undefined) {
                     const si = text.indexOf(";", rhsStart);
-                    rhsRaw = text.slice(rhsStart, si >= 0 ? si : text.length).trim();
+                    rhsRaw = text
+                        .slice(rhsStart, si >= 0 ? si : text.length)
+                        .trim();
                 }
                 if (rhsRaw.length > 0) {
                     // Build the edit: replace each reference, then delete the decl line.
@@ -306,7 +310,12 @@ export function computeCodeActions(
                             line: r.loc.line - 1,
                             character: r.loc.col - 1 + constName!.length,
                         };
-                        return [TextEdit.replace({ start: refStart, end: refEnd }, rhsRaw)];
+                        return [
+                            TextEdit.replace(
+                                { start: refStart, end: refEnd },
+                                rhsRaw,
+                            ),
+                        ];
                     });
 
                     // Delete the entire const statement line.

@@ -128,7 +128,8 @@ export function activate(context: ExtensionContext): void {
     // the server has responded to `initialize`.
     clientReady = Promise.resolve(client.start()).catch((err) => {
         serverOutputChannel?.error(
-            `workflow-lsp failed to start: ${err instanceof Error ? err.message : String(err)
+            `workflow-lsp failed to start: ${
+                err instanceof Error ? err.message : String(err)
             }`,
         );
     });
@@ -191,9 +192,7 @@ function previewGraph(): void {
 async function renderGraphForActiveEditor(): Promise<void> {
     const editor = window.activeTextEditor;
     if (!editor || editor.document.languageId !== "workflow") {
-        window.showInformationMessage(
-            "Open a .wf file to preview its graph.",
-        );
+        window.showInformationMessage("Open a .wf file to preview its graph.");
         return;
     }
     if (!client) return;

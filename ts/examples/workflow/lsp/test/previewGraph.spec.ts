@@ -22,10 +22,9 @@ describe("previewGraph", () => {
             "file:///g.wf",
             `workflow greet(name: string): string {\n    const msg = string.concat(["Hello, ", name]);\n    return msg;\n}\n`,
         );
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///g.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
         expect(r.errors).toEqual([]);
         expect(r.graph).toBeDefined();
         expect(r.graph!.workflowName).toBe("greet");
@@ -37,10 +36,9 @@ describe("previewGraph", () => {
         const docs = new FakeDocuments();
         // Malformed parameter list — parser recovers but reports errors.
         docs.add("file:///g.wf", `workflow broken( {`);
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///g.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
         expect(r.errors.length).toBeGreaterThan(0);
         for (const e of r.errors) {
             expect(typeof e.message).toBe("string");
@@ -56,10 +54,9 @@ describe("previewGraph", () => {
             "file:///g.wf",
             `workflow w(): string {\n    const x = "unterminated;\n    return x;\n}\n`,
         );
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///g.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
         expect(r.errors.length).toBeGreaterThan(0);
         expect(r.errors.every((e) => e.phase === "lex")).toBe(true);
         expect(r.graph).toBeUndefined();
@@ -67,10 +64,9 @@ describe("previewGraph", () => {
 
     it("reports an unknown-document error for missing URIs", () => {
         const docs = new FakeDocuments();
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///missing.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///missing.wf",
+        });
         expect(r.graph).toBeUndefined();
         expect(r.errors.length).toBe(1);
         expect(r.errors[0]!.message).toContain("unknown document");
@@ -85,10 +81,9 @@ describe("previewGraph", () => {
             "file:///g.wf",
             `workflow w(): string {\n    return unknownIdent;\n}\n`,
         );
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///g.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
         expect(r.graph).toBeDefined();
         expect(r.errors).toEqual([]);
     });
@@ -99,10 +94,9 @@ describe("previewGraph", () => {
             "file:///g.wf",
             `workflow noop(name: string): string {\n    return name;\n}\n`,
         );
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///g.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
         expect(r.errors).toEqual([]);
         expect(r.graph!.params).toHaveLength(1);
         expect(r.graph!.params[0]!.name).toBe("name");
@@ -121,10 +115,9 @@ describe("previewGraph", () => {
             "file:///g.wf",
             `workflow w(x: string): string {\n    if (string.equals([x, "a"])) {\n        return "A";\n    } else {\n        return "B";\n    }\n}\n`,
         );
-        const r = previewGraph(
-            docs as unknown as TextDocuments<TextDocument>,
-            { uri: "file:///g.wf" },
-        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
         expect(r.graph).toBeDefined();
         // An if/else generates at least one "if-then" group and one
         // "if-else" group.

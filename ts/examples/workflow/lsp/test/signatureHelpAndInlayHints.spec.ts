@@ -91,7 +91,11 @@ describe("signature help", () => {
         const d = doc(text);
         const line1 = text.split("\n")[1]!;
         const col = line1.lastIndexOf(",") + 2;
-        const help = computeSignatureHelp(d, { line: 1, character: col }, schemas);
+        const help = computeSignatureHelp(
+            d,
+            { line: 1, character: col },
+            schemas,
+        );
         expect(help).not.toBeNull();
         expect(help!.activeParameter).toBe(0);
     });
@@ -133,7 +137,7 @@ describe("inlay hints", () => {
         const hints = computeInlayHints(doc(text), schemas);
         // const s = "hi" -> s inferred as string, hint should be `: string`
         expect(hints.length).toBe(1);
-        expect((hints[0]!.label as string)).toBe(": string");
+        expect(hints[0]!.label as string).toBe(": string");
     });
 
     it("respects a requested range", () => {

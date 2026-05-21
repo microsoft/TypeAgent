@@ -156,7 +156,9 @@ export function formatType(t: TypeInfo): string {
             if (t.fields.size === 0) return "{}";
             const parts: string[] = [];
             for (const [name, { type, optional }] of t.fields) {
-                parts.push(`${name}${optional ? "?" : ""}: ${formatType(type)}`);
+                parts.push(
+                    `${name}${optional ? "?" : ""}: ${formatType(type)}`,
+                );
             }
             return `{ ${parts.join("; ")} }`;
         }
@@ -423,15 +425,29 @@ export class TypeChecker {
                                 ? valueType.elements[i]!
                                 : UNRESOLVED;
                         scope.set(s.names[i]!, elemType);
-                        if (this._symbolTypes && s.nameLocs[i] && s.nameLocs[i]!.offset !== undefined) {
-                            this._symbolTypes.set(s.nameLocs[i]!.offset!, elemType);
+                        if (
+                            this._symbolTypes &&
+                            s.nameLocs[i] &&
+                            s.nameLocs[i]!.offset !== undefined
+                        ) {
+                            this._symbolTypes.set(
+                                s.nameLocs[i]!.offset!,
+                                elemType,
+                            );
                         }
                     }
                 } else if (valueType.kind === "array") {
                     for (let i = 0; i < s.names.length; i++) {
                         scope.set(s.names[i]!, valueType.element);
-                        if (this._symbolTypes && s.nameLocs[i] && s.nameLocs[i]!.offset !== undefined) {
-                            this._symbolTypes.set(s.nameLocs[i]!.offset!, valueType.element);
+                        if (
+                            this._symbolTypes &&
+                            s.nameLocs[i] &&
+                            s.nameLocs[i]!.offset !== undefined
+                        ) {
+                            this._symbolTypes.set(
+                                s.nameLocs[i]!.offset!,
+                                valueType.element,
+                            );
                         }
                     }
                 } else if (
@@ -689,8 +705,16 @@ export class TypeChecker {
                     const fbScope = scope.child();
                     const fbParam = e.fallback.param ?? DEFAULT_FALLBACK_PARAM;
                     fbScope.set(fbParam, UNKNOWN);
-                    if (this._symbolTypes && e.fallback.param && e.fallback.paramLoc && e.fallback.paramLoc.offset !== undefined) {
-                        this._symbolTypes.set(e.fallback.paramLoc.offset, UNKNOWN);
+                    if (
+                        this._symbolTypes &&
+                        e.fallback.param &&
+                        e.fallback.paramLoc &&
+                        e.fallback.paramLoc.offset !== undefined
+                    ) {
+                        this._symbolTypes.set(
+                            e.fallback.paramLoc.offset,
+                            UNKNOWN,
+                        );
                     }
                     this.checkStatements(e.fallback.body, fbScope);
                 }
@@ -714,8 +738,15 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
-                if (this._symbolTypes && e.paramLoc && e.paramLoc.offset !== undefined) {
-                    this._symbolTypes.set(e.paramLoc.offset, bodyScope.get(e.param) ?? UNKNOWN);
+                if (
+                    this._symbolTypes &&
+                    e.paramLoc &&
+                    e.paramLoc.offset !== undefined
+                ) {
+                    this._symbolTypes.set(
+                        e.paramLoc.offset,
+                        bodyScope.get(e.param) ?? UNKNOWN,
+                    );
                 }
                 const mapReturnType = this.checkStatements(e.body, bodyScope);
                 return { kind: "array", element: mapReturnType };
@@ -738,8 +769,15 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
-                if (this._symbolTypes && e.paramLoc && e.paramLoc.offset !== undefined) {
-                    this._symbolTypes.set(e.paramLoc.offset, bodyScope.get(e.param) ?? UNKNOWN);
+                if (
+                    this._symbolTypes &&
+                    e.paramLoc &&
+                    e.paramLoc.offset !== undefined
+                ) {
+                    this._symbolTypes.set(
+                        e.paramLoc.offset,
+                        bodyScope.get(e.param) ?? UNKNOWN,
+                    );
                 }
                 this.checkStatements(e.body, bodyScope);
                 return colType;
@@ -788,8 +826,15 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
-                if (this._symbolTypes && e.paramLoc && e.paramLoc.offset !== undefined) {
-                    this._symbolTypes.set(e.paramLoc.offset, bodyScope.get(e.param) ?? UNKNOWN);
+                if (
+                    this._symbolTypes &&
+                    e.paramLoc &&
+                    e.paramLoc.offset !== undefined
+                ) {
+                    this._symbolTypes.set(
+                        e.paramLoc.offset,
+                        bodyScope.get(e.param) ?? UNKNOWN,
+                    );
                 }
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
                 if (e.maxConcurrency) {

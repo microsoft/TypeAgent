@@ -51,7 +51,9 @@ export function computeHover(
     // Look up the inferred type when the AST is available.
     let typeLabel: string | undefined;
     if (parsed.ast) {
-        const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(parsed.ast);
+        const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(
+            parsed.ast,
+        );
         const info = symbolTypes.get(def.loc.offset);
         if (info && info.kind !== "unresolved") {
             typeLabel = formatType(info);

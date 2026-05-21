@@ -24,12 +24,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import {
-    ViewColumn,
-    WebviewPanel,
-    window,
-    type Webview,
-} from "vscode";
+import { ViewColumn, WebviewPanel, window, type Webview } from "vscode";
 
 /** Mirrors `GraphModel` from workflow-dsl. Defined locally to avoid
  *  pulling the dsl package into the extension bundle. */

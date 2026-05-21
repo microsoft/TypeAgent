@@ -1255,14 +1255,24 @@ export class Parser {
             const paramLocs: SourceLocation[] = [];
             const firstTok = this.advance();
             params.push(firstTok.value);
-            paramLocs.push({ line: firstTok.line, col: firstTok.col, offset: firstTok.offset, length: firstTok.value.length });
+            paramLocs.push({
+                line: firstTok.line,
+                col: firstTok.col,
+                offset: firstTok.offset,
+                length: firstTok.value.length,
+            });
             let isArrow = true;
             while (this.peek().kind === TokenKind.Comma) {
                 this.advance();
                 if (this.peek().kind === TokenKind.Identifier) {
                     const tok = this.advance();
                     params.push(tok.value);
-                    paramLocs.push({ line: tok.line, col: tok.col, offset: tok.offset, length: tok.value.length });
+                    paramLocs.push({
+                        line: tok.line,
+                        col: tok.col,
+                        offset: tok.offset,
+                        length: tok.value.length,
+                    });
                 } else {
                     isArrow = false;
                     break;
@@ -1301,7 +1311,12 @@ export class Parser {
             const { stmts: body, innerComments } =
                 this.parseStatementsCapturingInner();
             this.expect(TokenKind.RBrace);
-            const ph: ArrowPlaceholder = { _isArrow: true, params, paramLocs, body };
+            const ph: ArrowPlaceholder = {
+                _isArrow: true,
+                params,
+                paramLocs,
+                body,
+            };
             if (innerComments) ph.bodyInnerComments = innerComments;
             return ph;
         }
@@ -1330,14 +1345,24 @@ export class Parser {
         // Collect dotted segments
         const segments: string[] = [firstName];
         const segmentLocs: SourceLocation[] = [
-            { line: l.line, col: l.col, offset: l.offset, length: firstName.length },
+            {
+                line: l.line,
+                col: l.col,
+                offset: l.offset,
+                length: firstName.length,
+            },
         ];
         while (this.peek().kind === TokenKind.Dot) {
             this.advance(); // .
             if (this.peek().kind === TokenKind.Identifier) {
                 const tok = this.advance();
                 segments.push(tok.value);
-                segmentLocs.push({ line: tok.line, col: tok.col, offset: tok.offset, length: tok.value.length });
+                segmentLocs.push({
+                    line: tok.line,
+                    col: tok.col,
+                    offset: tok.offset,
+                    length: tok.value.length,
+                });
             } else {
                 this.error("Expected identifier after '.'");
                 break;
@@ -1579,7 +1604,9 @@ export class Parser {
     }
 
     /** Extract parameter source locations from a parsed arrow. */
-    private extractArrowParamLocs(arg: Expr | ArrowPlaceholder): SourceLocation[] {
+    private extractArrowParamLocs(
+        arg: Expr | ArrowPlaceholder,
+    ): SourceLocation[] {
         if (this.isArrow(arg)) {
             return arg.paramLocs;
         }

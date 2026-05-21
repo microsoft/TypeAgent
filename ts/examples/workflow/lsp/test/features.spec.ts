@@ -82,9 +82,7 @@ describe("definition", () => {
     it("returns null when cursor is at the declaration itself", () => {
         // computeDefinition uses findReferenceAt which only searches refs.
         // The 'a' param at line 0 char 11 is a declaration, not a reference.
-        expect(
-            computeDefinition(doc(), { line: 0, character: 11 }),
-        ).toBeNull();
+        expect(computeDefinition(doc(), { line: 0, character: 11 })).toBeNull();
     });
 });
 
@@ -182,7 +180,10 @@ describe("completion", () => {
         const src = `workflow w(): string {\n    return unknown.call();\n}`;
         const d = doc(src);
         const col = src.split("\n")[1]!.indexOf(".") + 1;
-        const items = computeCompletions(d, schemas, { line: 1, character: col });
+        const items = computeCompletions(d, schemas, {
+            line: 1,
+            character: col,
+        });
         expect(items.length).toBe(0);
     });
 

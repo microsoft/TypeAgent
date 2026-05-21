@@ -36,7 +36,16 @@ export function compileIR(
     schemas: TaskSchema[],
 ): CompileIRResult {
     if (!params?.uri) {
-        return { errors: [{ phase: "validate", message: "missing uri parameter", line: 1, col: 1 }] };
+        return {
+            errors: [
+                {
+                    phase: "validate",
+                    message: "missing uri parameter",
+                    line: 1,
+                    col: 1,
+                },
+            ],
+        };
     }
     const doc = documents.get(params.uri);
     if (!doc) {

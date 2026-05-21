@@ -79,10 +79,10 @@ export function createServer(
 
     const connection = transport
         ? createConnection(
-            ProposedFeatures.all,
-            new StreamMessageReader(transport.input),
-            new StreamMessageWriter(transport.output),
-        )
+              ProposedFeatures.all,
+              new StreamMessageReader(transport.input),
+              new StreamMessageWriter(transport.output),
+          )
         : createConnection(ProposedFeatures.all);
 
     const documents = new TextDocuments<TextDocument>(TextDocument);

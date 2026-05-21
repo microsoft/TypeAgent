@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # extension-test.sh — Run @vscode/test-electron extension integration tests.
 #
 # Prerequisites (NOT available in the restricted dev container):

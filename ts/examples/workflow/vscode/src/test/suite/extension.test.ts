@@ -37,7 +37,7 @@ suite("Workflow extension", () => {
     test("recognizes .wf documents as language 'workflow'", async () => {
         const doc = await vscode.workspace.openTextDocument({
             language: "workflow",
-            content: "workflow w(): string { return \"hi\"; }\n",
+            content: 'workflow w(): string { return "hi"; }\n',
         });
         assert.strictEqual(doc.languageId, "workflow");
     });
@@ -98,7 +98,10 @@ suite("Snippet structure", () => {
         assert.ok(wf, "a snippet with prefix 'workflow' should exist");
         const body = wf.body.join("\n");
         // Tab stops use ${n:placeholder} syntax, not bare $n.
-        assert.ok(body.includes("${1:"), "body should contain tab stop ${1:...}");
+        assert.ok(
+            body.includes("${1:"),
+            "body should contain tab stop ${1:...}",
+        );
         assert.ok(
             body.includes("workflow"),
             "body should contain the 'workflow' keyword",
@@ -121,7 +124,7 @@ suite("Snippet structure", () => {
 const VALID_SRC =
     "workflow w(a: string, b: string): string {\n" +
     "    const x = a;\n" +
-    "    return string.join([x, b], \",\");\n" +
+    '    return string.join([x, b], ",");\n' +
     "}\n";
 
 const INVALID_SRC = "workflow broken(\n";
@@ -193,23 +196,30 @@ suite("Language features", () => {
             unformatUri,
             { tabSize: 4, insertSpaces: true },
         );
-        assert.ok(edits && edits.length > 0, "expected at least one formatting edit");
+        assert.ok(
+            edits && edits.length > 0,
+            "expected at least one formatting edit",
+        );
     });
 
     // --- 1d: document symbols ----------------------------------------------
 
     test("1d: document symbols list the workflow and its children", async () => {
-        const symbols =
-            await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-                "vscode.executeDocumentSymbolProvider",
-                validUri,
-            );
+        const symbols = await vscode.commands.executeCommand<
+            vscode.DocumentSymbol[]
+        >("vscode.executeDocumentSymbolProvider", validUri);
         assert.ok(symbols && symbols.length > 0, "expected document symbols");
         const wf = symbols[0]!;
         assert.strictEqual(wf.name, "w", "top-level symbol should be 'w'");
         const childNames = wf.children.map((c) => c.name);
-        assert.ok(childNames.includes("a"), "children should include param 'a'");
-        assert.ok(childNames.includes("x"), "children should include const 'x'");
+        assert.ok(
+            childNames.includes("a"),
+            "children should include param 'a'",
+        );
+        assert.ok(
+            childNames.includes("x"),
+            "children should include const 'x'",
+        );
     });
 
     // --- 2a: hover ---------------------------------------------------------
@@ -226,10 +236,18 @@ suite("Language features", () => {
             .flatMap((h) =>
                 Array.isArray(h.contents) ? h.contents : [h.contents],
             )
-            .map((c) => (typeof c === "string" ? c : (c as { value: string }).value))
+            .map((c) =>
+                typeof c === "string" ? c : (c as { value: string }).value,
+            )
             .join("\n");
-        assert.ok(content.toLowerCase().includes("parameter"), "hover should describe the symbol kind");
-        assert.ok(content.includes("a"), "hover content should mention the symbol name");
+        assert.ok(
+            content.toLowerCase().includes("parameter"),
+            "hover should describe the symbol kind",
+        );
+        assert.ok(
+            content.includes("a"),
+            "hover content should mention the symbol name",
+        );
     });
 
     // --- 2b: go-to-definition ----------------------------------------------
@@ -291,13 +309,12 @@ suite("Language features", () => {
         // Position (2, 31) is inside the second argument '","'.
         // locateCall counts the inner comma in [x, b] too, giving commaCount=2,
         // which is clamped to index 1 (the 'separator' param).
-        const help =
-            await vscode.commands.executeCommand<vscode.SignatureHelp>(
-                "vscode.executeSignatureHelpProvider",
-                validUri,
-                new vscode.Position(2, 31),
-                ",",
-            );
+        const help = await vscode.commands.executeCommand<vscode.SignatureHelp>(
+            "vscode.executeSignatureHelpProvider",
+            validUri,
+            new vscode.Position(2, 31),
+            ",",
+        );
         assert.ok(
             help && help.signatures.length > 0,
             "expected signature help",
@@ -317,13 +334,12 @@ suite("Language features", () => {
 
     test("4a: rename a parameter produces a workspace edit covering all occurrences", async () => {
         // 'a' declared at line 0, char 11; rename to 'alpha'.
-        const edit =
-            await vscode.commands.executeCommand<vscode.WorkspaceEdit>(
-                "vscode.executeDocumentRenameProvider",
-                validUri,
-                new vscode.Position(0, 11),
-                "alpha",
-            );
+        const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>(
+            "vscode.executeDocumentRenameProvider",
+            validUri,
+            new vscode.Position(0, 11),
+            "alpha",
+        );
         assert.ok(edit, "rename should produce a workspace edit");
         const fileEdits = edit
             .entries()

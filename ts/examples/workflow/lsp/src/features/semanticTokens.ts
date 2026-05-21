@@ -55,12 +55,19 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
     if (!parsed.symbols) return builder.build();
 
     // Sort by (line, col) so the LSP delta encoding is monotonic.
-    type Entry = { line: number; col: number; length: number; type: TokenType; modifier: number };
+    type Entry = {
+        line: number;
+        col: number;
+        length: number;
+        type: TokenType;
+        modifier: number;
+    };
     const entries: Entry[] = [];
 
     for (const ref of parsed.symbols.refs) {
         if (!ref.def) continue;
-        const isParam = ref.def.kind === "param" || ref.def.kind === "lambdaParam";
+        const isParam =
+            ref.def.kind === "param" || ref.def.kind === "lambdaParam";
         entries.push({
             line: ref.loc.line - 1,
             col: ref.loc.col - 1,
@@ -82,7 +89,7 @@ export function computeSemanticTokens(doc: TextDocument): SemanticTokens {
     }
 
     // Emit property tokens for resolved property accesses (e.g. `.stdout`).
-    for (const ref of (parsed.propertyRefs ?? [])) {
+    for (const ref of parsed.propertyRefs ?? []) {
         entries.push({
             line: ref.line - 1,
             col: ref.col - 1,
