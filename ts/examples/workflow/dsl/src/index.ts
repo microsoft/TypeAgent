@@ -3,10 +3,17 @@
 
 export {
     compile,
+    compileFile,
     CompileResult,
     CompileError,
     CompileOptions,
 } from "./compiler.js";
+export {
+    FileResolver,
+    LoadError,
+    LoadedModule,
+    LoadResult,
+} from "./fileLoader.js";
 export { lex, TokenKind, Token, LexError, LexComment } from "./lexer.js";
 export { Parser, ParseError } from "./parser.js";
 export { TypeChecker, TypeInfo, TypeError } from "./typeChecker.js";

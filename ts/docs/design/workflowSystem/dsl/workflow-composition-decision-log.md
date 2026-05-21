@@ -338,3 +338,73 @@ Total new engine tests for P5: 9. Not acted upon:
 - Named-record arg shape (`helper({a: 1, b: 2})`): the DSL already
   routes object-literal args through the same path as positional;
   the existing tests cover the lowered form.
+
+## Phase 7 — Imports (cross-file composition)
+
+### P7-D1. Alias resolution via pre-typecheck AST rewrite
+
+Local-import aliases (`import { foo as bar }`) could be resolved either by
+threading a per-file local-name table through the type checker, or by
+rewriting the AST in the loader so that every `WorkflowCallExpr.name`
+holds the canonical declared name before type-check runs. Picked the AST
+rewrite path: it keeps the existing single-namespace `TypeChecker.checkAll`
+untouched, and the rewrite is a small recursive descent over the AST
+shapes that can contain a workflow call (statements, expressions, AND
+parameter-default expressions — see P7-D5).
+
+### P7-D2. Flat global namespace across files
+
+After import resolution, every workflow is identified by its declared
+name in a single global table. Two files declaring the same workflow
+name — even if neither imports the other — are a compile error.
+Rationale: keeps the IR shape and runtime workflow lookup unchanged
+(the `WorkflowIR.workflows[name]` map is name-keyed), and matches how
+the engine resolves `WorkflowCallNode.workflowRef.name`. Per-file
+namespacing is deferred to a future IR revision if it ever becomes
+necessary.
+
+### P7-D3. LoadError `"load"` phase maps to `"typecheck"` in CompileError
+
+`CompileError.phase` is the union `"lex" | "parse" | "typecheck" | "emit"
+| "validate"`. Rather than extend it with a new `"load"` value (which
+would ripple to every consumer of CompileError), the loader's `"load"`
+phase (name lookup, visibility, collision errors) reports under
+`"typecheck"` — these are name-resolution / scoping errors and are
+diagnostically equivalent to the in-file unknown-name errors the
+type checker already emits.
+
+### P7-D4. `selectEntry` runs against entry-file workflows only
+
+The compiler restricts entry-point selection to workflows declared in
+the entry file. This avoids the surprise of an imported library's
+`export workflow` being silently picked as the program entry. Imports
+are an inclusion mechanism, not an entry-point publication mechanism.
+
+### P7-D5. AST rewrite must cover parameter defaults
+
+The first pass of the rewriter only visited workflow bodies. Code
+review surfaced that a parameter default expression
+(`workflow foo(x: number = imported()): number`) can also contain a
+workflow call, and would otherwise be left referencing the local
+alias. Fixed by walking `param.default` for every parameter before
+descending into the workflow body.
+
+### P7-D6. Optional `workspaceRoot` containment, off by default
+
+The default Node `FileResolver` allows imports to resolve anywhere on
+the filesystem (subject to the developer-supplied source tree). This
+matches the convention of `tsc`, esbuild, swc, etc., which trust the
+input source tree. An opt-in `workspaceRoot` option (and `wfc
+--workspace-root` flag) rejects imports whose realpath escapes the
+declared root. The realpath check (`fs.realpathSync`) is intentional:
+without it, a symlink inside the workspace can smuggle in any file on
+disk while still passing a purely lexical containment check.
+
+### P7-D7. File-level cycles permitted; call-graph cycles caught by TypeChecker
+
+The BFS loader allows mutually-importing files (A imports B, B imports
+A) — file-level cycles are common when two libraries share types or
+small helpers. Call-graph cycles (`a()` calls `b()` calls `a()`) remain
+rejected by the existing `TypeChecker.checkRecursion`, now operating
+on the merged flat workflow list, so they continue to be caught
+whether the cycle is within a file or spans imports.

@@ -20,7 +20,7 @@ import {
     isAbsolute,
 } from "node:path";
 import { createRequire } from "node:module";
-import { compile, CompileError, TaskSchemaInfo } from "workflow-dsl";
+import { compileFile, CompileError, TaskSchemaInfo } from "workflow-dsl";
 import { allBuiltinTasks } from "workflow-engine";
 
 const require = createRequire(import.meta.url);
@@ -39,6 +39,9 @@ Options:
   --entry <name>       Name of the workflow to use as the IR entry. Defaults
                        to the unique exported workflow, or the only workflow
                        if just one is defined.
+  --workspace-root <dir>
+                       If set, imports must resolve to files under <dir>.
+                       Off by default (matches tsc, esbuild, etc.).
   --no-validate        Skip IR validation after emit (validation is on by
                        default).
   --pretty             Pretty-print the JSON output with 2-space indent
@@ -84,6 +87,7 @@ interface ParsedArgs {
     inputs: string[];
     out?: string;
     entry?: string;
+    workspaceRoot?: string;
     validate: boolean;
     pretty: boolean;
 }
@@ -92,6 +96,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     const inputs: string[] = [];
     let out: string | undefined;
     let entry: string | undefined;
+    let workspaceRoot: string | undefined;
     let validate = true;
     let pretty = true;
 
@@ -122,6 +127,13 @@ function parseArgs(argv: string[]): ParsedArgs {
                 entry = v;
                 break;
             }
+            case "--workspace-root": {
+                const v = argv[++i];
+                if (!v || v.startsWith("-"))
+                    fail("--workspace-root requires a directory path");
+                workspaceRoot = v;
+                break;
+            }
             case "--no-validate":
                 validate = false;
                 break;
@@ -142,6 +154,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     const parsed: ParsedArgs = { inputs, validate, pretty };
     if (out !== undefined) parsed.out = out;
     if (entry !== undefined) parsed.entry = entry;
+    if (workspaceRoot !== undefined) parsed.workspaceRoot = workspaceRoot;
     return parsed;
 }
 
@@ -199,10 +212,13 @@ function compileOne(
     args: ParsedArgs,
     outIsDir: boolean,
 ): boolean {
-    const { abs, source } = readSource(inputDisplay);
-    const result = compile(source, builtinTaskSchemas(), {
+    const { abs } = readSource(inputDisplay);
+    const result = compileFile(abs, builtinTaskSchemas(), {
         validate: args.validate,
         ...(args.entry !== undefined ? { entry: args.entry } : {}),
+        ...(args.workspaceRoot !== undefined
+            ? { workspaceRoot: args.workspaceRoot }
+            : {}),
     });
     if (result.errors.length > 0) {
         for (const e of result.errors) {

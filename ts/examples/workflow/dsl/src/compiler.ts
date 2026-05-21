@@ -8,10 +8,13 @@
  */
 
 import { WorkflowIR, validateWorkflowIR } from "workflow-model";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { lex } from "./lexer.js";
 import { Parser } from "./parser.js";
 import { TypeChecker } from "./typeChecker.js";
 import { Emitter, TaskSchemaInfo } from "./emitter.js";
+import { loadModuleTree, FileResolver, LoadError } from "./fileLoader.js";
 
 export interface CompileError {
     phase: "lex" | "parse" | "typecheck" | "emit" | "validate";
@@ -188,4 +191,146 @@ function maybeValidate(
             col: 0,
         });
     }
+}
+
+/**
+ * Multi-file compile: load `entryPath`, follow `import { … } from "./other.wf"`
+ * declarations transitively via the supplied `resolver` (or the default
+ * Node fs/path resolver), then run the standard type-check + emit
+ * pipeline against the merged flat workflow set.
+ *
+ * Phase 7 of the workflow-composition implementation plan.
+ */
+export function compileFile(
+    entryPath: string,
+    taskSchemas: TaskSchemaInfo[],
+    options?: CompileOptions & {
+        resolver?: FileResolver;
+        /**
+         * If set, the default Node resolver will reject any import that
+         * resolves to a path outside this directory. Has no effect if a
+         * custom `resolver` is supplied. Off by default (matches the
+         * convention of `tsc`, esbuild, swc, etc.).
+         */
+        workspaceRoot?: string;
+    },
+): CompileResult {
+    const errors: CompileError[] = [];
+    const resolver =
+        options?.resolver ?? createNodeResolver(options?.workspaceRoot);
+    const load = loadModuleTree(entryPath, resolver);
+    for (const e of load.errors) {
+        errors.push(loadErrorToCompileError(e));
+    }
+    if (errors.length > 0) return { errors };
+
+    const workflows = load.workflows;
+    const entryWorkflows = load.entryWorkflows;
+
+    // Type check
+    const checker = new TypeChecker(taskSchemas);
+    const typeErrors = checker.checkAll(workflows);
+    for (const e of typeErrors) {
+        errors.push({
+            phase: "typecheck",
+            message: e.message,
+            line: e.line,
+            col: e.col,
+        });
+    }
+    if (typeErrors.length > 0) return { errors };
+
+    // Entry selection — restricted to the entry file's workflows, so
+    // that imports don't accidentally become the entry point.
+    const entry = selectEntry(entryWorkflows, options?.entry);
+    if (!entry.ok) {
+        errors.push({
+            phase: "typecheck",
+            message: entry.message,
+            line: entry.line,
+            col: entry.col,
+        });
+        return { errors };
+    }
+
+    const emitter = new Emitter(taskSchemas);
+    const { ir, errors: emitErrors } = emitter.emitAll(
+        workflows,
+        entry.value.name,
+    );
+    for (const e of emitErrors) {
+        errors.push({
+            phase: "emit",
+            message: e.message,
+            line: e.line,
+            col: e.col,
+        });
+    }
+
+    maybeValidate(ir ?? null, errors, options);
+    return { ir: ir ?? undefined, errors };
+}
+
+function loadErrorToCompileError(e: LoadError): CompileError {
+    const phase: CompileError["phase"] =
+        e.phase === "lex"
+            ? "lex"
+            : e.phase === "parse"
+              ? "parse"
+              : // "load" errors are reported under the typecheck phase so
+                // they appear in the same diagnostic stream as
+                // visibility / unknown-name errors.
+                "typecheck";
+    return {
+        phase,
+        message: e.file ? `${e.file}: ${e.message}` : e.message,
+        line: e.line,
+        col: e.col,
+    };
+}
+
+/**
+ * Default file resolver: maps relative specifiers (`./foo.wf`,
+ * `../bar.wf`) against the importing file's directory, normalizing
+ * the result. Absolute and workspace-rooted specifiers are not
+ * supported in v1.
+ */
+function createNodeResolver(workspaceRoot?: string): FileResolver {
+    const root = workspaceRoot
+        ? fs.realpathSync(path.resolve(workspaceRoot))
+        : undefined;
+    return {
+        resolve(spec, importerAbsPath) {
+            if (!spec.startsWith("./") && !spec.startsWith("../")) {
+                throw new Error(
+                    `Only relative imports (./, ../) are supported; got: ${spec}`,
+                );
+            }
+            const dir = path.dirname(importerAbsPath);
+            const resolved = path.resolve(dir, spec);
+            if (root !== undefined) {
+                // Follow symlinks before the containment check so a
+                // symlink inside the workspace cannot smuggle in a file
+                // that lives outside it. We require the file to exist
+                // when workspaceRoot is in play; "file not found" is
+                // reported below via read().
+                let realPath: string;
+                try {
+                    realPath = fs.realpathSync(resolved);
+                } catch {
+                    realPath = resolved;
+                }
+                const rel = path.relative(root, realPath);
+                if (rel.startsWith("..") || path.isAbsolute(rel)) {
+                    throw new Error(
+                        `Import resolves outside workspace root (${root}): ${spec}`,
+                    );
+                }
+            }
+            return resolved;
+        },
+        read(absPath) {
+            return fs.readFileSync(absPath, "utf8");
+        },
+    };
 }
