@@ -100,6 +100,8 @@ createDiscoveryHandlers((agentName, role) =>
 
 Passing a lookup callback (rather than the `IPortRegistrar` itself) keeps this package free of an `agent-dispatcher` dependency.
 
+Live port allocations (including any client counts agents have published via `SessionContext.notifyClientCountChanged`) are surfaced in-process by the dispatcher's `@system ports` command.
+
 ---
 
 ## Trademarks
