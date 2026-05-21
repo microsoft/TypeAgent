@@ -477,7 +477,7 @@ file on disk while still passing a purely lexical containment check.
 (no containment). Changed to default to the entry-file's directory for
 security-by-default.
 
-### P7-D7. File-level cycles permitted; call-graph cycles caught by TypeChecker
+### P7-D7. ✅ File-level cycles permitted; call-graph cycles caught by TypeChecker
 
 The BFS loader allows mutually-importing files (A imports B, B imports
 A) — file-level cycles are common when two libraries share types or
