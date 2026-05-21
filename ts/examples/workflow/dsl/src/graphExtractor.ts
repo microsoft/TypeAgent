@@ -239,6 +239,13 @@ class GraphExtractor {
             });
             this.bindings.set(stmt.name, nodeId);
             if (groupId) this.addToGroup(groupId, nodeId);
+        } else if (expr.kind === "DottedNameExpr") {
+            // Variable reference or property access - propagate the source binding
+            // so edges from this name resolve to the original producer node.
+            const sourceId = this.bindings.get(expr.segments[0]);
+            if (sourceId) {
+                this.bindings.set(stmt.name, sourceId);
+            }
         } else {
             // Complex expression (binary, built-in, etc.)
             const nodeId = this.extractExprAsNode(expr, groupId);
