@@ -755,3 +755,42 @@ field is only reachable by tools that build IR directly.
   site. Simpler but less flexible (no per-call override).
 
 **Raised during:** P5-D4 decision log review.
+
+## G23: No per-file namespacing for exported workflows in IR
+
+**Spec/intent:** The IR `workflows` map is a flat name-keyed table. Callee
+resolution is by exact name. In the current implementation, all non-entry-file
+workflows are mangled to `__f{N}_{name}` to avoid collisions, but this mangling
+is opaque to IR consumers (debuggers, tooling, introspection).
+
+**The gap:** There is no structured way in the IR to represent which file a
+workflow originated from, or to resolve name conflicts without mangling. A
+`WorkflowRef` could carry an optional `source` field (already reserved in the
+schema for registry-style resolution) but it is not used by the bundler today.
+
+**Options:**
+
+- **Structured source field**: populate `WorkflowRef.source` with the originating
+  file path; resolve by `(source, name)` pair in the engine.
+- **Per-file workflow namespaces**: nest workflows under a file key in the IR,
+  e.g. `ir.files[path].workflows[name]`.
+- **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
+  expose a `workflowOrigins` side-table mapping mangled name → original path + name.
+
+**Raised during:** P7-D2 decision log review.
+
+## G24: No engine test for caller-side onError recovery from sub-workflow failure
+
+**Spec/intent:** When a sub-workflow call fails and the caller has an `onError`
+target, execution should recover into the caller's `onError` handler (same
+`pendingError` threading used for tasks and loops).
+
+**The gap:** The recovery path exists in the engine (`onErrorDispatch` /
+`executeScope` loop), but no integration test exercises it for workflow calls
+specifically. The DSL does not expose `onError` syntax on workflow call sites,
+so the test would require manual IR construction.
+
+**Prerequisite:** DSL `onError` syntax for workflow call nodes (related to G22
+— call-site annotations).
+
+**Raised during:** P5-D6 decision log review.
