@@ -131,9 +131,14 @@ export function createServer(
     });
 
     connection.onDidChangeConfiguration((change) => {
+        const prev = inlayHintsEnabled;
         inlayHintsEnabled =
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (change.settings as any)?.workflow?.inlayHints?.enable ?? false;
+        // Tell the client to re-fetch inlay hints when the setting toggles.
+        if (inlayHintsEnabled !== prev) {
+            void connection.languages.inlayHint.refresh();
+        }
     });
 
     function scheduleDiagnostics(uri: string) {
