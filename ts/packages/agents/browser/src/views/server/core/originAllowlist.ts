@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
+
 /**
  * Origin allowlist for the browser views server (PDF viewer + other
  * per-session HTML views forked as a child process by the browser
@@ -16,25 +18,9 @@
  *    server's own loopback origin).
  *
  * No browser-extension scheme is accepted here — this listener does not
- * back any extension UI.
+ * back any extension UI. See {@link createAgentOriginAllowlist} for the
+ * shared loopback + no-Origin baseline.
  *
  * Anything else is rejected with HTTP 403 before the route handler runs.
  */
-export function isAllowedViewOrigin(origin: string | undefined): boolean {
-    if (origin === undefined || origin === "" || origin === "null") {
-        return true;
-    }
-    try {
-        const u = new URL(origin);
-        if (u.protocol !== "http:" && u.protocol !== "https:") {
-            return false;
-        }
-        return (
-            u.hostname === "localhost" ||
-            u.hostname === "127.0.0.1" ||
-            u.hostname === "[::1]"
-        );
-    } catch {
-        return false;
-    }
-}
+export const isAllowedViewOrigin = createAgentOriginAllowlist();
