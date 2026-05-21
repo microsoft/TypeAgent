@@ -332,6 +332,22 @@ calling IR's workflow table (see §2.2). Package-style imports
 (`from "@org/pkg"`) and engine-side registry resolution are deferred;
 the `WorkflowRef.source` field reserves the extension point.
 
+**Name conflict rules.** Two workflow authors are free to declare
+workflows with the same name in different files — there is no
+global uniqueness requirement. Conflicts are checked only within a
+single file's local import namespace:
+
+- Importing a name that is already occupied by a local declaration
+  or an earlier import in the same file is a compile error.
+- Two or more dependency files may each export a workflow named
+  `helper` without conflict, even if both are imported into the
+  same entry file — as long as each import is given a distinct
+  local alias (`import { helper as aHelper } from "./a.wf"`).
+
+Internally, the compiler mangles all non-entry-file workflow names
+to `__f{N}_{name}` to ensure unique keys in the flat IR map; this
+is an implementation detail invisible to DSL authors.
+
 ### 4.5 Higher-order positions take block bodies, not values
 
 `map`, `filter`, `fork`, `attempts`, and similar higher-order forms
