@@ -548,8 +548,10 @@ describe("compileFile workspaceRoot containment (default Node resolver)", () => 
         fs.rmSync(outsideRoot, { recursive: true, force: true });
     });
 
-    test("default (no workspaceRoot) follows parent imports", () => {
+    test("default (no workspaceRoot) blocks imports that escape the entry file's directory", () => {
         // Place helper.wf OUTSIDE tmpRoot; main.wf imports it via ../.
+        // With the new default, workspaceRoot = entry-file directory, so
+        // this should be rejected without an explicit workspaceRoot.
         const outsideHelper = path.join(outsideRoot, "helper.wf");
         fs.writeFileSync(
             outsideHelper,
@@ -569,6 +571,40 @@ describe("compileFile workspaceRoot containment (default Node resolver)", () => 
                 `}\n`,
         );
         const result = compileFile(main, taskSchemas);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(
+            result.errors.some((e) =>
+                /outside workspace root/i.test(e.message),
+            ),
+        ).toBe(true);
+    });
+
+    test("explicit workspaceRoot can widen the allowed import scope", () => {
+        // Same setup, but explicitly passing the parent directory as workspaceRoot
+        // should allow the ../sibling import.
+        const outsideHelper = path.join(outsideRoot, "helper.wf");
+        fs.writeFileSync(
+            outsideHelper,
+            `export workflow other(n: number): number {\n  return n;\n}\n`,
+        );
+        const main = path.join(tmpRoot, "main.wf");
+        const rel = path
+            .relative(tmpRoot, outsideHelper)
+            .split(path.sep)
+            .join("/");
+        fs.writeFileSync(
+            main,
+            `import { other } from "./${rel}";\n` +
+                `export workflow main(x: number): number {\n` +
+                `  const r = other(x);\n` +
+                `  return r;\n` +
+                `}\n`,
+        );
+        // Use the common parent of both dirs as the workspace root.
+        const commonParent = path.dirname(tmpRoot);
+        const result = compileFile(main, taskSchemas, {
+            workspaceRoot: commonParent,
+        });
         expect(result.errors).toEqual([]);
     });
 

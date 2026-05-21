@@ -207,17 +207,20 @@ export function compileFile(
     options?: CompileOptions & {
         resolver?: FileResolver;
         /**
-         * If set, the default Node resolver will reject any import that
-         * resolves to a path outside this directory. Has no effect if a
-         * custom `resolver` is supplied. Off by default (matches the
-         * convention of `tsc`, esbuild, swc, etc.).
+        /**
+         * Restricts the default Node resolver to only allow imports that
+         * resolve within this directory. Defaults to the directory of the
+         * entry file. Has no effect if a custom `resolver` is supplied.
          */
         workspaceRoot?: string;
     },
 ): CompileResult {
     const errors: CompileError[] = [];
     const resolver =
-        options?.resolver ?? createNodeResolver(options?.workspaceRoot);
+        options?.resolver ??
+        createNodeResolver(
+            options?.workspaceRoot ?? path.dirname(path.resolve(entryPath)),
+        );
     const load = loadModuleTree(entryPath, resolver);
     for (const e of load.errors) {
         errors.push(loadErrorToCompileError(e));
@@ -292,13 +295,11 @@ function loadErrorToCompileError(e: LoadError): CompileError {
 /**
  * Default file resolver: maps relative specifiers (`./foo.wf`,
  * `../bar.wf`) against the importing file's directory, normalizing
- * the result. Absolute and workspace-rooted specifiers are not
- * supported in v1.
+ * the result. Rejects any import that escapes `workspaceRoot`.
+ * Absolute and non-relative specifiers are not supported in v1.
  */
-function createNodeResolver(workspaceRoot?: string): FileResolver {
-    const root = workspaceRoot
-        ? fs.realpathSync(path.resolve(workspaceRoot))
-        : undefined;
+function createNodeResolver(workspaceRoot: string): FileResolver {
+    const root = fs.realpathSync(path.resolve(workspaceRoot));
     return {
         resolve(spec, importerAbsPath) {
             if (!spec.startsWith("./") && !spec.startsWith("../")) {
@@ -308,24 +309,20 @@ function createNodeResolver(workspaceRoot?: string): FileResolver {
             }
             const dir = path.dirname(importerAbsPath);
             const resolved = path.resolve(dir, spec);
-            if (root !== undefined) {
-                // Follow symlinks before the containment check so a
-                // symlink inside the workspace cannot smuggle in a file
-                // that lives outside it. We require the file to exist
-                // when workspaceRoot is in play; "file not found" is
-                // reported below via read().
-                let realPath: string;
-                try {
-                    realPath = fs.realpathSync(resolved);
-                } catch {
-                    realPath = resolved;
-                }
-                const rel = path.relative(root, realPath);
-                if (rel.startsWith("..") || path.isAbsolute(rel)) {
-                    throw new Error(
-                        `Import resolves outside workspace root (${root}): ${spec}`,
-                    );
-                }
+            // Follow symlinks before the containment check so a
+            // symlink inside the workspace cannot smuggle in a file
+            // that lives outside it.
+            let realPath: string;
+            try {
+                realPath = fs.realpathSync(resolved);
+            } catch {
+                realPath = resolved;
+            }
+            const rel = path.relative(root, realPath);
+            if (rel.startsWith("..") || path.isAbsolute(rel)) {
+                throw new Error(
+                    `Import resolves outside workspace root (${root}): ${spec}`,
+                );
             }
             return resolved;
         },

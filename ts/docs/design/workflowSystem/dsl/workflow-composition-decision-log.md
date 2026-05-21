@@ -461,16 +461,21 @@ workflow call, and would otherwise be left referencing the local
 alias. Fixed by walking `param.default` for every parameter before
 descending into the workflow body.
 
-### P7-D6. ✅ Optional `workspaceRoot` containment, off by default
+### P7-D6. ✅ `workspaceRoot` defaults to entry-file directory; explicit opt-in to widen
 
-The default Node `FileResolver` allows imports to resolve anywhere on
-the filesystem (subject to the developer-supplied source tree). This
-matches the convention of `tsc`, esbuild, swc, etc., which trust the
-input source tree. An opt-in `workspaceRoot` option (and `wfc
---workspace-root` flag) rejects imports whose realpath escapes the
-declared root. The realpath check (`fs.realpathSync`) is intentional:
-without it, a symlink inside the workspace can smuggle in any file on
-disk while still passing a purely lexical containment check.
+The default Node `FileResolver` restricts imports to the directory of the
+entry file. Any `../` path that escapes this root is a compile error. This is
+a safe-by-default posture: accidental traversal outside the project tree is
+blocked without any configuration.
+
+Callers that need to import across sibling directories can explicitly pass
+`workspaceRoot` to a common parent. The realpath check (`fs.realpathSync`) is
+intentional: without it, a symlink inside the workspace can smuggle in any
+file on disk while still passing a purely lexical containment check.
+
+**Change from initial implementation:** the first cut defaulted to unbounded
+(no containment). Changed to default to the entry-file's directory for
+security-by-default.
 
 ### P7-D7. File-level cycles permitted; call-graph cycles caught by TypeChecker
 
