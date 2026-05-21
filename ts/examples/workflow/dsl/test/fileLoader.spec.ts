@@ -208,6 +208,65 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         expect(result.ir?.entry).toBe("main");
     });
 
+    test("two files exporting the same name is allowed when only one is imported", () => {
+        // Both a.wf and b.wf export 'helper'. main.wf only imports from a.wf.
+        // There should be no collision — the Phase 2 global check was removed
+        // precisely because this situation is valid.
+        const resolver = new MemoryResolver({
+            "/p/a.wf": `
+                export workflow helper(x: number): number {
+                    return x * 2;
+                }
+            `,
+            "/p/b.wf": `
+                export workflow helper(x: number): number {
+                    return x + 10;
+                }
+            `,
+            "/p/main.wf": `
+                import { helper } from "./a.wf";
+                export workflow main(x: number): number {
+                    const r = helper(x);
+                    return r;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        expect(result.errors).toEqual([]);
+        expect(result.ir?.entry).toBe("main");
+        // a.wf's helper is bundled; b.wf is not loaded (not imported).
+        expect(hasWorkflow(result.ir, "helper")).toBe(true);
+    });
+
+    test("two files exporting the same name imported with different aliases is allowed", () => {
+        // Both a.wf and b.wf export 'helper'. main.wf imports both with different aliases.
+        // Both get mangled to unique IR names; no collision.
+        const resolver = new MemoryResolver({
+            "/p/a.wf": `
+                export workflow helper(x: number): number {
+                    return x * 2;
+                }
+            `,
+            "/p/b.wf": `
+                export workflow helper(x: number): number {
+                    return x + 10;
+                }
+            `,
+            "/p/main.wf": `
+                import { helper as aHelper } from "./a.wf";
+                import { helper as bHelper } from "./b.wf";
+                export workflow main(x: number): number {
+                    const a = aHelper(x);
+                    const b = bHelper(x);
+                    return a;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        expect(result.errors).toEqual([]);
+        expect(result.ir?.entry).toBe("main");
+    });
+
     test("missing file is reported as a compile error", () => {
         const resolver = new MemoryResolver({
             "/p/main.wf": `
