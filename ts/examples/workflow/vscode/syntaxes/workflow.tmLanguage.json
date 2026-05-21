@@ -3,36 +3,222 @@
   "name": "Workflow",
   "scopeName": "source.wf",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#keywords" },
-    { "include": "#strings" },
-    { "include": "#numbers" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#workflow-decl"
+    },
+    {
+      "include": "#const-destructure-decl"
+    },
+    {
+      "include": "#const-decl"
+    },
+    {
+      "include": "#param-decl"
+    },
+    {
+      "include": "#lambda-params-parens"
+    },
+    {
+      "include": "#lambda-param-bare"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#task-call"
+    },
+    {
+      "include": "#function-call"
+    },
+    {
+      "include": "#property-access"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
   ],
   "repository": {
     "comments": {
       "patterns": [
         {
           "name": "comment.line.double-slash.wf",
-          "match": "//.*$"
+          "begin": "//",
+          "end": "$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.wf"
+            }
+          }
         },
         {
           "name": "comment.block.wf",
           "begin": "/\\*",
-          "end": "\\*/"
+          "end": "\\*/",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.wf"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.wf"
+            }
+          }
         }
       ]
+    },
+    "workflow-decl": {
+      "match": "\\b(workflow)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "storage.type.function.wf"
+        },
+        "2": {
+          "name": "entity.name.function.wf"
+        }
+      }
+    },
+    "const-decl": {
+      "match": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "storage.type.wf"
+        },
+        "2": {
+          "name": "variable.other.constant.wf"
+        }
+      }
+    },
+    "const-destructure-decl": {
+      "begin": "\\b(const)\\s*\\[",
+      "end": "\\]",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.wf"
+        }
+      },
+      "patterns": [
+        {
+          "name": "variable.other.constant.wf",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "punctuation.separator.comma.wf",
+          "match": ","
+        }
+      ]
+    },
+    "param-decl": {
+      "match": "([A-Za-z_][A-Za-z0-9_]*)\\s*(?=:)",
+      "captures": {
+        "1": {
+          "name": "variable.parameter.wf"
+        }
+      }
+    },
+    "lambda-params-parens": {
+      "begin": "\\((?=[^()]*\\)\\s*=>)",
+      "end": "\\)",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.parameters.begin.wf"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.parameters.end.wf"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "name": "variable.parameter.wf",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "punctuation.separator.comma.wf",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.type.wf",
+          "match": ":"
+        }
+      ]
+    },
+    "lambda-param-bare": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?==>)",
+      "captures": {
+        "1": {
+          "name": "variable.parameter.wf"
+        }
+      }
     },
     "keywords": {
       "patterns": [
         {
-          "name": "keyword.control.wf",
-          "match": "\\b(workflow|const|if|else|switch|case|default|return|break|throw|true|false|null)\\b"
+          "name": "keyword.control.flow.wf",
+          "match": "\\b(return|break|throw)\\b"
+        },
+        {
+          "name": "keyword.control.conditional.wf",
+          "match": "\\b(if|else|switch|case|default)\\b"
         },
         {
           "name": "storage.type.wf",
-          "match": "\\b(string|number|boolean|object|array|any)\\b"
+          "match": "\\b(const)\\b"
+        },
+        {
+          "name": "storage.type.function.wf",
+          "match": "\\b(workflow)\\b"
         }
       ]
+    },
+    "types": {
+      "name": "support.type.primitive.wf",
+      "match": "\\b(string|number|boolean|object|array|any)\\b"
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.true.wf",
+          "match": "\\btrue\\b"
+        },
+        {
+          "name": "constant.language.boolean.false.wf",
+          "match": "\\bfalse\\b"
+        },
+        {
+          "name": "constant.language.null.wf",
+          "match": "\\bnull\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.decimal.wf",
+      "match": "\\b-?[0-9]+(\\.[0-9]+)?\\b"
     },
     "strings": {
       "patterns": [
@@ -40,10 +226,39 @@
           "name": "string.quoted.double.wf",
           "begin": "\"",
           "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.wf"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.wf"
+            }
+          },
           "patterns": [
             {
-              "name": "constant.character.escape.wf",
-              "match": "\\\\."
+              "include": "#string-escape"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.wf",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.wf"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.wf"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-escape"
             }
           ]
         },
@@ -51,25 +266,125 @@
           "name": "string.template.wf",
           "begin": "`",
           "end": "`",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.template.begin.wf"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.template.end.wf"
+            }
+          },
           "patterns": [
             {
-              "name": "constant.character.escape.wf",
-              "match": "\\\\."
+              "include": "#string-escape"
             },
             {
-              "name": "meta.template.expression.wf",
-              "begin": "\\$\\{",
-              "end": "\\}"
+              "include": "#template-expression"
             }
           ]
         }
       ]
     },
-    "numbers": {
+    "string-escape": {
+      "name": "constant.character.escape.wf",
+      "match": "\\\\."
+    },
+    "template-expression": {
+      "name": "meta.template.expression.wf",
+      "begin": "\\$\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.wf"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.wf"
+        }
+      },
       "patterns": [
         {
-          "name": "constant.numeric.wf",
-          "match": "\\b-?[0-9]+(\\.[0-9]+)?\\b"
+          "include": "$self"
+        }
+      ]
+    },
+    "task-call": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": {
+          "name": "support.class.wf"
+        },
+        "2": {
+          "name": "punctuation.accessor.wf"
+        },
+        "3": {
+          "name": "entity.name.function.wf"
+        }
+      }
+    },
+    "function-call": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.wf"
+        }
+      }
+    },
+    "property-access": {
+      "match": "(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.wf"
+        },
+        "2": {
+          "name": "variable.other.property.wf"
+        }
+      }
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "storage.type.function.arrow.wf",
+          "match": "=>"
+        },
+        {
+          "name": "keyword.operator.comparison.wf",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.wf",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.assignment.wf",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.wf",
+          "match": "\\+|-|\\*|/|%"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.terminator.statement.wf",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.comma.wf",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.type.wf",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.accessor.wf",
+          "match": "\\."
         }
       ]
     }

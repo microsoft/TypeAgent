@@ -60,6 +60,29 @@ workflow w(xs: string[]): string[] {
         expect(refX?.def).toBe(lambda);
     });
 
+    it("lambda param definition location points to the param token, not the map call", () => {
+        // 'repo' appears as the lambda param on line 2 (0-based), col 19 in:
+        // workflow w(repos: string[]): string[] {
+        //     return map(repos, (repo) => { return repo; });
+        // }
+        const src = [
+            "workflow w(repos: string[]): string[] {",
+            "    return map(repos, (repo) => { return repo; });",
+            "}",
+        ].join("\n");
+        const ast = parse(src);
+        const table = buildSymbolTable(ast);
+        const paramDef = table.defs.find((d) => d.name === "repo");
+        expect(paramDef).toBeDefined();
+        expect(paramDef!.kind).toBe("lambdaParam");
+        // The definition location should be the 'repo' token itself, not the
+        // start of the map() call.
+        // Line is 1-based; 'repo' is on the second source line.
+        expect(paramDef!.loc.line).toBe(2);
+        // Col is 0-based: '    return map(repos, (' = 23 chars, then 'repo' at 24.
+        expect(paramDef!.loc.col).toBe(24);
+    });
+
     it("does not resolve unknown names", () => {
         const ast = parse(`
 workflow w(): string {

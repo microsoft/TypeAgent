@@ -443,6 +443,8 @@ export interface AttemptsNode {
          * absence-vs-presence is necessary for content fidelity.
          */
         param: string | undefined;
+        /** Source location of the fallback parameter token. */
+        paramLoc?: SourceLocation;
         body: Statement[];
         /** Comments inside an empty fallback body. */
         bodyInnerComments?: Comment[];
@@ -456,6 +458,8 @@ export interface MapNode {
     kind: "MapNode";
     collection: Expr;
     param: string;
+    /** Source location of the lambda parameter token (e.g. `repo` in `(repo) =>`). */
+    paramLoc?: SourceLocation;
     body: Statement[];
     loc: SourceLocation;
     /** Comments inside an empty map body. */
@@ -466,6 +470,8 @@ export interface FilterNode {
     kind: "FilterNode";
     collection: Expr;
     param: string;
+    /** Source location of the lambda parameter token. */
+    paramLoc?: SourceLocation;
     body: Statement[];
     loc: SourceLocation;
     /** Comments inside an empty filter body. */
@@ -487,6 +493,8 @@ export interface ParallelMapNode {
     kind: "ParallelMapNode";
     collection: Expr;
     param: string;
+    /** Source location of the lambda parameter token. */
+    paramLoc?: SourceLocation;
     body: Statement[];
     maxConcurrency?: Expr;
     loc: SourceLocation;

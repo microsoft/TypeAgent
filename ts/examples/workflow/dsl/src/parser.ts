@@ -82,6 +82,8 @@ const BUILTIN_NAMES = new Set([
 interface ArrowPlaceholder {
     _isArrow: true;
     params: string[];
+    /** Source locations of each parameter token; parallel to `params`. */
+    paramLocs: SourceLocation[];
     body: Statement[];
     bodyInnerComments?: Comment[];
 }
@@ -1238,7 +1240,7 @@ export class Parser {
             this.advance(); // )
             if (this.peek().kind === TokenKind.Arrow) {
                 this.advance(); // =>
-                return this.parseArrowBody([], l);
+                return this.parseArrowBody([], [], l);
             }
             // Not an arrow, backtrack (shouldn't normally happen)
             this.pos = savedPos;
@@ -1250,12 +1252,17 @@ export class Parser {
             const savedPos = this.pos;
             this.advance(); // (
             const params: string[] = [];
-            params.push(this.advance().value);
+            const paramLocs: SourceLocation[] = [];
+            const firstTok = this.advance();
+            params.push(firstTok.value);
+            paramLocs.push({ line: firstTok.line, col: firstTok.col, offset: firstTok.offset, length: firstTok.value.length });
             let isArrow = true;
             while (this.peek().kind === TokenKind.Comma) {
                 this.advance();
                 if (this.peek().kind === TokenKind.Identifier) {
-                    params.push(this.advance().value);
+                    const tok = this.advance();
+                    params.push(tok.value);
+                    paramLocs.push({ line: tok.line, col: tok.col, offset: tok.offset, length: tok.value.length });
                 } else {
                     isArrow = false;
                     break;
@@ -1265,7 +1272,7 @@ export class Parser {
                 this.advance(); // )
                 if (this.peek().kind === TokenKind.Arrow) {
                     this.advance(); // =>
-                    return this.parseArrowBody(params, l);
+                    return this.parseArrowBody(params, paramLocs, l);
                 }
             }
             // Backtrack: not an arrow function, parse as parenthesized expr
@@ -1286,6 +1293,7 @@ export class Parser {
      */
     private parseArrowBody(
         params: string[],
+        paramLocs: SourceLocation[],
         _l: SourceLocation,
     ): ArrowPlaceholder {
         if (this.peek().kind === TokenKind.LBrace) {
@@ -1293,7 +1301,7 @@ export class Parser {
             const { stmts: body, innerComments } =
                 this.parseStatementsCapturingInner();
             this.expect(TokenKind.RBrace);
-            const ph: ArrowPlaceholder = { _isArrow: true, params, body };
+            const ph: ArrowPlaceholder = { _isArrow: true, params, paramLocs, body };
             if (innerComments) ph.bodyInnerComments = innerComments;
             return ph;
         }
@@ -1302,6 +1310,7 @@ export class Parser {
         return {
             _isArrow: true,
             params,
+            paramLocs,
             body: [{ kind: "ReturnStatement", value: expr, loc: expr.loc }],
         };
     }
@@ -1382,6 +1391,7 @@ export class Parser {
         let fallback:
             | {
                   param: string | undefined;
+                  paramLoc?: SourceLocation;
                   body: Statement[];
                   bodyInnerComments?: Comment[];
               }
@@ -1391,8 +1401,10 @@ export class Parser {
             if (this.peek().kind !== TokenKind.RParen) {
                 const fbArrow = this.parseArrowArg();
                 const fbParams = this.extractArrowParams(fbArrow);
+                const fbParamLocs = this.extractArrowParamLocs(fbArrow);
                 fallback = {
                     param: fbParams[0],
+                    paramLoc: fbParamLocs[0],
                     body: this.extractArrowBody(fbArrow),
                 };
                 const fbInner = this.extractArrowBodyInner(fbArrow);
@@ -1418,6 +1430,7 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
+        const paramLocs = this.extractArrowParamLocs(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
         const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
@@ -1425,6 +1438,7 @@ export class Parser {
             kind: "MapNode",
             collection,
             param: params[0] ?? "item",
+            paramLoc: paramLocs[0],
             body,
             loc: l,
         };
@@ -1438,6 +1452,7 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
+        const paramLocs = this.extractArrowParamLocs(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
         const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
@@ -1445,6 +1460,7 @@ export class Parser {
             kind: "FilterNode",
             collection,
             param: params[0] ?? "item",
+            paramLoc: paramLocs[0],
             body,
             loc: l,
         };
@@ -1501,6 +1517,7 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
+        const paramLocs = this.extractArrowParamLocs(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
         const bodyInner = this.extractArrowBodyInner(bodyArrow);
 
@@ -1523,6 +1540,7 @@ export class Parser {
             kind: "ParallelMapNode",
             collection,
             param: params[0] ?? "item",
+            paramLoc: paramLocs[0],
             body,
             loc: l,
         };
@@ -1551,6 +1569,14 @@ export class Parser {
     private extractArrowParams(arg: Expr | ArrowPlaceholder): string[] {
         if (this.isArrow(arg)) {
             return arg.params;
+        }
+        return [];
+    }
+
+    /** Extract parameter source locations from a parsed arrow. */
+    private extractArrowParamLocs(arg: Expr | ArrowPlaceholder): SourceLocation[] {
+        if (this.isArrow(arg)) {
+            return arg.paramLocs;
         }
         return [];
     }
