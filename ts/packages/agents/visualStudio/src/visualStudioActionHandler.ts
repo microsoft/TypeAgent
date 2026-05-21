@@ -49,6 +49,15 @@ class VisualStudioBridge {
     private readonly sendTimeoutMs: number;
 
     /**
+     * Invoked on every client connect/disconnect with the current count
+     * of OPEN clients (0 or 1 in practice — only the VS extension host
+     * ever dials this bridge). Set by the agent-lifecycle code; the
+     * bridge itself doesn't care about consumers. Errors raised by the
+     * callback are swallowed (the count is informational).
+     */
+    public onClientCountChanged?: (count: number) => void;
+
+    /**
      * @param wss   the underlying ws server, already bound and listening.
      * @param port  the actually bound port (OS-assigned when caller
      *              passed 0, or the env-pinned value when set).
@@ -148,6 +157,7 @@ class VisualStudioBridge {
         this.wss.on("connection", (ws: WebSocket) => {
             debug("host plugin connected");
             this.client = ws;
+            this.emitClientCount();
             ws.on("message", (data: RawData) => {
                 try {
                     const response = JSON.parse(
@@ -165,7 +175,12 @@ class VisualStudioBridge {
             });
             const onDisconnect = (reason: string) => {
                 debug(`host plugin disconnected (${reason})`);
+                // Only emit/clear once even if both `close` and `error`
+                // fire — `client` is set to undefined on first run and
+                // the guard skips the second.
+                if (this.client !== ws) return;
                 this.client = undefined;
+                this.emitClientCount();
                 // Reject every in-flight send so callers don't hang
                 // forever and the map can't grow unbounded across
                 // reconnects. `stop()` runs the same cleanup; either
@@ -180,6 +195,26 @@ class VisualStudioBridge {
                 onDisconnect(`error: ${err.message}`);
             });
         });
+    }
+
+    private emitClientCount(): void {
+        try {
+            this.onClientCountChanged?.(this.getConnectedCount());
+        } catch (err) {
+            debug("onClientCountChanged threw:", err);
+        }
+    }
+
+    /**
+     * Number of currently-OPEN bridge clients (0 or 1 in practice).
+     * Surfaced via `@system ports` through the SessionContext's
+     * `notifyClientCountChanged` API.
+     */
+    public getConnectedCount(): number {
+        return this.client !== undefined &&
+            this.client.readyState === WebSocket.OPEN
+            ? 1
+            : 0;
     }
 
     private failPending(error: Error): void {
@@ -324,6 +359,20 @@ let sharedBridge: VisualStudioBridge | undefined;
 let sharedStartingPromise: Promise<VisualStudioBridge> | undefined;
 let sharedClosingPromise: Promise<void> | undefined;
 let sharedBridgeRefCount = 0;
+// Active sessions currently holding a `(visualStudio, default)`
+// registration on the shared bridge. Insertion order picks a "primary"
+// session for client-count reporting: the primary publishes the global
+// count, the rest publish 0, so `@system ports` doesn't double-count
+// when summing per-session entries. See codeActionHandler for the
+// reference implementation.
+const sharedActiveSessions = new Set<SessionContext<Context>>();
+
+function publishClientCountFanout(count: number): void {
+    const primary = sharedActiveSessions.values().next().value;
+    for (const sc of sharedActiveSessions) {
+        void sc.notifyClientCountChanged("default", sc === primary ? count : 0);
+    }
+}
 
 async function ensureSharedBridge(): Promise<VisualStudioBridge> {
     // If a previous teardown is still releasing the port, await it
@@ -337,6 +386,13 @@ async function ensureSharedBridge(): Promise<VisualStudioBridge> {
     sharedStartingPromise = (async () => {
         try {
             const bridge = await VisualStudioBridge.start(getBridgeBindPort());
+            // Fan out client-count updates to active sessions. The
+            // bridge fires this on every connect/disconnect; the
+            // primary-session pattern in `publishClientCountFanout`
+            // prevents the `@system ports` summing logic from
+            // double-counting across sessions that each registered
+            // the SAME physical port.
+            bridge.onClientCountChanged = publishClientCountFanout;
             sharedBridge = bridge;
             return bridge;
         } finally {
@@ -381,6 +437,19 @@ async function updateAgentContext(
                 bridge.port,
             );
             sharedBridgeRefCount++;
+            sharedActiveSessions.add(context);
+            // Publish the current (global) count to the primary
+            // session (first in insertion order) and 0 to this session
+            // if it isn't the primary, so `@system ports` summing
+            // doesn't double-count. If this session is now becoming
+            // the primary (i.e. it's the first to enable), it gets the
+            // real count; otherwise it reports 0 and any future
+            // onClientCountChanged fanout keeps it at 0.
+            const primary = sharedActiveSessions.values().next().value;
+            void context.notifyClientCountChanged(
+                "default",
+                context === primary ? bridge.getConnectedCount() : 0,
+            );
         } catch (e) {
             // Roll back per-session bookkeeping so a subsequent retry
             // sees a clean slate. The shared bridge is left untouched —
@@ -399,6 +468,10 @@ async function updateAgentContext(
         agentContext.portRegistration?.release();
         delete agentContext.portRegistration;
 
+        const wasPrimary =
+            sharedActiveSessions.values().next().value === context;
+        sharedActiveSessions.delete(context);
+
         sharedBridgeRefCount = Math.max(0, sharedBridgeRefCount - 1);
         if (sharedBridgeRefCount === 0 && sharedBridge !== undefined) {
             const toStop = sharedBridge;
@@ -409,6 +482,17 @@ async function updateAgentContext(
                 sharedClosingPromise = undefined;
             });
             await sharedClosingPromise;
+        } else if (wasPrimary && sharedBridge !== undefined) {
+            // Primary session went away — transfer the (global) count
+            // to the new primary so `@system ports` keeps reporting
+            // the real number instead of 0.
+            const newPrimary = sharedActiveSessions.values().next().value;
+            if (newPrimary !== undefined) {
+                void newPrimary.notifyClientCountChanged(
+                    "default",
+                    sharedBridge.getConnectedCount(),
+                );
+            }
         }
     }
 }
