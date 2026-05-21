@@ -286,3 +286,21 @@ export function findTaskReferenceAt(
     }
     return undefined;
 }
+
+/** Returns the definition whose name token covers `(line, col)`. */
+export function findDefinitionAt(
+    table: SymbolTable,
+    line: number,
+    col: number,
+): SymbolDef | undefined {
+    for (const d of table.defs) {
+        if (
+            d.loc.line === line &&
+            col >= d.loc.col &&
+            col <= d.loc.col + d.name.length
+        ) {
+            return d;
+        }
+    }
+    return undefined;
+}

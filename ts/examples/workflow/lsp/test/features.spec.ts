@@ -48,11 +48,12 @@ describe("hover", () => {
         );
     });
 
-    it("returns null when cursor is at the declaration site of a const", () => {
-        // computeHover uses findReferenceAt which only searches refs, not defs.
-        // Hovering at the 'x' in `const x = ...` returns null.
+    it("returns hover at the declaration site of a const", () => {
+        // Hovering at the 'x' in `const x = ...` should show the type.
         const h = computeHover(doc(), { line: 1, character: 10 }, schemas);
-        expect(h).toBeNull();
+        expect(h).not.toBeNull();
+        const value = (h!.contents as { value: string }).value;
+        expect(value).toContain("const x");
     });
 
     it("task hover includes both input and output schema JSON", () => {

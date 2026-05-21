@@ -22,6 +22,7 @@ import { fromLspPosition } from "../util/position.js";
 import {
     findReferenceAt,
     findTaskReferenceAt,
+    findDefinitionAt,
     type SymbolDef,
 } from "../symbolResolver.js";
 import type { TaskSchema } from "../taskSchemas.js";
@@ -44,19 +45,20 @@ export function computeHover(
     }
 
     const ref = findReferenceAt(parsed.symbols, line, col);
-    if (!ref?.def) return null;
+    const def = ref?.def ?? findDefinitionAt(parsed.symbols, line, col);
+    if (!def) return null;
 
     // Look up the inferred type when the AST is available.
     let typeLabel: string | undefined;
     if (parsed.ast) {
         const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(parsed.ast);
-        const info = symbolTypes.get(ref.def.loc.offset);
+        const info = symbolTypes.get(def.loc.offset);
         if (info && info.kind !== "unresolved") {
             typeLabel = formatType(info);
         }
     }
 
-    return symbolHover(ref.def, typeLabel);
+    return symbolHover(def, typeLabel);
 }
 
 function symbolHover(def: SymbolDef, typeLabel?: string): Hover {
