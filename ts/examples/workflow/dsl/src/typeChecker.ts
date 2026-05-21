@@ -147,6 +147,32 @@ function typeName(t: TypeInfo): string {
     }
 }
 
+/** Format a TypeInfo as a TypeScript-style type string suitable for display in hover text. */
+export function formatType(t: TypeInfo): string {
+    switch (t.kind) {
+        case "primitive":
+            return t.name;
+        case "object": {
+            if (t.fields.size === 0) return "{}";
+            const parts: string[] = [];
+            for (const [name, { type, optional }] of t.fields) {
+                parts.push(`${name}${optional ? "?" : ""}: ${formatType(type)}`);
+            }
+            return `{ ${parts.join("; ")} }`;
+        }
+        case "array":
+            return `${formatType(t.element)}[]`;
+        case "tuple":
+            return `[${t.elements.map(formatType).join(", ")}]`;
+        case "unknown":
+            return "unknown";
+        case "never":
+            return "never";
+        case "unresolved":
+            return "unknown";
+    }
+}
+
 // ---- Scope ----
 
 class Scope {
@@ -261,6 +287,7 @@ export class TypeChecker {
     private taskSchemaMap: Map<string, TaskSchemaInfo>;
     private workflowMap: Map<string, WorkflowDecl>;
     private _propertyRefs: PropertyRef[] | null = null;
+    private _symbolTypes: Map<number, TypeInfo> | null = null;
 
     constructor(taskSchemas: TaskSchemaInfo[], workflows: WorkflowDecl[] = []) {
         this.taskSchemaMap = new Map(taskSchemas.map((s) => [s.name, s]));
@@ -301,6 +328,29 @@ export class TypeChecker {
         const refs = this._propertyRefs;
         this._propertyRefs = null;
         return refs;
+    }
+
+    /**
+     * Walk the workflow and return a map from declaration offset to inferred
+     * TypeInfo. Keys are `def.loc.offset` values from the symbol table, so
+     * hover can look up the type of any symbol without re-traversing the AST.
+     *
+     * Covers: workflow params, const bindings, destructuring bindings, and
+     * lambda parameters (map/filter/parallelMap/attempts-fallback).
+     */
+    collectSymbolTypes(wf: WorkflowDecl): Map<number, TypeInfo> {
+        this._symbolTypes = new Map();
+        const scope = new Scope();
+        // Params have explicit type annotations - store them before walking body.
+        for (const p of wf.params) {
+            const t = this.resolveTypeExpr(p.type);
+            scope.set(p.name, t);
+            this._symbolTypes.set(p.loc.offset, t);
+        }
+        this.checkStatements(wf.body, scope);
+        const result = this._symbolTypes;
+        this._symbolTypes = null;
+        return result;
     }
 
     private addError(
@@ -353,28 +403,34 @@ export class TypeChecker {
                         );
                     }
                 }
-                scope.set(
-                    s.name,
-                    s.typeAnnotation
-                        ? this.resolveTypeExpr(s.typeAnnotation)
-                        : valueType,
-                );
+                const constType = s.typeAnnotation
+                    ? this.resolveTypeExpr(s.typeAnnotation)
+                    : valueType;
+                scope.set(s.name, constType);
+                if (this._symbolTypes) {
+                    this._symbolTypes.set(s.nameLoc.offset, constType);
+                }
                 return UNRESOLVED;
             }
             case "DestructuringConst": {
                 const valueType = this.inferExpr(s.value, scope);
                 if (valueType.kind === "tuple") {
                     for (let i = 0; i < s.names.length; i++) {
-                        scope.set(
-                            s.names[i],
+                        const elemType =
                             i < valueType.elements.length
-                                ? valueType.elements[i]
-                                : UNRESOLVED,
-                        );
+                                ? valueType.elements[i]!
+                                : UNRESOLVED;
+                        scope.set(s.names[i]!, elemType);
+                        if (this._symbolTypes && s.nameLocs[i]) {
+                            this._symbolTypes.set(s.nameLocs[i]!.offset, elemType);
+                        }
                     }
                 } else if (valueType.kind === "array") {
-                    for (const name of s.names) {
-                        scope.set(name, valueType.element);
+                    for (let i = 0; i < s.names.length; i++) {
+                        scope.set(s.names[i]!, valueType.element);
+                        if (this._symbolTypes && s.nameLocs[i]) {
+                            this._symbolTypes.set(s.nameLocs[i]!.offset, valueType.element);
+                        }
                     }
                 } else if (
                     !isUnresolved(valueType) &&
@@ -629,10 +685,11 @@ export class TypeChecker {
                 );
                 if (e.fallback) {
                     const fbScope = scope.child();
-                    fbScope.set(
-                        e.fallback.param ?? DEFAULT_FALLBACK_PARAM,
-                        UNKNOWN,
-                    );
+                    const fbParam = e.fallback.param ?? DEFAULT_FALLBACK_PARAM;
+                    fbScope.set(fbParam, UNKNOWN);
+                    if (this._symbolTypes && e.fallback.param && e.fallback.paramLoc) {
+                        this._symbolTypes.set(e.fallback.paramLoc.offset, UNKNOWN);
+                    }
                     this.checkStatements(e.fallback.body, fbScope);
                 }
                 return bodyReturnType;
@@ -655,6 +712,9 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                if (this._symbolTypes && e.paramLoc) {
+                    this._symbolTypes.set(e.paramLoc.offset, bodyScope.get(e.param) ?? UNKNOWN);
+                }
                 const mapReturnType = this.checkStatements(e.body, bodyScope);
                 return { kind: "array", element: mapReturnType };
             }
@@ -675,6 +735,9 @@ export class TypeChecker {
                         e.collection.loc.col,
                     );
                     bodyScope.set(e.param, UNKNOWN);
+                }
+                if (this._symbolTypes && e.paramLoc) {
+                    this._symbolTypes.set(e.paramLoc.offset, bodyScope.get(e.param) ?? UNKNOWN);
                 }
                 this.checkStatements(e.body, bodyScope);
                 return colType;
@@ -722,6 +785,9 @@ export class TypeChecker {
                         e.collection.loc.col,
                     );
                     bodyScope.set(e.param, UNKNOWN);
+                }
+                if (this._symbolTypes && e.paramLoc) {
+                    this._symbolTypes.set(e.paramLoc.offset, bodyScope.get(e.param) ?? UNKNOWN);
                 }
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
                 if (e.maxConcurrency) {

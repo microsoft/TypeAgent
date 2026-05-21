@@ -29,8 +29,8 @@ describe("hover", () => {
         const h = computeHover(doc(), { line: 1, character: 14 }, schemas);
         expect(h).not.toBeNull();
         const value = (h!.contents as { value: string }).value;
-        expect(value).toContain("**a**");
-        expect(value).toContain("parameter");
+        // Expect TypeScript-style signature: (parameter) a: string
+        expect(value).toContain("(parameter) a: string");
     });
 
     it("returns markdown for a builtin task", () => {

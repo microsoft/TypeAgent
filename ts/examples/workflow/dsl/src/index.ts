@@ -9,7 +9,13 @@ export {
 } from "./compiler.js";
 export { lex, TokenKind, Token, LexError, LexComment } from "./lexer.js";
 export { Parser, ParseError } from "./parser.js";
-export { TypeChecker, TypeInfo, TypeError, PropertyRef } from "./typeChecker.js";
+export {
+    TypeChecker,
+    TypeInfo,
+    TypeError,
+    PropertyRef,
+    formatType,
+} from "./typeChecker.js";
 export { Emitter, TaskSchemaInfo, EmitError } from "./emitter.js";
 export { format, FormatOptions } from "./formatter.js";
 export {

@@ -16,6 +16,7 @@
 
 import { Hover, MarkupKind } from "vscode-languageserver/node.js";
 import type { TextDocument } from "vscode-languageserver-textdocument";
+import { TypeChecker, formatType } from "workflow-dsl";
 import { getParsed } from "../parsedDocument.js";
 import { fromLspPosition } from "../util/position.js";
 import {
@@ -43,21 +44,41 @@ export function computeHover(
     }
 
     const ref = findReferenceAt(parsed.symbols, line, col);
-    if (ref?.def) return symbolHover(ref.def);
-    return null;
+    if (!ref?.def) return null;
+
+    // Look up the inferred type when the AST is available.
+    let typeLabel: string | undefined;
+    if (parsed.ast) {
+        const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(parsed.ast);
+        const info = symbolTypes.get(ref.def.loc.offset);
+        if (info && info.kind !== "unresolved") {
+            typeLabel = formatType(info);
+        }
+    }
+
+    return symbolHover(ref.def, typeLabel);
 }
 
-function symbolHover(def: SymbolDef): Hover {
-    const kindLabel =
-        def.kind === "param"
-            ? "parameter"
-            : def.kind === "lambdaParam"
-              ? "lambda parameter"
-              : "constant";
+function symbolHover(def: SymbolDef, typeLabel?: string): Hover {
+    let declaration: string;
+    if (def.kind === "param") {
+        declaration = typeLabel
+            ? `(parameter) ${def.name}: ${typeLabel}`
+            : `(parameter) ${def.name}`;
+    } else if (def.kind === "lambdaParam") {
+        declaration = typeLabel
+            ? `(parameter) ${def.name}: ${typeLabel}`
+            : `(parameter) ${def.name}`;
+    } else {
+        // const binding
+        declaration = typeLabel
+            ? `const ${def.name}: ${typeLabel}`
+            : `const ${def.name}`;
+    }
     return {
         contents: {
             kind: MarkupKind.Markdown,
-            value: `**${def.name}** &mdash; ${kindLabel}`,
+            value: `\`\`\`workflow\n${declaration}\n\`\`\``,
         },
     };
 }
