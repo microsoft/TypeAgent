@@ -1,0 +1,13 @@
+// Pipeline entry: composes summarization over a batch of articles.
+// Demonstrates cross-file imports (G1 / Phase 7) by delegating the
+// per-article work to summarize() from writing.wf.
+
+import { summarize } from "./writing.wf";
+
+export workflow processArticles(articles: string[]): string[] {
+    const results = map(articles, (a) => {
+        const s = summarize(a);
+        return s;
+    });
+    return results;
+}

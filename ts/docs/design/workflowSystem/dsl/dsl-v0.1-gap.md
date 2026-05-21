@@ -3,53 +3,44 @@
 Tracked items where the DSL spec (dsl-v0.1.md) describes features that are
 not yet fully wired end-to-end.
 
-## G1: Sub-workflow calls
+## G1: Sub-workflow calls ✅ Resolved
 
-**Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
-sub-workflows are called by name and inlined at compile time.
+**Status:** Resolved as of the workflow-composition implementation plan
+(Phases 1–7). Multiple workflows in one file _and_ across multiple files
+now compose end-to-end through compiler, engine, and CLI. Cross-workflow
+calls emit `WorkflowCallNode` (not inlined) and the engine resolves the
+target via the IR's `workflows` table.
 
-**Current state:**
+**What landed:**
 
-- Parser: works. Single-segment calls (`sendEmail(message)`) produce
-  `WorkflowCallExpr` AST nodes.
-- Type checker: partially works. Resolves return type from the called
-  workflow's declaration, but `compile()` only passes a single workflow
-  to the checker (`TypeChecker` constructor defaults `workflows` to `[]`).
-  Cross-workflow calls produce "Unknown workflow" unless the caller
-  explicitly provides sibling workflows.
-- Emitter: does not inline. Emits a `TaskNode` with
-  `task: "workflow.<name>"` and empty schemas. The current emit strategy
-  was a placeholder: it generates an unregistered task reference rather
-  than inlining the sub-workflow body.
-- Runtime: fails. `workflow.<name>` tasks are not registered in the
-  engine.
+- Parser: `export workflow`, `import { … } from "./other.wf"` (with
+  optional aliases), default-expression parameters, named-record args.
+- Type checker: takes the full flat workflow list; resolves single-
+  segment names to either workflow or task (workflow shadows task), and
+  rejects call-graph cycles (across files too).
+- Emitter: emits one `WorkflowBody` per workflow into
+  `WorkflowIR.workflows[name]` and emits `WorkflowCallNode` (kind
+  `"workflowCall"`) at each call site. Default arguments are inlined
+  at the call site per design §4.3.
+- Engine: `WorkflowCallNode` handler creates an isolated child frame,
+  propagates errors out to the caller's `onError`, and honors
+  `timeoutMs`. A concurrent-run guard rejects re-entrancy on the same
+  engine instance.
+- CLI (`wfc`): `--entry <name>` selects the program entry from the
+  entry file's workflows; `--workspace-root <dir>` opts into
+  containment for cross-file imports (otherwise `tsc`-style trust).
+- File loader: BFS-loads `.wf` files, detects duplicate workflow names
+  across files, rejects non-exported / missing imports, rewrites
+  aliased call sites to canonical names before type-check, and uses
+  `realpathSync` for symlink-safe containment.
 
-**What needs to happen:**
+**References:**
 
-1. `compile()` should pass all parsed workflows to the type checker so
-   cross-workflow references resolve.
-2. The emitter should inline sub-workflow bodies into the calling
-   workflow's IR (as the spec says), or alternatively, register
-   `workflow.<name>` tasks in the engine at runtime.
-3. Add integration tests that compile and execute a multi-workflow file.
-
-**Related decisions:**
-
-The design space for this gap is captured in
-[`workflow-composition.md`](./workflow-composition.md) (cross-cutting
-DSL + IR), with a phased implementation plan in
-[`workflow-composition-impl-plan.md`](./workflow-composition-impl-plan.md).
-Decisions resolved there (see §8 of the design):
-
-- Sub-workflow emit strategy: not inlining. Each call becomes a
-  `WorkflowCallNode` referencing a body in the IR's workflow table.
-  Inlining is reclassified as an optional engine optimization.
-- Recursion: statically rejected in v1 (cycle check on the call
-  graph). Bounded recursion is deferred to
-  `ir/future/workflow-recursion.md`.
-- Call classification: the dotted-vs-single-segment rule is dropped.
-  Name resolution decides workflow-vs-task at the call site;
-  workflows shadow tasks of the same name (§4.1 of the design).
+- Design: [`workflow-composition.md`](./workflow-composition.md)
+- Plan: [`workflow-composition-impl-plan.md`](./workflow-composition-impl-plan.md)
+- Decisions: [`workflow-composition-decision-log.md`](./workflow-composition-decision-log.md)
+- IR additions folded into [`../ir/ir-v0.2.md`](../ir/ir-v0.2.md)
+  (no version bump).
 
 ## G2: Parallel branches missing IR schema fields
 
