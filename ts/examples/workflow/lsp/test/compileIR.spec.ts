@@ -49,6 +49,23 @@ describe("compileIR", () => {
         }
     });
 
+    it("returns type-check errors and no IR for a type error", () => {
+        const docs = new FakeDocuments();
+        // Reference to an undefined identifier triggers a type error.
+        docs.add(
+            "file:///t.wf",
+            `workflow w(): string {\n    const x = notDefined;\n    return x;\n}`,
+        );
+        const r = compileIR(
+            docs as unknown as TextDocuments<TextDocument>,
+            { uri: "file:///t.wf" },
+            schemas,
+        );
+        expect(r.ir).toBeUndefined();
+        expect(r.errors.length).toBeGreaterThan(0);
+        expect(r.errors.some((e) => e.phase === "typecheck")).toBe(true);
+    });
+
     it("reports an unknown-document error for missing URIs", () => {
         const docs = new FakeDocuments();
         const r = compileIR(

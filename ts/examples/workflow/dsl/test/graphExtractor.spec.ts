@@ -339,4 +339,34 @@ describe("Graph extractor", () => {
         expect(attemptsGroup).toBeDefined();
         expect(attemptsGroup!.parentId).toBe(mapGroup!.id);
     });
+
+    // ---- Built-in block label includes binding name ----
+
+    test("map group label is prefixed with the binding const name", () => {
+        const g = extract(`
+            workflow test(urls: string[]): unknown {
+                const results = map(urls, (url) => {
+                    return web.fetch(url);
+                });
+                return results;
+            }
+        `);
+        const mapGroup = g.groups.find((gr) => gr.kind === "map");
+        expect(mapGroup).toBeDefined();
+        expect(mapGroup!.label).toMatch(/^results\s*=/);
+    });
+
+    test("filter group label is prefixed with the binding const name", () => {
+        const g = extract(`
+            workflow test(items: string[]): unknown {
+                const kept = filter(items, (item) => {
+                    return item === "keep";
+                });
+                return kept;
+            }
+        `);
+        const filterGroup = g.groups.find((gr) => gr.kind === "filter");
+        expect(filterGroup).toBeDefined();
+        expect(filterGroup!.label).toMatch(/^kept\s*=/);
+    });
 });
