@@ -128,10 +128,12 @@ describe("inlay hints", () => {
         expect(hints.length).toBe(0);
     });
 
-    it("emits nothing for non-task-call bindings", () => {
+    it("emits a hint for non-task-call bindings with inferred type", () => {
         const text = `workflow w(): string {\n    const s = "hi";\n    return s;\n}`;
         const hints = computeInlayHints(doc(text), schemas);
-        expect(hints.length).toBe(0);
+        // const s = "hi" -> s inferred as string, hint should be `: string`
+        expect(hints.length).toBe(1);
+        expect((hints[0]!.label as string)).toBe(": string");
     });
 
     it("respects a requested range", () => {
