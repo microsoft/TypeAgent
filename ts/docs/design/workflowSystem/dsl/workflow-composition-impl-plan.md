@@ -112,13 +112,6 @@ Three log files capture the artifacts the per-phase process
 produces. They live next to this plan and are appended to as work
 progresses:
 
-- `workflow-composition-decision-log.md` &mdash; non-obvious design
-  decisions discovered during implementation, grouped by phase.
-  When an entry materially changes the design, also update
-  `workflow-composition.md` and cross-link.
-- `workflow-composition-review-log.md` &mdash; review feedback that
-  was **not** acted on, with reason. Acted-on feedback does not
-  need a log entry; the diff is the record.
 - `workflow-composition-test-gap-log.md` &mdash; identified test
   gaps that were **not** filled, with reason and (where relevant)
   a pointer to the future doc or phase that would address them.
