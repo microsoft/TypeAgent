@@ -39,6 +39,13 @@ export type DispatcherInvokeFunctions = {
         clientRequestId?: unknown,
     ): Promise<SubmitResult>;
 
+    interrupt(
+        text: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
+
     cancelCommand(requestId: string): Promise<CancelResult>;
 
     getQueueSnapshot(): Promise<QueueSnapshot>;

@@ -23,6 +23,8 @@ import {
     getCliQueueState,
     applyQueueSnapshot,
     getEnhancedConsolePrompt,
+    formatQueueBadge,
+    cancelAllInQueue,
     __testGetCurrentRequestId,
     __testSetCurrentRequestId,
 } from "../src/enhancedConsole.js";
@@ -443,7 +445,12 @@ describe("CLI cancel UX (A.6)", () => {
         };
         clientIO.queueStateChanged!(snap1);
         const prompt1 = getEnhancedConsolePrompt("");
-        expect(prompt1).toContain("queue: 1");
+        // `getEnhancedConsolePrompt` returns the static base only; the
+        // live `(queue: N)` badge is prepended at render time by
+        // `questionWithCompletion` via `formatQueueBadge()`.
+        const badge1 = formatQueueBadge();
+        expect(prompt1).not.toContain("queue:");
+        expect(badge1).toContain("queue: 1");
 
         // Second snapshot: 1 running + 2 queued.
         const snap2: QueueSnapshot = {
@@ -461,7 +468,9 @@ describe("CLI cancel UX (A.6)", () => {
         };
         clientIO.queueStateChanged!(snap2);
         const prompt2 = getEnhancedConsolePrompt("");
-        expect(prompt2).toContain("queue: 3");
+        const badge2 = formatQueueBadge();
+        expect(prompt2).not.toContain("queue:");
+        expect(badge2).toContain("queue: 3");
 
         // Third snapshot: idle. Badge gone.
         clientIO.queueStateChanged!({
@@ -471,7 +480,9 @@ describe("CLI cancel UX (A.6)", () => {
             version: 3,
         });
         const prompt3 = getEnhancedConsolePrompt("");
+        const badge3 = formatQueueBadge();
         expect(prompt3).not.toContain("queue:");
+        expect(badge3).toBe("");
     });
 });
 
@@ -619,5 +630,78 @@ describe("/queue list truncation (F11)", () => {
             expect(out).toContain(`task-${i}`);
         }
         expect(out).not.toContain("more queued");
+    });
+});
+
+// ── Double-Escape helper: cancelAllInQueue ─────────────────────────────
+describe("cancelAllInQueue (double-Escape clear queue)", () => {
+    it("cancels the running entry plus every queued entry exactly once", async () => {
+        const running = makeEntry(
+            "11111111-aaaa-aaaa-aaaa-111111111111",
+            "r",
+            "running",
+        );
+        const queued = [
+            makeEntry("22222222-aaaa-aaaa-aaaa-222222222222", "q1"),
+            makeEntry("33333333-aaaa-aaaa-aaaa-333333333333", "q2"),
+            makeEntry("44444444-aaaa-aaaa-aaaa-444444444444", "q3"),
+        ];
+        const snap = makeSnapshot(running, queued);
+        const { dispatcher, calls } = makeQueueDispatcher(snap);
+
+        const result = await cancelAllInQueue(dispatcher, snap);
+
+        expect(result).toEqual({ cancelled: 4, running: 1, queued: 3 });
+        expect(calls.cancelCommand).toHaveLength(4);
+        expect(new Set(calls.cancelCommand)).toEqual(
+            new Set([running.requestId, ...queued.map((e) => e.requestId)]),
+        );
+    });
+
+    it("returns zeros and issues no RPCs on an empty snapshot", async () => {
+        const { dispatcher, calls } = makeQueueDispatcher(undefined);
+
+        const empty = await cancelAllInQueue(dispatcher, undefined);
+        const idle = await cancelAllInQueue(dispatcher, makeSnapshot(null, []));
+
+        expect(empty).toEqual({ cancelled: 0, running: 0, queued: 0 });
+        expect(idle).toEqual({ cancelled: 0, running: 0, queued: 0 });
+        expect(calls.cancelCommand).toEqual([]);
+    });
+
+    it("returns zeros when no dispatcher is bound", async () => {
+        const snap = makeSnapshot(
+            makeEntry("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "r", "running"),
+            [makeEntry("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "q")],
+        );
+        const result = await cancelAllInQueue(undefined, snap);
+        expect(result).toEqual({ cancelled: 0, running: 0, queued: 0 });
+    });
+
+    it("swallows per-id cancel errors so siblings still get cancelled", async () => {
+        const snap = makeSnapshot(
+            makeEntry("11111111-aaaa-aaaa-aaaa-111111111111", "r", "running"),
+            [
+                makeEntry("22222222-aaaa-aaaa-aaaa-222222222222", "q1"),
+                makeEntry("33333333-aaaa-aaaa-aaaa-333333333333", "q2"),
+            ],
+        );
+        const seen: string[] = [];
+        const dispatcher = {
+            cancelCommand: async (rid: string) => {
+                seen.push(rid);
+                if (rid.startsWith("22222222")) {
+                    throw new Error("simulated server error");
+                }
+            },
+        } as unknown as Dispatcher;
+
+        const result = await cancelAllInQueue(dispatcher, snap);
+
+        expect(seen).toHaveLength(3);
+        // 2 succeeded (running + q2); q1 threw and was absorbed.
+        expect(result.cancelled).toBe(2);
+        expect(result.running).toBe(1);
+        expect(result.queued).toBe(1);
     });
 });

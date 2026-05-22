@@ -29,6 +29,9 @@ export function createDispatcherRpcServer(
         submitCommand: async (...args) => {
             return dispatcher.submitCommand(...args);
         },
+        interrupt: async (...args) => {
+            return dispatcher.interrupt(...args);
+        },
         cancelCommand: async (...args) => {
             return dispatcher.cancelCommand(...args);
         },

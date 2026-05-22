@@ -1003,4 +1003,49 @@ describe("RequestQueue", () => {
         expect(a.state).toBe("cancelled");
         expect(a.error).toBe("cancelled:no_clients");
     });
+
+    // Regression: WebSocket RPC JSON-serializes `args: any[]`, and
+    // JSON.stringify maps trailing/omitted `undefined` array elements to
+    // `null`. SubmitInput.attachments / .options must therefore tolerate
+    // BOTH null and undefined on the receive side. Before the fix this
+    // crashed on `null.length` inside materialize() and every CLI request
+    // surfaced as `### ERROR: Cannot read properties of null (reading
+    // 'length')`.
+    it("submit tolerates null attachments and null options (RPC wire shape)", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue } = makeQueue(dispatcher);
+
+        const entry = queue.submit({
+            text: "hello",
+            originatorConnectionId: "c1",
+            attachments: null as unknown as string[],
+            options: null as unknown as any,
+        });
+
+        await flush();
+        expect(dispatcher.calls.length).toBe(1);
+        dispatcher.calls[0].resolve({});
+        await entry.completion;
+
+        const snap = queue.getSnapshot();
+        expect(snap.running).toBeNull();
+        expect(snap.queued).toEqual([]);
+    });
+
+    it("interrupt tolerates null attachments and null options (RPC wire shape)", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue } = makeQueue(dispatcher);
+
+        const a = queue.interrupt({
+            text: "a",
+            originatorConnectionId: "c1",
+            attachments: null as unknown as string[],
+            options: null as unknown as any,
+        });
+
+        await flush();
+        expect(dispatcher.calls.length).toBe(1);
+        dispatcher.calls[0].resolve({});
+        await a.completion;
+    });
 });

@@ -32,6 +32,9 @@ export function createDispatcherRpcClient(
         async submitCommand(...args) {
             return rpc.invoke("submitCommand", ...args);
         },
+        async interrupt(...args) {
+            return rpc.invoke("interrupt", ...args);
+        },
         async getQueueSnapshot() {
             return rpc.invoke("getQueueSnapshot");
         },

@@ -727,11 +727,16 @@ export class RequestQueue {
         if (input.clientRequestId !== undefined) {
             entry.clientRequestId = input.clientRequestId;
         }
-        if (input.attachments !== undefined) {
+        // NOTE: `!= null` is intentional — RPC transport JSON-serializes
+        // `args: any[]`, and `JSON.stringify` maps trailing/omitted
+        // `undefined` array elements to `null` on the wire. Without this
+        // check materialize() would crash on `null.length` whenever a
+        // remote client called submitCommand(text, undefined, undefined, id).
+        if (input.attachments != null) {
             entry.attachments = input.attachments;
             entry.attachmentCount = input.attachments.length;
         }
-        if (input.options !== undefined) {
+        if (input.options != null) {
             entry.options = input.options;
         }
         if (input.schemaHint !== undefined) {

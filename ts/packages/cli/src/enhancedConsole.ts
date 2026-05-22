@@ -246,6 +246,25 @@ let currentRequestId: string | undefined;
 let currentClientRequestId: string | undefined;
 let isProcessing = false;
 let lastCtrlCTime = 0;
+// Tracks the most recent Escape press for double-Escape detection.
+// Single-ESC keeps its existing prompt-level meaning (dismiss
+// completions / clear input). A second ESC within the window
+// triggers `cancelAllInQueue` — drains both the running entry and
+// every queued entry through the dispatcher. The window is short
+// enough that pressing ESC once now and again a moment later doesn't
+// accidentally nuke the queue.
+let lastEscapeTime = 0;
+const DOUBLE_ESCAPE_WINDOW_MS = 1000;
+/**
+ * Module-level dispatcher ref shared by every input handler that may
+ * need to issue cancel RPCs: the SIGINT handler, the prompt's ESC
+ * handler (questionWithCompletion), and the legacy execution key
+ * listener. The actual write happens in the `bindDispatcher` callback
+ * threaded through `runEnhancedConsole`. Reading is always safe —
+ * undefined just means "not connected yet" and any cancel attempt is
+ * skipped silently.
+ */
+const moduleDispatcherRef: { current?: Dispatcher } = {};
 
 // ===== Server-side queue state (Phase 1) =====
 // Latest snapshot pushed by the SharedDispatcher. Always reflects the
@@ -346,6 +365,59 @@ export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
         snapshot && typeof snapshot.version === "number"
             ? snapshot.version
             : -1;
+}
+
+/**
+ * Cancel every request the server knows about for this conversation —
+ * both the running entry and every queued entry — through the bound
+ * dispatcher. Returns the number of cancel RPCs we issued, plus a
+ * formatted one-line summary the caller can print.
+ *
+ * Used by the double-Escape shortcut in `questionWithCompletion` and
+ * exported for tests. Cancellation is best-effort: each
+ * `cancelCommand` is fired independently, exceptions are swallowed so
+ * one bad RPC can't strand siblings, and the local snapshot is left
+ * alone — subsequent `requestCancelled` push events from the server
+ * will update it through the normal flow.
+ *
+ * `dispatcher` is taken explicitly (rather than reading
+ * `moduleDispatcherRef.current`) so tests can call this in isolation
+ * with a stub dispatcher.
+ */
+export async function cancelAllInQueue(
+    dispatcher: Dispatcher | undefined,
+    snapshot: QueueSnapshot | undefined,
+): Promise<{ cancelled: number; running: number; queued: number }> {
+    if (!dispatcher || typeof dispatcher.cancelCommand !== "function") {
+        return { cancelled: 0, running: 0, queued: 0 };
+    }
+    const targets: { id: string; from: "running" | "queued" }[] = [];
+    if (snapshot?.running?.requestId) {
+        targets.push({ id: snapshot.running.requestId, from: "running" });
+    }
+    for (const e of snapshot?.queued ?? []) {
+        if (e.requestId) targets.push({ id: e.requestId, from: "queued" });
+    }
+    let cancelled = 0;
+    let runningCancelled = 0;
+    let queuedCancelled = 0;
+    await Promise.all(
+        targets.map(async (t) => {
+            try {
+                await dispatcher.cancelCommand(t.id);
+                cancelled++;
+                if (t.from === "running") runningCancelled++;
+                else queuedCancelled++;
+            } catch {
+                // best-effort — server may have already drained this id
+            }
+        }),
+    );
+    return {
+        cancelled,
+        running: runningCancelled,
+        queued: queuedCancelled,
+    };
 }
 
 /**
@@ -1280,6 +1352,7 @@ export function createEnhancedClientIO(
                 "queued",
                 entry,
             );
+            redrawPromptIfActive();
         },
         requestStarted(entry: QueuedRequest, version: number): void {
             if (!admitVersion(version)) return;
@@ -1689,11 +1762,17 @@ async function questionWithCompletion(
                 }
             }
 
-            const promptText = chalk.cyanBright(message);
+            // Re-derive the live queue badge each render so the
+            // `(queue: N)` prefix updates immediately when the queue
+            // mutates (e.g. after a double-Escape clear) instead of
+            // waiting for the next Enter to rebuild the prompt.
+            const badge = formatQueueBadge();
+            const livePrompt = badge + message;
+            const promptText = chalk.cyanBright(livePrompt);
             const width = process.stdout.columns || 80;
 
             const inputLineWidth =
-                getDisplayWidth(message) + getDisplayWidth(input);
+                getDisplayWidth(livePrompt) + getDisplayWidth(input);
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
@@ -1742,12 +1821,17 @@ async function questionWithCompletion(
 
             // Hint line
             let hint: string;
+            const queueBusy =
+                cliQueueState !== undefined &&
+                (cliQueueState.running ? 1 : 0) + cliQueueState.queued.length >
+                    0;
+            const queueHint = queueBusy ? " · esc esc clear queue" : "";
             if (filteredCompletions.length > 0) {
-                hint = "↑↓ completions · tab accept · esc clear";
+                hint = "↑↓ completions · tab accept · esc clear" + queueHint;
             } else if (input.length > 0) {
-                hint = "↑↓ history · esc clear";
+                hint = "↑↓ history · esc clear" + queueHint;
             } else {
-                hint = "↑↓ history · /help commands";
+                hint = "↑↓ history · /help commands" + queueHint;
             }
             layout.drawFixed(inputRows + 2, "  " + chalk.dim(hint));
 
@@ -1847,6 +1931,17 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
+                // Double-Escape (within DOUBLE_ESCAPE_WINDOW_MS) cancels
+                // every running + queued request in the server-side
+                // queue. We still perform the normal single-Escape
+                // action (dismiss completions / clear input) so the
+                // prompt is left in a clean state. The summary is
+                // printed to the scroll region via writeQueueLine so
+                // it survives the prompt re-render below.
+                const now = Date.now();
+                const isDouble =
+                    now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
+                lastEscapeTime = isDouble ? 0 : now;
                 if (controller && filteredCompletions.length > 0) {
                     if (isSlashCommand(input)) {
                         // Slash completions are recomputed every render; use a
@@ -1864,6 +1959,32 @@ async function questionWithCompletion(
                     cursorPos = 0;
                     historyIndex = history.length;
                     slashCompletionsDismissed = false;
+                }
+                if (isDouble) {
+                    const snap = cliQueueState;
+                    const total =
+                        (snap?.running ? 1 : 0) + (snap?.queued.length ?? 0);
+                    if (total > 0) {
+                        // Fire-and-forget — cancellation is async but
+                        // the prompt should stay responsive. Errors
+                        // are absorbed by cancelAllInQueue itself.
+                        void cancelAllInQueue(
+                            moduleDispatcherRef.current,
+                            snap,
+                        ).then((res) => {
+                            const parts: string[] = [];
+                            if (res.running > 0) parts.push("1 running");
+                            if (res.queued > 0)
+                                parts.push(`${res.queued} queued`);
+                            writeQueueLine(
+                                chalk.yellow(
+                                    `✗ Queue cleared: ${res.cancelled} cancelled (${parts.join(", ")})`,
+                                ),
+                            );
+                        });
+                    } else {
+                        writeQueueLine(chalk.dim("Queue already empty."));
+                    }
                 }
                 render();
                 return;
@@ -2216,6 +2337,11 @@ export async function withEnhancedConsoleClientIO(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
                 dispatcherRef.current = d;
+                // Mirror to the module-level ref so input handlers
+                // outside this closure (e.g. questionWithCompletion's
+                // double-Escape) can issue cancel RPCs without
+                // threading the dispatcher through their signatures.
+                moduleDispatcherRef.current = d;
             },
         );
     } finally {
@@ -2637,30 +2763,44 @@ function getNextInput(
 }
 
 /**
- * Get styled console prompt
- * Returns a clean prompt regardless of status text.
+ * Returns the live "queue badge" prefix `(queue: N) ` used in the
+ * interactive prompt. Empty string when nothing's worth surfacing.
  *
- * The optional queue snapshot drives a small badge appended after the
- * verbose indicator: `(queue: N)` when there are queued entries that
- * are NOT this client's currently-awaited submission. Running entries
- * are tracked separately by the spinner / "▶ running" marker, so they
- * are not double-counted.
+ * Pulled out of `getEnhancedConsolePrompt` so the prompt can be
+ * re-derived at render time inside `questionWithCompletion` —
+ * otherwise the badge text gets baked into the captured prompt
+ * string once per question and stays stale until the next Enter
+ * (e.g. after double-Escape clears the queue).
+ *
+ * The exclusion logic mirrors `computeBadgeState`: a "running" entry
+ * that matches `currentRequestId` or was recently submitted from THIS
+ * CLI is not counted, because the spinner / `▶ running` marker
+ * already conveys it.
  */
-export function getEnhancedConsolePrompt(
-    _text: string,
-    queue?: QueueSnapshot | undefined,
-): string {
-    const snap = queue ?? cliQueueState;
-    const queuedCount = snap?.queued.length ?? 0;
+export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
+    const s = snap ?? cliQueueState;
+    const queuedCount = s?.queued.length ?? 0;
     const runningOther =
-        snap?.running &&
-        snap.running.requestId !== currentRequestId &&
-        !recentlySubmittedRequestIds.has(snap.running.requestId)
+        s?.running &&
+        s.running.requestId !== currentRequestId &&
+        !recentlySubmittedRequestIds.has(s.running.requestId)
             ? 1
             : 0;
     const total = queuedCount + runningOther;
-    const badge = total > 0 ? chalk.yellow(`(queue: ${total}) `) : "";
-    return `${getVerboseIndicator()}${badge}❯ `;
+    return total > 0 ? chalk.yellow(`(queue: ${total}) `) : "";
+}
+
+/**
+ * Get styled console prompt
+ * Returns a clean prompt regardless of status text.
+ *
+ * NOTE: this returns the *static* portion of the prompt only. The
+ * live `(queue: N)` badge is prepended at render time by
+ * `questionWithCompletion` via `formatQueueBadge()` so it stays in
+ * sync with `cliQueueState` between Enter presses.
+ */
+export function getEnhancedConsolePrompt(_text: string): string {
+    return `${getVerboseIndicator()}❯ `;
 }
 
 /**

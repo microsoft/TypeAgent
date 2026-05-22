@@ -762,9 +762,8 @@ export async function createSharedDispatcher(
                     text: command,
                     originatorConnectionId: connectionId,
                 };
-                if (attachments !== undefined)
-                    submitInput.attachments = attachments;
-                if (processOptions !== undefined)
+                if (attachments != null) submitInput.attachments = attachments;
+                if (processOptions != null)
                     submitInput.options = processOptions;
                 if (clientRequestId !== undefined)
                     submitInput.clientRequestId = clientRequestId;
@@ -796,9 +795,8 @@ export async function createSharedDispatcher(
                     text: command,
                     originatorConnectionId: connectionId,
                 };
-                if (attachments !== undefined)
-                    submitInput.attachments = attachments;
-                if (options !== undefined) submitInput.options = options;
+                if (attachments != null) submitInput.attachments = attachments;
+                if (options != null) submitInput.options = options;
                 if (clientRequestId !== undefined)
                     submitInput.clientRequestId = clientRequestId;
                 // F5/F7 (R2-H-1, R2P-M-3): convert typed errors into
@@ -921,9 +919,8 @@ export async function createSharedDispatcher(
                     text: command,
                     originatorConnectionId: connectionId,
                 };
-                if (attachments !== undefined)
-                    submitInput.attachments = attachments;
-                if (options !== undefined) submitInput.options = options;
+                if (attachments != null) submitInput.attachments = attachments;
+                if (options != null) submitInput.options = options;
                 if (clientRequestId !== undefined)
                     submitInput.clientRequestId = clientRequestId;
                 let entry;

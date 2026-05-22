@@ -436,6 +436,16 @@ export class MessageGroup {
         this.userMessage.setMessage(message, this.chatView.userGivenName);
     }
 
+    /**
+     * Reflect the server-side queue state onto this group's user
+     * message bubble. `null` clears the chip — call this on
+     * cancellation, on completion, and on any terminal transition so
+     * stale "queued" / "running" chips don't linger.
+     */
+    public setQueueStatus(status: "queued" | "running" | null) {
+        this.userMessage.setQueueStatus(status);
+    }
+
     public notifyExplained(data: NotifyExplainedData) {
         this.userMessage.notifyExplained(data);
     }
