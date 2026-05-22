@@ -1771,8 +1771,8 @@ async function questionWithCompletion(
             const promptText = chalk.cyanBright(livePrompt);
             const width = process.stdout.columns || 80;
 
-            const inputLineWidth =
-                getDisplayWidth(livePrompt) + getDisplayWidth(input);
+            const promptDisplayWidth = getDisplayWidth(livePrompt);
+            const inputLineWidth = promptDisplayWidth + getDisplayWidth(input);
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
@@ -1837,7 +1837,7 @@ async function questionWithCompletion(
 
             // Position cursor in the input line
             const cursorAbsCol =
-                getDisplayWidth(message) +
+                promptDisplayWidth +
                 getDisplayWidth(input.substring(0, cursorPos));
             const cursorRow = Math.floor(cursorAbsCol / width);
             layout.moveCursorToFixed(1 + cursorRow, (cursorAbsCol % width) + 1);

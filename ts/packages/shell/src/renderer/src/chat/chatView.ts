@@ -1120,6 +1120,7 @@ export class ChatView {
 
     /** Bootstrap from `JoinConversationResult.queueSnapshot`. */
     public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
+        const prev = this.queueSnapshot;
         this.queueSnapshot = snapshot
             ? this.cloneSnapshot(snapshot)
             : undefined;
@@ -1127,29 +1128,21 @@ export class ChatView {
             snapshot && typeof snapshot.version === "number"
                 ? snapshot.version
                 : -1;
-        // No global badge to re-render; per-bubble chips are set as
-        // events flow in. On bootstrap, walk the snapshot and stamp
-        // any chips we can resolve right now (skipping ones whose
-        // MessageGroup hasn't been created yet — those land via
-        // `applyPendingQueueStatus` once the group materializes).
-        if (snapshot) {
-            if (snapshot.running) {
-                this.tryApplyQueueStatusToGroup(snapshot.running, "running");
-            }
-            for (const entry of snapshot.queued) {
-                this.tryApplyQueueStatusToGroup(entry, "queued");
-            }
-        }
+        this.reconcileChipsToSnapshot(prev, snapshot);
     }
 
     /**
      * Returns true if `version` is fresh (and updates the watermark);
-     * false when it's a stale reorder. Older non-versioned events
-     * (undefined) are admitted unconditionally for forward compat.
+     * false when it's strictly older than the watermark. Same-version
+     * events ARE admitted — the server pairs fine-grained events
+     * (e.g. `requestStarted`) with an authoritative `queueStateChanged`
+     * at the same version, and the snapshot must overwrite the
+     * partial mutation. Older non-versioned events (undefined) are
+     * admitted unconditionally for forward compat.
      */
     private admitVersion(version: number | undefined): boolean {
         if (typeof version !== "number") return true;
-        if (version <= this.lastAppliedQueueVersion) return false;
+        if (version < this.lastAppliedQueueVersion) return false;
         this.lastAppliedQueueVersion = version;
         return true;
     }
@@ -1170,11 +1163,13 @@ export class ChatView {
             (e) => e.requestId !== entry.requestId,
         );
         snap.running = { ...entry };
-        // Clear the chip when the entry starts running — the existing
-        // spinner / active-request indicator already conveys "running",
-        // and keeping the chip would just be visual noise on the
-        // currently-active bubble.
-        this.tryApplyQueueStatusToGroup(entry, null);
+        // Transition the chip to "running" so the bubble itself
+        // signals "this is what the server is currently working on".
+        // The chat-input stop button + spinner are global affordances;
+        // the chip is the per-bubble counterpart that matters when
+        // multiple bubbles are queued or when the running request was
+        // submitted from a peer client (no local spinner).
+        this.tryApplyQueueStatusToGroup(entry, "running");
     }
 
     public onRequestCancelled(
@@ -1201,25 +1196,47 @@ export class ChatView {
 
     public onQueueStateChanged(snapshot: QueueSnapshot): void {
         if (!this.admitVersion(snapshot.version)) return;
+        const prev = this.queueSnapshot;
         // Authoritative replacement.
         this.queueSnapshot = this.cloneSnapshot(snapshot);
-        // Reconcile per-bubble chips with the authoritative snapshot:
-        // running entry → no chip; queued entries → "queued"; anything
-        // not in the snapshot → clear.
+        this.reconcileChipsToSnapshot(prev, snapshot);
+    }
+
+    /**
+     * Drive per-bubble chips off an authoritative snapshot.
+     * Stamps "running" / "queued" on entries the snapshot still has,
+     * clears chips on previously-live entries it no longer has, and
+     * sweeps any stale `pendingQueueStatus` whose entry vanished.
+     * Used by `applyQueueSnapshot` (bootstrap / reconnect) and
+     * `onQueueStateChanged` (normal completion).
+     */
+    private reconcileChipsToSnapshot(
+        prev: QueueSnapshot | undefined,
+        next: QueueSnapshot | undefined,
+    ): void {
         const liveIds = new Set<string>();
-        if (snapshot.running) {
-            liveIds.add(snapshot.running.requestId);
-            this.tryApplyQueueStatusToGroup(snapshot.running, null);
+        if (next?.running) {
+            liveIds.add(next.running.requestId);
+            this.tryApplyQueueStatusToGroup(next.running, "running");
         }
-        for (const entry of snapshot.queued) {
+        for (const entry of next?.queued ?? []) {
             liveIds.add(entry.requestId);
             this.tryApplyQueueStatusToGroup(entry, "queued");
         }
-        // Sweep stale pending statuses — entries the server has dropped
-        // since our last view (e.g. completed before we joined).
-        for (const reqId of Array.from(this.pendingQueueStatus.keys())) {
-            if (!liveIds.has(reqId)) {
-                this.pendingQueueStatus.delete(reqId);
+        // Clear chips on previously-live entries the new snapshot
+        // dropped — normal completion, drain on disconnect, etc.
+        const prevIds = new Set<string>();
+        if (prev?.running) prevIds.add(prev.running.requestId);
+        for (const e of prev?.queued ?? []) prevIds.add(e.requestId);
+        for (const id of prevIds) {
+            if (liveIds.has(id)) continue;
+            this.pendingQueueStatus.delete(id);
+            this.idToMessageGroup.get(id)?.setQueueStatus(null);
+        }
+        // Sweep any pending statuses whose entry is no longer live.
+        for (const id of Array.from(this.pendingQueueStatus.keys())) {
+            if (!liveIds.has(id)) {
+                this.pendingQueueStatus.delete(id);
             }
         }
     }
