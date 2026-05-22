@@ -66,7 +66,11 @@ async function startSession(debounceMs = 5) {
         client,
         server,
         publishes,
-        cleanup: () => {
+        cleanup: async () => {
+            // Add a small delay to let pending operations and error handlers complete
+            // before disposing connections. This prevents "Connection is disposed" errors
+            // when error handlers try to send notifications after test completion.
+            await new Promise((resolve) => setTimeout(resolve, 50));
             client.dispose();
             server.dispose();
             pipes.serverTransport.input.destroy();
@@ -115,7 +119,7 @@ describe("server integration", () => {
             expect(session.publishes[0]!.uri).toBe("file:///t.wf");
             expect(session.publishes[0]!.diagnostics.length).toBeGreaterThan(0);
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -149,7 +153,7 @@ describe("server integration", () => {
                 ),
             );
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -175,7 +179,7 @@ describe("server integration", () => {
             // Result may be null if x resolves as const; we just verify no crash.
             expect(result === null || typeof result === "object").toBe(true);
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -211,7 +215,7 @@ describe("server integration", () => {
             // Should include keywords
             expect(labels).toContain("const");
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -247,7 +251,7 @@ describe("server integration", () => {
             }
             // null is also acceptable (cursor not quite on the identifier)
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -282,7 +286,7 @@ describe("server integration", () => {
                 }
             }
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -313,7 +317,7 @@ describe("server integration", () => {
             );
             expect(Array.isArray(result)).toBe(true);
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -341,7 +345,7 @@ describe("server integration", () => {
                 expect(result.ir).toBeDefined();
             }
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -380,7 +384,7 @@ describe("server integration", () => {
             expect(Array.isArray(result.graph!.edges)).toBe(true);
             expect(Array.isArray(result.graph!.params)).toBe(true);
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 
@@ -410,7 +414,7 @@ describe("server integration", () => {
             expect(result.errors.length).toBeGreaterThan(0);
             expect(result.errors.every((e) => e.phase === "lex")).toBe(true);
         } finally {
-            session.cleanup();
+            await session.cleanup();
         }
     });
 });
