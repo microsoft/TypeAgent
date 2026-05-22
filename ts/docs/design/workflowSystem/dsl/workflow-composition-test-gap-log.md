@@ -58,13 +58,3 @@ address them. Filled gaps are tracked by the test diff itself.
 - **Reason not filled:** Already explicitly out of scope per the
   design (workflow-composition.md §3.4). The parser will produce a
   syntax error; the exact phrasing is not under test.
-
-### P7-T8. Imported workflow call inside other AST shapes (attempts, parallel branches, switch arms, ternary)
-
-- **Gap:** Test #15 covers the `map` body; analogous coverage for
-  `attempts`/`parallel`/`switch`/ternary is missing.
-- **Reason not filled:** `rewriteExpr`/`rewriteStmt` use uniform
-  recursive descent and the `map` case exercises the same code
-  paths. The risk is one of regression-detection breadth, not
-  current correctness. Add if the rewriter is ever rewritten to use
-  per-kind handlers rather than uniform descent.
