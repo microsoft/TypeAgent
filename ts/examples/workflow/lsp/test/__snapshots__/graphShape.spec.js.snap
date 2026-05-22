@@ -1,0 +1,189 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`extractGraph snapshots conditional workflow 1`] = `
+{
+  "edges": [
+    {
+      "from": "param_x",
+      "label": undefined,
+      "to": "group_if_then_0",
+    },
+  ],
+  "groups": [
+    {
+      "children": [
+        "return_0",
+      ],
+      "id": "group_if_then_0",
+      "kind": "if-then",
+      "label": "if (x)",
+      "parentId": undefined,
+    },
+    {
+      "children": [
+        "return_1",
+      ],
+      "id": "group_if_else_1",
+      "kind": "if-else",
+      "label": "else",
+      "parentId": undefined,
+    },
+  ],
+  "nodes": [
+    {
+      "groupId": "group_if_then_0",
+      "id": "return_0",
+      "kind": "return",
+      "label": "return",
+      "line": 4,
+    },
+    {
+      "groupId": "group_if_else_1",
+      "id": "return_1",
+      "kind": "return",
+      "label": "return",
+      "line": 6,
+    },
+  ],
+  "params": [
+    {
+      "id": "param_x",
+      "name": "x",
+      "type": "number",
+    },
+  ],
+  "workflowName": "check",
+}
+`;
+
+exports[`extractGraph snapshots map workflow 1`] = `
+{
+  "edges": [
+    {
+      "from": "param_items",
+      "label": undefined,
+      "to": "group_map_0",
+    },
+    {
+      "from": "group_map_0",
+      "to": "return_1",
+    },
+  ],
+  "groups": [
+    {
+      "children": [
+        "return_0",
+      ],
+      "id": "group_map_0",
+      "kind": "map",
+      "label": "map(items, item)",
+      "parentId": undefined,
+    },
+  ],
+  "nodes": [
+    {
+      "groupId": "group_map_0",
+      "id": "return_0",
+      "kind": "return",
+      "label": "return",
+      "line": 4,
+    },
+    {
+      "groupId": undefined,
+      "id": "return_1",
+      "kind": "return",
+      "label": "return",
+      "line": 3,
+    },
+  ],
+  "params": [
+    {
+      "id": "param_items",
+      "name": "items",
+      "type": "string[]",
+    },
+  ],
+  "workflowName": "processAll",
+}
+`;
+
+exports[`extractGraph snapshots parallel workflow 1`] = `
+{
+  "edges": [
+    {
+      "from": "param_a",
+      "label": undefined,
+      "to": "task_0",
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "bindName": "r1",
+      "groupId": undefined,
+      "id": "task_0",
+      "kind": "task",
+      "label": "r1",
+      "line": 4,
+      "taskType": "string.concat",
+    },
+  ],
+  "params": [
+    {
+      "id": "param_a",
+      "name": "a",
+      "type": "string",
+    },
+    {
+      "id": "param_b",
+      "name": "b",
+      "type": "string",
+    },
+  ],
+  "workflowName": "dual",
+}
+`;
+
+exports[`extractGraph snapshots simple linear workflow 1`] = `
+{
+  "edges": [
+    {
+      "from": "param_name",
+      "label": undefined,
+      "to": "task_0",
+    },
+    {
+      "from": "task_0",
+      "label": undefined,
+      "to": "return_1",
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "bindName": "msg",
+      "groupId": undefined,
+      "id": "task_0",
+      "kind": "task",
+      "label": "msg",
+      "line": 3,
+      "taskType": "string.concat",
+    },
+    {
+      "groupId": undefined,
+      "id": "return_1",
+      "kind": "return",
+      "label": "return",
+      "line": 4,
+    },
+  ],
+  "params": [
+    {
+      "id": "param_name",
+      "name": "name",
+      "type": "string",
+    },
+  ],
+  "workflowName": "greet",
+}
+`;

@@ -58,7 +58,8 @@
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
-    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=3 run test:local"
+    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=3 run test:local",
+    "test:ui": "pnpm -r --no-bail --no-sort --stream --if-present run test:ui"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",

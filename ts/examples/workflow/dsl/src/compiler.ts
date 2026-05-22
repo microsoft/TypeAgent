@@ -18,6 +18,7 @@ export interface CompileError {
     message: string;
     line: number;
     col: number;
+    length: number;
 }
 
 export interface CompileOptions {
@@ -45,6 +46,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (lexErrors.length > 0) {
@@ -60,6 +62,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (!ast || parseErrors.length > 0) {
@@ -75,6 +78,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (typeErrors.length > 0) {
@@ -90,6 +94,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
 
@@ -111,6 +116,7 @@ function maybeValidate(
             message: `${e.path}: ${e.message}`,
             line: 0,
             col: 0,
+            length: 1,
         });
     }
 }
