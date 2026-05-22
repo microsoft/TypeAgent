@@ -831,6 +831,40 @@ describe("DSL -> Engine integration", () => {
             const result = await eng.run(ir, { input: {} });
 
             expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("something went wrong");
+        });
+
+        it("throw propagates the message string to RunResult.error", async () => {
+            const ir = compileOk(`
+                workflow fail(): unknown {
+                    throw "explicit error message";
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeDefined();
+            expect(result.error!.message).toBe("explicit error message");
+        });
+
+        it("throw inside if branch propagates message", async () => {
+            const ir = compileOk(`
+                workflow failIf(x: boolean): unknown {
+                    if (x) {
+                        throw "branch error";
+                    }
+                    return "ok";
+                }
+            `);
+            const { eng } = makeEngine();
+
+            const failing = await eng.run(ir, { input: { x: true } });
+            expect(failing.success).toBe(false);
+            expect(failing.error!.message).toBe("branch error");
+
+            const passing = await eng.run(ir, { input: { x: false } });
+            expect(passing.success).toBe(true);
         });
     });
 
@@ -1259,11 +1293,6 @@ describe("DSL -> Engine integration", () => {
 
     // NOTE: The following tests are commented out because they expose real bugs
     // in the DSL compiler that should be tracked and fixed separately.
-
-    // BUG: top-level throw produces an empty error message.
-    // The error.fail task receives the value but the error propagation
-    // loses the message.
-    // describe("throw at top level", () => { ... });
 
     describe("nested control flow", () => {
         it("filter + map pipeline", async () => {

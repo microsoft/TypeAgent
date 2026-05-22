@@ -729,7 +729,7 @@ export const identity: TaskDefinition<{ value: unknown }, unknown> = {
 
 // ---- error tasks ----
 
-export const errorFail: TaskDefinition<{ value: unknown }, never> = {
+export const errorFail: TaskDefinition<{ message: unknown }, never> = {
     ...taskSchema("error.fail"),
     sideEffects: false,
     async execute(input) {
@@ -737,10 +737,10 @@ export const errorFail: TaskDefinition<{ value: unknown }, never> = {
             kind: "fail",
             error: {
                 message:
-                    typeof input.value === "string"
-                        ? input.value
-                        : JSON.stringify(input.value),
-                data: input.value,
+                    typeof input.message === "string"
+                        ? input.message
+                        : JSON.stringify(input.message),
+                data: input.message,
             },
         };
     },

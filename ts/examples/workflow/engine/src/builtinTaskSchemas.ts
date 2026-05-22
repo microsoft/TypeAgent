@@ -207,8 +207,8 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         name: "error.fail",
         inputSchema: {
             type: "object",
-            required: ["value"],
-            properties: { value: {} },
+            required: ["message"],
+            properties: { message: {} },
         },
         outputSchema: { not: {} },
     },
