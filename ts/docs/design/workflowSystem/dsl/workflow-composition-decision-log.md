@@ -428,6 +428,7 @@ There is no global check over the transitive import graph; authors in different
 files are free to declare workflows with the same name.
 
 **Bugs fixed during review:**
+
 1. Original Phase 2 checked ALL workflows (including private) for cross-file
    name collisions — wrong for private workflows, which are file-scoped.
 2. Private same-named helpers in two dependency files would silently overwrite

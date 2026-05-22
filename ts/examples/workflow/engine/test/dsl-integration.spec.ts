@@ -8,7 +8,12 @@
  * verifying end-to-end runtime behavior.
  */
 
-import { WorkflowIR, TaskDefinition, TaskContext } from "workflow-model";
+import {
+    WorkflowIR,
+    TaskDefinition,
+    TaskContext,
+    Template,
+} from "workflow-model";
 import {
     TaskRegistry,
     WorkflowEngine,
@@ -1310,6 +1315,117 @@ describe("DSL -> Engine integration", () => {
             const result = await eng.run(ir, { input: { x: 1 } });
             expect(result.success).toBe(false);
             expect(result.error?.message).toMatch(/boom/);
+        });
+
+        it("caller onError recovers from sub-workflow failure (manual IR)", async () => {
+            // DSL does not yet expose onError syntax on workflow call sites,
+            // so this test constructs the IR by hand to exercise the engine
+            // recovery path.
+            //
+            // Graph: callHelper --[onError]--> recover (binds fallback=99, terminal)
+            //                   --[next]-----> done    (terminal, binds helperResult=1, unreachable)
+            //
+            // helper always throws. onError fires, recover runs math.add(0,99),
+            // binds "fallback". Main output reads "fallback". Proves recovery ran.
+            const failTask: TaskDefinition = {
+                name: "fail.always",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "fail", error: { message: "sub failed" } };
+                },
+            };
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "main",
+                workflows: {
+                    helper: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "doFail",
+                        output: { $from: "scope", name: "unused" } as Template,
+                        nodes: {
+                            doFail: {
+                                kind: "task",
+                                task: "fail.always",
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                                bind: "unused",
+                            },
+                        },
+                    },
+                    main: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "number" },
+                        entry: "callHelper",
+                        output: { $from: "scope", name: "result" } as Template,
+                        nodes: {
+                            callHelper: {
+                                kind: "workflowCall",
+                                workflowRef: { name: "helper" },
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                                // no bind: we don't use the success output
+                                next: "done",
+                                onError: "recover",
+                            },
+                            recover: {
+                                // onError path: return 99 as fallback
+                                kind: "task",
+                                task: "math.add",
+                                inputSchema: {
+                                    type: "object",
+                                    required: [
+                                        "left",
+                                        "right",
+                                        "error",
+                                        "trigger",
+                                    ],
+                                    properties: {
+                                        left: { type: "number" },
+                                        right: { type: "number" },
+                                        error: { type: "object" },
+                                        trigger: {},
+                                    },
+                                },
+                                outputSchema: { type: "number" },
+                                inputs: { left: 0, right: 99 },
+                                bind: "result",
+                                // no next → terminal
+                            },
+                            done: {
+                                // success path: return 1 (unreachable when helper fails)
+                                kind: "task",
+                                task: "math.add",
+                                inputSchema: {
+                                    type: "object",
+                                    required: ["left", "right"],
+                                    properties: {
+                                        left: { type: "number" },
+                                        right: { type: "number" },
+                                    },
+                                },
+                                outputSchema: { type: "number" },
+                                inputs: { left: 0, right: 1 },
+                                bind: "result",
+                                // no next → terminal
+                            },
+                        },
+                    },
+                },
+            };
+
+            const { eng } = makeEngine([failTask]);
+            const result = await eng.run(ir, { input: {} });
+            // recover node ran (not done): output is 99, not 1
+            expect(result.error).toBeUndefined();
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(99);
         });
 
         it("same helper called multiple times has isolated bindings", async () => {

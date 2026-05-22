@@ -779,18 +779,20 @@ schema for registry-style resolution) but it is not used by the bundler today.
 
 **Raised during:** P7-D2 decision log review.
 
-## G24: No engine test for caller-side onError recovery from sub-workflow failure
+## G24: ✅ Engine test for caller-side onError recovery from sub-workflow failure
 
 **Spec/intent:** When a sub-workflow call fails and the caller has an `onError`
 target, execution should recover into the caller's `onError` handler (same
 `pendingError` threading used for tasks and loops).
 
-**The gap:** The recovery path exists in the engine (`onErrorDispatch` /
-`executeScope` loop), but no integration test exercises it for workflow calls
-specifically. The DSL does not expose `onError` syntax on workflow call sites,
-so the test would require manual IR construction.
+**Resolution:** Added manual-IR integration test
+`"caller onError recovers from sub-workflow failure (manual IR)"` in
+`ts/examples/workflow/engine/test/dsl-integration.spec.ts`. The test constructs
+an IR where `callHelper` has `onError: "recover"` — `helper` always fails, and
+`recover` returns 99 as fallback (on the mutually-exclusive success path `done`
+returns 1). Confirmed 223 engine tests passing.
 
-**Prerequisite:** DSL `onError` syntax for workflow call nodes (related to G22
-— call-site annotations).
+**DSL syntax gap:** The DSL still does not expose `onError` on workflow call
+nodes; see G22 for call-site annotation roadmap.
 
 **Raised during:** P5-D6 decision log review.
