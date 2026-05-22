@@ -163,10 +163,10 @@ export interface ClientIO {
     // implement them continue to work; they simply won't render queue UI.
 
     /** A new entry was appended to the queue tail. */
-    requestQueued?(entry: QueuedRequest): void;
+    requestQueued?(entry: QueuedRequest, version: number): void;
 
     /** The drain loop popped an entry and started executing it. */
-    requestStarted?(entry: QueuedRequest): void;
+    requestStarted?(entry: QueuedRequest, version: number): void;
 
     /**
      * A queued or running entry was cancelled. Cancellation of a
@@ -174,7 +174,11 @@ export interface ClientIO {
      * AbortController + `commandComplete` notify path; this is a
      * supplementary signal so clients can update queue UI eagerly.
      */
-    requestCancelled?(requestId: string, reason: QueueCancelReason): void;
+    requestCancelled?(
+        requestId: string,
+        reason: QueueCancelReason,
+        version: number,
+    ): void;
 
     /**
      * Coarse-grained snapshot fired after every queue transition.

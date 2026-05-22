@@ -27,6 +27,7 @@ import {
     DiscoveryChannelName,
     createDiscoveryHandlers,
     DispatcherConnectOptions,
+    JoinConversationResult,
     UserIdentity,
     getDispatcherChannelName,
     getClientIOChannelName,
@@ -346,14 +347,17 @@ async function main() {
                             connectionId: result.connectionId,
                         });
 
-                        return {
+                        const joinResult: JoinConversationResult = {
                             connectionId: result.connectionId,
                             conversationId,
                             name: result.name,
                             pendingInteractions:
                                 result.pendingInteractions ?? [],
-                            queueSnapshot: result.queueSnapshot,
                         };
+                        if (result.queueSnapshot !== undefined) {
+                            joinResult.queueSnapshot = result.queueSnapshot;
+                        }
+                        return joinResult;
                     } catch (e) {
                         channelProvider.deleteChannel(
                             getClientIOChannelName(conversationId),

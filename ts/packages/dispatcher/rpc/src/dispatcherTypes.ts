@@ -8,15 +8,16 @@ import type {
 } from "@typeagent/agent-sdk";
 import type {
     AgentSchemaInfo,
+    CancelResult,
     CommandCompletionResult,
     CommandResult,
     DisplayLogEntry,
     DispatcherStatus,
     ProcessCommandOptions,
     PendingInteractionResponse,
-    QueuedRequest,
     QueueSnapshot,
     RequestId,
+    SubmitResult,
     UserFeedbackCategory,
     UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
@@ -36,7 +37,9 @@ export type DispatcherInvokeFunctions = {
         attachments?: string[],
         options?: ProcessCommandOptions,
         clientRequestId?: unknown,
-    ): Promise<QueuedRequest>;
+    ): Promise<SubmitResult>;
+
+    cancelCommand(requestId: string): Promise<CancelResult>;
 
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
@@ -100,7 +103,6 @@ export type DispatcherInvokeFunctions = {
 };
 
 export type DispatcherCallFunctions = {
-    cancelCommand(requestId: string): void;
     cancelCommandByClientId(clientRequestId: unknown): void;
     cancelInteraction(interactionId: string): void;
 };

@@ -51,6 +51,7 @@ import {
     getSlashCompletions,
     getServerPort,
     getServerConnection,
+    getCliConnectionId,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 import {
@@ -252,11 +253,62 @@ let lastCtrlCTime = 0;
 // either not connected through a queueing dispatcher (direct/local
 // mode) or no events have arrived yet.
 let cliQueueState: QueueSnapshot | undefined;
-// Server-assigned UUID of the request that this CLI instance most
-// recently submitted but has not yet seen `requestStarted` for. Used
-// to suppress the "▶ running" marker for the user's own next command,
-// which would otherwise be noisy on a quiet local session.
-let lastSubmittedRequestId: string | undefined;
+/**
+ * Tracks the highest queue `version` we've applied. Push events whose
+ * version <= this value are dropped — they're stale (delivered out of
+ * order). Reset to the bootstrap snapshot's version on
+ * (re)connect/conversation switch via `applyQueueSnapshot`. See
+ * F6 / R2P-H-1.
+ */
+let lastAppliedVersion = -1;
+// Map of requestIds we recently submitted from THIS CLI to the
+// timestamp of the submit. Replaces the prior Set so we can prune
+// entries older than the TTL on each access (F4 / R2-L-3); without
+// pruning, IDs accumulated forever and cancellation/disconnect could
+// strand them. Cleared on reconnect via `clearRecentSubmissions`.
+//
+// Note: lookups also exist as defense for the rare case where the
+// server pushed `requestStarted` BEFORE the submit RPC ack returned —
+// the primary defence is the originator-based `isOurEntry` check
+// below, which uses the per-connection id known from join time and is
+// therefore race-free.
+const RECENT_SUBMITTED_TTL_MS = 60_000;
+const recentlySubmittedRequestIds = new Map<string, number>();
+
+function pruneRecentSubmissions(): void {
+    if (recentlySubmittedRequestIds.size === 0) return;
+    const now = Date.now();
+    for (const [id, ts] of recentlySubmittedRequestIds) {
+        if (now - ts > RECENT_SUBMITTED_TTL_MS) {
+            recentlySubmittedRequestIds.delete(id);
+        }
+    }
+}
+
+function rememberSubmittedId(id: string): void {
+    pruneRecentSubmissions();
+    recentlySubmittedRequestIds.set(id, Date.now());
+}
+
+function consumeSubmittedId(id: string): boolean {
+    pruneRecentSubmissions();
+    return recentlySubmittedRequestIds.delete(id);
+}
+
+/**
+ * Reset the recently-submitted tracker. Call after reconnect /
+ * conversation switch so stale ids from the previous session can't
+ * suppress markers in the new one.
+ */
+export function clearRecentSubmissions(): void {
+    recentlySubmittedRequestIds.clear();
+}
+
+/** Returns true if `entry` was submitted by THIS CLI instance. */
+function isOurEntry(entry: QueuedRequest): boolean {
+    const ourId = getCliConnectionId();
+    return ourId !== undefined && entry.originatorConnectionId === ourId;
+}
 
 /** Snapshot getter — used by /queue list and tests. */
 export function getCliQueueState(): QueueSnapshot | undefined {
@@ -264,12 +316,59 @@ export function getCliQueueState(): QueueSnapshot | undefined {
 }
 
 /**
+ * Test-only accessors. Exposed so unit tests can verify the
+ * Phase 1 cancel-target priority and "clear on completion"
+ * lifecycle without spinning up a full readline harness. Do NOT
+ * call from production code.
+ */
+export function __testGetCurrentRequestId(): string | undefined {
+    return currentRequestId;
+}
+export function __testSetCurrentRequestId(id: string | undefined): void {
+    currentRequestId = id;
+}
+export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
+    return recentlySubmittedRequestIds;
+}
+
+/**
  * Bootstrap the CLI's local queue state from a snapshot returned by
  * `joinConversation`. Safe to call repeatedly (each call replaces the
  * cached snapshot).
+ *
+ * Resets `lastAppliedVersion` so subsequent push events from the
+ * server are admitted (F6 / R2P-H-1). Pass `undefined` to clear after
+ * disconnect.
  */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
     cliQueueState = snapshot;
+    lastAppliedVersion =
+        snapshot && typeof snapshot.version === "number"
+            ? snapshot.version
+            : -1;
+}
+
+/**
+ * Admit a queue event by version. Returns true if the event is at
+ * least as fresh as `lastAppliedVersion` (and updates the watermark),
+ * false if it's strictly older (a stale reorder). Older /
+ * non-versioned events (version === undefined) are admitted
+ * unconditionally for backward compatibility.
+ *
+ * Uses strict `<` rather than `<=` (R5 review fix). The server emits
+ * every fine-grained event (`requestQueued`, `requestStarted`,
+ * `requestCancelled`) paired with a `queueStateChanged` snapshot at
+ * the **same** version. Admitting same-version pairs lets the
+ * authoritative snapshot reconcile any divergence the delta-patcher
+ * might have introduced — applying both is idempotent because the
+ * snapshot reflects state *after* the same transition the
+ * fine-grained event described.
+ */
+function admitVersion(version: number | undefined): boolean {
+    if (typeof version !== "number") return true;
+    if (version < lastAppliedVersion) return false;
+    lastAppliedVersion = version;
+    return true;
 }
 
 // Grammar log file path
@@ -882,6 +981,32 @@ export function createEnhancedClientIO(
                     }
                     break;
 
+                case "commandComplete": {
+                    // Phase 1: peer broadcast that a request finished.
+                    // We use it to clear `currentRequestId` if the
+                    // completed id matches, so a subsequent SIGINT
+                    // doesn't target a stale id. The completed id is
+                    // carried on the structured RequestId object.
+                    const completedId =
+                        typeof requestId === "object" &&
+                        requestId !== null &&
+                        "requestId" in (requestId as any)
+                            ? (requestId as { requestId: string }).requestId
+                            : typeof requestId === "string"
+                              ? requestId
+                              : undefined;
+                    if (
+                        completedId !== undefined &&
+                        currentRequestId === completedId
+                    ) {
+                        currentRequestId = undefined;
+                    }
+                    if (completedId !== undefined) {
+                        consumeSubmittedId(completedId);
+                    }
+                    break;
+                }
+
                 default:
                 // ignored.
             }
@@ -1148,14 +1273,16 @@ export function createEnhancedClientIO(
         },
 
         // ===== Message-queue push events (Phase 1) =====
-        requestQueued(entry: QueuedRequest): void {
+        requestQueued(entry: QueuedRequest, version: number): void {
+            if (!admitVersion(version)) return;
             cliQueueState = applyEntryToSnapshot(
                 cliQueueState,
                 "queued",
                 entry,
             );
         },
-        requestStarted(entry: QueuedRequest): void {
+        requestStarted(entry: QueuedRequest, version: number): void {
+            if (!admitVersion(version)) return;
             cliQueueState = applyEntryToSnapshot(
                 cliQueueState,
                 "started",
@@ -1163,8 +1290,20 @@ export function createEnhancedClientIO(
             );
             // Suppress the marker for the request the user just
             // submitted from THIS CLI — otherwise we double-print.
-            if (entry.requestId === lastSubmittedRequestId) {
-                lastSubmittedRequestId = undefined;
+            // Two signals (either is sufficient):
+            //   1. originatorConnectionId == our connection id
+            //      (authoritative; race-free since the connection id
+            //      is fixed from join time).
+            //   2. requestId is in `recentlySubmittedRequestIds`
+            //      (covers the post-await window).
+            // (A third "in submit window with unknown originator"
+            // signal existed historically but never fired because
+            // originatorConnectionId is always set on the server side
+            // — F3 / R2-M-1.)
+            const isOurs =
+                isOurEntry(entry) || consumeSubmittedId(entry.requestId);
+            redrawPromptIfActive();
+            if (isOurs) {
                 return;
             }
             writeQueueLine(
@@ -1172,26 +1311,86 @@ export function createEnhancedClientIO(
                     chalk.dim(truncateText(entry.text)),
             );
         },
-        requestCancelled(requestId: string, reason: QueueCancelReason): void {
+        requestCancelled(
+            requestId: string,
+            reason: QueueCancelReason,
+            version: number,
+        ): void {
+            if (!admitVersion(version)) return;
             const cancelledText = removeFromSnapshot(cliQueueState, requestId);
+            // If the cancelled id matches what we believe is the
+            // currently-active request, clear that pointer so SIGINT
+            // doesn't target a stale id.
+            if (currentRequestId === requestId) {
+                currentRequestId = undefined;
+            }
+            consumeSubmittedId(requestId);
+            redrawPromptIfActive();
             if (cancelledText !== undefined) {
+                // F7/F10: distinct rendering for server-stopping so the
+                // user knows the cancel wasn't theirs.
+                const label =
+                    reason === "server_stopping"
+                        ? chalk.red("✗ server stopping: ")
+                        : chalk.yellow("✗ cancelled: ");
                 writeQueueLine(
-                    chalk.yellow("✗ cancelled: ") +
+                    label +
                         chalk.dim(truncateText(cancelledText)) +
                         chalk.dim(` (${reason})`),
                 );
             }
         },
         queueStateChanged(snapshot: QueueSnapshot): void {
+            if (!admitVersion(snapshot.version)) return;
             // Authoritative replacement — clone to insulate from server-side
             // mutations.
+            const prevBadge = computeBadgeState(cliQueueState);
             cliQueueState = {
                 running: snapshot.running ? { ...snapshot.running } : null,
                 queued: snapshot.queued.map((e) => ({ ...e })),
                 paused: snapshot.paused,
+                version: snapshot.version,
             };
+            const nextBadge = computeBadgeState(cliQueueState);
+            // Only repaint when the visible badge changed — avoids
+            // flicker on no-op snapshots (same state echoed by the
+            // server after a non-visible transition).
+            if (prevBadge !== nextBadge) {
+                redrawPromptIfActive();
+            }
         },
     };
+}
+
+/**
+ * Compute the visible state of the queue badge so we can detect
+ * meaningful changes between snapshots. Returns a stable string key.
+ */
+function computeBadgeState(snap: QueueSnapshot | undefined): string {
+    if (!snap) return "none";
+    const queuedCount = snap.queued.length;
+    const runningOther =
+        snap.running &&
+        snap.running.requestId !== currentRequestId &&
+        !recentlySubmittedRequestIds.has(snap.running.requestId)
+            ? 1
+            : 0;
+    return `q${queuedCount}r${runningOther}p${snap.paused ? 1 : 0}`;
+}
+
+/**
+ * Redraw the readline / TerminalLayout prompt so the badge content
+ * reflects the latest cliQueueState. Safe to call at any time —
+ * silently no-ops when no interactive UI is active.
+ */
+function redrawPromptIfActive(): void {
+    if (terminalLayout?.isActive && activePromptRenderer) {
+        activePromptRenderer.redraw();
+        return;
+    }
+    if (activeRl) {
+        activeRl.prompt(true);
+    }
 }
 
 /** Best-effort truncate for one-line markers. */
@@ -1234,8 +1433,14 @@ function applyEntryToSnapshot(
               running: snap.running ? { ...snap.running } : null,
               queued: snap.queued.map((e) => ({ ...e })),
               paused: snap.paused,
+              version: snap.version,
           }
-        : { running: null, queued: [], paused: false };
+        : {
+              running: null,
+              queued: [],
+              paused: false,
+              version: lastAppliedVersion,
+          };
     if (kind === "queued") {
         if (!base.queued.some((e) => e.requestId === entry.requestId)) {
             base.queued.push({ ...entry });
@@ -2165,20 +2370,24 @@ export async function processCommandsEnhanced<T>(
                 process.exit(0);
             }
             lastCtrlCTime = now;
+            // Priority: server snapshot's running id is authoritative
+            // (it reflects the queue head EVERYBODY agrees on);
+            // currentRequestId is the fallback for the brief window
+            // before the snapshot has been populated by push events.
             const running =
-                currentRequestId ?? cliQueueState?.running?.requestId;
+                cliQueueState?.running?.requestId ?? currentRequestId;
             if (running) {
                 dispatcherForCancel.cancelCommand(running);
                 return;
             }
+            // No running request — print the hint regardless of
+            // whether anything is queued, so the user gets feedback
+            // (silent no-op was the bug).
             const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
-            if (hasQueued) {
-                writeQueueLine(
-                    chalk.dim(
-                        "No request currently running. Use /queue cancel <id> to cancel queued requests.",
-                    ),
-                );
-            }
+            const msg = hasQueued
+                ? "No request currently running. Use /queue cancel <id> to cancel queued requests."
+                : "Nothing running. Use /queue cancel <id> to cancel queued requests.";
+            writeQueueLine(chalk.dim(msg));
         });
     }
 
@@ -2273,9 +2482,9 @@ export async function processCommandsEnhanced<T>(
                 const clientRequestId = randomUUID();
                 currentClientRequestId = clientRequestId;
                 try {
-                    let entry: QueuedRequest | undefined;
+                    let result;
                     try {
-                        entry = await submitCommand.call(
+                        result = await submitCommand.call(
                             dispatcherForCancel,
                             request,
                             undefined,
@@ -2288,10 +2497,39 @@ export async function processCommandsEnhanced<T>(
                         console.log("");
                         continue;
                     }
+                    // F5 (R2-H-1): submitCommand now returns a
+                    // discriminated SubmitResult. Branch on the typed
+                    // failure variants so users see specific messages
+                    // instead of "request submitted".
+                    if (result && result.ok === false) {
+                        if (result.error === "queue_full") {
+                            console.log(
+                                chalk.yellow(
+                                    `### Queue is full (${result.maxDepth}). Try again after some complete.`,
+                                ),
+                            );
+                        } else if (result.error === "server_stopping") {
+                            console.log(
+                                chalk.red(
+                                    "### Server is shutting down. Your request was not accepted.",
+                                ),
+                            );
+                        } else {
+                            console.log(
+                                chalk.red(
+                                    `### Request rejected: ${(result as any).error}`,
+                                ),
+                            );
+                        }
+                        history.push(request);
+                        console.log("");
+                        continue;
+                    }
+                    const entry = result?.ok ? result.entry : undefined;
                     if (entry) {
                         // Track so requestStarted doesn't double-print
                         // and the prompt badge doesn't double-count.
-                        lastSubmittedRequestId = entry.requestId;
+                        rememberSubmittedId(entry.requestId);
                         currentRequestId = entry.requestId;
                     }
                 } finally {
@@ -2417,7 +2655,7 @@ export function getEnhancedConsolePrompt(
     const runningOther =
         snap?.running &&
         snap.running.requestId !== currentRequestId &&
-        snap.running.requestId !== lastSubmittedRequestId
+        !recentlySubmittedRequestIds.has(snap.running.requestId)
             ? 1
             : 0;
     const total = queuedCount + runningOther;

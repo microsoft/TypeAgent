@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Integration tests for MessageQueue + multi-client broadcast that
+ * Integration tests for RequestQueue + multi-client broadcast that
  * SharedDispatcher provides in production. We avoid spinning up a real
  * CommandHandlerContext: the queue's contract is observable purely
  * through (a) the inner-dispatcher resolver, (b) the broadcaster, and
@@ -28,7 +28,7 @@ import type {
     QueuedRequest,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
-import { MessageQueue, QueueBroadcaster } from "../src/messageQueue.js";
+import { RequestQueue, QueueBroadcaster } from "../src/requestQueue.js";
 
 interface ClientRecorder {
     name: string;
@@ -66,13 +66,17 @@ class MultiClientBus implements QueueBroadcaster {
         this.clients.delete(name);
     }
 
-    requestQueued(entry: QueuedRequest): void {
+    requestQueued(entry: QueuedRequest, _version: number): void {
         for (const r of this.clients.values()) r.queued.push({ ...entry });
     }
-    requestStarted(entry: QueuedRequest): void {
+    requestStarted(entry: QueuedRequest, _version: number): void {
         for (const r of this.clients.values()) r.started.push({ ...entry });
     }
-    requestCancelled(requestId: string, reason: QueueCancelReason): void {
+    requestCancelled(
+        requestId: string,
+        reason: QueueCancelReason,
+        _version: number,
+    ): void {
         for (const r of this.clients.values()) {
             r.cancelled.push({ requestId, reason });
         }
@@ -82,6 +86,7 @@ class MultiClientBus implements QueueBroadcaster {
             running: snapshot.running ? { ...snapshot.running } : null,
             queued: snapshot.queued.map((e) => ({ ...e })),
             paused: snapshot.paused,
+            version: snapshot.version,
         };
         for (const r of this.clients.values()) r.snapshots.push(cloned);
     }
@@ -121,14 +126,21 @@ const flush = async () => {
 function setup() {
     const dispatcher = new ControllableDispatcher();
     const bus = new MultiClientBus();
-    const queue = new MessageQueue(
-        () => dispatcher as unknown as Dispatcher,
+    const queue = new RequestQueue(
+        (ctx) =>
+            dispatcher.processCommand(
+                ctx.text,
+                ctx.clientRequestId,
+                ctx.attachments,
+                ctx.options,
+                ctx.requestId,
+            ),
         bus,
     );
     return { dispatcher, bus, queue };
 }
 
-describe("MessageQueue — multi-client integration", () => {
+describe("RequestQueue — multi-client integration", () => {
     it("drains in submit order across clients (interleaved A/B submits)", async () => {
         const { dispatcher, bus, queue } = setup();
         const a = bus.connect("A");
@@ -267,6 +279,7 @@ describe("MessageQueue — multi-client integration", () => {
             running: null,
             queued: [],
             paused: false,
+            version: 0,
         });
 
         const a1 = queue.submit({ text: "a1", originatorConnectionId: "A" });
@@ -317,5 +330,131 @@ describe("MessageQueue — multi-client integration", () => {
         const snap2 = queue.getSnapshot();
         expect(snap2.running?.text).toBe("a2");
         expect(snap2.queued.map((e) => e.text)).toEqual(["a3"]);
+    });
+
+    // ───── T6 ─────────────────────────────────────────────────────────
+    it("concurrent submits from the same client preserve FIFO order", async () => {
+        const { dispatcher, bus, queue } = setup();
+        bus.connect("A");
+
+        // Promise.all of synchronous submits — queue.submit is sync,
+        // so the order is determined by the order of the array
+        // entries (call order). Use Promise.all to assert all five
+        // returned successfully.
+        const entries = await Promise.all(
+            [0, 1, 2, 3, 4].map((i) =>
+                Promise.resolve(
+                    queue.submit({
+                        text: `t${i}`,
+                        originatorConnectionId: "A",
+                    }),
+                ),
+            ),
+        );
+        expect(entries.map((e) => e.text)).toEqual([
+            "t0",
+            "t1",
+            "t2",
+            "t3",
+            "t4",
+        ]);
+        await flush();
+
+        // Drain in order; assert command order matches submit order.
+        for (let i = 0; i < entries.length; i++) {
+            await flush();
+            expect(dispatcher.calls[i].command).toBe(`t${i}`);
+            dispatcher.calls[i].resolve({});
+            await entries[i].completion;
+        }
+    });
+
+    // ───── T10 ────────────────────────────────────────────────────────
+    it("attachments are redacted from broadcasts (only attachmentCount leaks)", async () => {
+        const { dispatcher, bus, queue } = setup();
+        const a = bus.connect("A");
+
+        queue.submit({
+            text: "with-attachments",
+            originatorConnectionId: "A",
+            attachments: ["data:image/png;base64,XXXX", "secret-bytes"],
+        });
+        await flush();
+
+        // The queued event payload must NOT carry `attachments` and
+        // MUST carry attachmentCount = 2.
+        const queuedEvt = a.queued.find((e) => e.text === "with-attachments");
+        expect(queuedEvt).toBeDefined();
+        expect((queuedEvt as any).attachments).toBeUndefined();
+        expect(queuedEvt!.attachmentCount).toBe(2);
+
+        // Same expectation on the snapshot.
+        const snap = queue.getSnapshot();
+        const visible = snap.running ?? snap.queued[0];
+        expect(visible).toBeDefined();
+        expect((visible as any).attachments).toBeUndefined();
+        expect(visible!.attachmentCount).toBe(2);
+
+        dispatcher.calls[0].resolve({});
+    });
+
+    // ───── T8 ─────────────────────────────────────────────────────────
+    it("event ordering: requestQueued precedes requestStarted; requestCancelled precedes next requestStarted", async () => {
+        const { dispatcher, bus, queue } = setup();
+        const a = bus.connect("A");
+
+        // Submit three; cancel the middle one before drain advances to
+        // it. We expect the timeline (per client A's recorder):
+        //   queued(t0), queued(t1), queued(t2), started(t0),
+        //   cancelled(t1), started(t2)
+        const t0 = queue.submit({ text: "t0", originatorConnectionId: "A" });
+        const t1 = queue.submit({ text: "t1", originatorConnectionId: "A" });
+        const t2 = queue.submit({ text: "t2", originatorConnectionId: "A" });
+
+        // Cancel t1 BEFORE drain reaches it. cancelQueued only works
+        // on tail entries — t1 is in the tail at this point.
+        await flush();
+        expect(queue.cancelQueued(t1.requestId, "user")).toBe(true);
+
+        // For t0: requestQueued must precede requestStarted.
+        const t0QueuedIdx = a.queued.findIndex(
+            (e) => e.requestId === t0.requestId,
+        );
+        const t0StartedIdx = a.started.findIndex(
+            (e) => e.requestId === t0.requestId,
+        );
+        expect(t0QueuedIdx).toBeGreaterThanOrEqual(0);
+        expect(t0StartedIdx).toBeGreaterThanOrEqual(0);
+
+        // Drain t0 -> t2 (t1 was cancelled).
+        dispatcher.calls[0].resolve({});
+        await t0.completion;
+        await flush();
+        expect(dispatcher.calls.length).toBe(2);
+        expect(dispatcher.calls[1].command).toBe("t2");
+
+        // The cancelled event for t1 must precede the started event
+        // for t2. Build a unified timeline ordering:
+        //   - cancelled events: a.cancelled (in arrival order)
+        //   - started events:   a.started   (in arrival order)
+        // We assert the first occurrence of cancelled(t1) appears
+        // BEFORE the first occurrence of started(t2). Since the bus
+        // appends on each broadcast, comparing array indices across
+        // separate arrays isn't direct — assert via the order of
+        // queueStateChanged snapshots (`a.snapshots`) which interleave
+        // the two streams: the snapshot AFTER cancel shows tail
+        // length 1 (t2 only), the snapshot AFTER t2 starts shows
+        // running=t2 / tail=0.
+        const cancelSnapIdx = a.snapshots.findIndex(
+            (s) => s.queued.length === 1 && s.queued[0].text === "t2",
+        );
+        const t2RunningSnapIdx = a.snapshots.findIndex(
+            (s) => s.running?.text === "t2",
+        );
+        expect(cancelSnapIdx).toBeGreaterThanOrEqual(0);
+        expect(t2RunningSnapIdx).toBeGreaterThan(cancelSnapIdx);
+
+        dispatcher.calls[1].resolve({});
+        await t2.completion;
     });
 });

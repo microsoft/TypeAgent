@@ -27,4 +27,8 @@ export type {
     QueueCancelReason,
     QueuedRequest,
     QueueSnapshot,
+    QueueEventVersion,
+    SubmitResult,
+    CancelResult,
 } from "./queue.js";
+export { QueueFullError, ServerStoppingError } from "./queue.js";

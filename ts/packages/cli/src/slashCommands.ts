@@ -134,12 +134,47 @@ function truncateForList(s: string, max = 50): string {
     return single.length > max ? single.slice(0, max - 1) + "…" : single;
 }
 
+// Connection id of the local CLI client — set by connect.ts after join.
+// Used to render `(you)` vs `(client-XXXX)` ownership labels in /queue list.
+let cliConnectionId: string | undefined;
+
+export function setCliConnectionId(id: string | undefined): void {
+    cliConnectionId = id;
+}
+
+/** Read-only accessor for the CLI's own connection id (or undefined). */
+export function getCliConnectionId(): string | undefined {
+    return cliConnectionId;
+}
+
+function ownerLabel(originatorConnectionId: string | undefined): string {
+    if (!originatorConnectionId) return "";
+    if (
+        cliConnectionId !== undefined &&
+        originatorConnectionId === cliConnectionId
+    ) {
+        return chalk.dim(" (you)");
+    }
+    // Hash for stable short label without exposing raw connection id.
+    let h = 0;
+    for (let i = 0; i < originatorConnectionId.length; i++) {
+        h = (h * 31 + originatorConnectionId.charCodeAt(i)) | 0;
+    }
+    const tag = (h >>> 0).toString(16).padStart(8, "0").slice(0, 4);
+    return chalk.dim(` (client-${tag})`);
+}
+
 function formatQueueSnapshot(snap: QueueSnapshot): string {
     const lines: string[] = [];
     lines.push(chalk.bold("Queue:"));
     if (snap.running) {
+        const r = snap.running;
+        const att =
+            r.attachmentCount && r.attachmentCount > 0
+                ? chalk.dim(` [${r.attachmentCount} attachments]`)
+                : "";
         lines.push(
-            `  ${chalk.greenBright("●")} ${chalk.cyan(shortId(snap.running.requestId))} ${chalk.dim("[running " + ageMs(snap.running.startedAt ?? snap.running.submittedAt) + "]")} ${truncateForList(snap.running.text)}`,
+            `  ${chalk.greenBright("●")} ${chalk.cyan(shortId(r.requestId))} ${chalk.dim("[running " + ageMs(r.startedAt ?? r.submittedAt) + "]")} ${truncateForList(r.text)}${att}${ownerLabel(r.originatorConnectionId)}`,
         );
     } else {
         lines.push(`  ${chalk.dim("(idle)")}`);
@@ -147,9 +182,33 @@ function formatQueueSnapshot(snap: QueueSnapshot): string {
     if (snap.queued.length === 0) {
         lines.push(`  ${chalk.dim("(no queued requests)")}`);
     } else {
-        for (const e of snap.queued) {
+        // F11 (R2-L-2): cap output for very long queues. Show the
+        // first 10 entries plus a footer with the count of suppressed
+        // entries so users aren't drowned in scrollback. The threshold
+        // (>10) is chosen so that a queue of exactly 10 still prints
+        // every entry — only when there's at least one entry we'd
+        // omit do we truncate.
+        const QUEUE_LIST_DISPLAY_LIMIT = 10;
+        const total = snap.queued.length;
+        const visible =
+            total > QUEUE_LIST_DISPLAY_LIMIT
+                ? snap.queued.slice(0, QUEUE_LIST_DISPLAY_LIMIT)
+                : snap.queued;
+        for (const e of visible) {
+            const att =
+                e.attachmentCount && e.attachmentCount > 0
+                    ? chalk.dim(` [${e.attachmentCount} attachments]`)
+                    : "";
             lines.push(
-                `  ${chalk.yellow("○")} ${chalk.cyan(shortId(e.requestId))} ${chalk.dim("[queued " + ageMs(e.submittedAt) + "]")} ${truncateForList(e.text)}`,
+                `  ${chalk.yellow("○")} ${chalk.cyan(shortId(e.requestId))} ${chalk.dim("[queued " + ageMs(e.submittedAt) + "]")} ${truncateForList(e.text)}${att}${ownerLabel(e.originatorConnectionId)}`,
+            );
+        }
+        if (total > QUEUE_LIST_DISPLAY_LIMIT) {
+            const hidden = total - QUEUE_LIST_DISPLAY_LIMIT;
+            lines.push(
+                chalk.dim(
+                    `  … and ${hidden} more queued. Use /queue cancel <id> to manage.`,
+                ),
             );
         }
     }
@@ -207,11 +266,14 @@ async function refreshQueueSnapshot(): Promise<QueueSnapshot | undefined> {
 
 function printQueueHelp(): void {
     console.log(chalk.bold("/queue"));
-    console.log("  /queue [list]       — show pending and running requests");
+    console.log("  /queue [list]         — show pending and running requests");
     console.log(
-        "  /queue cancel <id>  — cancel a queued or running request (id prefix ≥4 chars)",
+        "  /queue cancel <id>    — cancel a queued or running request (id prefix ≥4 chars)",
     );
-    console.log("  /queue help         — show this help");
+    console.log(
+        "  /queue interrupt <text> — cancel running request and run <text> next, ahead of queue",
+    );
+    console.log("  /queue help           — show this help");
 }
 
 const slashCommands: SlashCommand[] = [
@@ -374,12 +436,88 @@ const slashCommands: SlashCommand[] = [
                     console.log(chalk.yellow(resolved.error));
                     return;
                 }
-                d.cancelCommand(resolved.requestId);
-                console.log(
-                    chalk.dim(
-                        `Cancel requested for ${shortId(resolved.requestId)}.`,
-                    ),
-                );
+                let result;
+                try {
+                    result = await d.cancelCommand(resolved.requestId);
+                } catch (e: any) {
+                    console.log(
+                        chalk.red(`Cancel failed: ${e?.message ?? String(e)}`),
+                    );
+                    return;
+                }
+                const short = shortId(resolved.requestId);
+                switch (result?.kind) {
+                    case "cancelled_queued":
+                        console.log(
+                            chalk.yellow(`✗ cancelled (queued): ${short}`),
+                        );
+                        break;
+                    case "cancelled_running":
+                        console.log(
+                            chalk.yellow(`✗ cancelled (running): ${short}`),
+                        );
+                        break;
+                    case "already_completed":
+                        console.log(chalk.dim(`! already completed: ${short}`));
+                        break;
+                    case "not_found":
+                    default:
+                        console.log(chalk.dim(`! not found: ${short}`));
+                        break;
+                }
+                return;
+            }
+            if (sub === "interrupt") {
+                const rawArgs = args.trim();
+                // Strip the leading "interrupt" token (and any
+                // surrounding whitespace) to recover the verbatim
+                // text. Avoid split/rejoin which would collapse
+                // multi-spaces inside the user's text.
+                const text = rawArgs.replace(/^interrupt\s+/i, "").trim();
+                if (!text) {
+                    console.log(chalk.yellow("Usage: /queue interrupt <text>"));
+                    return;
+                }
+                const d = queueDispatcher;
+                if (!d || typeof d.interrupt !== "function") {
+                    console.log(
+                        chalk.dim(
+                            "Interrupt is unavailable (dispatcher does not expose interrupt).",
+                        ),
+                    );
+                    return;
+                }
+                let result;
+                try {
+                    result = await d.interrupt(text);
+                } catch (e: any) {
+                    console.log(
+                        chalk.red(
+                            `Interrupt failed: ${e?.message ?? String(e)}`,
+                        ),
+                    );
+                    return;
+                }
+                if (result?.ok) {
+                    const short = shortId(result.entry.requestId);
+                    console.log(
+                        chalk.cyan(`↯ interrupted; running next: ${short}`),
+                    );
+                } else if (result?.error === "queue_full") {
+                    console.log(
+                        chalk.red(
+                            `Interrupt rejected: queue full (max ${result.maxDepth}).`,
+                        ),
+                    );
+                } else if (result?.error === "server_stopping") {
+                    console.log(
+                        chalk.red(
+                            "Interrupt rejected: server is shutting down.",
+                        ),
+                    );
+                } else {
+                    console.log(chalk.red("Interrupt failed: unknown error."));
+                }
                 return;
             }
             console.log(chalk.yellow(`Unknown /queue subcommand: ${sub}`));

@@ -90,6 +90,12 @@ export class ChatView {
      * (re)connect. The badge UI re-renders from this object.
      */
     private queueSnapshot: QueueSnapshot | undefined;
+    /**
+     * Highest queue version we've applied. Drops out-of-order push
+     * events whose version <= this value (F6 / R2P-H-1). Reset on
+     * (re)bootstrap via applyQueueSnapshot.
+     */
+    private lastAppliedQueueVersion = -1;
 
     public userGivenName: string = "";
     /**
@@ -371,7 +377,10 @@ export class ChatView {
         };
     }
 
-    public initializeDispatcher(dispatcher: Dispatcher) {
+    public initializeDispatcher(
+        dispatcher: Dispatcher,
+        initialQueueSnapshot?: QueueSnapshot,
+    ) {
         if (this._dispatcher !== undefined) {
             throw new Error("Dispatcher already initialized");
         }
@@ -383,9 +392,17 @@ export class ChatView {
         this._dispatcher = dispatcher;
 
         // Bootstrap the queue snapshot so the badge is correct
-        // immediately after (re)connect, even mid-queue. Best-effort:
-        // older servers may not implement getQueueSnapshot.
-        if (typeof dispatcher.getQueueSnapshot === "function") {
+        // immediately after (re)connect, even mid-queue. Optimization
+        // (Cluster E.4): when the caller threads in the snapshot from
+        // `JoinConversationResult.queueSnapshot` we apply it directly
+        // and skip the extra `getQueueSnapshot` RPC. Server omits the
+        // join snapshot when the queue is idle (E.2), so an undefined
+        // value here is the common case and the RPC fallback is only
+        // needed for older / non-queueing servers (where it's also a
+        // no-op). Best-effort throughout — queue UX is cosmetic.
+        if (initialQueueSnapshot !== undefined) {
+            this.applyQueueSnapshot(initialQueueSnapshot);
+        } else if (typeof dispatcher.getQueueSnapshot === "function") {
             dispatcher
                 .getQueueSnapshot()
                 .then((snap) => this.applyQueueSnapshot(snap))
@@ -1033,10 +1050,27 @@ export class ChatView {
         this.queueSnapshot = snapshot
             ? this.cloneSnapshot(snapshot)
             : undefined;
+        this.lastAppliedQueueVersion =
+            snapshot && typeof snapshot.version === "number"
+                ? snapshot.version
+                : -1;
         this.renderQueueBadge();
     }
 
-    public onRequestQueued(entry: QueuedRequest): void {
+    /**
+     * Returns true if `version` is fresh (and updates the watermark);
+     * false when it's a stale reorder. Older non-versioned events
+     * (undefined) are admitted unconditionally for forward compat.
+     */
+    private admitVersion(version: number | undefined): boolean {
+        if (typeof version !== "number") return true;
+        if (version <= this.lastAppliedQueueVersion) return false;
+        this.lastAppliedQueueVersion = version;
+        return true;
+    }
+
+    public onRequestQueued(entry: QueuedRequest, version: number): void {
+        if (!this.admitVersion(version)) return;
         const snap = this.ensureSnapshot();
         if (!snap.queued.some((e) => e.requestId === entry.requestId)) {
             snap.queued.push({ ...entry });
@@ -1044,7 +1078,8 @@ export class ChatView {
         this.renderQueueBadge();
     }
 
-    public onRequestStarted(entry: QueuedRequest): void {
+    public onRequestStarted(entry: QueuedRequest, version: number): void {
+        if (!this.admitVersion(version)) return;
         const snap = this.ensureSnapshot();
         snap.queued = snap.queued.filter(
             (e) => e.requestId !== entry.requestId,
@@ -1056,7 +1091,9 @@ export class ChatView {
     public onRequestCancelled(
         requestId: string,
         _reason: QueueCancelReason,
+        version: number,
     ): void {
+        if (!this.admitVersion(version)) return;
         const snap = this.queueSnapshot;
         if (!snap) return;
         if (snap.running?.requestId === requestId) {
@@ -1068,6 +1105,7 @@ export class ChatView {
     }
 
     public onQueueStateChanged(snapshot: QueueSnapshot): void {
+        if (!this.admitVersion(snapshot.version)) return;
         // Authoritative replacement.
         this.queueSnapshot = this.cloneSnapshot(snapshot);
         this.renderQueueBadge();
@@ -1078,6 +1116,7 @@ export class ChatView {
             running: snap.running ? { ...snap.running } : null,
             queued: snap.queued.map((e) => ({ ...e })),
             paused: snap.paused,
+            version: snap.version,
         };
     }
 
@@ -1087,6 +1126,7 @@ export class ChatView {
                 running: null,
                 queued: [],
                 paused: false,
+                version: this.lastAppliedQueueVersion,
             };
         }
         return this.queueSnapshot;

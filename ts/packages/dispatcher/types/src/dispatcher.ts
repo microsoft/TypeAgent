@@ -16,7 +16,7 @@ import type {
     UserFeedbackRating,
 } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
-import type { QueuedRequest, QueueSnapshot } from "./queue.js";
+import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
 
 export const DispatcherName = "dispatcher";
 export const DispatcherEmoji = "🤖";
@@ -164,6 +164,20 @@ export interface Dispatcher {
     readonly connectionId: ConnectionId | undefined;
 
     /**
+     * Capability flag — `true` when this dispatcher is backed by a
+     * real server-side message queue (i.e. `submitCommand` provides
+     * meaningful FIFO + cross-client broadcast semantics). `false` or
+     * `undefined` for the in-process / direct dispatcher fallback,
+     * which executes synchronously and offers no queueing guarantees.
+     *
+     * Clients that want to gate UX on real queue support (e.g. show a
+     * `(queue: N)` badge) should check this rather than testing for
+     * the presence of `submitCommand`, which is always defined for
+     * type-completeness even in the fallback.
+     */
+    readonly supportsQueueing?: boolean;
+
+    /**
      * Process a single user request.
      *
      * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
@@ -184,27 +198,68 @@ export interface Dispatcher {
      *
      * Unlike `processCommand`, this resolves as soon as the request
      * has been accepted onto the server-side message queue, returning
-     * the assigned `QueuedRequest`. Completion is observed via
+     * a discriminated `SubmitResult`. Completion is observed via
      * ClientIO push events (`requestStarted`, `queueStateChanged`, the
      * existing `setDisplay`/`notify` flow, and ultimately the
      * `commandComplete` notify already broadcast by SharedDispatcher).
      *
+     * The `SubmitResult` discriminator carries `queue_full` /
+     * `server_stopping` as data rather than thrown errors because the
+     * RPC layer strips error subclass identity — see `SubmitResult`
+     * for the rationale.
+     *
      * Implementations that do not own a queue (direct in-process
-     * dispatcher mode) may fall back to invoking `processCommand`
-     * synchronously and synthesizing a single-entry snapshot.
+     * dispatcher mode, indicated by `supportsQueueing !== true`) fall
+     * back to invoking `processCommand` and synthesizing a single-
+     * entry `{ ok: true, entry }` result — failures from the
+     * underlying execution are surfaced to the originator via a
+     * `commandComplete` notify with the error attached. Callers that
+     * need true FIFO + cross-client broadcast semantics MUST check
+     * `supportsQueueing`.
      */
     submitCommand(
         command: string,
         attachments?: string[],
         options?: ProcessCommandOptions,
         clientRequestId?: unknown,
-    ): Promise<QueuedRequest>;
+    ): Promise<SubmitResult>;
 
     /**
      * Snapshot of the server-side queue. Cheap, in-memory. Returns an
      * empty snapshot for dispatchers without a queue.
      */
     getQueueSnapshot(): Promise<QueueSnapshot>;
+
+    /**
+     * Steering primitive — cancel the currently-running request (if
+     * any) and immediately enqueue `text` at the head of the queue so
+     * it runs *next*, ahead of anything already queued. Returns a
+     * `SubmitResult` describing the new entry (or the standard queue-
+     * full / server-stopping failure modes).
+     *
+     * Atomicity: the cancel-then-prepend pair is performed inside
+     * the server-side queue's critical section so a racing
+     * `submitCommand` from another client cannot land between them
+     * and steal the head slot. This is the whole reason `interrupt`
+     * exists as a server RPC rather than client-side composition of
+     * `cancelCommand` + `submitCommand` — see messageSteering.md §4.5.
+     *
+     * The rest of the queue is preserved: pre-existing queued
+     * entries stay queued, just behind the interrupting one. Side
+     * effects from the cancelled running request are NOT rolled back
+     * (same semantics as `cancelCommand`).
+     *
+     * Implementations without a queue (`supportsQueueing !== true`)
+     * SHOULD reject with `SubmitResult.error = "server_stopping"`
+     * or an analogous failure; callers MUST gate interrupt UX on
+     * `supportsQueueing`.
+     */
+    interrupt(
+        text: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
 
     /**
      * Close the dispatcher and release all resources.
@@ -291,16 +346,22 @@ export interface Dispatcher {
     cancelInteraction(interactionId: string): void;
 
     /**
-     * Cancel an in-flight command. If the command identified by requestId is
-     * currently executing, its AbortController is triggered, causing the
-     * command pipeline to stop at the next cancellation checkpoint.
+     * Cancel an in-flight or queued command.
      *
-     * This is a fire-and-forget operation — the in-flight processCommand()
-     * call will resolve with `{ cancelled: true }`.
+     * The returned `CancelResult` distinguishes whether the entry was
+     * cancelled while still queued (no work ran), while running (the
+     * AbortController was triggered and `processCommand` will resolve
+     * with `{ cancelled: true }` at the next checkpoint), or whether
+     * the requestId was unknown (`not_found`). Phase 1 implementations
+     * never report `already_completed` — see `CancelResult`.
+     *
+     * Fire-and-forget callers may ignore the returned promise; it
+     * never rejects under normal operation.
      *
      * @param requestId the requestId string of the command to cancel
+     * @returns a `CancelResult` describing what the server did
      */
-    cancelCommand(requestId: string): void;
+    cancelCommand(requestId: string): Promise<CancelResult>;
 
     /**
      * Cancel an in-flight command using the client-assigned id that was passed

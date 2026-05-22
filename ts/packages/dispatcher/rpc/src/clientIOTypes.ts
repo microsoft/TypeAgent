@@ -87,8 +87,12 @@ export type ClientIOCallFunctions = {
     onUserFeedback(entry: UserFeedbackEntry): void;
     onUserHide(entry: UserMessageHiddenEntry): void;
 
-    requestQueued(entry: QueuedRequest): void;
-    requestStarted(entry: QueuedRequest): void;
-    requestCancelled(requestId: string, reason: QueueCancelReason): void;
+    requestQueued(entry: QueuedRequest, version: number): void;
+    requestStarted(entry: QueuedRequest, version: number): void;
+    requestCancelled(
+        requestId: string,
+        reason: QueueCancelReason,
+        version: number,
+    ): void;
     queueStateChanged(snapshot: QueueSnapshot): void;
 };

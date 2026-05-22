@@ -11,4 +11,8 @@ export type {
     QueueCancelReason,
     QueuedRequest,
     QueueSnapshot,
+    QueueEventVersion,
+    SubmitResult,
+    CancelResult,
 } from "@typeagent/dispatcher-types";
+export { QueueFullError, ServerStoppingError } from "@typeagent/dispatcher-types";

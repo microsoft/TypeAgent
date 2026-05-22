@@ -14,9 +14,6 @@ export function createDispatcherRpcServer(
     channel: RpcChannel,
 ) {
     const dispatcherCallHandler: DispatcherCallFunctions = {
-        cancelCommand(...args) {
-            dispatcher.cancelCommand(...args);
-        },
         cancelCommandByClientId(...args) {
             dispatcher.cancelCommandByClientId(...args);
         },
@@ -31,6 +28,9 @@ export function createDispatcherRpcServer(
         },
         submitCommand: async (...args) => {
             return dispatcher.submitCommand(...args);
+        },
+        cancelCommand: async (...args) => {
+            return dispatcher.cancelCommand(...args);
         },
         getQueueSnapshot: async () => {
             return dispatcher.getQueueSnapshot();

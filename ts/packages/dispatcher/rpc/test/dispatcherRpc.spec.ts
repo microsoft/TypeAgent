@@ -66,8 +66,9 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         getAgentSchemas: notImplemented("getAgentSchemas") as any,
         respondToChoice: notImplemented("respondToChoice") as any,
         getDisplayHistory: notImplemented("getDisplayHistory") as any,
-        cancelCommand(...args) {
+        async cancelCommand(...args) {
             calls.push({ method: "cancelCommand", args });
+            return { kind: "not_found" as const, requestId: args[0] };
         },
         cancelCommandByClientId(...args) {
             calls.push({ method: "cancelCommandByClientId", args });
@@ -227,16 +228,16 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
     });
 });
 
-describe("dispatcher RPC — cancelCommand (existing fire-and-forget, regression)", () => {
-    it("sends a call message and returns void synchronously", () => {
+describe("dispatcher RPC — cancelCommand (now returns CancelResult)", () => {
+    it("sends an invoke message and resolves with the typed result", async () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
         const client = createDispatcherRpcClient(clientChannel);
 
-        const result = client.cancelCommand("req-1");
+        const result = await client.cancelCommand("req-1");
 
-        expect(result).toBeUndefined();
+        expect(result).toEqual({ kind: "not_found", requestId: "req-1" });
         expect(stub.calls).toEqual([
             { method: "cancelCommand", args: ["req-1"] },
         ]);
@@ -244,7 +245,7 @@ describe("dispatcher RPC — cancelCommand (existing fire-and-forget, regression
 });
 
 describe("dispatcher RPC — transport symmetry", () => {
-    it("cancelInteraction and cancelCommand both use call messages (no invoke round-trip)", () => {
+    it("cancelInteraction uses a call message; cancelCommand uses invoke (returns CancelResult)", () => {
         // Intercept raw messages on the wire to confirm message type
         const sentMessages: { type: string; name: string }[] = [];
 
@@ -269,16 +270,24 @@ describe("dispatcher RPC — transport symmetry", () => {
         const client = createDispatcherRpcClient(clientAdapter.channel);
 
         client.cancelInteraction("id-1");
-        client.cancelCommand("req-1");
+        void client.cancelCommand("req-1");
 
-        // Both should produce "call" messages, not "invoke"
-        const clientMessages = sentMessages.filter(
-            (m) => m.name === "cancelInteraction" || m.name === "cancelCommand",
+        const cancelInteractionMsgs = sentMessages.filter(
+            (m) => m.name === "cancelInteraction",
         );
-        expect(clientMessages).toHaveLength(2);
-        for (const m of clientMessages) {
+        const cancelCommandMsgs = sentMessages.filter(
+            (m) => m.name === "cancelCommand",
+        );
+        // cancelInteraction stays as call (fire-and-forget).
+        for (const m of cancelInteractionMsgs) {
             expect(m.type).toBe("call");
         }
+        // cancelCommand is now invoke (returns CancelResult).
+        expect(cancelCommandMsgs.length).toBeGreaterThan(0);
+        const clientCancelCmd = cancelCommandMsgs.find(
+            (m) => m.type !== "callResult",
+        );
+        expect(clientCancelCmd?.type).toBe("invoke");
     });
 
     it("respondToInteraction uses an invoke message (expects reply)", async () => {

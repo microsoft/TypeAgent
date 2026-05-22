@@ -70,7 +70,7 @@ export type ConversationManager = {
         connectionId: string;
         name: string;
         pendingInteractions: PendingInteractionRequest[];
-        queueSnapshot: QueueSnapshot;
+        queueSnapshot?: QueueSnapshot;
     }>;
     leaveConversation(
         conversationId: string,
@@ -492,7 +492,7 @@ export async function createConversationManager(
             connectionId: string;
             name: string;
             pendingInteractions: PendingInteractionRequest[];
-            queueSnapshot: QueueSnapshot;
+            queueSnapshot?: QueueSnapshot;
         }> {
             const record = conversations.get(conversationId);
             if (record === undefined) {
@@ -521,7 +521,16 @@ export async function createConversationManager(
                 );
             }
 
-            return {
+            const queueSnapshot = sharedDispatcher.isQueueIdle()
+                ? undefined
+                : sharedDispatcher.getQueueSnapshot();
+            const result: {
+                dispatcher: Dispatcher;
+                connectionId: string;
+                name: string;
+                pendingInteractions: PendingInteractionRequest[];
+                queueSnapshot?: QueueSnapshot;
+            } = {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
                 name: record.name,
@@ -529,8 +538,11 @@ export async function createConversationManager(
                     dispatcher.connectionId!,
                     options?.filter ?? false,
                 ),
-                queueSnapshot: sharedDispatcher.getQueueSnapshot(),
             };
+            if (queueSnapshot !== undefined) {
+                result.queueSnapshot = queueSnapshot;
+            }
+            return result;
         },
 
         async leaveConversation(

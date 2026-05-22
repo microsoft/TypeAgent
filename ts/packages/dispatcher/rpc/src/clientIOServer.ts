@@ -49,6 +49,12 @@ export function createClientIORpcServer(
         takeAction: (...args) => clientIO.takeAction(...args),
         onUserFeedback: (...args) => clientIO.onUserFeedback?.(...args),
         onUserHide: (...args) => clientIO.onUserHide?.(...args),
+        // Phase 1 queue lifecycle events. These are OPTIONAL on the
+        // ClientIO contract (see `@typeagent/dispatcher-types`) — older
+        // or partial implementations may omit some or all of them. The
+        // optional chaining below tolerates that without crashing the
+        // RPC bridge: a missing handler quietly swallows the event,
+        // matching the design that queue UX is best-effort cosmetic.
         requestQueued: (...args) => clientIO.requestQueued?.(...args),
         requestStarted: (...args) => clientIO.requestStarted?.(...args),
         requestCancelled: (...args) => clientIO.requestCancelled?.(...args),

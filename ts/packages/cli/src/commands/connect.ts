@@ -10,12 +10,14 @@ import {
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
     applyQueueSnapshot,
+    clearRecentSubmissions,
 } from "../enhancedConsole.js";
 import {
     setConversationCommandContext,
     setServerPort,
     setServerConnection,
     setQueueDispatcher,
+    setCliConnectionId,
 } from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
@@ -343,6 +345,8 @@ export default class Connect extends Command {
             // the queue snapshot so /queue list and the prompt badge
             // are correct from the first prompt.
             setQueueDispatcher(activeDispatcher);
+            setCliConnectionId(conversation.connectionId);
+            clearRecentSubmissions();
             applyQueueSnapshot(conversation.queueSnapshot);
             await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
@@ -373,6 +377,8 @@ export default class Connect extends Command {
                         activeName = newConversation.name;
                         bindDispatcher(activeDispatcher);
                         setQueueDispatcher(activeDispatcher);
+                        setCliConnectionId(newConversation.connectionId);
+                        clearRecentSubmissions();
                         applyQueueSnapshot(newConversation.queueSnapshot);
                         if (!isEphemeral) {
                             saveLastConversationId(activeConversationId);

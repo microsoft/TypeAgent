@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ShellUserSettings } from "./shellSettingsType.js";
-import type { Dispatcher, ClientIO } from "agent-dispatcher";
+import type { Dispatcher, ClientIO, QueueSnapshot } from "agent-dispatcher";
 
 export type { ShellUserSettings };
 
@@ -97,7 +97,10 @@ export interface ClientAPI {
 // Functions that are called from the main process to the renderer process.
 export interface Client {
     clientIO: ClientIO;
-    dispatcherInitialized(dispatcher: Dispatcher): void;
+    dispatcherInitialized(
+        dispatcher: Dispatcher,
+        initialQueueSnapshot?: QueueSnapshot,
+    ): void;
     updateRegisterAgents(agents: [string, string][]): void;
     showInputText(message: string): Promise<void>;
     showDialog(key: string): void;
@@ -113,7 +116,11 @@ export interface Client {
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
-    conversationChanged?(conversationId: string, name: string): void;
+    conversationChanged?(
+        conversationId: string,
+        name: string,
+        queueSnapshot?: QueueSnapshot,
+    ): void;
     markHistoryEntries?(): void;
     demoStateChanged?(state: DemoUIState): void;
     /** Show/clear the reconnect banner. Pass undefined to clear. */

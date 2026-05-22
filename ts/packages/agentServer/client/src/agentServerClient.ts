@@ -89,6 +89,12 @@ export type ConversationDispatcher = {
     conversationId: string;
     name: string;
     /**
+     * The connectionId assigned to this client by the server.  Useful for
+     * UI affordances (e.g. labelling the user's own queued requests
+     * `(you)` versus another client's requests).
+     */
+    connectionId: string;
+    /**
      * Snapshot of the per-conversation message queue at the moment of
      * join. Phase 1 use: bootstrap CLI / Shell queue badges so they
      * are correct even when joining mid-queue. May be omitted when the
@@ -195,6 +201,7 @@ export async function connectAgentServer(
                     dispatcher,
                     conversationId,
                     name: result.name,
+                    connectionId: result.connectionId,
                     queueSnapshot: result.queueSnapshot,
                 };
             },
