@@ -29,13 +29,3 @@ and 2 were addressed in-phase: input-validation EngineErrorKind, the
   root. Production code uses Node's `path.resolve`, which normalizes
   correctly. Re-evaluate if a future test legitimately needs `../`
   climbing past the workspace root.
-
-### P7-R2 (defensive, pass 2): broader Windows-path / case-insensitive coverage
-
-- **Finding:** `path.relative` + `realpathSync` covers the symlink
-  bypass on POSIX. Windows behavior (case-insensitive comparisons,
-  drive letters, UNC paths) is not exercised by tests.
-- **Decision:** Not acted on. The TypeAgent CI matrix is POSIX-first
-  for these packages, and `path` is platform-aware (it already does
-  the right thing on Windows). If we ever target Windows-only
-  deployment scenarios for `wfc`, add a Windows-specific test pass.
