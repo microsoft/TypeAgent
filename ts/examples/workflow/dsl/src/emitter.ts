@@ -1444,11 +1444,11 @@ export class Emitter {
             task: "error.fail",
             inputSchema: {
                 type: "object",
-                required: ["value"],
-                properties: { value: {} },
+                required: ["message"],
+                properties: { message: {} },
             },
             outputSchema: { not: {} },
-            inputs: { value: "Attempts exhausted" },
+            inputs: { message: "Attempts exhausted" },
         } as TaskNode;
         exhaustScope.nodeOrder.push(exhaustNodeId);
         const exhaustedArm = this.buildArmScope(

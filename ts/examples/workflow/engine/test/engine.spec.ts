@@ -6351,7 +6351,7 @@ describe("WorkflowEngine (IR v1)", () => {
     describe("error tasks", () => {
         it("error.fail always fails with string message", async () => {
             const result = await errorFail.execute(
-                { value: "boom" },
+                { message: "boom" },
                 {} as any,
             );
             expect(result.kind).toBe("fail");
@@ -6362,7 +6362,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
         it("error.fail serializes non-string values", async () => {
             const result = await errorFail.execute(
-                { value: { code: 42 } },
+                { message: { code: 42 } },
                 {} as any,
             );
             expect(result.kind).toBe("fail");
@@ -7952,11 +7952,11 @@ describe("WorkflowEngine (IR v1)", () => {
                         task: "error.fail",
                         inputSchema: {
                             type: "object",
-                            required: ["value"],
-                            properties: { value: {} },
+                            required: ["message"],
+                            properties: { message: {} },
                         },
                         outputSchema: { not: {} },
-                        inputs: { value: "boom" },
+                        inputs: { message: "boom" },
                     },
                 },
                 output: {},

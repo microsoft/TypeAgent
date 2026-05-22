@@ -684,6 +684,130 @@ describe("DSL -> Engine integration", () => {
             expect(result.output).toBe("unknown");
         });
 
+        it("switch dispatches on integer discriminant", async () => {
+            const ir = compileOk(`
+                workflow route(code: integer): unknown {
+                    switch (code) {
+                        case 1:
+                            const r = text.template("one", {});
+                            return r;
+                        case 2:
+                            const r = text.template("two", {});
+                            return r;
+                        case 3:
+                            const r = text.template("three", {});
+                            return r;
+                        default:
+                            const r = text.template("other", {});
+                            return r;
+                    }
+                }
+            `);
+            const { eng } = makeEngine();
+
+            for (const [code, expected] of [
+                [1, "one"],
+                [2, "two"],
+                [3, "three"],
+                [99, "other"],
+            ] as const) {
+                const result = await eng.run(ir, { input: { code } });
+                expect(result.success).toBe(true);
+                expect(result.output).toBe(expected);
+            }
+        });
+
+        it("switch executes only the matching arm's side effects", async () => {
+            // Use a side-effect task per arm and verify only the selected
+            // arm runs. Guards against any future regression where all
+            // arms (or the wrong arm) would be evaluated.
+            const calls: string[] = [];
+            const makeArmTask = (name: string): TaskDefinition => ({
+                name,
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["tag"],
+                    properties: { tag: { type: "string" } },
+                },
+                outputSchema: { type: "string" },
+                async execute(input: any) {
+                    calls.push(name);
+                    return { kind: "ok", output: `${name}:${input.tag}` };
+                },
+            });
+            const armA = makeArmTask("arm.a");
+            const armB = makeArmTask("arm.b");
+            const armC = makeArmTask("arm.c");
+            const extras = [armA, armB, armC];
+            const ir = compileOk(
+                `
+                workflow route(cmd: string): unknown {
+                    switch (cmd) {
+                        case "a":
+                            const r = arm.a("x");
+                            return r;
+                        case "b":
+                            const r = arm.b("x");
+                            return r;
+                        default:
+                            const r = arm.c("x");
+                            return r;
+                    }
+                }
+            `,
+                extras,
+            );
+            const { eng } = makeEngine(extras);
+
+            let result = await eng.run(ir, { input: { cmd: "b" } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe("arm.b:x");
+            expect(calls).toEqual(["arm.b"]);
+
+            calls.length = 0;
+            result = await eng.run(ir, { input: { cmd: "a" } });
+            expect(result.success).toBe(true);
+            expect(calls).toEqual(["arm.a"]);
+
+            calls.length = 0;
+            result = await eng.run(ir, { input: { cmd: "zzz" } });
+            expect(result.success).toBe(true);
+            expect(calls).toEqual(["arm.c"]);
+        });
+
+        it("switch nested inside map dispatches per-iteration", async () => {
+            const ir = compileOk(`
+                workflow labelAll(cmds: string[]): unknown {
+                    const results = map(cmds, (cmd) => {
+                        switch (cmd) {
+                            case "hi":
+                                const r = text.template("greeting", {});
+                                return r;
+                            case "bye":
+                                const r = text.template("farewell", {});
+                                return r;
+                            default:
+                                const r = text.template("unknown", {});
+                                return r;
+                        }
+                    });
+                    return results;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, {
+                input: { cmds: ["hi", "bye", "other", "hi"] },
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual([
+                "greeting",
+                "farewell",
+                "unknown",
+                "greeting",
+            ]);
+        });
+
         it("if/else with continuation after branch", async () => {
             const ir = compileOk(`
                 workflow classify(x: number): unknown {
@@ -718,6 +842,40 @@ describe("DSL -> Engine integration", () => {
             const result = await eng.run(ir, { input: {} });
 
             expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("something went wrong");
+        });
+
+        it("throw propagates the message string to RunResult.error", async () => {
+            const ir = compileOk(`
+                workflow fail(): unknown {
+                    throw "explicit error message";
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeDefined();
+            expect(result.error!.message).toBe("explicit error message");
+        });
+
+        it("throw inside if branch propagates message", async () => {
+            const ir = compileOk(`
+                workflow failIf(x: boolean): unknown {
+                    if (x) {
+                        throw "branch error";
+                    }
+                    return "ok";
+                }
+            `);
+            const { eng } = makeEngine();
+
+            const failing = await eng.run(ir, { input: { x: true } });
+            expect(failing.success).toBe(false);
+            expect(failing.error!.message).toBe("branch error");
+
+            const passing = await eng.run(ir, { input: { x: false } });
+            expect(passing.success).toBe(true);
         });
     });
 
@@ -1146,16 +1304,6 @@ describe("DSL -> Engine integration", () => {
 
     // NOTE: The following tests are commented out because they expose real bugs
     // in the DSL compiler that should be tracked and fixed separately.
-
-    // BUG: switch always takes the first case regardless of discriminant value.
-    // The switch lowering emits a chain of compare.equals nodes, but the
-    // branch condition routing appears broken.
-    // describe("switch with default", () => { ... });
-
-    // BUG: top-level throw produces an empty error message.
-    // The error.fail task receives the value but the error propagation
-    // loses the message.
-    // describe("throw at top level", () => { ... });
 
     describe("nested control flow", () => {
         it("filter + map pipeline", async () => {
