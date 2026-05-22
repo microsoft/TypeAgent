@@ -258,7 +258,12 @@ export class TypeChecker {
         this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
     }
 
-    check(wf: WorkflowDecl): TypeError[] {
+    /**
+     * Type-check a single workflow body. Internal: invoked per workflow
+     * by {@link checkAll}. The workflow map and task map must already be
+     * set on the instance.
+     */
+    private checkOne(wf: WorkflowDecl): TypeError[] {
         this.errors = [];
         const scope = new Scope();
         const seenParams = new Set<string>();
@@ -346,11 +351,11 @@ export class TypeChecker {
         }
 
         // Per-workflow type check. We accumulate errors across all
-        // workflows rather than short-circuiting; calling `check()`
-        // resets `this.errors`, so capture and restore around each call.
+        // workflows rather than short-circuiting; `checkOne` resets
+        // `this.errors`, so capture and restore around each call.
         const allErrors: TypeError[] = [...this.errors];
         for (const w of workflows) {
-            const wfErrors = this.check(w);
+            const wfErrors = this.checkOne(w);
             allErrors.push(...wfErrors);
         }
         this.errors = allErrors;

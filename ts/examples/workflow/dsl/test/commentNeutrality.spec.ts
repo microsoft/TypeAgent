@@ -132,10 +132,12 @@ describe("comments don't affect typeChecker", () => {
                 return "n";
             }
         }`;
-        const errsBare = new TypeChecker(SCHEMAS).check(parseNoComments(bare));
-        const errsCommented = new TypeChecker(SCHEMAS).check(
+        const errsBare = new TypeChecker(SCHEMAS).checkAll([
+            parseNoComments(bare),
+        ]);
+        const errsCommented = new TypeChecker(SCHEMAS).checkAll([
             parseWithComments(commented),
-        );
+        ]);
         expect(errsBare).toEqual([]);
         expect(errsCommented).toEqual([]);
     });
@@ -147,7 +149,7 @@ describe("comments don't affect typeChecker", () => {
                line */
             return 42; // wrong type
         }`;
-        const errs = new TypeChecker([]).check(parseWithComments(src));
+        const errs = new TypeChecker([]).checkAll([parseWithComments(src)]);
         expect(errs.length).toBeGreaterThan(0);
     });
 });
@@ -205,9 +207,12 @@ describe("comments don't leak into emitter IR", () => {
             // c2
             return x;
         }`;
-        const irBare = new Emitter([]).emit(parseNoComments(bare)).ir;
-        const irCommented = new Emitter([]).emit(
-            parseWithComments(commented),
+        const bareAst = parseNoComments(bare);
+        const commentedAst = parseWithComments(commented);
+        const irBare = new Emitter([]).emitAll([bareAst], bareAst.name).ir;
+        const irCommented = new Emitter([]).emitAll(
+            [commentedAst],
+            commentedAst.name,
         ).ir;
         expect(irBare).toBeDefined();
         expect(irCommented).toBeDefined();
@@ -222,7 +227,8 @@ describe("comments don't leak into emitter IR", () => {
             /* block */
             return x;
         }`;
-        const ir = new Emitter([]).emit(parseWithComments(src)).ir!;
+        const ast = parseWithComments(src);
+        const ir = new Emitter([]).emitAll([ast], ast.name).ir!;
         const json = JSON.stringify(ir);
         expect(json).not.toContain("leadingComments");
         expect(json).not.toContain("// h");

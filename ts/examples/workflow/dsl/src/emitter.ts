@@ -141,18 +141,6 @@ export class Emitter {
     }
 
     /**
-     * Emit a single workflow as a self-contained IR (legacy API, used
-     * by tests and back-compat callers). Internally delegates to
-     * `emitAll([ast], ast.name)`.
-     */
-    emit(ast: WorkflowDecl): {
-        ir: WorkflowIR | undefined;
-        errors: EmitError[];
-    } {
-        return this.emitAll([ast], ast.name);
-    }
-
-    /**
      * Emit a multi-workflow IR. The `entryName` selects which workflow's
      * inputs/outputs become the artifact's top-level surface; every
      * workflow in the input list is emitted into the IR's `workflows`
@@ -217,8 +205,7 @@ export class Emitter {
 
     /**
      * Emit a single workflow into a WorkflowBody (the value stored in
-     * `WorkflowIR.workflows[name]`). Factored out of the legacy emit()
-     * so emitAll can call it per workflow.
+     * `WorkflowIR.workflows[name]`). Called per workflow by emitAll.
      */
     private emitWorkflowBody(ast: WorkflowDecl): WorkflowBody | undefined {
         const inputSchema = this.paramsToSchema(ast.params);
@@ -883,7 +870,7 @@ export class Emitter {
         const callee = this.workflowMap.get(expr.name);
         if (!callee) {
             this.emitError(
-                `Unknown workflow '${expr.name}' (workflow calls require multi-workflow emit via emitAll)`,
+                `Unknown workflow '${expr.name}'`,
                 expr.loc.line,
                 expr.loc.col,
             );
