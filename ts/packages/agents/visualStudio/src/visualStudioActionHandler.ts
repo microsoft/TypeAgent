@@ -41,19 +41,34 @@ type BridgeResponse = {
 };
 
 class VisualStudioBridge {
-    private client: WebSocket | undefined;
+    // Multi-client tracking. The bridge accepts every VS extension that
+    // dials in (insertion-order-preserving Map so we can route to the
+    // most-recently-connected one). Keys are synthetic ids — the VS
+    // extension's `ClientWebSocket` doesn't expose anything we could
+    // use to distinguish two parallel instances.
+    private clients: Map<string, WebSocket> = new Map();
+    private clientIdCounter = 0;
+    // For each in-flight request we record which clientId we sent it
+    // to, so a disconnect on one VS only fails the requests that
+    // actually targeted that instance — other VS instances keep
+    // running. The id itself is bridge-wide (responses are looked up
+    // by id alone).
     private pending = new Map<
         string,
-        { resolve: (r: BridgeResponse) => void; timer: NodeJS.Timeout }
+        {
+            resolve: (r: BridgeResponse) => void;
+            timer: NodeJS.Timeout;
+            clientId: string;
+        }
     >();
     private readonly sendTimeoutMs: number;
 
     /**
      * Invoked on every client connect/disconnect with the current count
-     * of OPEN clients (0 or 1 in practice — only the VS extension host
-     * ever dials this bridge). Set by the agent-lifecycle code; the
-     * bridge itself doesn't care about consumers. Errors raised by the
-     * callback are swallowed (the count is informational).
+     * of OPEN clients. Set by the agent-lifecycle code; the bridge
+     * itself doesn't care about consumers. Errors raised by the
+     * callback are swallowed (the count is informational and only
+     * surfaces via `@system ports`).
      */
     public onClientCountChanged?: (count: number) => void;
 
@@ -155,8 +170,11 @@ class VisualStudioBridge {
 
     private setupHandlers(): void {
         this.wss.on("connection", (ws: WebSocket) => {
-            debug("host plugin connected");
-            this.client = ws;
+            const clientId = `vs-${++this.clientIdCounter}`;
+            this.clients.set(clientId, ws);
+            debug(
+                `host plugin connected (${clientId}); total=${this.clients.size}`,
+            );
             this.emitClientCount();
             ws.on("message", (data: RawData) => {
                 try {
@@ -174,18 +192,19 @@ class VisualStudioBridge {
                 }
             });
             const onDisconnect = (reason: string) => {
-                debug(`host plugin disconnected (${reason})`);
-                // Only emit/clear once even if both `close` and `error`
-                // fire — `client` is set to undefined on first run and
-                // the guard skips the second.
-                if (this.client !== ws) return;
-                this.client = undefined;
+                // Identity-guarded so the second of {close, error} is a
+                // no-op (Map.delete returns false the second time).
+                if (!this.clients.delete(clientId)) return;
+                debug(
+                    `host plugin disconnected (${clientId}, ${reason}); remaining=${this.clients.size}`,
+                );
                 this.emitClientCount();
-                // Reject every in-flight send so callers don't hang
-                // forever and the map can't grow unbounded across
-                // reconnects. `stop()` runs the same cleanup; either
-                // path is sufficient.
-                this.failPending(
+                // Only fail the pending sends that targeted *this*
+                // client — other VS instances stay live and their
+                // pending requests must keep waiting for their own
+                // responses (or hit the per-request timeout).
+                this.failPendingForClient(
+                    clientId,
                     new Error(`Host plugin disconnected: ${reason}`),
                 );
             };
@@ -206,15 +225,17 @@ class VisualStudioBridge {
     }
 
     /**
-     * Number of currently-OPEN bridge clients (0 or 1 in practice).
-     * Surfaced via `@system ports` through the SessionContext's
-     * `notifyClientCountChanged` API.
+     * Number of currently-OPEN bridge clients. Surfaced via
+     * `@system ports` through the SessionContext's
+     * `notifyClientCountChanged` API. Multiple VS instances can
+     * connect concurrently and each is counted independently.
      */
     public getConnectedCount(): number {
-        return this.client !== undefined &&
-            this.client.readyState === WebSocket.OPEN
-            ? 1
-            : 0;
+        let n = 0;
+        for (const ws of this.clients.values()) {
+            if (ws.readyState === WebSocket.OPEN) n++;
+        }
+        return n;
     }
 
     private failPending(error: Error): void {
@@ -222,6 +243,23 @@ class VisualStudioBridge {
         const entries = Array.from(this.pending.values());
         this.pending.clear();
         for (const entry of entries) {
+            clearTimeout(entry.timer);
+            entry.resolve({
+                id: "",
+                success: false,
+                error: error.message,
+            });
+        }
+    }
+
+    private failPendingForClient(clientId: string, error: Error): void {
+        const toFail: string[] = [];
+        for (const [id, entry] of this.pending) {
+            if (entry.clientId === clientId) toFail.push(id);
+        }
+        for (const id of toFail) {
+            const entry = this.pending.get(id)!;
+            this.pending.delete(id);
             clearTimeout(entry.timer);
             entry.resolve({
                 id: "",
@@ -239,10 +277,12 @@ class VisualStudioBridge {
      */
     async stop(): Promise<void> {
         debug("Closing VisualStudioBridge");
-        if (this.client?.readyState === WebSocket.OPEN) {
-            this.client.close();
+        for (const ws of this.clients.values()) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
         }
-        this.client = undefined;
+        this.clients.clear();
         // Reject any in-flight sends before the server closes; otherwise
         // callers awaiting `send()` hang forever after a manual disable.
         this.failPending(new Error("VisualStudioBridge stopped"));
@@ -250,9 +290,18 @@ class VisualStudioBridge {
     }
 
     async send(actionName: string, parameters: unknown): Promise<unknown> {
-        if (!this.client) {
+        // Route to the most-recently-connected OPEN client. This
+        // preserves the legacy single-client behavior (where the
+        // newest connection won) when only one VS is active, and
+        // gives a sensible "last-wins" tiebreak for multi-VS sessions
+        // — RPCs like buildSolution can't sensibly broadcast (both
+        // VS instances would execute), and a smarter routing strategy
+        // (per-solution-path, user-disambiguated) is future work.
+        const target = this.pickTargetClient();
+        if (target === undefined) {
             throw new Error(`No host plugin connected on port ${this.port}`);
         }
+        const [clientId, ws] = target;
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         return new Promise((resolve, reject) => {
             // Timeout so a plugin that accepts the WS frame but never
@@ -271,13 +320,14 @@ class VisualStudioBridge {
             }, this.sendTimeoutMs);
             this.pending.set(id, {
                 timer,
+                clientId,
                 resolve: (res) =>
                     res.success
                         ? resolve(res.result)
                         : reject(new Error(res.error)),
             });
             try {
-                this.client!.send(
+                ws.send(
                     JSON.stringify({
                         id,
                         actionName,
@@ -292,8 +342,20 @@ class VisualStudioBridge {
         });
     }
 
+    // Map iteration is insertion-ordered; walk in reverse so the
+    // newest OPEN connection wins. Returns undefined when no client
+    // is currently OPEN.
+    private pickTargetClient(): [string, WebSocket] | undefined {
+        const entries = Array.from(this.clients.entries());
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const [id, ws] = entries[i];
+            if (ws.readyState === WebSocket.OPEN) return [id, ws];
+        }
+        return undefined;
+    }
+
     get connected(): boolean {
-        return this.client !== undefined;
+        return this.getConnectedCount() > 0;
     }
 }
 
