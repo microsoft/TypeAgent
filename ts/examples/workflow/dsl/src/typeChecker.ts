@@ -146,7 +146,8 @@ function isEqualityComparable(a: TypeInfo, b: TypeInfo): boolean {
  * Performs recursive structural comparison for objects and arrays.
  */
 function isAssignableTo(target: TypeInfo, source: TypeInfo): boolean {
-    if (target.kind === "unresolved" || source.kind === "unresolved") return true;
+    if (target.kind === "unresolved" || source.kind === "unresolved")
+        return true;
     if (source.kind === "never") return true;
     if (target.kind === "never") return false;
     if (target.kind === "unknown") return true;
@@ -380,7 +381,10 @@ export class TypeChecker {
         const returnType = this.checkStatements(wf.body, scope);
         // Validate return type matches declaration
         const declared = this.resolveTypeExpr(wf.returnType);
-        if (returnType.kind !== "unresolved" && !isAssignableTo(declared, returnType)) {
+        if (
+            returnType.kind !== "unresolved" &&
+            !isAssignableTo(declared, returnType)
+        ) {
             this.addError(
                 `Workflow return type '${typeName(returnType)}' is not assignable to declared type '${typeName(declared)}'`,
                 wf.loc.line,
