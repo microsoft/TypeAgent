@@ -296,8 +296,8 @@ function collectCallsInNode(
             return;
         }
         if (
-            JSON.stringify(node.inputSchema) !==
-            JSON.stringify(target.inputSchema)
+            canonicalStringify(node.inputSchema) !==
+            canonicalStringify(target.inputSchema)
         ) {
             errors.push({
                 path: `${path}.inputSchema`,
@@ -305,8 +305,8 @@ function collectCallsInNode(
             });
         }
         if (
-            JSON.stringify(node.outputSchema) !==
-            JSON.stringify(target.outputSchema)
+            canonicalStringify(node.outputSchema) !==
+            canonicalStringify(target.outputSchema)
         ) {
             errors.push({
                 path: `${path}.outputSchema`,
