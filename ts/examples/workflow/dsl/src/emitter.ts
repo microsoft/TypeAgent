@@ -62,6 +62,7 @@ export interface EmitError {
     message: string;
     line: number;
     col: number;
+    length: number;
 }
 
 // ---- Binding: how a name resolves in scope ----
@@ -774,6 +775,7 @@ export class Emitter {
                 `Unknown task: ${expr.task}`,
                 expr.loc.line,
                 expr.loc.col,
+                expr.task.length,
             );
             return undefined;
         }
@@ -2218,6 +2220,7 @@ export class Emitter {
             `Unknown reference: ${segments.join(".")}`,
             expr.loc.line,
             expr.loc.col,
+            segments.join(".").length,
         );
         return segments.join(".");
     }
@@ -2676,7 +2679,12 @@ export class Emitter {
         }
     }
 
-    private emitError(msg: string, line: number, col: number): void {
-        this.errors.push({ message: msg, line, col });
+    private emitError(
+        msg: string,
+        line: number,
+        col: number,
+        length: number = 1,
+    ): void {
+        this.errors.push({ message: msg, line, col, length });
     }
 }
