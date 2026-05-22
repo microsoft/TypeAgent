@@ -38,7 +38,6 @@ target via the IR's `workflows` table.
 
 - Design: [`workflow-composition.md`](./workflow-composition.md)
 - Plan: [`workflow-composition-impl-plan.md`](./workflow-composition-impl-plan.md)
-- Decisions: [`workflow-composition-decision-log.md`](./workflow-composition-decision-log.md)
 - IR additions folded into [`../ir/ir-v0.2.md`](../ir/ir-v0.2.md)
   (no version bump).
 
@@ -685,8 +684,8 @@ therefore a non-standard extension with no TypeScript precedent.
 TypeScript (positional only, or explicit destructuring) or keep the
 named-record convenience syntax as a DSL-specific ergonomic feature?
 
-**Raised during:** review of `workflow-composition-decision-log.md`
-P3-D4, post-G1 implementation.
+**Raised during:** G1 workflow composition implementation (Phase 3 — call
+syntax design).
 
 ## G21: `export` conflates entry-point selection with cross-file importability; no library compile mode
 
@@ -729,8 +728,8 @@ concrete problems:
   stem) as the entry when no explicit `--entry` is given, making `export`
   purely a visibility qualifier.
 
-**Raised during:** P3-D5 decision log review; related IR future work
-would be a multi-workflow / library IR shape.
+**Raised during:** G1 workflow composition implementation (Phase 3 — export /
+entry-point semantics).
 
 ## G22: No DSL syntax for `timeoutMs` on workflow calls
 
@@ -754,7 +753,8 @@ field is only reachable by tools that build IR directly.
   — declares max runtime on the callee declaration rather than each call
   site. Simpler but less flexible (no per-call override).
 
-**Raised during:** P5-D4 decision log review.
+**Raised during:** G1 workflow composition implementation (Phase 5 — sub-workflow
+call design).
 
 ## G23: No per-file namespacing for exported workflows in IR
 
@@ -777,4 +777,5 @@ schema for registry-style resolution) but it is not used by the bundler today.
 - **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
   expose a `workflowOrigins` side-table mapping mangled name → original path + name.
 
-**Raised during:** P7-D2 decision log review.
+**Raised during:** G1 workflow composition implementation (Phase 7 — cross-file
+bundler / name mangling).
