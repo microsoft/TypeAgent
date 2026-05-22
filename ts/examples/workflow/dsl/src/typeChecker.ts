@@ -457,45 +457,58 @@ export class TypeChecker {
     }
 
     /**
-     * Walk the workflow and return source locations of every successfully
-     * resolved property-access segment (segments[1..n] of a DottedNameExpr).
-     * Used by the LSP to emit `property` semantic tokens for `.stdout` etc.
+     * Walk every workflow and return source locations of all
+     * successfully resolved property-access segments
+     * (segments[1..n] of a DottedNameExpr). Used by the LSP to emit
+     * `property` semantic tokens for `.stdout` etc. across an entire
+     * module.
      */
-    collectPropertyRefs(wf: WorkflowDecl): PropertyRef[] {
-        this._propertyRefs = [];
-        const scope = new Scope();
-        for (const p of wf.params) {
-            scope.set(p.name, this.resolveTypeExpr(p.type));
+    collectPropertyRefs(workflows: WorkflowDecl[]): PropertyRef[] {
+        const all: PropertyRef[] = [];
+        for (const wf of workflows) {
+            this._propertyRefs = [];
+            const scope = new Scope();
+            for (const p of wf.params) {
+                scope.set(p.name, this.resolveTypeExpr(p.type));
+            }
+            this.checkStatements(wf.body, scope);
+            all.push(...this._propertyRefs);
+            this._propertyRefs = null;
         }
-        this.checkStatements(wf.body, scope);
-        const refs = this._propertyRefs;
-        this._propertyRefs = null;
-        return refs;
+        return all;
     }
 
     /**
-     * Walk the workflow and return a map from declaration offset to inferred
-     * TypeInfo. Keys are `def.loc.offset` values from the symbol table, so
-     * hover can look up the type of any symbol without re-traversing the AST.
+     * Walk every workflow and return a single map from declaration
+     * offset to inferred TypeInfo. Keys are `def.loc.offset` values
+     * from the symbol table, so hover and inlay hints can look up the
+     * type of any symbol in any workflow without re-traversing the
+     * AST. Offsets are file-wide unique, so merging per-workflow maps
+     * is collision-free.
      *
-     * Covers: workflow params, const bindings, destructuring bindings, and
-     * lambda parameters (map/filter/parallelMap/attempts-fallback).
+     * Covers: workflow params, const bindings, destructuring bindings,
+     * and lambda parameters (map/filter/parallelMap/attempts-fallback).
      */
-    collectSymbolTypes(wf: WorkflowDecl): Map<number, TypeInfo> {
-        this._symbolTypes = new Map();
-        const scope = new Scope();
-        // Params have explicit type annotations - store them before walking body.
-        for (const p of wf.params) {
-            const t = this.resolveTypeExpr(p.type);
-            scope.set(p.name, t);
-            if (p.loc.offset !== undefined) {
-                this._symbolTypes.set(p.loc.offset, t);
+    collectSymbolTypes(workflows: WorkflowDecl[]): Map<number, TypeInfo> {
+        const merged = new Map<number, TypeInfo>();
+        for (const wf of workflows) {
+            this._symbolTypes = new Map();
+            const scope = new Scope();
+            // Params have explicit type annotations - store them before walking body.
+            for (const p of wf.params) {
+                const t = this.resolveTypeExpr(p.type);
+                scope.set(p.name, t);
+                if (p.loc.offset !== undefined) {
+                    this._symbolTypes.set(p.loc.offset, t);
+                }
             }
+            this.checkStatements(wf.body, scope);
+            for (const [k, v] of this._symbolTypes) {
+                merged.set(k, v);
+            }
+            this._symbolTypes = null;
         }
-        this.checkStatements(wf.body, scope);
-        const result = this._symbolTypes;
-        this._symbolTypes = null;
-        return result;
+        return merged;
     }
 
     private addError(

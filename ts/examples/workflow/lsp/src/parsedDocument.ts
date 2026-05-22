@@ -40,7 +40,6 @@ import { loadTaskSchemas } from "./taskSchemas.js";
 export interface ParsedWorkflow {
     decl: WorkflowDecl;
     symbols: SymbolTable;
-    propertyRefs: PropertyRef[];
 }
 
 export interface ParsedDocument {
@@ -56,7 +55,7 @@ export interface ParsedDocument {
      * entry carries its own `loc`.
      */
     symbols: SymbolTable;
-    /** Concatenated property refs across all workflows. */
+    /** Combined property refs across all workflows. */
     propertyRefs: PropertyRef[];
     /**
      * Convenience alias for `workflows[0]?.decl`. Several features were
@@ -89,16 +88,18 @@ export function getParsed(doc: TextDocument): ParsedDocument {
     if (lexErrors.length === 0) {
         const parser = new Parser(tokens, comments);
         const { module } = parser.parseModule();
-        const checker = new TypeChecker(loadTaskSchemas());
-        for (const decl of module.workflows) {
+        const decls = module.workflows;
+        for (const decl of decls) {
             const symbols = buildSymbolTable(decl);
-            const propertyRefs = checker.collectPropertyRefs(decl);
-            entry.workflows.push({ decl, symbols, propertyRefs });
+            entry.workflows.push({ decl, symbols });
             entry.symbols.defs.push(...symbols.defs);
             entry.symbols.refs.push(...symbols.refs);
             entry.symbols.taskRefs.push(...symbols.taskRefs);
-            entry.propertyRefs.push(...propertyRefs);
         }
+        // Single multi-workflow call: property refs are file-wide
+        // (only consumed via the combined `parsed.propertyRefs` array).
+        const checker = new TypeChecker(loadTaskSchemas());
+        entry.propertyRefs = checker.collectPropertyRefs(decls);
         if (entry.workflows.length > 0) {
             entry.ast = entry.workflows[0]!.decl;
         }

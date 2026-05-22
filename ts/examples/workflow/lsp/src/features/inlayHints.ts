@@ -3,7 +3,7 @@
 
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { InlayHint, InlayHintKind, Range } from "vscode-languageserver/node.js";
-import type { Expr, Statement, WorkflowDecl } from "workflow-dsl";
+import type { Expr, Statement } from "workflow-dsl";
 import { TypeChecker, formatType } from "workflow-dsl";
 import { getParsed } from "../parsedDocument.js";
 import type { TaskSchema } from "../taskSchemas.js";
@@ -102,13 +102,12 @@ export function computeInlayHints(
     const rangeStartOffset = range ? doc.offsetAt(range.start) : 0;
     const rangeEndOffset = range ? doc.offsetAt(range.end) : text.length;
 
-    const checker = new TypeChecker(schemas);
+    // Single multi-workflow pass: one merged Map<offset, TypeInfo>
+    // keyed by file-wide unique source offset.
+    const decls = parsed.workflows.map((w) => w.decl);
+    const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(decls);
 
-    for (const wf of parsed.workflows) {
-        const ast: WorkflowDecl = wf.decl;
-        // Compute all symbol types once per workflow.
-        const symbolTypes = checker.collectSymbolTypes(ast);
-
+    for (const ast of decls) {
         // ---- const bindings ----
         for (const stmt of iterStatements(ast.body)) {
             if (stmt.kind !== "ConstStatement" || stmt.isSynthetic) continue;
