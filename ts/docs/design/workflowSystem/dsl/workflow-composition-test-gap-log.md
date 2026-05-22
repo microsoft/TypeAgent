@@ -11,20 +11,6 @@ address them. Filled gaps are tracked by the test diff itself.
 
 ## Phase 5 — Engine
 
-### P5-T1. ✅ Caller-side `onError` _recovery_ path for `workflowCall`
-
-- **Gap:** A test that compiles a workflow where the caller installs
-  an `onError` recovery edge on a `WorkflowCallNode`, the callee
-  throws, and the caller routes to its recovery target rather than
-  failing.
-- **Resolution:** Added manual-IR integration test
-  `"caller onError recovers from sub-workflow failure (manual IR)"`
-  in `examples/workflow/engine/test/dsl-integration.spec.ts`. The
-  test constructs the IR directly (the DSL still has no surface
-  syntax for `onError` on a workflow call site) and verifies that
-  a failing sub-workflow routes to the caller's `recover` node
-  while the success path remains unreachable.
-
 ### P5-T2. Named-record argument shape (`helper({a: 1, b: 2})`)
 
 - **Gap:** Dedicated end-to-end test using object-literal arguments
@@ -119,19 +105,3 @@ address them. Filled gaps are tracked by the test diff itself.
   paths. The risk is one of regression-detection breadth, not
   current correctness. Add if the rewriter is ever rewritten to use
   per-kind handlers rather than uniform descent.
-
-## Phase 1 / Phase 7 follow-up — fixture sweep
-
-### P1F-T1. ✅ Multi-workflow content fidelity
-
-- **Gap:** `contentFidelity.spec.ts` filtered out any `examples/*.wf`
-  containing `import` or `export` (i.e. `pipeline.wf`, `writing.wf`),
-  so identifier/literal/comment fidelity was not asserted for
-  multi-workflow sources.
-- **Resolution:** Added `formatModule(module, options)` to the
-  formatter (emits imports + multiple workflow decls; also fixes the
-  long-standing omission where `export` on a workflow declaration
-  was dropped on round-trip). Updated `contentFidelity.spec.ts` to
-  parse module-shaped sources via `parseModule` and re-emit via
-  `formatModule`, removing the filter. `pipeline.wf` and
-  `writing.wf` now run through the data-fidelity check.
