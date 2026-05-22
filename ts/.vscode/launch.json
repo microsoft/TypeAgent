@@ -453,6 +453,29 @@
         "${workspaceFolder}/extensions/agr-language/dist/**/*.js"
       ],
       "preLaunchTask": "build agr-language"
+    },
+    {
+      "name": "Launch Workflow Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/examples/workflow/vscode"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/examples/workflow/vscode/dist/**/*.js"
+      ]
+    },
+    {
+      "name": "Workflow Extension Tests",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/examples/workflow/vscode",
+        "--extensionTestsPath=${workspaceFolder}/examples/workflow/vscode/dist/test/suite/index"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/examples/workflow/vscode/dist/**/*.js"
+      ]
     }
   ]
 }

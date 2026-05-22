@@ -614,3 +614,51 @@ Three plausible end states, one per category:
    [revisit-triggers.md](../ir/revisit-triggers.md) and either
    [ir-v0.1.md](../ir/ir-v0.1.md) or a new decision record.
 5. If all categories close as "working as intended," remove this gap.
+
+## G21: Inferred return type and typed lambda parameters
+
+**Status:** deferred - parser and type checker changes needed.
+
+**Problem 1 - inferred workflow return type:**
+The workflow declaration currently requires an explicit return type:
+
+```
+workflow summarize(repos: string[]): string { ... }
+```
+
+TypeScript allows omitting the annotation when the return type can be
+inferred from the body. The DSL type checker already infers the return
+type during `check()` (it computes `returnType` from `checkStatements`
+and validates it against the declared type). The parser and emitter
+would need changes to make the annotation optional and fall back to the
+inferred type when absent.
+
+**Problem 2 - typed lambda parameters:**
+Lambda parameters in `map`, `filter`, `parallelMap`, and
+`attempts.fallback` currently have no syntax for an explicit type
+annotation:
+
+```
+map(repos, (repo) => { ... })          // repo inferred as string
+```
+
+TypeScript allows writing `(repo: string) =>` to be explicit and get
+an error if the inferred type does not match. The DSL parser would need
+to accept an optional `: TypeExpr` after the param name in arrow
+expressions, and the type checker would need to validate the annotation
+against the inferred element type.
+
+**What needs to happen:**
+
+1. Update the parser to make the workflow return type annotation
+   optional (produce a sentinel `TypeExpr` such as `{ kind: "NamedType",
+name: "_infer" }`) and emit the inferred type in the emitter.
+2. Update the type checker to skip the return-type compatibility check
+   when the annotation is the sentinel, and instead use the inferred
+   type as the declared return type for downstream validation.
+3. Update the parser to accept `(param: TypeExpr) =>` in arrow
+   expressions, store the annotation on `MapNode`/`FilterNode`/etc.,
+   and have the type checker emit an error when the annotation does not
+   match the inferred element type.
+4. Add LSP hover and inlay-hint support that shows the inferred return
+   type next to the workflow name when the annotation is omitted.

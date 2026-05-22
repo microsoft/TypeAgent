@@ -82,3 +82,10 @@ jobs:
         working-directory: ts
         run: |
           npm run test:local
+      - name: UI tests (requires display)
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
+        working-directory: ts
+        run: |
+          Xvfb :99 -screen 0 1600x1200x24 &
+          export DISPLAY=:99
+          npm run test:ui

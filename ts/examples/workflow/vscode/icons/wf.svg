@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Workflow DSL file icon: stylized "wf" on a rounded square -->
+  <rect width="16" height="16" rx="3" fill="#0078d4"/>
+  <text x="1" y="12" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff">wf</text>
+</svg>
