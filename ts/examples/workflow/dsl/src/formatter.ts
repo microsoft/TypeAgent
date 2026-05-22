@@ -55,8 +55,8 @@ export interface FormatOptions {
     printWidth?: number;
     /** When `true`, a single blank line is emitted before any statement
      *  that had at least one blank line before it in the original source.
-     *  Multiple consecutive blank lines are collapsed to one. Default `false`
-     *  (blank lines are stripped, producing compact deterministic output). */
+     *  Multiple consecutive blank lines are collapsed to one. Default `true`.
+     *  Set to `false` to strip blank lines for compact deterministic output. */
     keepBlankLines?: boolean;
 }
 
@@ -73,7 +73,7 @@ export function format(decl: WorkflowDecl, options?: FormatOptions): string {
         indent: options?.indent ?? 4,
         eol: options?.eol ?? "\n",
         printWidth: options?.printWidth ?? 100,
-        keepBlankLines: options?.keepBlankLines ?? false,
+        keepBlankLines: options?.keepBlankLines ?? true,
     };
     validateFormatOptions(opts);
     const p = new Printer(opts);

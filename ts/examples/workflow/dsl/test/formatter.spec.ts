@@ -283,13 +283,13 @@ describe("formatter: keepBlankLines option", () => {
         expect(out).toMatch(/const x = a;\n\n\s*return x;/);
     });
 
-    test("blank line is stripped by default (keepBlankLines:false)", () => {
+    test("blank line is stripped when keepBlankLines:false", () => {
         const src = `workflow w(a: string): string {
     const x = a;
 
     return x;
 }`;
-        const out = format(parse(src));
+        const out = format(parse(src), { keepBlankLines: false });
         expect(out).not.toMatch(/const x = a;\n\n/);
     });
 
