@@ -207,10 +207,14 @@ export function compileFile(
     options?: CompileOptions & {
         resolver?: FileResolver;
         /**
-        /**
          * Restricts the default Node resolver to only allow imports that
-         * resolve within this directory. Defaults to the directory of the
-         * entry file. Has no effect if a custom `resolver` is supplied.
+         * resolve within this directory (containment is enforced after
+         * symlink resolution via `fs.realpathSync`). Defaults to the
+         * directory of the entry file — a safe-by-default posture that
+         * blocks accidental `../` traversal outside the project tree.
+         * Set explicitly to widen the allowed scope (e.g. a workspace
+         * root containing multiple sibling packages). Has no effect if a
+         * custom `resolver` is supplied.
          */
         workspaceRoot?: string;
     },

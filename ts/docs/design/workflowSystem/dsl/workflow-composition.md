@@ -348,6 +348,15 @@ Internally, the compiler mangles all non-entry-file workflow names
 to `__f{N}_{name}` to ensure unique keys in the flat IR map; this
 is an implementation detail invisible to DSL authors.
 
+**Resolver scope (`workspaceRoot`).** The default Node file resolver
+restricts imports to the directory of the entry file. Any `import`
+path that resolves outside this root — including via `../` or
+symlinks (containment is enforced after `fs.realpathSync`) — is a
+compile error. This is a safe-by-default posture; accidental
+traversal outside the project tree is blocked without configuration.
+Callers that need to import across sibling packages can pass an
+explicit `workspaceRoot` to a common parent directory.
+
 ### 4.5 Higher-order positions take block bodies, not values
 
 `map`, `filter`, `fork`, `attempts`, and similar higher-order forms

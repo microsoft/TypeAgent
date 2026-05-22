@@ -312,6 +312,14 @@ calling node's `onError` target (if any) the same way task errors do.
 - The called workflow body is a `WorkflowBody` (see §2.4). It does not
   inherit visibility into the caller's locals; the only data crossing
   the frame boundary is `inputs` (in) and the body's return value (out).
+- **Frame slots inherited from the caller:**
+  - `constants` — shared by reference. Top-level constants are
+    program-wide and identical in every workflow frame.
+  - `bindings` — fresh empty map. Sub-workflow node binds
+    (`const x = …`) never leak into the caller, and the caller's
+    binds are never visible inside the callee.
+  - `state` — not propagated. Loop state is loop-body-local and
+    does not cross workflow boundaries.
 - Errors thrown inside the body propagate to `onError` on the
   `workflowCall` node itself. If no `onError` is set, the error
   escapes to the caller's `onError`, and so on.
