@@ -1717,12 +1717,11 @@ export class WorkflowEngine {
             const effectiveTimeout = node.timeoutMs;
             let subSignal = signal;
             let subAbort: AbortController | undefined;
-            let timeoutSignal: AbortSignal | undefined;
+            let timeoutId: ReturnType<typeof setTimeout> | undefined;
+            let timedOut = false;
             let onParentAbort: (() => void) | undefined;
-            let onTimeoutAbort: (() => void) | undefined;
             if (effectiveTimeout !== undefined) {
                 subAbort = new AbortController();
-                timeoutSignal = AbortSignal.timeout(effectiveTimeout);
                 if (signal.aborted) {
                     subAbort.abort(signal.reason);
                 } else {
@@ -1731,11 +1730,10 @@ export class WorkflowEngine {
                         once: true,
                     });
                 }
-                onTimeoutAbort = () =>
+                timeoutId = setTimeout(() => {
+                    timedOut = true;
                     subAbort!.abort("Sub-workflow timed out");
-                timeoutSignal.addEventListener("abort", onTimeoutAbort, {
-                    once: true,
-                });
+                }, effectiveTimeout);
                 subSignal = subAbort.signal;
             }
 
@@ -1755,21 +1753,21 @@ export class WorkflowEngine {
                     constraints,
                 );
             } catch (e) {
-                if (timeoutSignal?.aborted) {
+                if (timedOut) {
                     throw new EngineError(
                         `Sub-workflow "${calleeName}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
                     );
                 }
                 throw e;
             } finally {
+                if (timeoutId !== undefined) {
+                    clearTimeout(timeoutId);
+                }
                 if (onParentAbort) {
                     signal.removeEventListener("abort", onParentAbort);
                 }
-                if (timeoutSignal && onTimeoutAbort) {
-                    timeoutSignal.removeEventListener("abort", onTimeoutAbort);
-                }
             }
-            if (timeoutSignal?.aborted) {
+            if (timedOut) {
                 throw new EngineError(
                     `Sub-workflow "${calleeName}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
                 );
