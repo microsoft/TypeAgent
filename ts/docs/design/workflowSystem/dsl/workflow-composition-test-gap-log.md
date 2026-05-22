@@ -31,16 +31,6 @@ address them. Filled gaps are tracked by the test diff itself.
 
 ## Phase 7 — Imports
 
-### P7-T1. Same canonical workflow imported under two different aliases
-
-- **Gap:** `import { foo } from "./a.wf"; import { foo as bar } from "./a.wf";`
-  is legal per the loader (different local names, same canonical
-  target). No test verifies that both aliases lower to the same
-  workflow body in the IR.
-- **Reason not filled:** Low-value variant — the rewriter treats
-  each local-name entry independently and the canonical-name path is
-  already covered by the alias-canonicalization test.
-
 ### P7-T2. Nested transitive imported defaults
 
 - **Gap:** Workflow `B` is imported by main and has param

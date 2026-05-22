@@ -153,6 +153,48 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         expect(result.ir?.workflows["articleSummarize"]).toBeUndefined();
     });
 
+    // P7-T1: same file imported under multiple local names. The loader
+    // dedupes by resolved path, so the body appears once in the IR and
+    // both local names rewrite to the same mangled canonical.
+    test("same workflow imported under two aliases lowers to a single body", () => {
+        const resolver = new MemoryResolver({
+            "/p/lib.wf": `
+                export workflow helper(n: number): number {
+                    return n;
+                }
+            `,
+            "/p/main.wf": `
+                import { helper } from "./lib.wf";
+                import { helper as helper2 } from "./lib.wf";
+                export workflow main(x: number): number {
+                    const a = helper(x);
+                    const b = helper2(x);
+                    return a;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        expect(result.errors).toEqual([]);
+
+        // Exactly one body for `helper`, mangled (non-entry file).
+        const helperKeys = Object.keys(result.ir!.workflows).filter((k) =>
+            /(^|_)helper$/.test(k),
+        );
+        expect(helperKeys).toHaveLength(1);
+
+        // Both call sites resolve to the same canonical mangled name.
+        const mainBody = result.ir!.workflows["main"];
+        const calls = Object.values(mainBody.nodes).filter(
+            (n: any) => n.kind === "workflowCall",
+        );
+        expect(calls).toHaveLength(2);
+        const refs = new Set(
+            calls.map((c: any) => c.workflowRef?.name as string),
+        );
+        expect(refs.size).toBe(1);
+        expect([...refs][0]).toBe(helperKeys[0]);
+    });
+
     test("rejects duplicate exported workflow names across files", () => {
         const resolver = new MemoryResolver({
             "/p/a.wf": `
