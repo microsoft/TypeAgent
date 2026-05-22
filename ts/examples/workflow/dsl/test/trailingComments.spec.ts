@@ -13,7 +13,7 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { compile } from "../src/compiler.js";
 import { extractGraph } from "../src/graphExtractor.js";
 import {
@@ -28,7 +28,8 @@ function parse(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens, comments);
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;

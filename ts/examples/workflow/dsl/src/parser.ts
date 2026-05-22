@@ -139,7 +139,6 @@ export class Parser {
     /** Last token consumed by `advance()`. Used to compute statement end
      *  position for trailing-comment same-line detection. */
     private lastToken: Token | undefined;
-    private singleWorkflowMode = false;
 
     private tokens: Token[];
 
@@ -329,7 +328,6 @@ export class Parser {
         imports: ImportDecl[];
         errors: ParseError[];
     } {
-        this.singleWorkflowMode = false;
         const workflows: WorkflowDecl[] = [];
         const imports: ImportDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
@@ -354,8 +352,8 @@ export class Parser {
 
     /**
      * Parse the source into a `Module` (top-level container holding
-     * imports and workflow declarations). New top-level API; existing
-     * `parse()` is preserved for callers that only need workflows.
+     * imports and workflow declarations). The canonical top-level
+     * parse entry point.
      */
     parseModule(): { module: Module; errors: ParseError[] } {
         const l = this.loc();
@@ -364,24 +362,6 @@ export class Parser {
             module: { kind: "Module", imports, workflows, loc: l },
             errors,
         };
-    }
-
-    /** Parse a single workflow (backward compat). */
-    parseSingle(): { ast: WorkflowDecl | undefined; errors: ParseError[] } {
-        this.singleWorkflowMode = true;
-        const ast = this.parseWorkflow();
-        // Trailing tokens past the workflow are a parse error — without
-        // this check, stray punctuation (e.g. an extra `}`) or a second
-        // unintentional `workflow` would be silently dropped on emit.
-        const next = this.peek();
-        if (next.kind !== TokenKind.EOF) {
-            this.error(
-                `Unexpected token after workflow: ${next.kind} (${JSON.stringify(
-                    next.value,
-                )})`,
-            );
-        }
-        return { ast, errors: this.errors };
     }
 
     private peek(): Token {
@@ -500,7 +480,7 @@ export class Parser {
         // before EOF). They have no statement to attach to, so they go
         // on the workflow's trailingComments.
         const trailingComments =
-            this.singleWorkflowMode || this.peek().kind === TokenKind.EOF
+            this.peek().kind === TokenKind.EOF
                 ? this.takeLeadingComments()
                 : undefined;
         const decl: WorkflowDecl = {

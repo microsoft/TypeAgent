@@ -154,7 +154,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         expect(ast).toBeDefined();
         expect(ast!.name).toBe("hello");
@@ -173,7 +174,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         expect(ast!.body[0].kind).toBe("ConstStatement");
     });
@@ -184,7 +186,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         const paramType = ast!.params[0].type;
         expect(paramType.kind).toBe("ObjectType");

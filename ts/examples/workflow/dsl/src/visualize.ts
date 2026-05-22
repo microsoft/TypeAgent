@@ -23,12 +23,15 @@ function parseWf(filePath: string): GraphModel {
         );
     }
     const parser = new Parser(tokens, comments);
-    const { ast, errors: parseErrors } = parser.parseSingle();
-    if (!ast || parseErrors.length > 0) {
+    const { module, errors: parseErrors } = parser.parseModule();
+    if (parseErrors.length > 0 || module.workflows.length === 0) {
         throw new Error(
             `Parse errors: ${parseErrors.map((e) => e.message).join(", ")}`,
         );
     }
+    // The visualizer renders a single workflow; pick the last declared
+    // (entry-style) workflow if multiple are present.
+    const ast = module.workflows[module.workflows.length - 1];
     return extractGraph(ast);
 }
 

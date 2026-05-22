@@ -3,7 +3,7 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { compile } from "../src/compiler.js";
 import { WorkflowDecl } from "../src/ast.js";
 
@@ -11,7 +11,8 @@ function parse(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens, comments);
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;
@@ -436,7 +437,7 @@ describe("formatter: raw literal round-trip (A2)", () => {
             // Lexer caught it - acceptable.
             return;
         }
-        const { errors } = new Parser(tokens, comments).parseSingle();
+        const { errors } = new Parser(tokens, comments).parseModule();
         const hasBackslashErr = errors.some((e) =>
             /backslash/i.test(e.message),
         );

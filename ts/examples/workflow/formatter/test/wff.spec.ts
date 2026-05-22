@@ -176,6 +176,26 @@ describe("wff CLI", () => {
         expect(result.stdout).toMatch(/^\+\+\+ /m);
     });
 
+    test("formats a multi-workflow file with imports (round-trip)", async () => {
+        // The CLI now goes through parseModule/formatModule so imports
+        // and multiple top-level `workflow` declarations are preserved.
+        const src =
+            'import { helper } from "./lib.wf";\n' +
+            "\n" +
+            "workflow a(x: string): string {\n" +
+            "    return x;\n" +
+            "}\n" +
+            "\n" +
+            "export workflow b(x: string): string {\n" +
+            "    const r = helper(x);\n" +
+            "    return r;\n" +
+            "}\n";
+        const result = await runWff([], src);
+        expect(result.code).toBe(0);
+        // Already-formatted input round-trips byte-for-byte.
+        expect(result.stdout).toBe(src);
+    });
+
     test("stdin -> stdout pipeline", async () => {
         const ugly = "workflow id(  x: string  ): string { return x; }\n";
         const result = await runWff([], ugly);

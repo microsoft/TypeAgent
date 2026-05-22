@@ -63,24 +63,10 @@ interface ResolvedOptions {
     printWidth: number;
 }
 
-/** Format a single workflow declaration as DSL source text. */
-export function format(decl: WorkflowDecl, options?: FormatOptions): string {
-    const opts: ResolvedOptions = {
-        indent: options?.indent ?? 4,
-        eol: options?.eol ?? "\n",
-        printWidth: options?.printWidth ?? 100,
-    };
-    validateFormatOptions(opts);
-    const p = new Printer(opts);
-    p.printWorkflow(decl);
-    return p.toString();
-}
-
 /**
  * Format a parsed `Module` (imports plus one or more workflow
- * declarations) back to DSL source text. Use this for multi-workflow
- * files and any file that uses `import` / `export`. Single-workflow
- * sources may continue to use `format(decl)`.
+ * declarations) back to DSL source text. This is the canonical
+ * formatter entry point.
  */
 export function formatModule(module: Module, options?: FormatOptions): string {
     const opts: ResolvedOptions = {

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { lex } from "../src/lexer.js";
-import { Parser } from "../src/parser.js";
+import { Parser, ParseError } from "../src/parser.js";
 import {
     WorkflowDecl,
     Expr,
@@ -14,11 +14,15 @@ import {
     DestructuringConst,
 } from "../src/ast.js";
 
-function parse(source: string) {
+function parse(source: string): {
+    ast: WorkflowDecl | undefined;
+    errors: ParseError[];
+} {
     const { tokens, errors: lexErrors } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens);
-    return parser.parseSingle();
+    const { module, errors } = parser.parseModule();
+    return { ast: module.workflows[0], errors };
 }
 
 function parseExpr(source: string): Expr {
@@ -622,7 +626,7 @@ describe("parser", () => {
         const source = "workflow test(): string { ??? }";
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { errors } = parser.parseSingle();
+        const { errors } = parser.parseModule();
         expect(errors.length).toBeGreaterThan(0);
     });
 
@@ -635,7 +639,7 @@ describe("parser", () => {
         `;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { errors } = parser.parseSingle();
+        const { errors } = parser.parseModule();
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0].message).toContain("Expected ;");
     });
@@ -685,19 +689,23 @@ describe("parser", () => {
         test("stray `}` after workflow is a parse error", () => {
             const { errors } = parse(`workflow w(): number { return 1; }\n}\n`);
             expect(errors.length).toBeGreaterThan(0);
+            // parseModule reports a stray top-level token as an expected
+            // keyword (workflow/export/import) error.
             expect(errors[0].message).toMatch(
-                /Unexpected token after workflow/,
+                /Expected 'workflow', 'export', or 'import'/,
             );
         });
 
-        test("a second `workflow` keyword is a parse error", () => {
-            const { errors } = parse(
+        test("a second `workflow` keyword is accepted (multi-workflow file)", () => {
+            // Multi-workflow files are now first-class; the loader and
+            // type checker handle name uniqueness downstream.
+            const { tokens } = lex(
                 `workflow a(): number { return 1; }\nworkflow b(): number { return 2; }\n`,
             );
-            expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].message).toMatch(
-                /Unexpected token after workflow/,
-            );
+            const { module, errors } = new Parser(tokens).parseModule();
+            expect(errors).toEqual([]);
+            expect(module.workflows).toHaveLength(2);
+            expect(module.workflows.map((w) => w.name)).toEqual(["a", "b"]);
         });
 
         test("trailing whitespace and comments only are NOT a parse error", () => {
