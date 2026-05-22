@@ -149,7 +149,11 @@ export function createServer(
             const doc = documents.get(uri);
             if (!doc) return;
             const diagnostics = computeDiagnostics(doc.getText(), schemas);
-            void connection.sendDiagnostics({ uri, diagnostics });
+            try {
+                void connection.sendDiagnostics({ uri, diagnostics });
+            } catch {
+                // Connection disposed (e.g. during test teardown); drop silently.
+            }
         }, debounceMs);
         // Don't keep the event loop alive just for diagnostics.
         if (typeof handle.unref === "function") handle.unref();
@@ -166,10 +170,14 @@ export function createServer(
         const t = pendingDiagnostics.get(event.document.uri);
         if (t) clearTimeout(t);
         pendingDiagnostics.delete(event.document.uri);
-        void connection.sendDiagnostics({
-            uri: event.document.uri,
-            diagnostics: [],
-        });
+        try {
+            void connection.sendDiagnostics({
+                uri: event.document.uri,
+                diagnostics: [],
+            });
+        } catch {
+            // Connection disposed; drop silently.
+        }
     });
 
     connection.onDocumentFormatting((params) => {
