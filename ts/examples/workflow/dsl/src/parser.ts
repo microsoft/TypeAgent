@@ -585,22 +585,45 @@ export class Parser {
         innerComments: Comment[] | undefined;
     } {
         const stmts: Statement[] = [];
+        let prevEndLine: number | undefined = undefined;
         while (
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
-            const s = this.parseStatement();
-            if (s) stmts.push(s);
+            const s = this.parseStatement(prevEndLine);
+            if (s) {
+                stmts.push(s);
+                prevEndLine = s.endLine;
+            }
         }
         const innerComments = this.finalizeBlock(stmts);
         return { stmts, innerComments };
     }
 
-    private parseStatement(): Statement | undefined {
+    /**
+     * Parse a single statement, optionally detecting a blank line between
+     * the previous statement (whose last token was on `prevEndLine`) and
+     * this one. When `prevEndLine` is `undefined` (first statement in a
+     * block), blank-line detection is skipped so no blank line is injected
+     * at the top of a block.
+     */
+    private parseStatement(prevEndLine?: number): Statement | undefined {
         const leadingComments = this.takeLeadingComments();
+        // Detect blank line: if the gap between the previous statement's end
+        // line and the first line of this item (leading comment or token) is
+        // >= 2 there is at least one blank line in between.
+        let blankLineBefore = false;
+        if (prevEndLine !== undefined) {
+            const firstLine =
+                leadingComments !== undefined && leadingComments.length > 0
+                    ? leadingComments[0].pos.line
+                    : this.peek().line;
+            blankLineBefore = firstLine - prevEndLine >= 2;
+        }
         const stmt = this.parseStatementInner();
         if (stmt) {
             if (leadingComments) stmt.leadingComments = leadingComments;
+            if (blankLineBefore) stmt.blankLineBefore = true;
             const endLine = this.lastToken?.line;
             if (endLine !== undefined) {
                 stmt.endLine = endLine;
@@ -915,14 +938,18 @@ export class Parser {
     } {
         this.inSwitchDepth++;
         const stmts: Statement[] = [];
+        let prevEndLine: number | undefined = undefined;
         while (
             this.peek().kind !== TokenKind.Case &&
             this.peek().kind !== TokenKind.Default &&
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
-            const s = this.parseStatement();
-            if (s) stmts.push(s);
+            const s = this.parseStatement(prevEndLine);
+            if (s) {
+                stmts.push(s);
+                prevEndLine = s.endLine;
+            }
         }
         // For switch arms we differ from generic finalizeBlock: only
         // capture inline-trailing comments (same source line as the last
