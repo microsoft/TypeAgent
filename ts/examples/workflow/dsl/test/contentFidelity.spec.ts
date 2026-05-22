@@ -42,7 +42,7 @@ import { fileURLToPath } from "url";
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format, formatModule } from "../src/formatter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,6 +67,28 @@ function parseAndFormat(src: string): string {
         );
     }
     return format(ast!);
+}
+
+/**
+ * Multi-workflow round-trip: parse as a Module (imports + multiple
+ * workflows) and re-emit via `formatModule`. Used for fixtures that
+ * contain `import` or `export`.
+ */
+function parseAndFormatModule(src: string): string {
+    const { tokens, errors: lexErrors, comments } = lex(src);
+    if (lexErrors.length > 0) {
+        throw new Error(
+            `lex errors: ${lexErrors.map((e) => e.message).join(", ")}`,
+        );
+    }
+    const p = new Parser(tokens, comments);
+    const { module, errors } = p.parseModule();
+    if (errors.length > 0) {
+        throw new Error(
+            `parse errors: ${errors.map((e) => e.message).join(", ")}`,
+        );
+    }
+    return formatModule(module);
 }
 
 interface Multiset {
@@ -134,12 +156,20 @@ function multisetDiff(
 }
 
 function assertDataFidelity(src: string, label: string): void {
-    const formatted = parseAndFormat(src);
+    const formatted = isModuleSource(src)
+        ? parseAndFormatModule(src)
+        : parseAndFormat(src);
     const before = dataMultisetOf(src);
     const after = dataMultisetOf(formatted);
     const diff = multisetDiff(label, before, after);
     if (diff) throw new Error(diff);
     expect(true).toBe(true);
+}
+
+/** A source is a Module source (must use parseModule/formatModule) iff
+ *  it contains `import` or `export` at statement position. */
+function isModuleSource(src: string): boolean {
+    return /^\s*(import|export)\b/m.test(src);
 }
 
 function tokenStreamDiff(
@@ -365,12 +395,6 @@ describe("content fidelity (data): examples/*.wf preserve all identifiers, liter
     const files = fs
         .readdirSync(EXAMPLES_DIR)
         .filter((f) => f.endsWith(".wf"))
-        .filter((f) => {
-            // parseSingle / format work on single-workflow sources only.
-            // Skip multi-workflow files (those using `import` or `export`).
-            const src = fs.readFileSync(path.join(EXAMPLES_DIR, f), "utf8");
-            return !/^\s*(import|export)\b/m.test(src);
-        })
         .sort();
     if (files.length === 0) {
         test.skip("no .wf example files found", () => {});

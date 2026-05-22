@@ -122,18 +122,16 @@ address them. Filled gaps are tracked by the test diff itself.
 
 ## Phase 1 / Phase 7 follow-up — fixture sweep
 
-### P1F-T1. Multi-workflow content fidelity
+### P1F-T1. ✅ Multi-workflow content fidelity
 
-- **Gap:** `contentFidelity.spec.ts` filters out any `examples/*.wf`
+- **Gap:** `contentFidelity.spec.ts` filtered out any `examples/*.wf`
   containing `import` or `export` (i.e. `pipeline.wf`, `writing.wf`),
-  so identifier/literal/comment fidelity is not asserted for
+  so identifier/literal/comment fidelity was not asserted for
   multi-workflow sources.
-- **Reason not filled:** `format()` and `Parser.parseSingle()`
-  operate on a single `WorkflowDecl`; there is no `formatModule()`
-  yet that round-trips imports + multiple workflow decls. Adding
-  that is a formatter work item, not a composition correctness
-  one — the per-workflow body uses the same emit paths already
-  exercised by single-workflow files.
-- **Re-trigger:** Add when a `formatModule` (or equivalent
-  multi-decl emitter) lands, or when prettier/IDE formatting of
-  `.wf` files is wired up.
+- **Resolution:** Added `formatModule(module, options)` to the
+  formatter (emits imports + multiple workflow decls; also fixes the
+  long-standing omission where `export` on a workflow declaration
+  was dropped on round-trip). Updated `contentFidelity.spec.ts` to
+  parse module-shaped sources via `parseModule` and re-emit via
+  `formatModule`, removing the filter. `pipeline.wf` and
+  `writing.wf` now run through the data-fidelity check.

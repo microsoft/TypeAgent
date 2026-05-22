@@ -24,6 +24,8 @@
 
 import {
     WorkflowDecl,
+    Module,
+    ImportDecl,
     ParamDecl,
     TypeExpr,
     Statement,
@@ -71,6 +73,24 @@ export function format(decl: WorkflowDecl, options?: FormatOptions): string {
     validateFormatOptions(opts);
     const p = new Printer(opts);
     p.printWorkflow(decl);
+    return p.toString();
+}
+
+/**
+ * Format a parsed `Module` (imports plus one or more workflow
+ * declarations) back to DSL source text. Use this for multi-workflow
+ * files and any file that uses `import` / `export`. Single-workflow
+ * sources may continue to use `format(decl)`.
+ */
+export function formatModule(module: Module, options?: FormatOptions): string {
+    const opts: ResolvedOptions = {
+        indent: options?.indent ?? 4,
+        eol: options?.eol ?? "\n",
+        printWidth: options?.printWidth ?? 100,
+    };
+    validateFormatOptions(opts);
+    const p = new Printer(opts);
+    p.printModule(module);
     return p.toString();
 }
 
@@ -371,10 +391,50 @@ class Printer {
         }
     }
 
+    // ---- Module / imports ----
+
+    /**
+     * Emit a complete module: any imports first, then each workflow
+     * declaration separated by a blank line. A blank line also
+     * separates the imports block from the first workflow when both
+     * are present.
+     */
+    printModule(module: Module): void {
+        for (const imp of module.imports) {
+            this.printImport(imp);
+        }
+        if (module.imports.length > 0 && module.workflows.length > 0) {
+            this.newline();
+        }
+        module.workflows.forEach((wf, i) => {
+            if (i > 0) this.newline();
+            this.printWorkflow(wf);
+        });
+    }
+
+    /**
+     * Emit a single `import { name, other as alias } from "./path";`
+     * declaration. Leading comments attached to the import are emitted
+     * on their own lines above the statement.
+     */
+    private printImport(decl: ImportDecl): void {
+        this.printLeadingComments(decl.leadingComments);
+        this.write("import { ");
+        decl.names.forEach((s, i) => {
+            if (i > 0) this.write(", ");
+            this.write(s.name);
+            if (s.alias !== undefined) this.write(` as ${s.alias}`);
+        });
+        this.write(" } from ");
+        this.write(quoteStringLiteral(decl.source));
+        this.line(";");
+    }
+
     // ---- Workflow ----
 
     printWorkflow(decl: WorkflowDecl): void {
         this.printLeadingComments(decl.leadingComments);
+        if (decl.exported) this.write("export ");
         this.write(`workflow ${decl.name}(`);
         this.printParamList(decl, decl.params, decl.paramInnerComments);
         this.write("): ");
