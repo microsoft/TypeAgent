@@ -104,7 +104,20 @@ function isUnresolved(t: TypeInfo): boolean {
     return t.kind === "unresolved";
 }
 
-function typeEq(a: TypeInfo, b: TypeInfo): boolean {
+/**
+ * Loose kind-level compatibility check used only by the `===`/`!==`
+ * operator. Returns true if comparing `a` and `b` with strict equality is
+ * not obviously a type error.
+ *
+ * This is intentionally permissive for objects, arrays, and tuples (any
+ * two values of the same kind are considered comparable), since without
+ * union types in the DSL a stricter check would reject reasonable
+ * comparisons. See G18 for the eventual tightening.
+ *
+ * For structural assignability (return types, const annotations, ternary
+ * arms), use `isAssignableTo` instead.
+ */
+function isEqualityComparable(a: TypeInfo, b: TypeInfo): boolean {
     // Unresolved (error recovery): compatible with everything.
     if (a.kind === "unresolved" || b.kind === "unresolved") return true;
     // never is the bottom type: source=never assignable to any target,
@@ -126,6 +139,68 @@ function typeEq(a: TypeInfo, b: TypeInfo): boolean {
         return a.name === b.name;
     }
     return true; // structural comparison not needed for operator checks
+}
+
+/**
+ * Returns true if `source` is assignable to `target`.
+ * Performs recursive structural comparison for objects and arrays.
+ */
+function isAssignableTo(target: TypeInfo, source: TypeInfo): boolean {
+    if (target.kind === "unresolved" || source.kind === "unresolved") return true;
+    if (source.kind === "never") return true;
+    if (target.kind === "never") return false;
+    if (target.kind === "unknown") return true;
+    if (source.kind === "unknown") return false;
+    if (target.kind !== source.kind) return false;
+    switch (target.kind) {
+        case "primitive": {
+            const s = source as PrimitiveType;
+            if (
+                (target.name === "integer" && s.name === "number") ||
+                (target.name === "number" && s.name === "integer")
+            )
+                return true;
+            return target.name === s.name;
+        }
+        case "object": {
+            const s = source as ObjectTypeInfo;
+            for (const [fieldName, fieldInfo] of target.fields) {
+                const sourceField = s.fields.get(fieldName);
+                if (fieldInfo.optional) {
+                    // Optional target field: absent in source is fine, but if
+                    // present it must still have a compatible type.
+                    if (!sourceField) continue;
+                    if (!isAssignableTo(fieldInfo.type, sourceField.type))
+                        return false;
+                    continue;
+                }
+                if (!sourceField) return false;
+                // A required target field cannot be satisfied by an optional
+                // source field: the source field might be absent at runtime.
+                if (sourceField.optional) return false;
+                if (!isAssignableTo(fieldInfo.type, sourceField.type))
+                    return false;
+            }
+            return true;
+        }
+        case "array": {
+            const s = source as ArrayTypeInfo;
+            return isAssignableTo(target.element, s.element);
+        }
+        case "tuple": {
+            const s = source as TupleTypeInfo;
+            if (target.elements.length !== s.elements.length) return false;
+            return target.elements.every((t, i) =>
+                isAssignableTo(t, s.elements[i]),
+            );
+        }
+        default: {
+            // Exhaustiveness check: if a new TypeInfo kind is added, this
+            // becomes a compile error rather than silently returning true.
+            const _exhaustive: never = target;
+            return _exhaustive;
+        }
+    }
 }
 
 function typeName(t: TypeInfo): string {
@@ -305,7 +380,7 @@ export class TypeChecker {
         const returnType = this.checkStatements(wf.body, scope);
         // Validate return type matches declaration
         const declared = this.resolveTypeExpr(wf.returnType);
-        if (returnType.kind !== "unresolved" && !typeEq(declared, returnType)) {
+        if (returnType.kind !== "unresolved" && !isAssignableTo(declared, returnType)) {
             this.addError(
                 `Workflow return type '${typeName(returnType)}' is not assignable to declared type '${typeName(declared)}'`,
                 wf.loc.line,
@@ -398,7 +473,7 @@ export class TypeChecker {
                     const declared = this.resolveTypeExpr(s.typeAnnotation);
                     if (
                         !isUnresolved(valueType) &&
-                        !typeEq(declared, valueType)
+                        !isAssignableTo(declared, valueType)
                     ) {
                         this.addError(
                             `Type '${typeName(valueType)}' is not assignable to type '${typeName(declared)}'`,
@@ -675,7 +750,10 @@ export class TypeChecker {
                 // result is the other arm's type (matches TypeScript).
                 if (consType.kind === "never") return altType;
                 if (altType.kind === "never") return consType;
-                if (!typeEq(consType, altType)) {
+                if (
+                    !isAssignableTo(consType, altType) ||
+                    !isAssignableTo(altType, consType)
+                ) {
                     this.addError(
                         `Ternary arms must have the same type: '${typeName(consType)}' vs '${typeName(altType)}'`,
                         e.loc.line,
@@ -892,7 +970,7 @@ export class TypeChecker {
                     right.kind !== "never" &&
                     left.kind !== "unknown" &&
                     right.kind !== "unknown" &&
-                    !typeEq(left, right)
+                    !isEqualityComparable(left, right)
                 ) {
                     this.addError(
                         `Operator '${e.op}' requires same types on both sides: '${typeName(left)}' vs '${typeName(right)}'`,
