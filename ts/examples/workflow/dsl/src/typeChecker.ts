@@ -298,11 +298,11 @@ export class TypeChecker {
 
     /**
      * Type-check a single workflow body. Internal: invoked per workflow
-     * by {@link checkAll}. The workflow map and task map must already be
-     * set on the instance.
+     * by {@link checkAll}. Appends to {@link errors} rather than
+     * replacing it, so multi-workflow checks accumulate diagnostics
+     * across all bodies.
      */
-    private checkOne(wf: WorkflowDecl): TypeError[] {
-        this.errors = [];
+    private checkOne(wf: WorkflowDecl): void {
         const scope = new Scope();
         const seenParams = new Set<string>();
         for (const p of wf.params) {
@@ -344,7 +344,6 @@ export class TypeChecker {
                 wf.loc.col,
             );
         }
-        return this.errors;
     }
 
     /**
@@ -388,15 +387,11 @@ export class TypeChecker {
             seen.add(w.name);
         }
 
-        // Per-workflow type check. We accumulate errors across all
-        // workflows rather than short-circuiting; `checkOne` resets
-        // `this.errors`, so capture and restore around each call.
-        const allErrors: TypeError[] = [...this.errors];
+        // Per-workflow type check. `checkOne` appends to `this.errors`,
+        // so diagnostics from every workflow accumulate naturally.
         for (const w of workflows) {
-            const wfErrors = this.checkOne(w);
-            allErrors.push(...wfErrors);
+            this.checkOne(w);
         }
-        this.errors = allErrors;
 
         // Static recursion check across the call graph.
         this.checkRecursion(workflows);
@@ -408,12 +403,20 @@ export class TypeChecker {
      * DFS the workflow call graph and report any cycle (direct or
      * mutual recursion). Each WorkflowDecl is a node; its edges are
      * the targets of every `WorkflowCallExpr` found anywhere in its
-     * body (including inside builtins / nested control flow).
+     * body (including inside builtins / nested control flow). Each
+     * edge carries the source location of the offending call so the
+     * diagnostic is pinned at the user-visible call site (not the
+     * callee declaration).
      */
     private checkRecursion(workflows: WorkflowDecl[]): void {
-        const edges = new Map<string, string[]>();
+        interface Edge {
+            target: string;
+            line: number;
+            col: number;
+        }
+        const edges = new Map<string, Edge[]>();
         for (const w of workflows) {
-            const targets: string[] = [];
+            const targets: Edge[] = [];
             collectWorkflowCalls(w.body, targets);
             edges.set(w.name, targets);
         }
@@ -427,21 +430,25 @@ export class TypeChecker {
         const visit = (name: string, stack: string[]): void => {
             color.set(name, GRAY);
             stack.push(name);
-            for (const tgt of edges.get(name) ?? []) {
+            for (const edge of edges.get(name) ?? []) {
+                const tgt = edge.target;
                 if (!edges.has(tgt)) continue;
                 const c = color.get(tgt) ?? WHITE;
                 if (c === GRAY) {
-                    // Found a cycle: stack[stack.indexOf(tgt) ...] -> tgt
+                    // Cycle closes at `edge` (call from `name` -> `tgt`).
                     const idx = stack.indexOf(tgt);
                     const cycle = stack.slice(idx).concat(tgt);
-                    const key = [...cycle].sort().join("|");
+                    // Dedup by the canonical rotation of the cycle:
+                    // two distinct cycles sharing members must not
+                    // collapse together (only true rotations of the
+                    // same cycle should).
+                    const key = canonicalRotation(cycle.slice(0, -1));
                     if (!reported.has(key)) {
                         reported.add(key);
-                        const wf = this.workflowMap.get(tgt);
                         this.addError(
                             `Recursive workflow call detected: ${cycle.join(" -> ")} (workflow recursion is not supported; see design §2.4)`,
-                            wf?.loc.line ?? 0,
-                            wf?.loc.col ?? 0,
+                            edge.line,
+                            edge.col,
                         );
                     }
                 } else if (c === WHITE) {
@@ -1279,17 +1286,25 @@ interface SourceLocationLike {
 }
 
 /**
- * Walk a statement list and collect the names of every workflow call
- * expression encountered (used for the static recursion check). The
- * traversal descends into nested control flow and builtin nodes.
+ * Walk a statement list and collect every workflow call expression
+ * encountered (used for the static recursion check). Each entry
+ * carries the call's source location so the diagnostic can point at
+ * the call site rather than the callee declaration. The traversal
+ * descends into nested control flow and builtin nodes.
  */
-function collectWorkflowCalls(stmts: Statement[], out: string[]): void {
+interface CallEdge {
+    target: string;
+    line: number;
+    col: number;
+}
+
+function collectWorkflowCalls(stmts: Statement[], out: CallEdge[]): void {
     for (const s of stmts) {
         walkStmt(s, out);
     }
 }
 
-function walkStmt(s: Statement, out: string[]): void {
+function walkStmt(s: Statement, out: CallEdge[]): void {
     switch (s.kind) {
         case "ConstStatement":
         case "DestructuringConst":
@@ -1316,10 +1331,10 @@ function walkStmt(s: Statement, out: string[]): void {
     }
 }
 
-function walkExpr(e: Expr, out: string[]): void {
+function walkExpr(e: Expr, out: CallEdge[]): void {
     switch (e.kind) {
         case "WorkflowCallExpr":
-            out.push(e.name);
+            out.push({ target: e.name, line: e.loc.line, col: e.loc.col });
             for (const a of e.args) walkExpr(a.value, out);
             return;
         case "TaskCallExpr":
@@ -1370,4 +1385,19 @@ function walkExpr(e: Expr, out: string[]): void {
             collectWorkflowCalls(e.body, out);
             return;
     }
+}
+
+/**
+ * Returns a stable key for a cycle that is invariant under rotation
+ * but distinguishes cycles that merely share members. Pick the
+ * lexicographically smallest rotation of the cycle's node sequence.
+ */
+function canonicalRotation(cycle: string[]): string {
+    if (cycle.length === 0) return "";
+    let best = cycle.join("|");
+    for (let i = 1; i < cycle.length; i++) {
+        const rot = cycle.slice(i).concat(cycle.slice(0, i)).join("|");
+        if (rot < best) best = rot;
+    }
+    return best;
 }

@@ -44,6 +44,17 @@ interface ScopeContext {
     state?: Record<string, unknown>;
 }
 
+/**
+ * Per-run state threaded through every internal execute* method.
+ * Carrying this on the call stack (rather than on the engine instance)
+ * is what makes a single `WorkflowEngine` safe to use for concurrent
+ * `run()` invocations.
+ */
+interface RunCtx {
+    /** The currently-executing IR's workflows table; consulted by sub-workflow dispatch. */
+    workflows: Record<string, WorkflowBody>;
+}
+
 // ---- Template resolution ----
 // Note: the error throws below (unknown namespace, unresolved reference,
 // path projection failures) should never fire when static validation is
@@ -303,14 +314,6 @@ export class WorkflowEngine {
         ReturnType<typeof this.ajv.compile>
     >();
     private defenseInDepth = true;
-    /**
-     * The workflows table of the currently-executing IR.  Populated at
-     * the start of `run()` and cleared at completion.  Sub-workflow
-     * dispatch (`workflowCall` node) reads from this map to resolve the
-     * callee body without threading it through every internal method.
-     */
-    private currentWorkflows: Record<string, WorkflowBody> | undefined =
-        undefined;
 
     constructor(private readonly registry: TaskRegistry) {}
 
@@ -395,22 +398,11 @@ export class WorkflowEngine {
 
         debug("run %s started (workflow: %s)", runId, ir.entry);
 
-        // The engine uses `this.currentWorkflows` to thread the IR's
-        // workflows table to `executeWorkflowCall` without a parameter
-        // refactor across every internal method.  This means a single
-        // engine instance cannot service two concurrent `run()` calls.
-        // Detect that misuse explicitly rather than silently corrupt
-        // sub-workflow dispatch in the first run.
-        if (this.currentWorkflows !== undefined) {
-            return {
-                runId: "",
-                success: false,
-                error: {
-                    message:
-                        "WorkflowEngine.run() is not re-entrant: another run is already in progress on this engine instance.",
-                },
-            };
-        }
+        // Per-run state. Carrying this on the call stack rather than on
+        // `this` means a single engine instance can service multiple
+        // concurrent `run()` calls without sub-workflow dispatch racing
+        // across them.
+        const ctx: RunCtx = { workflows: ir.workflows };
 
         // Validate workflow input against inputSchema.
         if (entryBody.inputSchema) {
@@ -449,10 +441,7 @@ export class WorkflowEngine {
         }
 
         // Set currentWorkflows only once we've passed all early-return
-        // validation, so the matching cleanup in the `finally` block is
-        // always reached.
-        this.currentWorkflows = ir.workflows;
-
+        // validation.
         const scope: ScopeContext = {
             input: input ?? {},
             constants,
@@ -476,6 +465,7 @@ export class WorkflowEngine {
                 scopePath,
                 runId,
                 abortSignal,
+                ctx,
                 policy,
                 approve,
                 taskTimeoutMs,
@@ -546,8 +536,6 @@ export class WorkflowEngine {
             });
 
             return { runId, success: false, error: { message, nodeId } };
-        } finally {
-            this.currentWorkflows = undefined;
         }
     }
 
@@ -558,6 +546,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         policy?: TaskPolicy,
         approve?: ApprovalFn,
         taskTimeoutMs?: number,
@@ -649,6 +638,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -675,6 +665,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -699,6 +690,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -723,6 +715,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -748,6 +741,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -998,6 +992,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1049,6 +1044,7 @@ export class WorkflowEngine {
                 armScopePath,
                 runId,
                 signal,
+                ctx,
                 policy,
                 approve,
                 taskTimeoutMs,
@@ -1119,6 +1115,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1207,6 +1204,7 @@ export class WorkflowEngine {
                     bodyScopePath,
                     runId,
                     signal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,
@@ -1334,6 +1332,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1399,6 +1398,7 @@ export class WorkflowEngine {
                     branchScopePath,
                     runId,
                     signal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,
@@ -1481,6 +1481,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1559,6 +1560,7 @@ export class WorkflowEngine {
                     itemScopePath,
                     runId,
                     signal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,
@@ -1650,6 +1652,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1661,7 +1664,7 @@ export class WorkflowEngine {
         iteration?: number,
     ): Promise<string | undefined> {
         const calleeName = node.workflowRef.name;
-        const callee = this.currentWorkflows?.[calleeName];
+        const callee = ctx.workflows[calleeName];
         if (!callee) {
             // Unreachable after static validation: type checker verifies
             // workflowRef.name exists in the IR's workflows table.
@@ -1745,6 +1748,7 @@ export class WorkflowEngine {
                     subScopePath,
                     runId,
                     subSignal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,

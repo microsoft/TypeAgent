@@ -23,7 +23,7 @@
  *    checker).
  */
 
-import { Module, WorkflowDecl, Statement, Expr, TaskArg } from "./ast.js";
+import { Module, WorkflowDecl, ImportDecl, Statement, Expr, TaskArg } from "./ast.js";
 import { lex } from "./lexer.js";
 import { Parser } from "./parser.js";
 
@@ -74,6 +74,12 @@ export function loadModuleTree(
 ): LoadResult {
     const errors: LoadError[] = [];
     const loaded = new Map<string, LoadedModule>();
+    // Memo of `resolver.resolve(spec, importer)` results, keyed by the
+    // ImportDecl that produced them. The default Node resolver calls
+    // `fs.realpathSync` (one syscall) and custom resolvers may be even
+    // more expensive or non-idempotent, so we cache during BFS and
+    // reuse in Phase 3.
+    const importResolutions = new Map<ImportDecl, string>();
     const queue: string[] = [entryPath];
 
     // Phase 1 — BFS load: lex + parse every transitively-imported
@@ -137,6 +143,10 @@ export function loadModuleTree(
                 });
                 continue;
             }
+            // Cache the resolved path on the ImportDecl so Phase 3
+            // doesn't have to call `resolver.resolve` (which can be
+            // expensive or non-idempotent) a second time.
+            importResolutions.set(imp, resolved);
             if (!loaded.has(resolved)) queue.push(resolved);
         }
     }
@@ -163,6 +173,21 @@ export function loadModuleTree(
     const fileIndexes = new Map<string, number>();
     let fileIdx = 0;
     for (const { path } of loaded.values()) {
+        if (fileIndexes.has(path)) {
+            // Invariant: BFS dedups by the resolver's normalized path,
+            // so this map should be 1:1 with `loaded`. If a future
+            // resolver returns non-canonical paths (e.g. different
+            // casing or unresolved symlinks), mangling could collide;
+            // surface the bug here rather than emit a broken IR.
+            errors.push({
+                phase: "load",
+                message: `Internal: duplicate file path in load set: ${path}`,
+                line: 0,
+                col: 0,
+                file: path,
+            });
+            continue;
+        }
         fileIndexes.set(path, fileIdx++);
     }
 
@@ -181,8 +206,10 @@ export function loadModuleTree(
             local.set(wf.name, mangledName(wf.name, path));
         }
         for (const imp of module.imports) {
-            const sourcePath = resolver.resolve(imp.source, path);
-            const sourceMod = loaded.get(sourcePath);
+            const sourcePath = importResolutions.get(imp);
+            const sourceMod = sourcePath
+                ? loaded.get(sourcePath)
+                : undefined;
             if (!sourceMod) {
                 // Should not happen if BFS succeeded; defensive.
                 errors.push({
@@ -230,7 +257,7 @@ export function loadModuleTree(
                     continue;
                 }
                 // Map local alias/name → mangled canonical name in source file.
-                local.set(localName, mangledName(spec.name, sourcePath));
+                local.set(localName, mangledName(spec.name, sourceMod.path));
             }
         }
         fileLocalMaps.set(path, local);
