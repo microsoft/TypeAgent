@@ -175,4 +175,26 @@ describe("inlay hints", () => {
         // One hint per case-arm const binding (n and m).
         expect(hints.length).toBeGreaterThanOrEqual(2);
     });
+
+    it("emits inferred-type hints for every workflow in a multi-workflow file", () => {
+        // Two workflows, each with a const binding that should yield a
+        // hint. A bug that processed only the first workflow would
+        // silently drop the second hint.
+        const text =
+            `workflow a(): integer {\n` +
+            `    const n = list.length([1, 2]);\n` + // hint on line 1
+            `    return n;\n` +
+            `}\n` +
+            `workflow b(): string {\n` +
+            `    const s = "hi";\n` + // hint on line 5
+            `    return s;\n` +
+            `}\n`;
+        const hints = computeInlayHints(doc(text), schemas);
+        // One hint per workflow.
+        expect(hints.length).toBe(2);
+        const lines = hints.map((h) => h.position.line).sort((a, b) => a - b);
+        expect(lines).toEqual([1, 5]);
+        const labels = hints.map((h) => h.label).sort();
+        expect(labels).toEqual([": integer", ": string"]);
+    });
 });

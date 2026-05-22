@@ -136,6 +136,35 @@ describe("code actions — inline const", () => {
         // The safety check should suppress the inline action.
         expect(inline).toBeUndefined();
     });
+
+    it("inline-const safety is scoped to the owner workflow", () => {
+        // Workflow b shadows 'x'; that must NOT block inlining 'y' in
+        // workflow a, which references its own 'x'.
+        const MULTI_SRC =
+            `workflow a(): string {\n` +
+            `    const x = "outer";\n` + // line 1
+            `    const y = x;\n` + // line 2 — inline target
+            `    return y;\n` + // line 3
+            `}\n` + // line 4
+            `workflow b(): string {\n` + // line 5
+            `    const x = "b-outer";\n` + // line 6
+            `    if (true) {\n` + // line 7
+            `        const x = "b-inner";\n` + // line 8 — irrelevant shadow
+            `        return x;\n` + // line 9
+            `    }\n` + // line 10
+            `    return x;\n` + // line 11
+            `}\n`; // line 12
+        const range = {
+            start: { line: 2, character: 10 },
+            end: { line: 2, character: 11 },
+        };
+        const actions = computeCodeActions(doc(MULTI_SRC), range);
+        const inline = actions.find((a) =>
+            a.title.includes("Inline const 'y'"),
+        );
+        // The sibling workflow's shadow must not poison workflow a.
+        expect(inline).toBeDefined();
+    });
 });
 
 describe("code actions — concat→template", () => {
