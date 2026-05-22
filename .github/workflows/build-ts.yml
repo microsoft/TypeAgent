@@ -32,7 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [20, 22]
+        version: [22, 24]
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -76,9 +76,16 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
-          npm run lint          
+          npm run lint
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           npm run test:local
+      - name: UI tests (requires display)
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
+        working-directory: ts
+        run: |
+          Xvfb :99 -screen 0 1600x1200x24 &
+          export DISPLAY=:99
+          npm run test:ui

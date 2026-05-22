@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { debugShell } from "./debug.js";
+import { AGENT_SERVER_DEFAULT_PORT } from "@typeagent/agent-server-client";
 
 type ShellCommandLineArgs = {
     reset: boolean;
@@ -163,7 +164,7 @@ export function parseShellCommandLine() {
                         result.connect = port;
                     }
                 } else {
-                    result.connect = 8999; // default port
+                    result.connect = AGENT_SERVER_DEFAULT_PORT; // default port
                 }
                 continue;
             }

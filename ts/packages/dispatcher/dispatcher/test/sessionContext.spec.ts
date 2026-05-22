@@ -31,6 +31,10 @@ function makeContext(overrides: {
                 getSharedLocalHostPort: async () => undefined,
                 setLocalHostPort: () => {},
             },
+            portRegistrar: {
+                register: () => "test-reg-id",
+                release: () => {},
+            },
             clientIO: {
                 notify: () => {},
                 question: async () => 0,
@@ -49,7 +53,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: "/global/instance",
             persistDir: "/session/persist",
         });
-        createSessionContext("myAgent", {}, context, false);
+        createSessionContext("myAgent", {}, context, false, "test-session-id");
         const instanceCall = calls.find((c) => c.name === "myAgent");
         expect(instanceCall?.baseDir).toBe("/global/instance");
     });
@@ -59,7 +63,7 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: "/session/persist",
         });
-        createSessionContext("myAgent", {}, context, false);
+        createSessionContext("myAgent", {}, context, false, "test-session-id");
         const instanceCall = calls.find((c) => c.name === "myAgent");
         expect(instanceCall?.baseDir).toBe("/session/persist");
     });
@@ -73,8 +77,8 @@ describe("createSessionContext storage routing", () => {
             instanceDir: "/global/instance",
             persistDir: "/session/session-2",
         });
-        createSessionContext("myAgent", {}, ctx1, false);
-        createSessionContext("myAgent", {}, ctx2, false);
+        createSessionContext("myAgent", {}, ctx1, false, "test-session-id");
+        createSessionContext("myAgent", {}, ctx2, false, "test-session-id");
         expect(calls1.find((c) => c.name === "myAgent")?.baseDir).toBe(
             "/global/instance",
         );
@@ -88,7 +92,13 @@ describe("createSessionContext storage routing", () => {
             instanceDir: undefined,
             persistDir: undefined,
         });
-        const sessionCtx = createSessionContext("myAgent", {}, context, false);
+        const sessionCtx = createSessionContext(
+            "myAgent",
+            {},
+            context,
+            false,
+            "test-session-id",
+        );
         expect(sessionCtx.instanceStorage).toBeUndefined();
     });
 });
@@ -126,7 +136,7 @@ describe("beginAgentThread", () => {
 
     test("setDisplay routes to clientIO with synthetic agent-* clientRequestId and kind", () => {
         const { ctx, calls } = makeContextWithClientIO();
-        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-1");
         const thread = sc.beginAgentThread("bubble");
         thread.setDisplay({ type: "text", content: "hi" });
 
@@ -142,7 +152,7 @@ describe("beginAgentThread", () => {
 
     test("appendDisplay carries mode through and reuses the same clientRequestId", () => {
         const { ctx, calls } = makeContextWithClientIO();
-        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-2");
         const thread = sc.beginAgentThread("toast");
         thread.appendDisplay({ type: "text", content: "a" }, "inline");
         thread.appendDisplay({ type: "text", content: "b" });
@@ -158,7 +168,7 @@ describe("beginAgentThread", () => {
 
     test("two threads get distinct clientRequestIds", () => {
         const { ctx, calls } = makeContextWithClientIO();
-        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-3");
         sc.beginAgentThread("bubble").setDisplay({
             type: "text",
             content: "1",
@@ -174,7 +184,7 @@ describe("beginAgentThread", () => {
 
     test("setDisplay/appendDisplay throw after complete()", () => {
         const { ctx } = makeContextWithClientIO();
-        const sc = createSessionContext("myAgent", {}, ctx, false);
+        const sc = createSessionContext("myAgent", {}, ctx, false, "sc-test-4");
         const thread = sc.beginAgentThread("inline");
         thread.complete();
         expect(() => thread.setDisplay({ type: "text", content: "x" })).toThrow(
@@ -183,6 +193,133 @@ describe("beginAgentThread", () => {
         expect(() =>
             thread.appendDisplay({ type: "text", content: "x" }),
         ).toThrow(/completed/);
+    });
+});
+
+describe("notifyReadinessChanged", () => {
+    function makeContextWithAgents(
+        refreshImpl: (name: string) => Promise<any>,
+    ) {
+        const refreshCalls: string[] = [];
+        const ctx = {
+            session: {
+                getSessionDirPath: () => undefined,
+                getConfig: () => ({}),
+            },
+            storageProvider: { getStorage: () => ({}) as any },
+            persistDir: undefined,
+            instanceDir: undefined,
+            commandLock: async (fn: any) => fn(),
+            agents: {
+                getTransientState: () => undefined,
+                getSharedLocalHostPort: async () => undefined,
+                setLocalHostPort: () => {},
+                refreshReadiness: async (name: string) => {
+                    refreshCalls.push(name);
+                    return refreshImpl(name);
+                },
+            },
+            clientIO: {
+                notify: () => {},
+                question: async () => 0,
+            },
+            translatorCache: { clear: () => {} },
+            lastActionSchemaName: undefined,
+            conversationManager: undefined,
+        } as any;
+        return { ctx, refreshCalls };
+    }
+
+    test("delegates to agents.refreshReadiness with the agent's own name", async () => {
+        const { ctx, refreshCalls } = makeContextWithAgents(async () => ({
+            kind: "ready",
+        }));
+        const sc = createSessionContext("myAgent", {}, ctx, false, "nrc-1");
+        await sc.notifyReadinessChanged!();
+        expect(refreshCalls).toEqual(["myAgent"]);
+    });
+
+    test("swallows errors from refreshReadiness so event-driven callers do not throw", async () => {
+        const { ctx, refreshCalls } = makeContextWithAgents(async () => {
+            throw new Error("boom");
+        });
+        const sc = createSessionContext("myAgent", {}, ctx, false, "nrc-2");
+        await expect(sc.notifyReadinessChanged!()).resolves.toBeUndefined();
+        expect(refreshCalls).toEqual(["myAgent"]);
+    });
+});
+
+describe("notifyClientCountChanged", () => {
+    function makeContextWithRegistrar() {
+        const setCalls: Array<{
+            agentName: string;
+            role: string;
+            sessionContextId: string;
+            count: number;
+        }> = [];
+        const ctx = {
+            session: {
+                getSessionDirPath: () => undefined,
+                getConfig: () => ({}),
+            },
+            storageProvider: { getStorage: () => ({}) as any },
+            persistDir: undefined,
+            instanceDir: undefined,
+            commandLock: async (fn: any) => fn(),
+            agents: {
+                getTransientState: () => undefined,
+                getSharedLocalHostPort: async () => undefined,
+                setLocalHostPort: () => {},
+            },
+            clientIO: {
+                notify: () => {},
+                question: async () => 0,
+            },
+            translatorCache: { clear: () => {} },
+            lastActionSchemaName: undefined,
+            conversationManager: undefined,
+            portRegistrar: {
+                setClientCount: (
+                    agentName: string,
+                    role: string,
+                    sessionContextId: string,
+                    count: number,
+                ) => {
+                    setCalls.push({
+                        agentName,
+                        role,
+                        sessionContextId,
+                        count,
+                    });
+                },
+            },
+        } as any;
+        return { ctx, setCalls };
+    }
+
+    test("delegates to portRegistrar.setClientCount with the agent's own name and sessionContextId", async () => {
+        const { ctx, setCalls } = makeContextWithRegistrar();
+        const sc = createSessionContext("myAgent", {}, ctx, false, "ncc-1");
+        await sc.notifyClientCountChanged!("default", 3);
+        expect(setCalls).toEqual([
+            {
+                agentName: "myAgent",
+                role: "default",
+                sessionContextId: "ncc-1",
+                count: 3,
+            },
+        ]);
+    });
+
+    test("swallows errors from setClientCount so event-driven callers do not throw", async () => {
+        const { ctx } = makeContextWithRegistrar();
+        ctx.portRegistrar.setClientCount = () => {
+            throw new Error("boom");
+        };
+        const sc = createSessionContext("myAgent", {}, ctx, false, "ncc-2");
+        await expect(
+            sc.notifyClientCountChanged!("default", 1),
+        ).resolves.toBeUndefined();
     });
 });
 

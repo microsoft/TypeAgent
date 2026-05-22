@@ -25,6 +25,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "cheerio": "1.0.0-rc.12",
@@ -49,6 +50,6 @@
     "rimraf": "^6.0.1"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

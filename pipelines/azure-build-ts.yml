@@ -28,8 +28,8 @@ jobs:
     displayName: "Build TypeScript Project"
     strategy:
       matrix:
-        node_22:
-          nodeVersion: "22"
+        node_24:
+          nodeVersion: "24"
     steps:
       - template: include-prepare-repo.yml
         parameters:
@@ -71,6 +71,14 @@ jobs:
         workingDirectory: $(buildDirectory)
 
       - script: |
+          Xvfb :99 -screen 0 1600x1200x24 &
+          export DISPLAY=:99
+          npm run test:ui
+        displayName: "UI tests (requires display)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+        workingDirectory: $(buildDirectory)
+
+      - script: |
           npm run lint
         displayName: "Lint"
         workingDirectory: $(buildDirectory)
@@ -83,7 +91,6 @@ jobs:
       - script: |
           echo $(ADO_REGISTRY)
           echo "registry=$(ADO_REGISTRY)" > .npmrc
-          echo "always-auth=true" >> .npmrc
           cat .npmrc
         displayName: "Create .npmrc file."
         workingDirectory: $(NpmRcDirectory)
@@ -96,7 +103,7 @@ jobs:
       - script: |
           for file in $(publishedPackageDirectory)/*.tgz; do
             echo "Publishing file: $file"
-            npm publish --registry=$(ADO_REGISTRY) "$file"
+            npm publish --registry=$(ADO_REGISTRY) --tag=latest "$file"
           done
         displayName: "Publish packages"
         workingDirectory: $(NpmRcDirectory)

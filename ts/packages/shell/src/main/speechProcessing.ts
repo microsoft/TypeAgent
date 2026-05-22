@@ -30,12 +30,13 @@ Only classify statements as questions or requests if they are complete statement
 `;
 
     constructor() {
+        const apiSettings = openai.apiSettingsFromEnv(
+            openai.ModelType.Chat,
+            undefined,
+            "GPT_5_NANO",
+        );
         this.model = openai.createChatModel(
-            openai.azureApiSettingsFromEnv(
-                openai.ModelType.Chat,
-                undefined,
-                "GPT_5_NANO",
-            ),
+            apiSettings,
             {
                 temperature: 1.0,
                 max_completion_tokens: 8196,

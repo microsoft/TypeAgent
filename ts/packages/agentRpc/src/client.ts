@@ -33,6 +33,7 @@ import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
+import { randomUUID } from "crypto";
 
 /**
  * Race a promise against an AbortSignal. If the signal fires before the
@@ -186,6 +187,15 @@ export async function createAgentRpcClient(
 ) {
     const channel = channelProvider.createChannel(`agent:${name}`);
     const contextMap = createObjectMap<SessionContext<ShimContext>>();
+    // Tracks port registration handles returned by sessionContext.registerPort
+    // so the out-of-process agent can release them via the regId we sent back.
+    const registrationHandles = new Map<string, { release: () => void }>();
+    // Reverse index: which regIds belong to which agent context. Lets us
+    // release everything an out-of-process agent registered if it closes
+    // its context without calling releasePort for each one (crash, bug,
+    // forgetful agent). Without this, the agent could leak release closures
+    // for the lifetime of the RPC client.
+    const regIdsByContext = new Map<number, Set<string>>();
     function getContextParam(
         context: SessionContext<ShimContext>,
     ): ContextParams {
@@ -194,6 +204,7 @@ export async function createAgentRpcClient(
             hasInstanceStorage: context.instanceStorage !== undefined,
             hasSessionStorage: context.sessionStorage !== undefined,
             agentContextId: context.agentContext?.contextId,
+            sessionContextId: context.sessionContextId,
         };
     }
 
@@ -326,6 +337,42 @@ export async function createAgentRpcClient(
             const context = contextMap.get(param.contextId);
             context.setLocalHostPort(param.port);
         },
+        registerPort: async (param: {
+            contextId: number;
+            role: string;
+            port: number;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            const handle = context.registerPort(param.role, param.port);
+            const regId = randomUUID();
+            registrationHandles.set(regId, handle);
+            let regIds = regIdsByContext.get(param.contextId);
+            if (regIds === undefined) {
+                regIds = new Set<string>();
+                regIdsByContext.set(param.contextId, regIds);
+            }
+            regIds.add(regId);
+            return { regId };
+        },
+        releasePort: async (param: { regId: string; contextId?: number }) => {
+            const handle = registrationHandles.get(param.regId);
+            if (handle === undefined) {
+                return;
+            }
+            // Defense-in-depth: only honor releasePort when the calling
+            // context actually owns the regId. Without this, a buggy or
+            // compromised out-of-process agent could pass another
+            // agent's regId and cancel its registration.
+            if (param.contextId !== undefined) {
+                const owned = regIdsByContext.get(param.contextId);
+                if (owned === undefined || !owned.has(param.regId)) {
+                    return;
+                }
+                owned.delete(param.regId);
+            }
+            registrationHandles.delete(param.regId);
+            handle.release();
+        },
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);
             return context.indexes(param.type as any);
@@ -333,6 +380,18 @@ export async function createAgentRpcClient(
         reloadAgentSchema: async (param: { contextId: number }) => {
             const context = contextMap.get(param.contextId);
             return context.reloadAgentSchema();
+        },
+        notifyReadinessChanged: async (param: { contextId: number }) => {
+            const context = contextMap.get(param.contextId);
+            return context.notifyReadinessChanged();
+        },
+        notifyClientCountChanged: async (param: {
+            contextId: number;
+            role: string;
+            count: number;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return context.notifyClientCountChanged(param.role, param.count);
         },
         storageRead: async (param: {
             contextId: number;
@@ -746,6 +805,26 @@ export async function createAgentRpcClient(
     const invokeCloseAgentContext = result.closeAgentContext;
     result.closeAgentContext = async (context: SessionContext<ShimContext>) => {
         const result = await invokeCloseAgentContext?.(context);
+        const contextId = contextMap.getId(context);
+        // Backstop: release any port handles the out-of-process agent
+        // failed to release explicitly (crash, bug, or just forgot). Mirrors
+        // the dispatcher-side releaseAllForSession backstop so handles
+        // can't outlive the context they're scoped to.
+        const regIds = regIdsByContext.get(contextId);
+        if (regIds !== undefined) {
+            for (const regId of regIds) {
+                const handle = registrationHandles.get(regId);
+                if (handle !== undefined) {
+                    registrationHandles.delete(regId);
+                    try {
+                        handle.release();
+                    } catch {
+                        // Best-effort cleanup; swallow.
+                    }
+                }
+            }
+            regIdsByContext.delete(contextId);
+        }
         contextMap.close(context);
         // Clean up the options RPC channel once this agent context is closed.
         // Options are agent-scoped (created once per initializeAgentContext call)

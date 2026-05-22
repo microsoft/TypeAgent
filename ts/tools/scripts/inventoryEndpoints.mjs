@@ -87,7 +87,7 @@ async function listDeployments(account) {
 async function listKeyVaultSecrets(vaultName) {
     try {
         const raw = await execAsync(
-            `az keyvault secret list --vault-name ${vaultName}`,
+            `az keyvault secret list --vault-name ${vaultName} -o json`,
         );
         return JSON.parse(raw);
     } catch (e) {

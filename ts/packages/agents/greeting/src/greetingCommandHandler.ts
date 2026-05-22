@@ -60,7 +60,7 @@ async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
 
     // non blocking execution call
     exec(
-        "az ad signed-in-user show",
+        "az ad signed-in-user show -o json",
         { timeout: 15000 },
         (_error, stdout, _stderr) => {
             try {

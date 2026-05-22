@@ -12,144 +12,121 @@
  */
 
 import { execFile } from "node:child_process";
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { TaskDefinition } from "workflow-model";
+import { JSONSchema, TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
+import { BUILTIN_TASK_SCHEMAS } from "./builtinTaskSchemas.js";
 
-export const intAdd: TaskDefinition<
-    { a: number; b: number },
-    { result: number }
-> = {
-    name: "int.add",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["a", "b"],
-        properties: { a: { type: "integer" }, b: { type: "integer" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "integer" } },
-    },
-    async execute(input) {
-        return { kind: "ok", output: { result: input.a + input.b } };
-    },
-};
+const SCHEMA_BY_NAME = new Map(
+    BUILTIN_TASK_SCHEMAS.map((s) => [s.name, s] as const),
+);
 
-export const intLessThan: TaskDefinition<
-    { a: number; b: number },
-    { result: boolean }
-> = {
-    name: "int.lessThan",
-    sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["a", "b"],
-        properties: { a: { type: "integer" }, b: { type: "integer" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["result"],
-        properties: { result: { type: "boolean" } },
-    },
-    async execute(input) {
-        return { kind: "ok", output: { result: input.a < input.b } };
-    },
-};
+/**
+ * Look up a task's declared schema triple (name, inputSchema, outputSchema)
+ * from the single source of truth in `builtinTaskSchemas.ts`.
+ */
+function taskSchema(
+    name: string,
+): Pick<TaskDefinition, "name" | "inputSchema" | "outputSchema"> {
+    const s = SCHEMA_BY_NAME.get(name);
+    if (!s) {
+        throw new Error(
+            `No schema declared for builtin task '${name}' in builtinTaskSchemas.ts`,
+        );
+    }
+    return {
+        name: s.name,
+        inputSchema: s.inputSchema,
+        outputSchema: s.outputSchema,
+    };
+}
 
-export const listLength: TaskDefinition<
-    { list: unknown[] },
-    { length: number }
-> = {
-    name: "list.length",
+/**
+ * Recursively enforce OpenAI structured output requirements on a schema:
+ * - `additionalProperties: false` on every object
+ * - `required` must list every key in `properties`
+ * Returns a deep copy; the original schema is not mutated.
+ */
+function sealObjects(schema: JSONSchema): JSONSchema {
+    const copy = { ...schema };
+    if (copy.type === "object" || copy.properties) {
+        copy.additionalProperties = false;
+        if (copy.properties) {
+            const sealed: Record<string, JSONSchema> = {};
+            for (const [key, sub] of Object.entries(copy.properties)) {
+                if (typeof sub !== "boolean") {
+                    sealed[key] = sealObjects(sub);
+                }
+            }
+            copy.properties = sealed;
+            copy.required = Object.keys(sealed);
+        }
+    }
+    if (
+        copy.items &&
+        typeof copy.items !== "boolean" &&
+        !Array.isArray(copy.items)
+    ) {
+        copy.items = sealObjects(copy.items);
+    }
+    for (const kw of ["oneOf", "anyOf", "allOf"] as const) {
+        if (Array.isArray(copy[kw])) {
+            copy[kw] = (copy[kw] as JSONSchema[]).map(sealObjects);
+        }
+    }
+    return copy;
+}
+
+export const listLength: TaskDefinition<{ list: unknown[] }, number> = {
+    ...taskSchema("list.length"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list"],
-        properties: { list: { type: "array" } },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["length"],
-        properties: { length: { type: "integer" } },
-    },
     async execute(input) {
-        return { kind: "ok", output: { length: input.list.length } };
+        return { kind: "ok", output: input.list.length };
     },
 };
 
 export const listElementAt: TaskDefinition<
     { list: unknown[]; index: number },
-    { element: unknown }
+    unknown
 > = {
-    name: "list.elementAt",
+    ...taskSchema("list.elementAt"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list", "index"],
-        properties: {
-            list: { type: "array" },
-            index: { type: "integer" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["element"],
-        properties: { element: {} },
-    },
     async execute(input) {
-        return { kind: "ok", output: { element: input.list[input.index] } };
+        if (input.index < 0 || input.index >= input.list.length) {
+            return {
+                kind: "fail",
+                error: {
+                    message: `Index ${input.index} out of bounds for list of length ${input.list.length}`,
+                },
+            };
+        }
+        return { kind: "ok", output: input.list[input.index] };
     },
 };
 
 export const listAppend: TaskDefinition<
     { list: unknown[]; item: unknown },
-    { list: unknown[] }
+    unknown[]
 > = {
-    name: "list.append",
+    ...taskSchema("list.append"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list", "item"],
-        properties: { list: { type: "array" }, item: {} },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["list"],
-        properties: { list: { type: "array" } },
-    },
     async execute(input) {
-        return { kind: "ok", output: { list: [...input.list, input.item] } };
+        return { kind: "ok", output: [...input.list, input.item] };
     },
 };
 
 export const boolToLabel: TaskDefinition<
     { value: boolean; ifTrue: string; ifFalse: string },
-    { label: string }
+    string
 > = {
-    name: "bool.toLabel",
+    ...taskSchema("bool.toLabel"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value", "ifTrue", "ifFalse"],
-        properties: {
-            value: { type: "boolean" },
-            ifTrue: { type: "string" },
-            ifFalse: { type: "string" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["label"],
-        properties: { label: { type: "string" } },
-    },
     async execute(input) {
         return {
             kind: "ok",
-            output: { label: input.value ? input.ifTrue : input.ifFalse },
+            output: input.value ? input.ifTrue : input.ifFalse,
         };
     },
 };
@@ -165,30 +142,8 @@ export const shellExec: TaskDefinition<
     },
     { stdout: string; stderr: string; exitCode: number }
 > = {
-    name: "shell.exec",
+    ...taskSchema("shell.exec"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["command"],
-        properties: {
-            command: { type: "string" },
-            args: { type: "array", items: { type: "string" } },
-            cwd: { type: "string" },
-            maxBuffer: {
-                type: "integer",
-                description: "Max stdout+stderr in bytes (default 1MB)",
-            },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["stdout", "stderr", "exitCode"],
-        properties: {
-            stdout: { type: "string" },
-            stderr: { type: "string" },
-            exitCode: { type: "integer" },
-        },
-    },
     async execute(input, ctx) {
         const { command, args = [], cwd } = input;
         const maxBuffer = input.maxBuffer ?? 1024 * 1024; // 1MB default
@@ -255,23 +210,10 @@ export const shellExec: TaskDefinition<
 
 export const llmGenerate: TaskDefinition<
     { prompt: string; endpoint?: string },
-    { text: string }
+    string
 > = {
-    name: "llm.generate",
+    ...taskSchema("llm.generate"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["prompt"],
-        properties: {
-            prompt: { type: "string" },
-            endpoint: { type: "string" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["text"],
-        properties: { text: { type: "string" } },
-    },
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
         let model;
@@ -292,7 +234,64 @@ export const llmGenerate: TaskDefinition<
                 error: { message: result.message },
             };
         }
-        return { kind: "ok", output: { text: result.data } };
+        return { kind: "ok", output: result.data };
+    },
+};
+
+export const llmGenerateJson: TaskDefinition<
+    { prompt: string; endpoint?: string },
+    unknown
+> = {
+    ...taskSchema("llm.generateJson"),
+    sideEffects: true,
+    async execute(input, ctx) {
+        ctx?.signal?.throwIfAborted();
+        let model;
+        try {
+            model = openai.createJsonChatModel(input.endpoint);
+        } catch (err) {
+            return {
+                kind: "fail",
+                error: {
+                    message: err instanceof Error ? err.message : String(err),
+                },
+            };
+        }
+        // Derive structured output schema from the node's outputSchema if
+        // it declares a non-opaque schema.
+        const outSchema = ctx.outputSchema;
+        const jsonSchema =
+            outSchema &&
+            typeof outSchema !== "boolean" &&
+            Object.keys(outSchema).length > 0
+                ? {
+                      name: "response",
+                      strict: true as const,
+                      schema: sealObjects(outSchema) as Record<string, unknown>,
+                  }
+                : undefined;
+        const result = await model.complete(
+            input.prompt,
+            undefined,
+            jsonSchema,
+        );
+        if (!result.success) {
+            return {
+                kind: "fail",
+                error: { message: result.message },
+            };
+        }
+        try {
+            const value = JSON.parse(result.data);
+            return { kind: "ok", output: value };
+        } catch (parseErr) {
+            return {
+                kind: "fail",
+                error: {
+                    message: `Failed to parse LLM JSON response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+                },
+            };
+        }
     },
 };
 
@@ -300,83 +299,42 @@ export const llmGenerate: TaskDefinition<
 
 export const textTemplate: TaskDefinition<
     { template: string; vars: Record<string, unknown> },
-    { text: string }
+    string
 > = {
-    name: "text.template",
+    ...taskSchema("text.template"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["template", "vars"],
-        properties: {
-            template: { type: "string" },
-            vars: { type: "object" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["text"],
-        properties: { text: { type: "string" } },
-    },
     async execute(input) {
         let text = input.template;
         for (const [key, value] of Object.entries(input.vars)) {
             text = text.replaceAll(`{{${key}}}`, String(value));
         }
-        return { kind: "ok", output: { text } };
+        return { kind: "ok", output: text };
     },
 };
 
 export const stringJoin: TaskDefinition<
     { list: string[]; delimiter: string },
-    { text: string }
+    string
 > = {
-    name: "string.join",
+    ...taskSchema("string.join"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list", "delimiter"],
-        properties: {
-            list: { type: "array", items: { type: "string" } },
-            delimiter: { type: "string" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["text"],
-        properties: { text: { type: "string" } },
-    },
     async execute(input) {
-        return {
-            kind: "ok",
-            output: { text: input.list.join(input.delimiter) },
-        };
+        return { kind: "ok", output: input.list.join(input.delimiter) };
     },
 };
 
 export const stringSplit: TaskDefinition<
-    { text: string; delimiter: string },
-    { list: string[] }
+    { text: string; delimiter: string; keepEmpty?: boolean },
+    string[]
 > = {
-    name: "string.split",
+    ...taskSchema("string.split"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["text", "delimiter"],
-        properties: {
-            text: { type: "string" },
-            delimiter: { type: "string" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["list"],
-        properties: { list: { type: "array", items: { type: "string" } } },
-    },
     async execute(input) {
-        const list = input.text
-            .split(input.delimiter)
-            .filter((s) => s.length > 0);
-        return { kind: "ok", output: { list } };
+        const list = input.text.split(input.delimiter);
+        return {
+            kind: "ok",
+            output: input.keepEmpty ? list : list.filter((s) => s.length > 0),
+        };
     },
 };
 
@@ -388,29 +346,8 @@ export const httpGet: TaskDefinition<
     },
     { body: string; status: number }
 > = {
-    name: "http.get",
+    ...taskSchema("http.get"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["url"],
-        properties: {
-            url: { type: "string" },
-            headers: { type: "object" },
-            maxResponseBytes: {
-                type: "integer",
-                description:
-                    "Max response body size in bytes (default 10MB). Responses larger than this are truncated.",
-            },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["body", "status"],
-        properties: {
-            body: { type: "string" },
-            status: { type: "integer" },
-        },
-    },
     async execute(input, ctx) {
         const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024; // 10MB
         try {
@@ -426,7 +363,7 @@ export const httpGet: TaskDefinition<
                 hostname === "[::1]" ||
                 hostname?.startsWith("10.") ||
                 hostname?.startsWith("192.168.") ||
-                hostname?.startsWith("172.16.") ||
+                /^172\.(1[6-9]|2\d|3[01])\./.test(hostname ?? "") ||
                 hostname?.endsWith(".internal") ||
                 parsed.protocol === "file:"
             ) {
@@ -550,41 +487,24 @@ const DEFAULT_MAX_FILE_READ_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const fileRead: TaskDefinition<
     { path: string; maxBytes?: number },
-    { content: string }
+    string
 > = {
-    name: "file.read",
+    ...taskSchema("file.read"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["path"],
-        properties: {
-            path: { type: "string" },
-            maxBytes: {
-                type: "integer",
-                description: "Max file size in bytes (default 10MB)",
-            },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["content"],
-        properties: { content: { type: "string" } },
-    },
     async execute(input) {
         const maxBytes = input.maxBytes ?? DEFAULT_MAX_FILE_READ_BYTES;
         try {
             const safePath = validateFilePath(input.path);
-            const info = await stat(safePath);
-            if (info.size > maxBytes) {
+            const content = await readFile(safePath, "utf8");
+            if (Buffer.byteLength(content, "utf8") > maxBytes) {
                 return {
                     kind: "fail",
                     error: {
-                        message: `File is ${info.size} bytes, exceeding the ${maxBytes} byte limit`,
+                        message: `File exceeds the ${maxBytes} byte limit`,
                     },
                 };
             }
-            const content = await readFile(safePath, "utf8");
-            return { kind: "ok", output: { content } };
+            return { kind: "ok", output: content };
         } catch (err) {
             return {
                 kind: "fail",
@@ -598,29 +518,16 @@ export const fileRead: TaskDefinition<
 
 export const fileWrite: TaskDefinition<
     { path: string; content: string },
-    { path: string }
+    string
 > = {
-    name: "file.write",
+    ...taskSchema("file.write"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["path", "content"],
-        properties: {
-            path: { type: "string" },
-            content: { type: "string" },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["path"],
-        properties: { path: { type: "string" } },
-    },
     async execute(input) {
         try {
             const safePath = validateFilePath(input.path);
             await mkdir(dirname(safePath), { recursive: true });
             await writeFile(safePath, input.content, "utf8");
-            return { kind: "ok", output: { path: safePath } };
+            return { kind: "ok", output: safePath };
         } catch (err) {
             return {
                 kind: "fail",
@@ -632,21 +539,246 @@ export const fileWrite: TaskDefinition<
     },
 };
 
-/** The 5 standard-library tasks (pure, no IO). */
+// ---- compare tasks ----
+
+export const compareEquals: TaskDefinition<
+    { left: unknown; right: unknown },
+    boolean
+> = {
+    ...taskSchema("compare.equals"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left === input.right };
+    },
+};
+
+export const compareNotEquals: TaskDefinition<
+    { left: unknown; right: unknown },
+    boolean
+> = {
+    ...taskSchema("compare.notEquals"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left !== input.right };
+    },
+};
+
+export const compareGreaterThan: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    ...taskSchema("compare.greaterThan"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left > input.right };
+    },
+};
+
+export const compareLessThan: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    ...taskSchema("compare.lessThan"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left < input.right };
+    },
+};
+
+export const compareGreaterOrEqual: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    ...taskSchema("compare.greaterOrEqual"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left >= input.right };
+    },
+};
+
+export const compareLessOrEqual: TaskDefinition<
+    { left: number; right: number },
+    boolean
+> = {
+    ...taskSchema("compare.lessOrEqual"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left <= input.right };
+    },
+};
+
+// ---- bool tasks ----
+
+export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
+    ...taskSchema("bool.not"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: !input.value };
+    },
+};
+
+// ---- math tasks ----
+
+export const mathAdd: TaskDefinition<{ left: number; right: number }, number> =
+    {
+        ...taskSchema("math.add"),
+        sideEffects: false,
+        async execute(input) {
+            return { kind: "ok", output: input.left + input.right };
+        },
+    };
+
+export const mathSubtract: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    ...taskSchema("math.subtract"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left - input.right };
+    },
+};
+
+export const mathMultiply: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    ...taskSchema("math.multiply"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left * input.right };
+    },
+};
+
+export const mathDivide: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    ...taskSchema("math.divide"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left / input.right };
+    },
+};
+
+export const mathModulo: TaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    ...taskSchema("math.modulo"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left % input.right };
+    },
+};
+
+export const mathNegate: TaskDefinition<{ value: number }, number> = {
+    ...taskSchema("math.negate"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: -input.value };
+    },
+};
+
+export const mathFloor: TaskDefinition<{ value: number }, number> = {
+    ...taskSchema("math.floor"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: Math.floor(input.value) };
+    },
+};
+
+export const mathRound: TaskDefinition<{ value: number }, number> = {
+    ...taskSchema("math.round"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: Math.round(input.value) };
+    },
+};
+
+export const mathCeil: TaskDefinition<{ value: number }, number> = {
+    ...taskSchema("math.ceil"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: Math.ceil(input.value) };
+    },
+};
+
+// ---- noop (merge/join point for branches) ----
+
+export const noop: TaskDefinition<
+    Record<string, never>,
+    Record<string, never>
+> = {
+    ...taskSchema("noop"),
+    sideEffects: false,
+    async execute() {
+        return { kind: "ok", output: {} };
+    },
+};
+
+// ---- identity (pass-through for literal values in branches) ----
+
+export const identity: TaskDefinition<{ value: unknown }, unknown> = {
+    ...taskSchema("identity"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.value };
+    },
+};
+
+// ---- error tasks ----
+
+export const errorFail: TaskDefinition<{ value: unknown }, never> = {
+    ...taskSchema("error.fail"),
+    sideEffects: false,
+    async execute(input) {
+        return {
+            kind: "fail",
+            error: {
+                message:
+                    typeof input.value === "string"
+                        ? input.value
+                        : JSON.stringify(input.value),
+                data: input.value,
+            },
+        };
+    },
+};
+
+/** Standard-library tasks (pure, no IO). */
 export const standardLibraryTasks: TaskDefinition[] = [
-    intAdd,
-    intLessThan,
     listLength,
     listElementAt,
     listAppend,
+    compareEquals,
+    compareNotEquals,
+    compareGreaterThan,
+    compareLessThan,
+    compareGreaterOrEqual,
+    compareLessOrEqual,
+    boolNot,
+    mathAdd,
+    mathSubtract,
+    mathMultiply,
+    mathDivide,
+    mathModulo,
+    mathNegate,
+    mathFloor,
+    mathRound,
+    mathCeil,
+    errorFail,
+    noop,
+    identity,
 ];
 
-/** All builtin tasks: stdlib + IO + utility + legacy. */
+/** All builtin tasks: stdlib + IO + utility. */
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
     boolToLabel,
     shellExec,
     llmGenerate,
+    llmGenerateJson,
     httpGet,
     fileRead,
     fileWrite,

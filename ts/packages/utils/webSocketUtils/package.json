@@ -13,7 +13,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./originAllowlist": "./dist/originAllowlist.js"
   },
   "files": [
     "dist",
@@ -27,11 +28,12 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
     "isomorphic-ws": "^5.0.0",
-    "ws": "^8.17.1"
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

@@ -8,7 +8,7 @@ The sample demonstrates:
 - How the Chat Response schema allows the LLM to generate several responses and select one at random from the generated options.
 - How the [Greeting Command Handler](./src/greetingCommandHandler.ts) may use a web search engine to augment the generated responses with personalized information.
 
-The sample includes an example implementation of lookups with Bing. To experiment with lookups, please add your Bing API key to the root **.env** file with the following key:  
+The sample includes an example implementation of lookups with Bing. To experiment with lookups, please add your Bing API key to the root **config.local.yaml** (under `bing.apiKey`) or the legacy **.env** file with the following key:  
 **BING_API_KEY**
 
 If a key is not available, the agent will return a "No Information available" response.

@@ -26,6 +26,8 @@ import {
     EndpointPool,
     makeSingleMemberPool,
 } from "./endpointPool.js";
+import { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
+import { getRuntimeConfig } from "./runtimeConfig.js";
 import {
     PromptSection,
     Result,
@@ -49,6 +51,12 @@ import {
     openAIApiSettingsFromEnv,
 } from "./openaiSettings.js";
 import { AzureApiSettings, azureApiSettingsFromEnv } from "./azureSettings.js";
+import {
+    CopilotApiSettings,
+    copilotApiSettingsFromConfig,
+} from "./copilotSettings.js";
+import { createCopilotChatModel } from "./copilotModels.js";
+import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
@@ -68,7 +76,7 @@ export type ModelInfo<T> = {
     maxTokens: number;
 };
 
-export type ModelProviders = "openai" | "azure" | "ollama";
+export type ModelProviders = "openai" | "azure" | "ollama" | "copilot";
 
 export type CommonApiSettings = {
     provider: ModelProviders;
@@ -87,7 +95,8 @@ export type CommonApiSettings = {
 export type ApiSettings =
     | OllamaApiSettings
     | AzureApiSettings
-    | OpenAIApiSettings;
+    | OpenAIApiSettings
+    | CopilotApiSettings;
 
 /**
  * Environment variables used to configure OpenAI clients
@@ -118,9 +127,9 @@ export enum EnvVars {
 
     AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5 = "AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5",
     AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5 = "AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5",
-    // Deprecated: use AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5 / AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5
-    AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
-    AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
+    // Generic fallback for any current/future image model
+    AZURE_OPENAI_API_KEY_GPT_IMAGE = "AZURE_OPENAI_API_KEY_GPT_IMAGE",
+    AZURE_OPENAI_ENDPOINT_GPT_IMAGE = "AZURE_OPENAI_ENDPOINT_GPT_IMAGE",
     AZURE_OPENAI_API_KEY_SORA_2 = "AZURE_OPENAI_API_KEY_SORA_2",
     AZURE_OPENAI_ENDPOINT_SORA_2 = "AZURE_OPENAI_ENDPOINT_SORA_2",
 
@@ -143,12 +152,41 @@ export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
  * @param env Environment variables or arbitrary Record
  * @param endpointName optional suffix to add to env variable names. Lets you target different backends
  * @returns
+ *
+ * @deprecated Use the typed-config entry points instead
+ * (`azureApiSettingsFromConfig` / `openAIApiSettingsFromConfig` in
+ * `apiSettingsFromConfig.ts`). The env-based path bypasses the YAML
+ * config loaded via `@typeagent/config` and will fail when only
+ * suffixed deployments (e.g. `AZURE_OPENAI_ENDPOINT_GPT_4_O`) are
+ * configured without a bare `AZURE_OPENAI_ENDPOINT`. Existing
+ * callers continue to work because this function now consults the
+ * typed config before falling back to env scanning, but new code
+ * should call the typed entry points directly.
  */
 export function apiSettingsFromEnv(
     modelType: ModelType = ModelType.Chat,
     env?: Record<string, string | undefined>,
     endpointName?: string,
 ): ApiSettings {
+    // Provider-mode override applies to chat only. Embeddings, images,
+    // and video stay on whatever the legacy resolver picks (Azure/OpenAI).
+    const mode = getActiveModelProvider();
+    if (mode !== undefined && modelType === ModelType.Chat) {
+        const target = resolveTarget(mode, endpointName ?? "DEFAULT");
+        if (mode === "copilot") {
+            return copilotApiSettingsFromConfig(target);
+        }
+        if (mode === "ollama") {
+            return ollamaApiSettingsFromEnv(modelType, env, target);
+        }
+        if (mode === "openai") {
+            return openAIApiSettingsFromEnv(modelType, env, target);
+        }
+        // mode === "azure" falls through to legacy logic with the (identity-
+        // mapped) target — preserves the historical resolution path.
+        return azureApiSettingsFromEnv(modelType, env, target);
+    }
+
     env ??= process.env;
     if (EnvVars.OPENAI_API_KEY in env) {
         return openAIApiSettingsFromEnv(modelType, env, endpointName);
@@ -227,6 +265,10 @@ function parseEndPointName(endpoint?: string): {
     name?: string;
 } {
     if (endpoint === undefined || endpoint === "") {
+        const mode = getActiveModelProvider();
+        if (mode !== undefined) {
+            return { provider: mode, name: resolveTarget(mode, "DEFAULT") };
+        }
         return {
             provider:
                 EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
@@ -235,7 +277,8 @@ function parseEndPointName(endpoint?: string): {
     if (
         endpoint === "openai" ||
         endpoint === "azure" ||
-        endpoint === "ollama"
+        endpoint === "ollama" ||
+        endpoint === "copilot"
     ) {
         return { provider: endpoint };
     }
@@ -247,6 +290,16 @@ function parseEndPointName(endpoint?: string): {
     }
     if (endpoint.startsWith("azure:")) {
         return { provider: "azure", name: endpoint.substring(6) };
+    }
+    if (endpoint.startsWith("copilot:")) {
+        return { provider: "copilot", name: endpoint.substring(8) };
+    }
+    // Provider-mode override: route an unprefixed canonical name through
+    // the active mode's mapping. Explicit prefixes above always win.
+    const mode = getActiveModelProvider();
+    if (mode !== undefined) {
+        const target = resolveTarget(mode, endpoint);
+        return { provider: mode, name: target };
     }
     if (EnvVars.OPENAI_ENDPOINT in process.env) {
         return { provider: "openai", name: endpoint };
@@ -270,9 +323,35 @@ function getModelPool(
     const key = `${modelType}:${provider}:${endpointName ?? ""}`;
     const existing = modelPools.get(key);
     if (existing) return existing;
-    const pool = discoverEndpointPool(provider, modelType, endpointName);
+    const pool = buildModelPool(provider, modelType, endpointName);
     modelPools.set(key, pool);
     return pool;
+}
+
+// Try the typed-Config path first; if it fails (typically because the
+// caller's deployment uses a non-canonical region alias that the typed
+// REGIONS set doesn't carry), fall back to the legacy env-scanning
+// discovery. Both paths read the same underlying values via process.env
+// / the singleton built from it, so the pool contents converge.
+function buildModelPool(
+    provider: ModelProviders,
+    modelType: ModelType,
+    endpointName?: string,
+): EndpointPool {
+    if (provider !== "ollama" && provider !== "copilot") {
+        try {
+            const typedName = endpointName?.toLowerCase();
+            return discoverEndpointPoolFromConfig(
+                getRuntimeConfig(),
+                provider,
+                modelType,
+                typedName,
+            );
+        } catch {
+            // Fall through to legacy.
+        }
+    }
+    return discoverEndpointPool(provider, modelType, endpointName);
 }
 
 export function getChatModelPool(endpoint?: string): EndpointPool {
@@ -291,6 +370,18 @@ export function getChatModelPool(endpoint?: string): EndpointPool {
             undefined,
             endpointName.name,
         );
+        if (settings.maxConcurrency !== undefined) {
+            const q = priorityQueue<() => Promise<any>>(
+                async (task) => task(),
+                settings.maxConcurrency,
+            );
+            settings.throttler = (fn: () => Promise<any>, priority?: number) =>
+                q.push<any>(fn, priority);
+        }
+        pool = makeSingleMemberPool(settings, key);
+    } else if (endpointName.provider === "copilot") {
+        // Copilot is single-endpoint (the spawned CLI); no HTTP pool.
+        const settings = copilotApiSettingsFromConfig(endpointName.name);
         if (settings.maxConcurrency !== undefined) {
             const q = priorityQueue<() => Promise<any>>(
                 async (task) => task(),
@@ -440,6 +531,14 @@ export function createChatModel(
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
+    // Tag calls with the active mode so TokenCounter rollups can slice
+    // by provider. Pre-resolved ApiSettings bypass mode override, so
+    // only tag when the override is in effect AND the caller went
+    // through name-based resolution.
+    const activeMode = getActiveModelProvider();
+    if (activeMode !== undefined && typeof endpoint !== "object") {
+        tags = [...(tags ?? []), `mode:${activeMode}`];
+    }
     const pool =
         typeof endpoint === "object"
             ? makeSingleMemberPool(endpoint, `custom:${endpoint.provider}`)
@@ -454,6 +553,14 @@ export function createChatModel(
 
     if (settings.provider === "ollama") {
         return createOllamaChatModel(
+            settings,
+            completionSettings,
+            completionCallback,
+            tags,
+        );
+    }
+    if (settings.provider === "copilot") {
+        return createCopilotChatModel(
             settings,
             completionSettings,
             completionCallback,
@@ -484,6 +591,18 @@ function createAzureOpenAIChatModel(
     completionSettings ??= {};
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
+
+    // Normalize max_tokens → max_completion_tokens.  Newer models (GPT-5,
+    // o3, o4, GPT-4.1, etc.) reject the legacy `max_tokens` parameter.
+    // Promote it unconditionally — all supported models accept the new name.
+    if (
+        completionSettings.max_tokens !== undefined &&
+        completionSettings.max_completion_tokens === undefined
+    ) {
+        completionSettings.max_completion_tokens =
+            completionSettings.max_tokens;
+    }
+    delete completionSettings.max_tokens;
 
     const disableResponseFormat =
         !settings.supportsResponseFormat &&
@@ -979,6 +1098,7 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
               };
     const model: ImageModel = {
         generateImage,
+        editImage,
     };
     return model;
 
@@ -1030,6 +1150,86 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
         return success(retValue);
     }
 
+    async function editImage(
+        sourceImage: Buffer,
+        sourceMimeType: string,
+        sourceFileName: string,
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>> {
+        if (imageCount !== 1) {
+            throw Error("n MUST equal 1");
+        }
+        // Derive the edits URL from the configured generations URL.
+        // Azure deployments expose `/images/generations` and a parallel
+        // `/images/edits` on the same deployment path; preserve any
+        // `?api-version=...` querystring.
+        const member = pool.members[0];
+        const generationsUrl = member.settings.endpoint;
+        const editsUrl = generationsUrl.replace(
+            "/images/generations",
+            "/images/edits",
+        );
+        if (editsUrl === generationsUrl) {
+            return error(
+                `Configured image endpoint does not contain '/images/generations'; cannot derive edits URL: ${generationsUrl}`,
+            );
+        }
+
+        const headerResult = await createApiHeaders(member.settings);
+        if (!headerResult.success) {
+            return headerResult;
+        }
+        // Strip Content-Type if present; let fetch set the multipart boundary.
+        const headers: Record<string, string> = { ...headerResult.data };
+        delete headers["Content-Type"];
+        delete headers["content-type"];
+
+        const form = new FormData();
+        const blob = new Blob([sourceImage as unknown as ArrayBuffer], {
+            type: sourceMimeType,
+        });
+        form.append("image", blob, sourceFileName);
+        form.append("prompt", prompt);
+        form.append("n", String(imageCount));
+        form.append("size", `${width}x${height}`);
+        if (member.settings.provider !== "azure" && settings.modelName) {
+            form.append("model", settings.modelName);
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(editsUrl, {
+                method: "POST",
+                headers,
+                body: form,
+            });
+        } catch (e) {
+            return error(`Image edit request failed: ${(e as Error).message}`);
+        }
+        if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            return error(
+                `Image edit request returned ${response.status} ${response.statusText}: ${body}`,
+            );
+        }
+        const data = (await response.json()) as ImageCompletion;
+        const retValue: ImageGeneration = { images: [] };
+        data.data.map((i) => {
+            verifyContentSafety(i);
+            const image_url = i.b64_json
+                ? `data:image/png;base64,${i.b64_json}`
+                : (i.url ?? "");
+            retValue.images.push({
+                revised_prompt: i.revised_prompt ?? prompt,
+                image_url,
+            });
+        });
+        return success(retValue);
+    }
+
     function verifyContentSafety(data: ImageData): boolean {
         verifyFilterResults(data.content_filter_results as FilterResult);
         verifyFilterResults(data.prompt_filter_results as FilterResult);
@@ -1077,7 +1277,10 @@ function getPromptLength(prompt: string | PromptSection[]) {
  * @param apiSettings: settings to use to create the client
  */
 export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
-    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Video);
+    const pool = apiSettings
+        ? makeSingleMemberPool(apiSettings, `custom:${apiSettings.provider}`)
+        : getModelPool(defaultProvider(), ModelType.Video);
+    const settings = pool.members[0].settings;
     const defaultParams =
         settings.provider === "azure"
             ? {}
@@ -1097,10 +1300,6 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         height: number = 720,
         inpaintItems?: ImageInPaintItem[],
     ): Promise<Result<VideoGenerationJob>> {
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
         if (numVariants < 0 || numVariants > 2) {
             throw Error("n MUST equal 1"); // as of 10.09.2025 API will only accept n<2
         }
@@ -1139,22 +1338,26 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             else formData.append(k, v);
         }
 
-        // send it
+        const response = await callApiWithPool(
+            pool,
+            async (member) => {
+                const headerResult = await createApiHeaders(member.settings);
+                if (!headerResult.success) return headerResult;
+                return success({
+                    headers: headerResult.data,
+                    body: formData,
+                });
+            },
+            { retryPauseMs: settings.retryPauseMs },
+        );
+        if (!response.success) return response;
+
         try {
-            const result = await fetch(settings.endpoint, {
-                method: "POST",
-                headers: headerResult.data,
-                body: formData,
-            });
-
-            if (!result.ok) {
-                return error(`Error ${result.status}: ${await result.text()}`);
-            }
-
+            const jobJson = (await response.data.json()) as VideoGenerationJob;
             return success({
                 endpoint: new URL(settings.endpoint),
-                headers: headerResult.data,
-                ...((await result.json()) as VideoGenerationJob),
+                headers: {},
+                ...jobJson,
             });
         } catch (err) {
             return error(`Error: ${err}`);

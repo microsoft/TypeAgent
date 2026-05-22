@@ -15,7 +15,16 @@ import { getActionContext } from "../../../execute/actionContext.js";
 import { emitActionResult } from "../../../execute/actionHandlers.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
-import { openai as ai, getChatModelNames } from "aiclient";
+import {
+    openai as ai,
+    getChatModelNames,
+    getCopilotClient,
+    getActiveModelProvider,
+    setActiveModelProvider,
+    getRuntimeConfig,
+    PROVIDER_MODES,
+    type ProviderMode,
+} from "aiclient";
 import { SessionOptions } from "../../session.js";
 import chalk from "chalk";
 import {
@@ -213,6 +222,7 @@ function buildAgentStatusHtml(
     agents: {
         getAppAgentEmoji(name: string): string;
         getReadiness(name: string): ReadinessReport;
+        hasUnknownReadiness(name: string): boolean;
         getLoadError(name: string): Error | undefined;
     },
     showSchema: boolean,
@@ -239,8 +249,9 @@ function buildAgentStatusHtml(
         const tdStyle = `text-align:center;padding:3px 8px;border-bottom:${bb}`;
 
         // Per-agent badges (app-agent rows only): load failure first, then
-        // readiness warning. Distinct icons + colors so they don't get
-        // conflated with the disabled-state ❌ in the status columns.
+        // readiness warning (or unknown indicator). Distinct icons + colors
+        // so they don't get conflated with the disabled-state ❌ in the
+        // status columns.
         let warning = "";
         if (isAppAgent) {
             const loadError = agents.getLoadError(name);
@@ -248,12 +259,23 @@ function buildAgentStatusHtml(
                 const tip = `Failed to load: ${loadError.message ?? String(loadError)}`;
                 warning += ` <span title="${escapeAttr(tip)}" style="color:#dc2626;cursor:help" aria-label="${escapeAttr(tip)}">⛔</span>`;
             }
-            const report = agents.getReadiness(name);
-            if (report.state !== "ready") {
-                const tip = report.message
-                    ? `${report.state}: ${report.message}`
-                    : report.state;
-                warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+            if (agents.hasUnknownReadiness(name)) {
+                // Agent is known to implement checkReadiness but hasn't
+                // been probed this session (typically: currently
+                // disabled). We can't probe it without spinning up its
+                // session context, so surface the uncertainty instead
+                // of implicitly claiming it's ready.
+                const tip =
+                    "Readiness state unknown — agent is not currently loaded. Enable it (or run `@config agent refresh <name>` after enabling) to re-probe its setup state.";
+                warning += ` <span title="${escapeAttr(tip)}" style="color:#64748b;cursor:help" aria-label="${escapeAttr(tip)}">❓</span>`;
+            } else {
+                const report = agents.getReadiness(name);
+                if (report.state !== "ready") {
+                    const tip = report.message
+                        ? `${report.state}: ${report.message}`
+                        : report.state;
+                    warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+                }
             }
         }
 
@@ -272,13 +294,23 @@ function buildAgentStatusHtml(
     return `<table style="border-collapse:collapse;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.4"><thead><tr>${headerCols.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
-function showAgentStatus(
+async function showAgentStatus(
     toggle: AgentToggle,
     context: ActionContext<CommandHandlerContext>,
     changes?: ChangedAgent,
 ) {
     const systemContext = context.sessionContext.agentContext;
     const agents = systemContext.agents;
+
+    // Bring readiness state up to date for any loaded agent before we
+    // render, so the table reflects current reality (env vars, files,
+    // etc. may have changed since the agent's last probe). For agents
+    // that are disabled (no session context), refreshReadiness is a
+    // no-op — only agents known to implement checkReadiness but not
+    // currently loaded get a ❓ badge via hasUnknownReadiness.
+    await Promise.all(
+        agents.getAppAgentNames().map((name) => agents.refreshReadiness(name)),
+    );
 
     const status: StatusRecords = {};
 
@@ -366,9 +398,16 @@ function showAgentStatus(
             if (agents.getLoadError(name) !== undefined) {
                 displayName = `${displayName} ${chalk.red("(err)")}`;
             }
-            const report = agents.getReadiness(name);
-            if (report.state !== "ready") {
-                displayName = `${displayName} ${chalk.yellow("(!)")}`;
+            if (agents.hasUnknownReadiness(name)) {
+                // Implements checkReadiness but not currently loaded.
+                // Distinct "(?)" marker so users don't read silence as
+                // "this agent is fine" when it actually has a probe.
+                displayName = `${displayName} ${chalk.gray("(?)")}`;
+            } else {
+                const report = agents.getReadiness(name);
+                if (report.state !== "ready") {
+                    displayName = `${displayName} ${chalk.yellow("(!)")}`;
+                }
             }
         }
         table.push(
@@ -522,7 +561,7 @@ class AgentToggleCommandHandler implements CommandHandler {
 
         // report modified agent status
         if (!hasParams) {
-            showAgentStatus(this.toggle, context);
+            await showAgentStatus(this.toggle, context);
             return;
         }
 
@@ -534,7 +573,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         if (changed === undefined) {
             displayWarn("No change", context);
         } else {
-            showAgentStatus(this.toggle, context, changed);
+            await showAgentStatus(this.toggle, context, changed);
         }
     }
 
@@ -949,31 +988,6 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
             `Number of actions to use for initial translation is set to ${count}`,
             context,
         );
-    }
-}
-
-class ConfigPortsCommandHandler implements CommandHandler {
-    public readonly description = "Lists the ports assigned to agents.";
-
-    public readonly parameters = {};
-
-    public async run(context: ActionContext<CommandHandler>) {
-        const ports: string[][] = [["", "Agent", "Port"]];
-        const cmdContext = context.sessionContext.agentContext as any;
-
-        cmdContext.agents.getAppAgentNames().forEach((name: string) => {
-            const port = cmdContext.agents.getLocalHostPort(name);
-
-            if (port !== undefined) {
-                ports.push([
-                    cmdContext.agents.getAppAgentEmoji(name),
-                    name,
-                    port.toString(),
-                ]);
-            }
-        });
-
-        displayResult(ports, context);
     }
 }
 
@@ -1817,6 +1831,172 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
     },
 };
 
+function isProviderMode(s: string): s is ProviderMode {
+    return (PROVIDER_MODES as readonly string[]).includes(s);
+}
+
+function effectiveProvider(): ProviderMode {
+    return getActiveModelProvider() ?? "azure";
+}
+
+async function listModelsForProvider(
+    provider: ProviderMode,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<void> {
+    const names = await getChatModelNames();
+    const matched: string[] = [];
+    switch (provider) {
+        case "azure":
+            // Azure entries in getChatModelNames have no prefix.
+            for (const n of names) {
+                if (
+                    !n.startsWith("openai:") &&
+                    !n.startsWith("ollama:") &&
+                    !n.startsWith("copilot:")
+                ) {
+                    matched.push(n);
+                }
+            }
+            break;
+        case "openai":
+            for (const n of names) if (n.startsWith("openai:")) matched.push(n);
+            break;
+        case "ollama":
+            for (const n of names) if (n.startsWith("ollama:")) matched.push(n);
+            break;
+        case "copilot":
+            for (const n of names)
+                if (n.startsWith("copilot:")) matched.push(n);
+            break;
+    }
+
+    const lines = [`Models available under '${provider}':`];
+    if (matched.length === 0) {
+        lines.push("  (none configured)");
+    } else {
+        for (const m of matched) lines.push(`  ${m}`);
+    }
+
+    // For copilot, also surface auth status so users can debug "why
+    // does the list look short?" without a second command.
+    if (provider === "copilot") {
+        try {
+            const client = await getCopilotClient();
+            const status = await client.getAuthStatus();
+            lines.push("");
+            lines.push(
+                `Copilot CLI: ${status.isAuthenticated ? "authenticated" : "NOT authenticated"}` +
+                    (status.login ? ` (${status.login})` : ""),
+            );
+            if (!status.isAuthenticated) {
+                lines.push(
+                    "Run 'copilot auth login' or 'gh auth login --scopes copilot' to sign in.",
+                );
+            }
+        } catch (e) {
+            lines.push("");
+            lines.push(
+                `Copilot CLI unavailable: ${e instanceof Error ? e.message : String(e)}`,
+            );
+        }
+    }
+    displayResult(lines.join("\n"), context);
+}
+
+class ConfigModelProviderCommandHandler implements CommandHandler {
+    public readonly description =
+        "Show or set the active model provider (azure | openai | ollama | copilot)";
+    public readonly parameters = {
+        args: {
+            name: {
+                description:
+                    "Provider to activate (azure | openai | ollama | copilot)",
+                optional: true,
+            },
+            action: {
+                description: "Optional 'list' to list provider's models",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const name = params.args.name;
+        const action = params.args.action;
+
+        // Bare: show available providers, mark current.
+        if (name === undefined) {
+            const current = effectiveProvider();
+            const yamlConfigured = getRuntimeConfig().modelProvider;
+            const lines = ["Available model providers:"];
+            for (const m of PROVIDER_MODES) {
+                const marker = m === current ? " (current)" : "";
+                lines.push(`  ${m}${marker}`);
+            }
+            if (yamlConfigured === undefined) {
+                lines.push("");
+                lines.push(
+                    "No override is active by default — resolution falls back to Azure.",
+                );
+            }
+            displayResult(lines.join("\n"), context);
+            return;
+        }
+
+        if (!isProviderMode(name)) {
+            throw new Error(
+                `Invalid provider '${name}'. Valid providers: ${PROVIDER_MODES.join(", ")}`,
+            );
+        }
+
+        // <name> list: list provider's models.
+        if (action !== undefined) {
+            if (action !== "list") {
+                throw new Error(
+                    `Invalid action '${action}'. Only 'list' is supported.`,
+                );
+            }
+            await listModelsForProvider(name, context);
+            return;
+        }
+
+        // <name>: set active provider.
+        const previous = getActiveModelProvider();
+        setActiveModelProvider(name);
+        // Clear cached translators so the next translation picks up the
+        // new provider mapping.
+        context.sessionContext.agentContext.translatorCache.clear();
+
+        const previousLabel = previous ?? "azure (default)";
+        displayResult(`Model provider: ${previousLabel} → ${name}`, context);
+    }
+
+    public async getCompletion(
+        _context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        const completions: CompletionGroup[] = [];
+        for (const n of names) {
+            if (n === "name") {
+                completions.push({
+                    name: n,
+                    completions: [...PROVIDER_MODES],
+                });
+            } else if (n === "action") {
+                completions.push({
+                    name: n,
+                    completions: ["list"],
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
 // ---------------------------------------------------------------------------
 // `@config collision …` — runtime config surface for action-collision detection.
 //
@@ -2359,6 +2539,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             translation: configTranslationCommandHandlers,
             explainer: configExplainerCommandHandlers,
             execution: configExecutionCommandHandlers,
+            modelProvider: new ConfigModelProviderCommandHandler(),
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {

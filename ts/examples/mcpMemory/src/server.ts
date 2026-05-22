@@ -3,10 +3,9 @@
 
 import { ensureDir } from "typeagent";
 import { MemoryServer } from "./memoryServer.js";
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 console.log("Starting Memory Server");
 

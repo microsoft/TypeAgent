@@ -150,15 +150,25 @@ export async function addImagePromptContent(
         });
     }
 
+    // Resolve the image's GPS position once. If the image has no GPS EXIF
+    // (e.g. a webcam capture from the photo agent) skip POI / reverse-geocode
+    // lookups entirely — both helpers early-return for `position === undefined`,
+    // and `openai.apiSettingsFromEnv()` (which they accept but ignore) throws
+    // `Missing ApiSetting: AZURE_OPENAI_ENDPOINT` when only suffixed Azure
+    // deployments are configured.
+    const gpsPosition = image.exifTags
+        ? exifGPSTagToLatLong(
+              image.exifTags.GPSLatitude,
+              image.exifTags.GPSLatitudeRef,
+              image.exifTags.GPSLongitude,
+              image.exifTags.GPSLongitudeRef,
+          )
+        : undefined;
+
     // include POI
-    if (image.exifTags) {
+    if (gpsPosition !== undefined) {
         retValue.nearbyPOI = await findNearbyPointsOfInterest(
-            exifGPSTagToLatLong(
-                image.exifTags.GPSLatitude,
-                image.exifTags.GPSLatitudeRef,
-                image.exifTags.GPSLongitude,
-                image.exifTags.GPSLongitudeRef,
-            ),
+            gpsPosition,
             openai.apiSettingsFromEnv(),
         );
     }
@@ -170,14 +180,9 @@ export async function addImagePromptContent(
     }
 
     // include address
-    if (image.exifTags) {
+    if (gpsPosition !== undefined) {
         retValue.reverseGeocode = await reverseGeocode(
-            exifGPSTagToLatLong(
-                image.exifTags.GPSLatitude,
-                image.exifTags.GPSLatitudeRef,
-                image.exifTags.GPSLongitude,
-                image.exifTags.GPSLongitudeRef,
-            ),
+            gpsPosition,
             openai.apiSettingsFromEnv(),
         );
     }

@@ -67,11 +67,13 @@ If you have multiple clients connected (e.g., both a Shell and a CLI connected t
 
 In local mode (no agent server), only a single default conversation is available. Conversation switching and creation are not supported.
 
+In local mode, the shell also hosts an in-process port-discovery WebSocket on `ws://localhost:8999/` (the same default the standalone `agentServer` uses) so external clients like the Chrome extension can find in-process agents — e.g. the browser agent's dynamically assigned WebSocket port — through the same discovery channel they would use against a real `agentServer`. If port 8999 is already in use (a real `agentServer` running, another local-mode shell, etc.) the bind fails loudly and the shell continues without discovery; external clients won't be able to find in-process agents until you restart the shell with no conflict.
+
 ### Azure Speech to Text service (Optional)
 
 Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.
 
-To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in the `.env` are needed:
+To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in `config.local.yaml` (under `speech`) or the legacy `.env` are needed:
 
 | Variable              | Value                                                                            |
 | --------------------- | -------------------------------------------------------------------------------- |
@@ -83,7 +85,7 @@ To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure
 
 If you would like to enable keyless Speech API access you must have performed the following steps:
 
-1. Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file.
+1. Specify `identity` as the `SPEECH_SDK_KEY` in `config.local.yaml` (set `speech.key: identity`) or the legacy `.env` file.
 2. Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
 3. Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions
    (typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on cognitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).

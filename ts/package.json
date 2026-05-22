@@ -24,6 +24,11 @@
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli run start",
     "cli:dev": "pnpm -C packages/cli run start:dev",
+    "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
+    "docs:generate": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write",
+    "docs:generate:dry": "node tools/docsAutogen/bin/docs-autogen.cjs --render --dry-run",
+    "docs:generate:llm": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write --llm",
+    "docs:verify-links": "node tools/docsAutogen/bin/docs-autogen.cjs --verify-links --all",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
@@ -53,18 +58,20 @@
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
-    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=1 run test:local"
+    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=3 run test:local",
+    "test:ui": "pnpm -r --no-bail --no-sort --stream --if-present run test:ui"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
-    "@types/node": "^20.17.28",
+    "@types/node": "^22.0.0",
     "markdown-link-check": "^3.14.2",
     "prettier": "^3.5.3",
-    "shx": "^0.4.0"
+    "shx": "^0.4.0",
+    "tsx": "^4.21.0"
   },
   "packageManager": "pnpm@10.33.4+sha512.1c67b3b359b2d408119ba1ed289f34b8fc3c6873412bec6fd264fbdc82489e510fcbecb9ce9d22dae7f3b76269d8441046014bdca53b9979cd7a561ad631b800",
   "engines": {
-    "node": ">=20.18.1",
+    "node": ">=22",
     "pnpm": ">=10"
   },
   "pnpm": {
@@ -91,10 +98,9 @@
       "exifreader",
       "keytar",
       "koffi",
-      "node-pty",
-      "protobufjs",
       "puppeteer",
-      "sharp"
+      "sharp",
+      "usocket"
     ],
     "allowedDeprecatedVersions": {
       "@cliqz/adblocker": "*",

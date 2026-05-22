@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 import { app, BrowserWindow, dialog, ipcMain, Notification } from "electron";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
     debugShell,
     debugShellCleanup,
@@ -33,6 +36,7 @@ import {
     ClientIO,
     createDispatcher,
     Dispatcher,
+    PortRegistrar,
     RequestId,
 } from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -44,12 +48,17 @@ import {
     ensureAgentServer,
     connectAgentServer,
     stopAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     loadUserSettings,
     saveUserSettings,
 } from "agent-dispatcher/helpers/userSettings";
+import {
+    startStandaloneDiscoveryServer,
+    type StandaloneDiscoveryServer,
+} from "./discoveryServer.js";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -82,6 +91,12 @@ async function initializeDispatcher(
         // Make sure the previous cleanup is done.
         await cleanupP;
     }
+    // Hoisted above the try{} so the catch can clean up an already-bound
+    // discovery WS if a later step (createDispatcher, etc.) throws —
+    // otherwise the listening socket on AGENT_SERVER_DEFAULT_PORT would
+    // leak across re-init attempts and block the next launch with
+    // EADDRINUSE.
+    let standaloneDiscovery: StandaloneDiscoveryServer | undefined;
     try {
         const clientIOChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
@@ -458,6 +473,37 @@ async function initializeDispatcher(
                 configName,
             );
 
+            // Standalone shell hosts its own dispatcher in-process. Pre-build
+            // a PortRegistrar so we can hand the same instance to both the
+            // dispatcher (where agents register their dynamically assigned
+            // ports) and the discovery WS server below (which reads from it
+            // to answer external lookups). Without this shared instance, the
+            // dispatcher would silently make its own private registrar and
+            // the Chrome extension's discoverPort lookup would never find
+            // the browser agent's port.
+            const portRegistrar = new PortRegistrar();
+
+            // Stand up the discovery WS so the Chrome extension (and any
+            // other external client speaking the agent-server discovery
+            // protocol) can find in-process agents at parity with what
+            // they get when connecting to a real agent-server. Bind is
+            // exact on AGENT_SERVER_DEFAULT_PORT (8999): an EADDRINUSE
+            // here usually means a real agent-server is already running,
+            // and silently picking a random port would only confuse the
+            // user (their default-configured extension would still fail).
+            try {
+                standaloneDiscovery = await startStandaloneDiscoveryServer(
+                    AGENT_SERVER_DEFAULT_PORT,
+                    portRegistrar,
+                );
+            } catch (e) {
+                debugShellError(
+                    "Failed to start standalone discovery server on port %d: %s. External clients (e.g. Chrome extension) will not be able to discover in-process agent ports.",
+                    AGENT_SERVER_DEFAULT_PORT,
+                    (e as Error).message,
+                );
+            }
+
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
@@ -466,6 +512,7 @@ async function initializeDispatcher(
                 agentInitOptions: {
                     browser: browserControl.control,
                 },
+                portRegistrar,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 persistSession: true,
                 persistDir: instanceDir,
@@ -545,6 +592,10 @@ async function initializeDispatcher(
             if (connection !== undefined) {
                 await connection.close();
             }
+            if (standaloneDiscovery !== undefined) {
+                standaloneDiscovery.close();
+                standaloneDiscovery = undefined;
+            }
             clientIOChannel.notifyDisconnected();
             ipcMain.removeListener("clientio-rpc-reply", onClientIORpcReply);
             browserControl.close();
@@ -611,6 +662,12 @@ async function initializeDispatcher(
             rebindDispatcher,
         };
     } catch (e: any) {
+        // Tear down the discovery WS if it was already bound before the
+        // failure — otherwise port AGENT_SERVER_DEFAULT_PORT stays held
+        // by this process and the next shell launch hits EADDRINUSE.
+        if (standaloneDiscovery !== undefined) {
+            standaloneDiscovery.close();
+        }
         if (isTest) {
             // In test mode, avoid blocking dialogs so the process can exit cleanly
             console.error("Exception initializing dispatcher:", e.stack);
@@ -648,6 +705,44 @@ export function initializeInstance(
     const conversationBackend = createLocalConversationBackend();
     let cleanupConversationIpc =
         registerConversationIpcHandlers(conversationBackend);
+
+    // Watch user-settings.json so that changes made via @settings (e.g. from the
+    // CLI or NL) hot-reload shell settings immediately without a restart.
+    // The file may not exist yet if the user has never changed a setting.
+    const userSettingsPath = path.join(
+        os.homedir(),
+        ".typeagent",
+        "user-settings.json",
+    );
+    let userSettingsWatcher: fs.FSWatcher | undefined;
+    const startUserSettingsWatcher = () => {
+        userSettingsWatcher?.close();
+        userSettingsWatcher = undefined;
+        if (!fs.existsSync(userSettingsPath)) {
+            return;
+        }
+        userSettingsWatcher = fs.watch(userSettingsPath, () => {
+            try {
+                const updated = loadUserSettings();
+                shellWindow.setUserSettingValue(
+                    "partialCompletion",
+                    updated.ui.autoComplete,
+                );
+            } catch {
+                // Ignore transient read errors during file write
+            }
+        });
+    };
+    startUserSettingsWatcher();
+    // Watch the directory too so we catch the file being created for the first time
+    const userSettingsDirWatcher = fs.watch(
+        path.join(os.homedir(), ".typeagent"),
+        (event, filename) => {
+            if (filename === "user-settings.json" && event === "rename") {
+                startUserSettingsWatcher();
+            }
+        },
+    );
 
     // Set up notification callback for browser agent IPC early,
     // so messages queued during tab restoration can trigger notifications
@@ -828,6 +923,8 @@ export function initializeInstance(
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
         cleanupConversationIpc();
+        userSettingsWatcher?.close();
+        userSettingsDirWatcher.close();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);
     });
 

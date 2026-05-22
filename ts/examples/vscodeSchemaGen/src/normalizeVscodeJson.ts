@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -9,8 +9,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 const misc_commandstxt_filePath = path.join(
     __dirname,

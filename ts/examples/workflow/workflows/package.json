@@ -1,0 +1,42 @@
+{
+  "name": "workflow-examples",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Bundled example workflows: hand-written IR JSON under ir/, DSL sources under dsl/ compiled to built/.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/workflow/workflows"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "wfc \"dsl/*.wf\" -o built",
+    "clean": "rimraf --glob built *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "workflow-compiler": "workspace:*"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "build": {
+        "dependsOn": [
+          "workflow-compiler#build"
+        ],
+        "files": {
+          "inputGlobs": [
+            "dsl/*.wf"
+          ],
+          "outputGlobs": [
+            "built/*.json"
+          ]
+        }
+      }
+    }
+  }
+}

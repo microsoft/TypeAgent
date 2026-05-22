@@ -570,16 +570,21 @@ async function fetchWithPool(
         const member = pool.members[0];
         const req = await buildRequest(member);
         if (!req.success) return req;
+        const isMultipart = req.data.body instanceof FormData;
         const init: RequestInit = {
             method,
-            headers: {
-                "content-type": "application/json",
-                ...req.data.headers,
-            },
+            headers: isMultipart
+                ? { ...req.data.headers }
+                : {
+                      "content-type": "application/json",
+                      ...req.data.headers,
+                  },
             signal: options?.signal ?? null,
         };
         if (method === "POST" && req.data.body !== undefined) {
-            init.body = JSON.stringify(req.data.body);
+            init.body = isMultipart
+                ? (req.data.body as FormData)
+                : JSON.stringify(req.data.body);
         }
         const settings = member.settings;
         return fetchWithRetry(
@@ -640,16 +645,21 @@ async function fetchWithPool(
             // per-endpoint recoverable — bubble it out rather than rotating.
             return req;
         }
+        const isMultipart = req.data.body instanceof FormData;
         const init: RequestInit = {
             method,
-            headers: {
-                "content-type": "application/json",
-                ...req.data.headers,
-            },
+            headers: isMultipart
+                ? { ...req.data.headers }
+                : {
+                      "content-type": "application/json",
+                      ...req.data.headers,
+                  },
             signal: options?.signal ?? null,
         };
         if (method === "POST" && req.data.body !== undefined) {
-            init.body = JSON.stringify(req.data.body);
+            init.body = isMultipart
+                ? (req.data.body as FormData)
+                : JSON.stringify(req.data.body);
         }
 
         attempts += 1;

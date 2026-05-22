@@ -3,9 +3,7 @@
 
 import WebSocket from "isomorphic-ws";
 import registerDebug from "debug";
-import findConfig from "find-config";
-import dotenv from "dotenv";
-import fs from "node:fs";
+import { loadConfigSync } from "@typeagent/config";
 
 const debug = registerDebug("typeagent:websockets");
 
@@ -30,16 +28,9 @@ export async function createWebSocket(
 ) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         let endpoint = `ws://localhost:${port}`;
+        loadConfigSync();
         if (process.env["WEBSOCKET_HOST"]) {
             endpoint = process.env["WEBSOCKET_HOST"];
-        } else {
-            const dotEnvPath = findConfig(".env");
-            if (dotEnvPath) {
-                const vals = dotenv.parse(fs.readFileSync(dotEnvPath));
-                if (vals["WEBSOCKET_HOST"]) {
-                    endpoint = vals["WEBSOCKET_HOST"];
-                }
-            }
         }
 
         endpoint += `?channel=${channel}&role=${role}`;

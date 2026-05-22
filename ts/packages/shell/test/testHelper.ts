@@ -195,17 +195,33 @@ export function getAppPath(): string {
 }
 
 /**
+ * Resolve the config file to pass via --env. Prefers `config.local.yaml`
+ * (the canonical key-config format) and falls back to a legacy `.env` so
+ * smoke tests work in both YAML-only and legacy developer environments.
+ * Throws if neither file is present.
+ */
+function resolveTestConfigPath(appPath: string): string {
+    const yamlPath = path.resolve(appPath, "../../config.local.yaml");
+    if (fs.existsSync(yamlPath)) {
+        return yamlPath;
+    }
+    const dotenvPath = path.resolve(appPath, "../../.env");
+    if (fs.existsSync(dotenvPath)) {
+        return dotenvPath;
+    }
+    throw new Error(
+        `No test config file found. Expected either ${yamlPath} or ${dotenvPath}. ` +
+            `Run 'node tools/scripts/getKeys.mjs --vault <name> --commit' to generate one.`,
+    );
+}
+
+/**
  * Get electron launch arguments
  * @returns The arguments to pass to the electron application
  */
 export function getLaunchArgs(testGreetings: boolean): string[] {
     const appPath = getAppPath();
-    const args = [
-        appPath,
-        "--test",
-        "--env",
-        path.resolve(appPath, "../../.env"),
-    ];
+    const args = [appPath, "--test", "--env", resolveTestConfigPath(appPath)];
     if (os.platform() === "linux") {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");

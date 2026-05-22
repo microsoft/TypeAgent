@@ -5,7 +5,7 @@ Status: **Adopted (v1).** `output` resolves in the full body scope at
 `iterateState` resolves in the full body scope at `@iterate`. Both
 sentinels resolve in the same scope; the difference is what happens
 _after_ resolution (state is carried forward vs. output is published).
-Folded into [../ir-v1.md](../ir-v1.md) §3.7. This document is the
+Folded into [../ir-v0.1.md](../ir-v0.1.md) §3.7. This document is the
 rationale.
 
 ## Purpose
@@ -20,7 +20,7 @@ A future reviewer should read this document when:
 
 Cross-references:
 
-- [../ir-v1.md](../ir-v1.md) §3.7 (loop node), §3.7.1 (iterate
+- [../ir-v0.1.md](../ir-v0.1.md) §3.7 (loop node), §3.7.1 (iterate
   state), §5.4 step 4 (execution semantics).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P2 (traceability), P5 (predictability).
@@ -51,7 +51,7 @@ null, copying `summary` into it at `@iterate`, and reading it from
 
 ## 2. What the spec already says
 
-Two passages in ir-v1.md bear on this:
+Two passages in ir-v0.1.md bear on this:
 
 - **§3.7:** "`output` is resolved when the body reaches `@exit`. It
   is a single reference object resolved in the body scope (typically
@@ -116,7 +116,7 @@ The full-scope rule wins on all three principles.
 
 ## 4. Spec changes
 
-One edit to ir-v1.md §3.7: replace the ambiguous parenthetical with
+One edit to ir-v0.1.md §3.7: replace the ambiguous parenthetical with
 explicit language:
 
 > `output` is resolved when the body reaches `@exit`. It is a single
@@ -127,3 +127,32 @@ explicit language:
 > from a body-scoped binding.
 
 No change to §5.4 step 4 (already correct).
+
+---
+
+## Related: decision 0010 (loop `continueWhen`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) reframes
+where the loop's output value comes from without changing the
+guidance in this decision. Under 0010 the loop body is a plain
+[`WorkflowScope`](../workflow-scope-proposal.md), and the loop's
+output value **is** `body.output` resolved at body completion of the
+terminating iteration (the iteration where `continueWhen` resolves
+to `false`). The two patterns this decision describes still apply:
+
+- **Accumulator pattern:** `body.output` reads from `state` (the
+  accumulator carried across iterations). The terminating iteration's
+  state, by construction of `iterateState`, holds the final value.
+- **Retry pattern:** `body.output` reads from a body-scoped binding
+  produced this iteration (typically the successful task's bound
+  output). The terminating iteration is the one in which that
+  binding was produced; `continueWhen` reads `false` on that path.
+
+The §3.3 phi rules and the dominator coverage required by §4.1 pass 6
+apply to `body.output` exactly as the v0.1 spec required for the
+loop-level `output` reference. The footnote in [§8.5][^iterate-boundary]
+of ir-v0.1.md records the iteration-boundary retiming.
+
+[^iterate-boundary]:
+    See ir-v0.1.md §8.5 footnote on the
+    `@iterate` -> "body completion gated by `continueWhen`" retiming.

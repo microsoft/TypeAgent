@@ -52,7 +52,7 @@ export class MarkdownAgent<T extends object> {
 
     constructor(schema: string, schemaName: string, fastModelName: string) {
         this.schema = schema;
-        const apiSettings = ai.azureApiSettingsFromEnv(
+        const apiSettings = ai.apiSettingsFromEnv(
             ai.ModelType.Chat,
             undefined,
             fastModelName,

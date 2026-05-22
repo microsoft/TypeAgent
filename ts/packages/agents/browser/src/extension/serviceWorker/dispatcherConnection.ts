@@ -26,6 +26,7 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
     AgentServerChannelName,
+    AGENT_SERVER_DEFAULT_URL,
 } from "@typeagent/agent-server-protocol";
 
 import registerDebug from "debug";
@@ -33,7 +34,7 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:extension:dispatcher");
 const debugErr = registerDebug("typeagent:extension:dispatcher:error");
 
-const DEFAULT_AGENT_SERVER_URL = "ws://localhost:8999";
+const DEFAULT_AGENT_SERVER_URL = AGENT_SERVER_DEFAULT_URL;
 
 // Module-level dispatcher state
 let dispatcher: Dispatcher | undefined;

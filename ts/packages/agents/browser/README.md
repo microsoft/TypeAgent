@@ -32,9 +32,19 @@ To build the browser extension, run `pnpm run build` in this folder. For debug s
 
 ### Agent WebSocket Server
 
-The browser agent exposes a WebSocket server (`AgentWebSocketServer`) on port 8081. Two types of clients connect to it:
+The browser agent exposes a WebSocket server (`AgentWebSocketServer`) on a
+port assigned dynamically by the OS at bind time. The actual port is
+published to the host's `PortRegistrar` under `(browser, default)` and
+discovered by external clients via the discovery channel hosted at
+`ws://localhost:8999/` (default). Both supported hosts publish this
+channel: the standalone `agentServer` process and the standalone
+Electron `shell` (which hosts an in-process discovery WS so the same
+extension config works against either host). To pin the port for
+debugging, set `BROWSER_WEBSOCKET_PORT=<n>` before launching the host.
 
-- **Chrome extension** (`src/extension/serviceWorker/websocket.ts`) — connects from the browser's service worker using `chrome.runtime.id` as its client ID.
+Two types of clients connect to the browser agent:
+
+- **Chrome extension** (`src/extension/serviceWorker/websocket.ts`) — connects from the browser's service worker using `chrome.runtime.id` as its client ID. Calls `discoverPort("browser", "default")` to look up the live port before connecting.
 - **Inline browser** (`packages/shell/src/main/browserIpc.ts`) — connects from the Electron shell using `inlineBrowser` as its client ID.
 
 #### Connection URL format
@@ -42,7 +52,7 @@ The browser agent exposes a WebSocket server (`AgentWebSocketServer`) on port 80
 Every client embeds its identity in the WebSocket connection URL as query parameters:
 
 ```
-ws://localhost:8081?channel=browser&role=client&clientId=<id>&sessionId=<sessionId>
+ws://localhost:<port>?channel=browser&role=client&clientId=<id>&sessionId=<sessionId>
 ```
 
 | Parameter   | Description                                                                                              |

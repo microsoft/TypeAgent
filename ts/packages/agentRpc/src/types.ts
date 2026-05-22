@@ -148,8 +148,23 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         port: number;
     }) => Promise<void>;
+    registerPort: (param: {
+        contextId: number;
+        role: string;
+        port: number;
+    }) => Promise<{ regId: string }>;
+    releasePort: (param: {
+        regId: string;
+        contextId?: number;
+    }) => Promise<void>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
     reloadAgentSchema: (param: { contextId: number }) => Promise<void>;
+    notifyReadinessChanged: (param: { contextId: number }) => Promise<void>;
+    notifyClientCountChanged: (param: {
+        contextId: number;
+        role: string;
+        count: number;
+    }) => Promise<void>;
     popupQuestion: (param: {
         contextId: number;
         message: string;
@@ -273,6 +288,7 @@ export type ContextParams = {
     hasInstanceStorage: boolean;
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
+    sessionContextId: string;
 };
 
 export type ActionContextParams = ContextParams & {

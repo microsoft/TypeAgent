@@ -35,6 +35,8 @@
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
+    "@github/copilot-sdk": "0.2.0",
+    "@typeagent/config": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "typechat": "^0.1.1"
@@ -49,6 +51,6 @@
     "typescript": "~5.4.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

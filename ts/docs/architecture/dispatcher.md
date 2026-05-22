@@ -678,6 +678,8 @@ Handles `@`-prefixed system commands. The full set is registered in
 | `@display`      | Tweak how output is rendered.                                                                                                                  |
 | `@env`          | Inspect environment variables and config-relevant runtime values.                                                                              |
 | `@exit`         | Exit the program.                                                                                                                              |
+| `@explain`      | Explanation of cached translations                                                                                                             |
+| `@feedback`     | Inspect and export user-feedback entries                                                                                                       |
 | `@grammar`      | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses).      |
 | `@help`         | Inline help for any command.                                                                                                                   |
 | `@history`      | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                   |
@@ -686,6 +688,7 @@ Handles `@`-prefixed system commands. The full set is registered in
 | `@memory`       | Conversation-memory operations (RAG store maintenance).                                                                                        |
 | `@notify`       | Notification stream control.                                                                                                                   |
 | `@open`         | Open a file or folder via the host.                                                                                                            |
+| `@ports`        | List all registered TCP ports (per `(agent, role, port)` group) with the agent-server's own listen port and the current # of clients connected.|
 | `@random`       | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                 |
 | `@run`          | Execute a script of dispatcher commands in sequence.                                                                                           |
 | `@session`      | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                             |

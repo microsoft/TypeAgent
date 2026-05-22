@@ -36,6 +36,7 @@ import { UserSettingsAction } from "./schema/settingsActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
+import { getFeedbackCommandHandlers } from "./handlers/feedbackCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
@@ -60,6 +61,7 @@ import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
 import { getMemoryCommandHandlers } from "../memory.js";
 import { getSettingsCommandHandlers } from "./handlers/settingsCommandHandlers.js";
+import { PortsCommandHandler } from "./handlers/portsCommandHandler.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -73,6 +75,7 @@ export const systemHandlers: CommandHandlerTable = {
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
+        feedback: getFeedbackCommandHandlers(),
         display: new DisplayCommandHandler(),
         trace: new TraceCommandHandler(),
         help: new HelpCommandHandler(),
@@ -108,6 +111,7 @@ export const systemHandlers: CommandHandlerTable = {
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),
+        ports: new PortsCommandHandler(),
     },
 };
 
@@ -208,7 +212,8 @@ export const systemManifest: AppAgentManifest = {
                     "Manage persistent user settings for the TypeAgent system. " +
                     "Set whether the agent server starts hidden in the background (e.g. 'start the server hidden', 'run the server in the background', 'show the server window'). " +
                     "Set the idle timeout for the agent server (e.g. 'shut down the server after 5 minutes of inactivity', 'set idle timeout to 300 seconds', 'disable idle timeout'). " +
-                    "Set whether to resume the last conversation on startup (e.g. 'always resume my last conversation', 'pick up where I left off', 'start fresh each time').",
+                    "Set whether to resume the last conversation on startup (e.g. 'always resume my last conversation', 'pick up where I left off', 'start fresh each time'). " +
+                    "Enable or disable inline autocomplete suggestions in the CLI and Shell (e.g. 'turn off autocomplete', 'disable tab completion', 'enable autocomplete', 'turn on inline suggestions').",
                 schemaFile:
                     "./src/context/system/schema/settingsActionSchema.ts",
                 schemaType: "UserSettingsAction",

@@ -10,7 +10,7 @@ The Command Executor MCP server can control VSCode through the Coda extension. B
 ```
 User → Claude Code → execute_command MCP tool →
   → TypeAgent Dispatcher →
-  → Coda Extension (WebSocket on port 8082) →
+  → Coda Extension (WebSocket; port discovered through agent-server) →
   → VSCode APIs
 ```
 
@@ -295,7 +295,7 @@ To use these VSCode capabilities:
 2. **Coda Extension** must be installed and activated in VSCode:
 
    - Published as `aisystems.copilot-coda`
-   - Auto-connects to dispatcher on port 8082
+   - Discovers the code agent's WebSocket port via the agent-server (default `ws://localhost:8999`)
 
 3. **Command Executor MCP Server** configured in `.mcp.json`:
    ```json

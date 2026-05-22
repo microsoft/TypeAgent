@@ -22,7 +22,7 @@ A future reviewer should read this document when:
 
 Cross-references:
 
-- [../ir-v1.md](../ir-v1.md) §1.4 tension table ("engine needs total
+- [../ir-v0.1.md](../ir-v0.1.md) §1.4 tension table ("engine needs total
   dispatch with no expression evaluator on the hot path"), §3.4
   (template model evaluates but does not compute), §8.3 (branch model
   rejects embedded expression language).
@@ -308,7 +308,7 @@ For clarity, the standard-library tasks are:
 | `int.add`        | Integer addition               | `{ a: integer, b: integer }`                          | `{ result: integer }` |
 | `int.lessThan`   | Integer comparison             | `{ a: integer, b: integer }`                          | `{ result: boolean }` |
 | `list.length`    | Array length                   | `{ list: any[] }`                                     | `{ length: integer }` |
-| `list.elementAt` | Index into array               | `{ list: any[], index: integer }`                     | `{ element: any }`    |
+| `list.elementAt` | Index into array               | `{ list: any[], index: integer }`                     | _(element value)_     |
 | `list.append`    | Append to array                | `{ list: any[], item: any }`                          | `{ list: any[] }`     |
 | `bool.toLabel`   | Boolean to string discriminant | `{ value: boolean, ifTrue: string, ifFalse: string }` | `{ label: string }`   |
 
@@ -336,7 +336,7 @@ concerns and do not appear in this record.
 - **String interpolation.** Named as the likeliest pressure point
   (§5). If it forces `$expr`, that is a narrow extension, not a
   general expression sublanguage.
-- **Branch predicates.** §8.3 of ir-v1.md rejects predicate branches
+- **Branch predicates.** §8.3 of ir-v0.1.md rejects predicate branches
   for v1. This decision is consistent with that rejection but does
   not depend on it. If predicate branches are later adopted (revisit
   trigger row 2), they could use `$expr` or they could use a
@@ -371,3 +371,29 @@ Register as revisit trigger row 11:
 - **Minimal response:** `$expr` as a template-position key,
   string-typed, pure-functional, no arithmetic. Extend only if
   arithmetic is independently forced.
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) preserves
+the "no expressions in the IR" invariant on both surfaces it touches:
+
+- **Branch arms** become [`WorkflowScope`](../workflow-scope-proposal.md)s,
+  but the branch itself still dispatches on a discriminant value
+  produced by an upstream task (the v0.1 `selector`/`selectorSchema`
+  shape is unchanged). The arm's `inputs` and `scope.output` are
+  reference objects, not expressions.
+- **Loop termination** via `continueWhen` is a reference object
+  resolved in the body-scope binding context. Decisions about whether
+  to continue are values computed by a body task (typically a
+  classifier or comparison task whose output is bound under a
+  predictable name), exactly the §1 "tasks are the only computation
+  surface" rule. `continueWhen` does not introduce a predicate
+  sublanguage; it is a `Template` with the same grammar as `inputs`
+  or `output`.
+
+If revisit-trigger row 11 fires (an `$expr` template-position key
+lands), `continueWhen` becomes the most ergonomic site for tiny
+boolean expressions (e.g., `{ "$expr": "state.attempts < 3" }`); the
+shape of the loop does not change.

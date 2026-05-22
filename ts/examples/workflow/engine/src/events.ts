@@ -3,7 +3,7 @@
 
 /**
  * Events emitted by the workflow engine during execution.
- * Mirrors the observability contract in ir-v1.md section 5.6.
+ * Mirrors the observability contract in ir-v0.1.md section 5.6.
  */
 export type WorkflowEvent =
     | {
@@ -17,6 +17,7 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           scopePath: string[];
+          iteration?: number;
           timestamp: number;
       }
     | {
@@ -24,6 +25,7 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           scopePath: string[];
+          iteration?: number;
           output: unknown;
           timestamp: number;
       }
@@ -32,6 +34,7 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           scopePath: string[];
+          iteration?: number;
           error: { message: string; data?: unknown };
           timestamp: number;
       }
@@ -62,6 +65,47 @@ export type WorkflowEvent =
           type: "runFailed";
           runId: string;
           error: { message: string; data?: unknown };
+          timestamp: number;
+      }
+    | {
+          type: "forkStarted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          branchNames: string[];
+          timestamp: number;
+      }
+    | {
+          type: "forkCompleted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          output: unknown;
+          timestamp: number;
+      }
+    | {
+          type: "forkFailed";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          error: { message: string; data?: unknown };
+          timestamp: number;
+      }
+    | {
+          type: "forkMapIterationStarted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          index: number;
+          timestamp: number;
+      }
+    | {
+          type: "forkMapIterationCompleted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          index: number;
+          output: unknown;
           timestamp: number;
       };
 

@@ -107,7 +107,7 @@ describe("discoverWorkflows", () => {
         const result = await discoverWorkflows(dir, taskMap("noop"));
         expect(result.workflows.size).toBe(0);
         expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].file).toBe("bad.json");
+        expect(result.errors[0].file).toBe(join(dir, "bad.json"));
         expect(typeof result.errors[0].errors).toBe("string");
     });
 
@@ -138,7 +138,7 @@ describe("discoverWorkflows", () => {
         const result = await discoverWorkflows(dir, taskMap("noop"));
         expect(result.workflows.size).toBe(0);
         expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].file).toBe("invalid.json");
+        expect(result.errors[0].file).toBe(join(dir, "invalid.json"));
         expect(Array.isArray(result.errors[0].errors)).toBe(true);
     });
 

@@ -5,11 +5,12 @@ semantics that any conforming engine must implement.
 
 ## Files
 
-- **[ir-v1.md](ir-v1.md)** - the authoritative v1 IR. Single source of truth.
-- **[revisit-triggers.md](revisit-triggers.md)** - index of v1 decisions with explicit reopening conditions.
-- **[dsl-assumptions.md](dsl-assumptions.md)** - DSL-shaped assumptions baked into v1 that a future DSL design must confirm or refute.
+- **[ir-v0.1.md](ir-v0.1.md)** - the foundational IR spec. Core node kinds, scope model, execution semantics.
+- **[ir-v0.2.md](ir-v0.2.md)** - IR extensions: fork/forkMap concurrency, standard library, builtin tasks.
+- **[revisit-triggers.md](revisit-triggers.md)** - index of decisions with explicit reopening conditions.
+- **[dsl-assumptions.md](dsl-assumptions.md)** - DSL-shaped assumptions baked into the IR that the DSL design must confirm or refute.
 - **[decisions/](decisions/)** - numbered per-decision records.
-- **[post-v1/](post-v1/)** - sketches of features deferred past v1.
+- **[future/](future/)** - sketches of features deferred to future iterations.
 
 ## Decision records
 
@@ -25,7 +26,7 @@ template.
 
 ## Post-v1 sketches
 
-- **[post-v1/block-scope.md](post-v1/block-scope.md)** - explicit `block` scope (multi-statement try, regional grouping).
+- **[future/block-scope.md](future/block-scope.md)** - explicit `block` scope (multi-statement try, regional grouping).
 
 ## Related
 

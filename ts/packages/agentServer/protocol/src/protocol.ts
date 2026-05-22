@@ -67,6 +67,89 @@ export const DefaultUserIdentity: UserIdentity = {
 
 export const AgentServerChannelName = "agent-server";
 
+/**
+ * Channel name for the port-discovery RPC endpoint hosted by agent-server.
+ * External clients (browser extension, VS Code extension, CLI) open this
+ * channel to look up which port a given app-agent + role is currently bound
+ * to. The dispatcher's `PortRegistrar` is the source of truth.
+ */
+export const DiscoveryChannelName = "discovery";
+
+/**
+ * Default TCP port the agent-server listens on. Centralized here so every
+ * client that defaults to "the local agent-server" stays in sync if we ever
+ * change it. Override via `--port`/`AGENT_SERVER_PORT` on the server side
+ * and via the `port` argument on the client side.
+ */
+export const AGENT_SERVER_DEFAULT_PORT = 8999;
+
+/** Convenience: the matching default WebSocket URL. */
+export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_PORT}`;
+
+/**
+ * Well-known agent name for the agent-server itself. Used by external
+ * clients via `lookupPort` to discover the configured server port when
+ * they bootstrapped from a different known port. The agent-server
+ * special-cases this name in its discovery handler.
+ */
+export const AGENT_SERVER_DISCOVERY_NAME = "agent-server";
+
+/**
+ * RPC surface for the discovery channel. Read-only on purpose: clients can
+ * ask "where is agent X's role Y?" but cannot mutate the registrar — only
+ * agents themselves (in-process, via SessionContext.registerPort) can do
+ * that.
+ */
+export type DiscoveryInvokeFunctions = {
+    /**
+     * Look up the port currently registered for `(agentName, role)`.
+     *
+     * `role` is an agent-defined free-form string — the discovery
+     * protocol does not enumerate valid values; each agent owns its
+     * own role namespace and should publish constants for callers to
+     * import. Omit `role` (or pass undefined) to look up the agent's
+     * default role, which matches what `setLocalHostPort` registered
+     * for agents that pre-date the multi-role API.
+     *
+     * Well-known: `agentName === "agent-server"` returns the
+     * agent-server's own listening port (registered as a regular
+     * allocation under that name), so clients that bootstrap from a
+     * known port can discover the configured one.
+     *
+     * Returns `null` (not undefined) so the JSON-RPC response is always a
+     * defined value; callers should treat null as "no allocation found,
+     * try again later" rather than a hard error.
+     */
+    lookupPort: (param: {
+        agentName: string;
+        role?: string;
+    }) => Promise<{ port: number | null }>;
+};
+
+/**
+ * Build the read-only discovery RPC handler set from a lookup callback.
+ *
+ * Both the agent-server and the standalone Electron shell host this
+ * channel — the agent-server multiplexes it onto its main WS, the
+ * standalone shell stands up a dedicated WS for it. They share this
+ * factory so the wire-level behavior (including null-for-not-found
+ * normalization) stays in lockstep.
+ *
+ * The callback shape — rather than passing the `IPortRegistrar`
+ * directly — keeps this package free of an `agent-dispatcher` dep,
+ * which would otherwise create a downward dependency from the
+ * protocol-only package onto the dispatcher core.
+ */
+export function createDiscoveryHandlers(
+    lookup: (agentName: string, role?: string) => number | undefined,
+): DiscoveryInvokeFunctions {
+    return {
+        lookupPort: async ({ agentName, role }) => ({
+            port: lookup(agentName, role) ?? null,
+        }),
+    };
+}
+
 /** Build the dispatcher channel name for a given conversation. */
 export function getDispatcherChannelName(conversationId: string): string {
     return `dispatcher:${conversationId}`;

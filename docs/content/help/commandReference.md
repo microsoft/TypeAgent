@@ -766,22 +766,49 @@ The `--json <path>` flag writes a `CollisionScanResult` to disk for offline post
 
 This is the proactive companion to runtime collision detection — see [Action Collision Detection](../../../ts/packages/dispatcher/dispatcher/README.md#action-collision-detection) in the dispatcher README.
 
-## @history list - List history
+## @feedback list - List recent user-feedback entries (most recent first)
+Usage: `@feedback list [--limit <number>] [--all]`
+### Flags:
+  - --limit &lt;number&gt; : Maximum number of entries to show (default: 20)
+  - --all : Include every entry; otherwise only the latest rating per request is shown (default: false)
 
-Usage: `@history list`
+## @feedback top - Aggregate user feedback — counts by rating and category
+Usage: `@feedback top [--limit <number>]`
+### Flags:
+  - --limit &lt;number&gt; : Top-N depth for the per-category breakdown (default: 10)
 
-## @history clear - Clear the history
+## @feedback filter - Filter feedback by rating, category, and/or date range
+Usage: `@feedback filter [--rating <string>] [--category <string>] [--since <string>] [--until <string>] [--limit <number>] [--all]`
+### Flags:
+  - --rating &lt;string&gt; : up | down | cleared
+  - --category &lt;string&gt; : wrong-agent | didnt-understand | bad-response | other
+  - --since &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/after this date
+  - --until &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/before this date
+  - --limit &lt;number&gt; : Maximum number of entries to show (default: 50)
+  - --all : Include every entry; otherwise only the latest rating per request (default: false)
 
-Usage: `@history clear`
-
-## @history delete - Delete a specific message from the chat history
-
-Usage: `@history delete <index>`
-
+## @feedback export - Export user-feedback entries to a local file (JSON or JSONL)
+Usage: `@feedback export <file> [--format <string>] [--all]`
 ### Arguments:
+  - &lt;file&gt; - Destination path. Extension picks the format if `--format` is omitted: `.jsonl` → JSONL, anything else → JSON. (type: string)
+### Flags:
+  - --format &lt;string&gt; : `json` | `jsonl` (overrides the path extension)
+  - --all : Include every entry; otherwise only the latest rating per request (default: false)
 
-- &lt;index&gt; - Chat history index to delete. (type: number)
+## @feedback count - Show the total number of feedback entries
+Usage: `@feedback count`
 
+## @history list - List history  
+Usage: `@history list`  
+   
+## @history clear - Clear the history  
+Usage: `@history clear`  
+   
+## @history delete - Delete a specific message from the chat history  
+Usage: `@history delete <index>`  
+### Arguments:  
+  - &lt;index&gt; - Chat history index to delete. (type: number)  
+   
 ## @history entities list - Shows all of the entities currently in 'working memory.'
 
 Usage: `@history entities list`
@@ -1028,45 +1055,34 @@ Usage: `@shell run interactive`
 
 Usage: `@shell break`
 
-## @shell topmost - Always keep the shell window on top of other windows
+## @shell topmost - Always keep the shell window on top of other windows  
+Usage: `@shell topmost`  
+  
+## @shell open - Show a new Web Content view  
+Usage: `@shell open <site>`  
+### Arguments:  
+  - &lt;site&gt; - Alias or URL for the site of the open. (type: string)  
+  
+## @shell close - Close the new Web Content view  
+Usage: `@shell close`  
+  
+## @shell localWhisper off - Turn off Local Whisper integration  
+Usage: `@shell localWhisper off`  
+  
+## @shell localWhisper on - Turn on Local Whisper integration.  
+Usage: `@shell localWhisper on`  
+  
+## @shell theme light - Set the theme to light  
+Usage: `@shell theme light`  
+  
+## @shell theme dark - Set the theme to dark  
+Usage: `@shell theme dark`  
 
-Usage: `@shell topmost`
+## @shell trash restore - Restore agent messages from the trash (un-hide everything that was sent to the bin via the trash icon)
+Usage: `@shell trash restore`
 
-## @shell open - Show a new Web Content view
-
-Usage: `@shell open <site>`
-
-### Arguments:
-
-- &lt;site&gt; - Alias or URL for the site of the open. (type: string)
-
-## @shell close - Close the new Web Content view
-
-Usage: `@shell close`
-
-## @shell localWhisper off - Turn off Local Whisper integration
-
-Usage: `@shell localWhisper off`
-
-## @shell localWhisper on - Turn on Local Whisper integration.
-
-Usage: `@shell localWhisper on`
-
-## @shell theme light - Set the theme to light
-
-Usage: `@shell theme light`
-
-## @shell theme dark - Set the theme to dark
-
-Usage: `@shell theme dark`
-
-## @spelunker request - Send a natural language request to the Spelunker
-
-Usage: `@spelunker request <question>`
-
-### Arguments:
-
-- &lt;question&gt; - Request for Spelunker (type: string)
+## @shell trash flush - Permanently delete every message currently in the trash. They stay hidden and can no longer be restored
+Usage: `@shell trash flush`
 
 ## @uninstall - Uninstall an agent
 

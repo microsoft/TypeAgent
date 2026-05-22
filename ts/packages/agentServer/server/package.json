@@ -38,6 +38,7 @@
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -46,7 +47,7 @@
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "websocket-channel-server": "workspace:*",
-    "ws": "^8.17.1"
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
