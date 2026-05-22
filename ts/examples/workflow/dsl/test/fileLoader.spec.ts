@@ -694,4 +694,83 @@ describe("compileFile workspaceRoot containment (default Node resolver)", () => 
             ),
         ).toBe(true);
     });
+
+    // P7-T4: documents that the entry file itself is NOT subject to
+    // containment — only its imports are. A caller pointing compileFile
+    // at a file outside workspaceRoot is loading exactly the file it
+    // asked for; the containment check protects against unintended
+    // *transitive* reads via imports.
+    test("entry file outside workspaceRoot loads; its escaping imports are blocked", () => {
+        // Entry lives in outsideRoot, workspaceRoot is tmpRoot.
+        const main = path.join(outsideRoot, "main.wf");
+        fs.writeFileSync(
+            main,
+            `export workflow main(x: number): number {\n` +
+                `  return x;\n` +
+                `}\n`,
+        );
+        // No imports → loads cleanly even though entry is outside the root.
+        const ok = compileFile(main, taskSchemas, {
+            workspaceRoot: tmpRoot,
+        });
+        expect(ok.errors).toEqual([]);
+
+        // Add a sibling import that lives next to the entry (also
+        // outside workspaceRoot) → import is rejected.
+        const sibling = path.join(outsideRoot, "helper.wf");
+        fs.writeFileSync(
+            sibling,
+            `export workflow other(n: number): number {\n  return n;\n}\n`,
+        );
+        fs.writeFileSync(
+            main,
+            `import { other } from "./helper.wf";\n` +
+                `export workflow main(x: number): number {\n` +
+                `  const r = other(x);\n` +
+                `  return r;\n` +
+                `}\n`,
+        );
+        const blocked = compileFile(main, taskSchemas, {
+            workspaceRoot: tmpRoot,
+        });
+        expect(blocked.errors.length).toBeGreaterThan(0);
+        expect(
+            blocked.errors.some((e) =>
+                /outside workspace root/i.test(e.message),
+            ),
+        ).toBe(true);
+    });
+
+    // P7-T5: relative workspaceRoot is resolved against process.cwd()
+    // via path.resolve in createNodeResolver; behavior should be
+    // identical to passing the equivalent absolute path.
+    test("relative workspaceRoot is resolved against process.cwd()", () => {
+        const subDir = path.join(tmpRoot, "lib");
+        fs.mkdirSync(subDir);
+        fs.writeFileSync(
+            path.join(subDir, "helper.wf"),
+            `export workflow other(n: number): number {\n  return n;\n}\n`,
+        );
+        const main = path.join(tmpRoot, "main.wf");
+        fs.writeFileSync(
+            main,
+            `import { other } from "./lib/helper.wf";\n` +
+                `export workflow main(x: number): number {\n` +
+                `  const r = other(x);\n` +
+                `  return r;\n` +
+                `}\n`,
+        );
+        // Switch cwd to tmpRoot's parent so we can address tmpRoot by
+        // its basename ("./<basename>"). Restore after the test.
+        const prevCwd = process.cwd();
+        process.chdir(path.dirname(tmpRoot));
+        try {
+            const result = compileFile(main, taskSchemas, {
+                workspaceRoot: `./${path.basename(tmpRoot)}`,
+            });
+            expect(result.errors).toEqual([]);
+        } finally {
+            process.chdir(prevCwd);
+        }
+    });
 });

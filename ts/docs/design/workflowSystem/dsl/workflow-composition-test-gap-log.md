@@ -62,26 +62,6 @@ address them. Filled gaps are tracked by the test diff itself.
   contract on ordering exists yet. Add a contract test if the CLI
   starts dedup-or-sorting errors.
 
-### P7-T4. Entry file outside `workspaceRoot`
-
-- **Gap:** Does `compileFile("/outside/main.wf", …, { workspaceRoot: "/workspace" })`
-  fail with a containment error, or succeed with all its imports
-  blocked individually?
-- **Reason not filled:** Current `realpathSync` containment is
-  applied only at `resolve()` time for import statements; the entry
-  file is not subject to it. This is a deliberate carve-out (the
-  caller chose to point `compileFile` at this file), but it is also
-  unexercised. Add when the policy is firmed up.
-
-### P7-T5. Relative `workspaceRoot` path
-
-- **Gap:** Tests pass absolute roots from `mkdtempSync`. Behavior
-  with `workspaceRoot: "."` or `workspaceRoot: "./src"` is unverified.
-- **Reason not filled:** `compiler.ts` calls
-  `path.resolve(workspaceRoot)` so the behavior is well-defined, and
-  the CLI accepts whatever the user types verbatim. Add only if a
-  user reports surprising CWD-dependence.
-
 ### P7-T6. Empty import list `import { } from "./foo.wf"`
 
 - **Gap:** Whether parser accepts, and whether the loader still
