@@ -15,8 +15,10 @@ new surface area:
 3. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
    structurally valid, align fork execution with the spec's failure and cleanup
    semantics.
-4. **G13: Fix structural type comparison for objects and arrays.** Type-system
-   expansions should build on sound object and array compatibility checks.
+4. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
+   surfaces real structural mismatches, switch error messages from the
+   collapsed `'object'` rendering to the existing `formatType` output so
+   users can see which fields differ.
 5. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
    one-way before adding more type-system expressiveness.
 6. **G3: Add TypeScript-style named type aliases.** Once structural
@@ -49,8 +51,8 @@ new surface area:
 Dependency spine:
 
 - `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
-- `G13 + G10 -> G3 -> G4 -> G18` builds type-system features on sound
-  assignability.
+- `G10 -> G3 -> G4 -> G18` builds type-system features on sound
+  assignability (G13 resolved the structural-comparison prerequisite).
 
 ## G1: Sub-workflow calls
 
@@ -321,35 +323,6 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
-
-## G13: `typeEq` skips structural comparison for objects and arrays
-
-**Context:** The type checker's `typeEq(target, source)` function is used
-for return type validation, const annotation checking, and ternary arm
-compatibility. It skips structural comparison for object and array kinds.
-
-**Current state:**
-
-- `typeEq` checks primitive kinds by name, handles `unknown`/`never`
-  correctly, and handles `integer`/`number` compatibility.
-- For objects and arrays it falls through to `return true` without
-  comparing fields or element types.
-- This means `{ a: string }` is considered compatible with
-  `{ x: number, y: number }` in all contexts where `typeEq` is called.
-- Affected call sites: return type vs declared type (line ~263), const
-  annotation vs inferred type (line ~308), ternary arm compatibility
-  (line ~549).
-
-**What needs to happen:**
-
-1. Add structural comparison for object types: check that all required
-   fields in the target exist in the source with compatible types.
-2. Add element-type comparison for array types.
-3. Consider splitting into two functions: `typeEq` for operator checks
-   (where the current loose behavior is fine) and `isAssignableTo` for
-   the structural contexts.
-4. Add tests for mismatched object types in return position and ternary
-   arms.
 
 ## G16: `throw` produces empty error message
 
@@ -639,3 +612,61 @@ name: "_infer" }`) and emit the inferred type in the emitter.
    match the inferred element type.
 4. Add LSP hover and inlay-hint support that shows the inferred return
    type next to the workflow name when the annotation is omitted.
+
+## G22: Type error messages collapse objects to `'object'`
+
+**Status:** UX gap surfaced by the G13 implementation. Pure diagnostic
+improvement; no semantic change to type checking.
+
+**Context:** When the type checker reports an assignability error, it
+formats both sides with `typeName(t)`. For object types this function
+returns the literal string `"object"`, discarding all field information.
+This makes object-vs-object mismatches indistinguishable to users.
+
+**Current state:**
+
+- `typeName` in `typeChecker.ts` returns `"object"` for any `ObjectTypeInfo`,
+  regardless of fields.
+- Arrays partially benefit from recursion (`string[]`) but their element
+  type collapses to `"object"` when it's an object.
+- Tuples also collapse to `"object"` for each object element.
+- A `formatType` function already exists in `typeChecker.ts` that produces
+  a full TypeScript-style rendering (e.g. `{ name: string, tag?: string }`,
+  `{ x: string }[]`), used today only for LSP hover text.
+- Affected diagnostics include (non-exhaustive):
+  - `Workflow return type 'object' is not assignable to declared type 'object'`
+  - `Type 'object' is not assignable to type 'object'` (const annotations)
+  - `Ternary arms must have the same type: 'object' vs 'object'`
+  - `Operator '===' requires same types on both sides: 'object' vs 'object'`
+- After G13 added structural object/array assignability checks, mismatches
+  between objects are now reported as errors, so the volume of
+  object-vs-object messages users see has grown.
+
+**Reproduction:**
+
+```
+workflow test(x: { name: string, tag: number }): { name: string, tag?: string } {
+    return x;
+}
+```
+
+Currently reports: `Workflow return type 'object' is not assignable to
+declared type 'object'`. Users cannot tell which field mismatches without
+manually walking both type expressions.
+
+**What needs to happen:**
+
+1. Switch the structural error messages (return-type, const-annotation,
+   ternary-arm, and `===`/`!==`) to use `formatType` instead of
+   `typeName`, or introduce a single shared diagnostic formatter.
+2. Decide whether `typeName` should be removed in favor of `formatType`,
+   or kept for short contexts (e.g. operator operand kind in
+   `must be numeric, got 'string'`). If kept, document the contract.
+3. Consider augmenting object-mismatch messages with the specific
+   offending field path (e.g. `field 'tag' has type 'number' but
+expected 'string'`), reusing the recursion already done inside
+   `isAssignableTo`. This may require threading an error-reason result
+   out of `isAssignableTo` instead of a bare boolean.
+4. Update existing type-checker tests whose substring assertions rely on
+   the collapsed `'object'` rendering, and add tests asserting the
+   richer field-level wording.
