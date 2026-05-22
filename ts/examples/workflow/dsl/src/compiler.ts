@@ -21,6 +21,7 @@ export interface CompileError {
     message: string;
     line: number;
     col: number;
+    length: number;
 }
 
 export interface CompileOptions {
@@ -57,6 +58,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (lexErrors.length > 0) {
@@ -74,6 +76,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (workflows.length === 0 || parseErrors.length > 0) {
@@ -90,6 +93,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (typeErrors.length > 0) {
@@ -107,6 +111,7 @@ export function compile(
             message: entry.message,
             line: entry.line,
             col: entry.col,
+            length: 1,
         });
         return { errors };
     }
@@ -123,6 +128,7 @@ export function compile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
 
@@ -189,6 +195,7 @@ function maybeValidate(
             message: `${e.path}: ${e.message}`,
             line: 0,
             col: 0,
+            length: 1,
         });
     }
 }
@@ -243,6 +250,7 @@ export function compileFile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
     if (typeErrors.length > 0) return { errors };
@@ -256,6 +264,7 @@ export function compileFile(
             message: entry.message,
             line: entry.line,
             col: entry.col,
+            length: 1,
         });
         return { errors };
     }
@@ -271,6 +280,7 @@ export function compileFile(
             message: e.message,
             line: e.line,
             col: e.col,
+            length: e.length,
         });
     }
 
@@ -293,6 +303,7 @@ function loadErrorToCompileError(e: LoadError): CompileError {
         message: e.file ? `${e.file}: ${e.message}` : e.message,
         line: e.line,
         col: e.col,
+        length: 1,
     };
 }
 

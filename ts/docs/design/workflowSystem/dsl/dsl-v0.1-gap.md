@@ -110,147 +110,6 @@ to a variable and pass it opaquely to another task.
    type checker support for resolving generic instantiations, and emitter
    support for threading the resolved type into the schema.
 
-## G5: `identity` is covering two distinct IR gaps
-
-**Context:** The current emitter uses builtin `identity` nodes in several
-places where the DSL produces a value but the IR only allows control flow
-to continue through executable node IDs. The principle question is not just
-"can we remove `identity`?" but which uses reflect a real missing IR
-concept versus a reasonable lowering to existing task semantics.
-
-**Current state:** `identity` is doing two different jobs:
-
-- **Literal materialization:** turning a literal/template value into a
-  node result so the workflow or a branch arm can continue through a real
-  node.
-- **Shared-bind normalization:** ensuring both sides of a split publish the
-  same bound name before converging.
-
-In current emitter/runtime terms, that means four concrete behaviors:
-
-1. **Literal branch arms normalize through `identity`.**
-   Branch targets in the IR are node IDs, not inline values. When a DSL
-   branch arm computes a literal/template value instead of calling a task,
-   the emitter wraps that value in an `identity` node, binds the common
-   result name there, and then converges through a merge node.
-
-2. **Literal-only workflows normalize through `identity`.**
-   A workflow that returns a literal and would otherwise emit no executable
-   nodes still gets a real entry node. The emitter inserts an `identity`
-   node and returns its `result` field rather than emitting a zero-node
-   workflow. This keeps the runtime model uniform: executable workflows
-   start at an entry node.
-
-3. **Branch-returning control flow normalizes through a shared bind.**
-   When both sides of an `if/else` or ternary produce a value, the emitter
-   does not rely on branch-local bind names matching by accident. Instead,
-   each side writes through an `identity` node to the same post-merge bind
-   name, which downstream consumers read after control flow converges.
-
-4. **`noop` and `identity` are part of the compiler/runtime contract.**
-   The current lowering depends on these builtins existing in the runtime.
-   `identity` materializes values into ordinary node outputs; `noop` serves
-   as the convergence point after split control flow. They are not just
-   incidental implementation details if the emitter continues to generate
-   them.
-
-These are related in the emitter, but they are not the same design problem.
-
-**Design-principles analysis:**
-
-1. **Keep `identity` as a lowering primitive.**
-
-   - Strong on minimization: no new IR concept is added.
-   - Clean under P1/P2/P4: the value still crosses a normal task boundary,
-     remains traceable, and preserves local contracts.
-   - Slightly weak under P3/P5: some nodes exist only as compiler shims,
-     so IR structure does not always correspond to meaningful computation.
-
-2. **Add a dedicated `ConstNode` for literal materialization.**
-
-   - Best small IR improvement for literal-only cases.
-   - Improves P3/P5 by making "this path yields a value" structurally
-     visible instead of disguising it as a generic task call.
-   - Compatible with P1/P2/P4 if it keeps explicit schemas, output, and
-     control flow.
-   - Does **not** solve shared-bind normalization; it only replaces the
-     literal-materialization subset of current `identity` usage.
-
-3. **Add explicit merge / phi semantics for shared-bind normalization.**
-   - Best fit for the normalization subset of `identity` usage.
-   - Potentially strong under P3/P4/P5 because branch convergence would
-     explicitly describe how a common post-branch name is produced.
-   - Expensive under the minimization discipline: this adds a real new IR
-     behavioral concept with validator and runtime implications.
-
-**Conclusion:**
-
-- Keeping `identity` is acceptable under the current principles because it
-  preserves the existing task-centered computation boundary and avoids new
-  IR concepts.
-- The current lowering should be treated as intentional
-  compiler/runtime contract, not as an accidental workaround:
-  - literal branch arms lower through `identity`
-  - literal-only workflows lower through an `identity` entry node
-  - branch-produced values lower through shared-bind normalization
-  - `noop` and `identity` must exist as runtime builtins if the emitter
-    continues to generate them
-- If the IR is refined later, the problem should be split rather than
-  solved with one broad mechanism:
-  1.  `ConstNode` is the clean candidate for literal materialization.
-  2.  Explicit merge / phi semantics are the clean candidate for shared-bind
-      normalization.
-
-**What needs to happen:**
-
-1. Decide whether the spec should explicitly document `identity` as an
-   accepted compiler/runtime lowering primitive for these cases. The
-   explicit lowering rules above should be carried into the main spec
-   docs or kept here as the durable reference.
-2. If a later cleanup is desired, evaluate `ConstNode` and merge / phi
-   support separately rather than treating all `identity` uses as one
-   problem.
-
-## G6: Validator does not handle branch-return convergence patterns
-
-**Context:** The IR validator's domination analysis rejects some
-emitter-produced workflows that execute correctly in the runner. Four
-DSL-integration tests and several hand-built engine tests bypass
-validation to preserve behavioral coverage.
-
-**Current state:** The validator has three binding-coverage strategies
-in `isBindingCoveredAtNode`:
-
-- (a) Direct dominator coverage
-- (b) Joint coverage across onError splits
-- (c) Split-point phi coverage for branch nodes where both arms bind
-  the same name
-
-Strategy (c) was added for ternary and short-circuit `&&`/`||` patterns
-and works for those. But the emitter's branch-return lowering produces
-prefixed nodes (e.g. `then_taskCall_3`, `else_taskCall_5`) that converge
-through a merge `noop`, and the current phi check does not trace through
-the prefix-based convergence pattern.
-
-**Patterns that fail validation:**
-
-1. if/else where both arms return (branch-return with shared-bind
-   normalization through prefixed nodes converging at merge noop)
-2. switch where all arms return (multi-arm shared-bind convergence)
-3. if/else with arithmetic (mixed binary-op + branch lowering)
-4. task call + binary op + ternary (mixed lowering with multiple splits)
-
-**What needs to happen:**
-
-1. Extend the validator's CFG traversal to recognize the prefix-based
-   convergence shape the emitter produces for branch-return patterns.
-   The fix belongs in the validator, not the emitter.
-2. Once the validator handles these patterns, remove `NO_VALIDATE` from
-   the four DSL-integration tests and `skipValidation` from their
-   corresponding engine runs.
-3. The hand-built engine tests that use `skipValidation` for
-   error-handling paths are a separate concern and can stay as-is.
-
 ## G7: Composition patterns outside current scope
 
 **Context:** The DSL parser and type checker intentionally do not support
@@ -284,27 +143,6 @@ nested calls would obscure the step-by-step execution model.
    (error if not). There are no union types. This was an intentional
    simplification: returns the consequent type, rejects mismatches at
    compile time.
-
-## G8: Comments not preserved in AST
-
-**Spec:** dsl-v0.1.md section 6 states "The AST preserves comments.
-Each node has an optional `leadingComments` array of `Comment { text, pos }`
-attached to the following AST node." It also claims round-trip fidelity
-between source and AST.
-
-**Status: Resolved.**
-
-- The lexer (`lexer.ts`) now collects `//` and `/* */` comments into a
-  `comments: LexComment[]` side channel returned alongside tokens. The
-  full comment lexeme (including delimiters) is preserved.
-- The parser (`parser.ts`) accepts the comments list and attaches any
-  comment whose offset precedes a statement's (or workflow's) first
-  token as a `leadingComments` entry on that AST node.
-- A new formatter (`formatter.ts`, exported as `format`) lowers a
-  `WorkflowDecl` back to DSL source and emits `leadingComments` in
-  attached positions, completing the round trip.
-- See `formatter-design.md` for design notes (e.g., the full-text
-  comment representation, trailing-comment handling).
 
 ## G9: Bare task calls wrapped as synthetic ConstStatement
 
@@ -465,19 +303,6 @@ reversed.
 
 **Reproduction:** Compile a switch with string cases, run with a value
 matching the second case. Output is always from the first case.
-
-## G15: Branch/ternary inside loop body fails at runtime
-
-**Spec:** dsl-v0.1.md sections 2.7, 3.2. Branches and ternary
-expressions should work inside map/filter/attempts bodies.
-
-**Current state:** A ternary expression inside a map body compiles
-without errors but fails at runtime. The branch condition evaluation
-inside a loop body scope does not resolve correctly, possibly due to
-scope nesting issues in $from reference resolution.
-
-**Reproduction:** `map(nums, (n) => { const r = n > 10 ? "big" : "small"; return r })`
-compiles but the engine fails to execute the workflow.
 
 ## G16: `throw` produces empty error message
 

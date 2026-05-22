@@ -459,7 +459,11 @@ and which are _opaque literals_ (no interpretation). Today the
 opaque-literal positions are `constants[*].value`, `inputSchema`,
 `outputSchema`, `selectorSchema`, `state[*].schema`, `types[*]`. The
 template positions are `inputs.<field>`, `output`, `state[*].initial`,
-`iterateState[*]`, `selector`. User data containing `$from` lives in
+`iterateState[*]`, `selector`, and -- per [decision 0010](0010-finish-workflow-scope-unification.md)
+-- branch arm `cases[*].inputs.<field>` / `default.inputs.<field>`,
+each arm's `scope.output` (uniformly with the top-level `output`
+position because arms are now [`WorkflowScope`](../workflow-scope-proposal.md)s),
+and the loop's `continueWhen`. User data containing `$from` lives in
 opaque positions and is never interpreted; references live in template
 positions and are interpreted as today.
 

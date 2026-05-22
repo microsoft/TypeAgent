@@ -9,6 +9,8 @@ import {
     WorkflowNode,
     Template,
     TaskNode,
+    BranchNode,
+    BranchArm,
     LoopNode,
     ForkNode,
     ForkMapNode,
@@ -227,14 +229,10 @@ class TaskFailure extends Error {
 
 // ---- Scope exit ----
 
-type ScopeExit =
-    | {
-          kind: "terminal";
-          errorHandled?:
-              | { message: string; nodeId: string | undefined }
-              | undefined;
-      }
-    | { kind: "sentinel"; sentinel: "@iterate" | "@exit" };
+type ScopeExit = {
+    kind: "terminal";
+    errorHandled?: { message: string; nodeId: string | undefined } | undefined;
+};
 
 // ---- Public types ----
 
@@ -581,11 +579,6 @@ export class WorkflowEngine {
                 throw new EngineError("Run cancelled");
             }
 
-            // Sentinels (loop body only)
-            if (currentId === "@iterate" || currentId === "@exit") {
-                return { kind: "sentinel", sentinel: currentId };
-            }
-
             const node = nodes[currentId];
             // Unreachable after static validation: name-resolution pass
             // verifies all node references exist.
@@ -648,16 +641,29 @@ export class WorkflowEngine {
                         ...(iteration !== undefined ? { iteration } : {}),
                         timestamp: Date.now(),
                     });
-                    currentId = this.executeBranch(node, activeScope);
-                    this.emit({
-                        type: "nodeCompleted",
+                    currentId = await this.executeBranch(
+                        node,
+                        branchNodeId,
+                        activeScope,
+                        scope,
+                        scopePath,
                         runId,
-                        nodeId: branchNodeId,
-                        scopePath: [...scopePath],
-                        ...(iteration !== undefined ? { iteration } : {}),
-                        output: currentId,
-                        timestamp: Date.now(),
-                    });
+                        signal,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
+                        },
+                        policy,
+                        approve,
+                        taskTimeoutMs,
+                        constraints,
+                        iteration,
+                    );
                     break;
                 }
 
@@ -984,31 +990,126 @@ export class WorkflowEngine {
         }
     }
 
-    private executeBranch(
-        node: {
-            selector: Template;
-            cases: Record<string, string>;
-            default?: string;
-        },
-        scope: ScopeContext,
-    ): string {
-        const raw = resolveTemplate(node.selector, scope);
-        const selector = String(raw);
-        const next = node.cases[selector] ?? node.default;
-        if (!next) {
+    private async executeBranch(
+        node: BranchNode,
+        nodeId: string,
+        resolveScope: ScopeContext,
+        bindScope: ScopeContext,
+        scopePath: string[],
+        runId: string,
+        signal: AbortSignal,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
+        taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
+        iteration?: number,
+    ): Promise<string | undefined> {
+        const raw = resolveTemplate(node.selector, resolveScope);
+        const caseKey = String(raw);
+        const arm: BranchArm | undefined = node.cases[caseKey] ?? node.default;
+        if (!arm) {
             // For exhaustive branches (default omitted), this is unreachable
             // after static validation: the validator proves every selector
             // value has a matching case. For non-exhaustive branches, this is
-            // also unreachable because the validator requires a default. Either
-            // way this indicates a validator bypass — unrecoverable.
+            // also unreachable because the validator requires a default.
             throw new EngineError(
-                `Branch selector resolved to "${selector}" but no matching case or default exists`,
+                `Branch selector resolved to "${caseKey}" but no matching case or default exists`,
                 "UnrecoverableError",
                 true,
             );
         }
-        debug("branch selector=%s -> %s", selector, next);
-        return next;
+
+        debug("branch %s selector=%s -> arm", nodeId, caseKey);
+
+        const armInput = resolveTemplate(arm.inputs, resolveScope) as Record<
+            string,
+            unknown
+        >;
+        const armScope: ScopeContext = {
+            input: armInput,
+            constants: resolveScope.constants,
+            bindings: new Map(),
+            // No state: branch arms are isolated sub-scopes like fork branches.
+            // $from:"state" refs in arm nodes are hoisted through arm.inputs
+            // by the DSL emitter (captureOuterRefs) and rewritten to
+            // $from:"input". Hand-crafted IR must do the same; the validator
+            // rejects $from:"state" in arm node inputs.
+        };
+        const armScopePath = [...scopePath, `${nodeId}.${caseKey}`];
+
+        try {
+            await this.executeScope(
+                arm.scope.nodes,
+                arm.scope.entry,
+                armScope,
+                armScopePath,
+                runId,
+                signal,
+                policy,
+                approve,
+                taskTimeoutMs,
+                constraints,
+                iteration,
+            );
+
+            const armOutput = resolveTemplate(arm.scope.output, armScope);
+
+            if (this.defenseInDepth && arm.scope.outputSchema) {
+                const validate = this.getValidator(arm.scope.outputSchema);
+                if (!validate(armOutput)) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    throw new EngineError(
+                        `Branch "${nodeId}" arm "${caseKey}" output schema violation: ${msg}`,
+                    );
+                }
+            }
+
+            if (node.bind) {
+                bindScope.bindings.set(node.bind, armOutput);
+            }
+
+            this.emit({
+                type: "nodeCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                ...(iteration !== undefined ? { iteration } : {}),
+                output: armOutput,
+                timestamp: Date.now(),
+            });
+
+            return node.next;
+        } catch (err) {
+            if (
+                node.onError &&
+                !(err instanceof EngineError && err.unrecoverable)
+            ) {
+                const errorObj = buildErrorObject(
+                    err,
+                    "branch",
+                    nodeId,
+                    scopePath,
+                );
+
+                this.emit({
+                    type: "nodeFailed",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    ...(iteration !== undefined ? { iteration } : {}),
+                    error: { message: errorObj["message"] as string },
+                    timestamp: Date.now(),
+                });
+
+                onErrorDispatch(errorObj, armInput);
+                return node.onError;
+            }
+            throw err;
+        }
     }
 
     private async executeLoop(
@@ -1099,7 +1200,7 @@ export class WorkflowEngine {
                 };
 
                 // Execute body
-                const exit = await this.executeScope(
+                await this.executeScope(
                     node.body.nodes,
                     node.body.entry,
                     bodyScope,
@@ -1113,13 +1214,20 @@ export class WorkflowEngine {
                     i,
                 );
 
-                if (exit.kind === "terminal") {
+                // Evaluate continueWhen to determine whether to iterate or exit.
+                const continueResult = resolveTemplate(
+                    node.continueWhen,
+                    bodyScope,
+                );
+                if (typeof continueResult !== "boolean") {
                     throw new EngineError(
-                        `Loop body at "${nodeId}" terminated without sentinel`,
+                        `Loop continueWhen at "${nodeId}" evaluated to non-boolean: ${typeof continueResult}`,
+                        "UnrecoverableError",
+                        true,
                     );
                 }
 
-                if (exit.sentinel === "@exit") {
+                if (!continueResult) {
                     // Resolve output in body scope (state + body bindings)
                     const output = resolveTemplate(node.body.output, bodyScope);
 
@@ -1164,7 +1272,7 @@ export class WorkflowEngine {
                     return node.next;
                 }
 
-                // @iterate: compute next state and validate (§5.4 step 4)
+                // continueWhen === true: compute next state and validate (§5.4 step 4)
                 // Defense-in-depth: static validator checks iterateState
                 // template types against state schemas; runtime task-output
                 // checks (#9) ensure body bindings are correct.

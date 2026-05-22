@@ -91,6 +91,7 @@ function stripTrivia(value: unknown): unknown {
             if (k === "elseOnNewLine") continue;
             if (k === "multiLine") continue;
             if (k === "endLine") continue;
+            if (k === "blankLineBefore") continue;
             // Drop every source-position field. These shift when comments
             // appear or when the formatter re-emits the same AST.
             if (

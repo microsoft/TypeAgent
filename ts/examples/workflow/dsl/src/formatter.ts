@@ -55,12 +55,18 @@ export interface FormatOptions {
      *  to `Infinity` to never wrap based on width; set to `0` to
      *  always wrap when an alternative multi-line layout exists. */
     printWidth?: number;
+    /** When `true`, a single blank line is emitted before any statement
+     *  that had at least one blank line before it in the original source.
+     *  Multiple consecutive blank lines are collapsed to one. Default `true`.
+     *  Set to `false` to strip blank lines for compact deterministic output. */
+    keepBlankLines?: boolean;
 }
 
 interface ResolvedOptions {
     indent: number;
     eol: string;
     printWidth: number;
+    keepBlankLines: boolean;
 }
 
 /**
@@ -73,6 +79,7 @@ export function formatModule(module: Module, options?: FormatOptions): string {
         indent: options?.indent ?? 4,
         eol: options?.eol ?? "\n",
         printWidth: options?.printWidth ?? 100,
+        keepBlankLines: options?.keepBlankLines ?? true,
     };
     validateFormatOptions(opts);
     const p = new Printer(opts);
@@ -650,6 +657,7 @@ class Printer {
     // ---- Statements ----
 
     private printStatement(s: Statement): void {
+        if (s.blankLineBefore && this.opts.keepBlankLines) this.newline();
         this.printLeadingComments(s.leadingComments);
         switch (s.kind) {
             case "ConstStatement": {

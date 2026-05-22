@@ -97,3 +97,18 @@ without effects, smaller IRs for pure pipelines) are not where
 TypeAgent workflow value comes from. The one v1 weakness (A9:
 unjustified edge detection) is closed by a planned additive change,
 not a redesign.
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`, loop `continueWhen`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) keeps the
+two-graph separation intact. Branch arms become
+[`WorkflowScope`](../workflow-scope-proposal.md)s, which makes a
+branch DDG-source-eligible when it declares `bind` (the same uniform
+rule §3.2 already applies to task, fork, forkMap, and loop). The CFG
+shape of a branch is unchanged: arms are sub-scopes with their own
+nested CFG, and the branch node itself dispatches to exactly one arm
+per execution. Loop termination via `continueWhen` is a DDG
+dependency (the loop reads a body-scope value) layered on the same
+CFG body shape; it does not change the CFG/DDG separation either.

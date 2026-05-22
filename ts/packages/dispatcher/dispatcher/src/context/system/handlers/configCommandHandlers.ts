@@ -991,31 +991,6 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
     }
 }
 
-class ConfigPortsCommandHandler implements CommandHandler {
-    public readonly description = "Lists the ports assigned to agents.";
-
-    public readonly parameters = {};
-
-    public async run(context: ActionContext<CommandHandler>) {
-        const ports: string[][] = [["", "Agent", "Port"]];
-        const cmdContext = context.sessionContext.agentContext as any;
-
-        cmdContext.agents.getAppAgentNames().forEach((name: string) => {
-            const port = cmdContext.agents.getLocalHostPort(name);
-
-            if (port !== undefined) {
-                ports.push([
-                    cmdContext.agents.getAppAgentEmoji(name),
-                    name,
-                    port.toString(),
-                ]);
-            }
-        });
-
-        displayResult(ports, context);
-    }
-}
-
 class FixedSchemaCommandHandler implements CommandHandler {
     public readonly description = "Set a fixed schema disable switching";
     public readonly parameters = {
@@ -2083,8 +2058,6 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     ),
                 },
             },
-
-            ports: new ConfigPortsCommandHandler(),
         },
     };
 }

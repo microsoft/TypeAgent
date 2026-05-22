@@ -6,11 +6,14 @@
  *
  * This exercises: template resolution ($from references, literal pass-through),
  * linear task chains, onError recovery dispatch, loop with state/iterateState/
- * sentinels, branch nodes, and all six standard-library tasks.
+ * continueWhen, branch nodes, and all six standard-library tasks.
  */
 
 import {
     WorkflowIR,
+    WorkflowNode,
+    JSONSchema,
+    ConstantDef,
     TaskDefinition,
     TaskPolicy,
     Template,
@@ -47,6 +50,58 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { compile as compileDsl, TaskSchemaInfo } from "workflow-dsl";
+
+// ---- Test helper: wrap legacy flat WorkflowIR into multi-workflow shape ----
+// Engine tests were written against the pre-multi-workflow flat WorkflowIR
+// shape (`{ kind, name, version, ...WorkflowScope fields }`). The multi-
+// workflow refactor moves the body into `workflows[name]`. This helper lets
+// the existing fixtures keep their compact flat literal form by wrapping at
+// call sites.
+type LegacyWorkflowIR = {
+    kind: "workflow";
+    name: string;
+    description?: string;
+    version: string;
+    types?: Record<string, JSONSchema>;
+    constants?: Record<string, ConstantDef>;
+    inputSchema: JSONSchema;
+    entry: string;
+    nodes: Record<string, WorkflowNode>;
+    output: Template;
+    outputSchema: JSONSchema;
+};
+
+function wrapIR(legacy: LegacyWorkflowIR): WorkflowIR {
+    const {
+        kind,
+        name,
+        version,
+        types,
+        constants,
+        inputSchema,
+        entry,
+        nodes,
+        output,
+        outputSchema,
+    } = legacy;
+    const ir: WorkflowIR = {
+        kind,
+        version,
+        entry: name,
+        workflows: {
+            [name]: {
+                inputSchema,
+                entry,
+                nodes,
+                output,
+                outputSchema,
+            },
+        },
+    };
+    if (types) ir.types = types;
+    if (constants) ir.constants = constants;
+    return ir;
+}
 
 function compileWfFile(relPath: string): WorkflowIR {
     const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -220,485 +275,515 @@ const domainTasks: TaskDefinition[] = [
 // ---- A4 morning-brief IR ----
 
 function makeA4IR(): WorkflowIR {
-    return {
+    return wrapIR({
         kind: "workflow",
+        name: "morningBrief",
         version: "1",
+        inputSchema: {
+            type: "object",
+            required: ["repos", "maxEmails", "maxCommits"],
+            properties: {
+                repos: { type: "array", items: { type: "string" } },
+                maxEmails: { type: "integer", minimum: 1 },
+                maxCommits: { type: "integer", minimum: 1 },
+            },
+        },
+        outputSchema: { type: "string" },
         constants: {
             one: { schema: { type: "number" }, value: 1 },
         },
-        entry: "morningBrief",
-        workflows: {
-            ["morningBrief"]: {
+        nodes: {
+            // Calendar
+            fetchCalendar: {
+                kind: "task",
+                task: "calendar.today",
+                inputSchema: { type: "object", properties: {} },
+                outputSchema: { type: "array" },
+                inputs: {},
+                next: "renderCalendar",
+                onError: "calendarUnavailable",
+                bind: "calendarEvents",
+            },
+            renderCalendar: {
+                kind: "task",
+                task: "text.renderSection",
                 inputSchema: {
                     type: "object",
-                    required: ["repos", "maxEmails", "maxCommits"],
+                    required: ["section", "items"],
                     properties: {
-                        repos: { type: "array", items: { type: "string" } },
-                        maxEmails: { type: "integer", minimum: 1 },
-                        maxCommits: { type: "integer", minimum: 1 },
+                        section: { type: "string" },
+                        items: { type: "array" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["section", "body"],
+                    properties: {
+                        section: { type: "string" },
+                        body: { type: "string" },
+                    },
+                },
+                inputs: {
+                    section: "calendar",
+                    items: {
+                        $from: "scope",
+                        name: "calendarEvents",
+                    },
+                },
+                next: "fetchEmail",
+                bind: "calendarSection",
+            },
+            calendarUnavailable: {
+                kind: "task",
+                task: "text.placeholderSection",
+                inputSchema: {
+                    type: "object",
+                    required: ["section", "reason", "error", "trigger"],
+                    properties: {
+                        section: { type: "string" },
+                        reason: { type: "string" },
+                        error: { type: "object" },
+                        trigger: { type: "object" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["section", "body"],
+                    properties: {
+                        section: { type: "string" },
+                        body: { type: "string" },
+                    },
+                },
+                inputs: {
+                    section: "calendar",
+                    reason: {
+                        $from: "input",
+                        name: "error",
+                        path: ["message"],
+                    },
+                },
+                next: "fetchEmail",
+                bind: "calendarSection",
+            },
+
+            // Email
+            fetchEmail: {
+                kind: "task",
+                task: "email.fetchUnread",
+                inputSchema: {
+                    type: "object",
+                    required: ["max"],
+                    properties: { max: { type: "integer" } },
+                },
+                outputSchema: { type: "array" },
+                inputs: {
+                    max: { $from: "input", name: "maxEmails" },
+                },
+                next: "renderEmail",
+                onError: "emailUnavailable",
+                bind: "emailMessages",
+            },
+            renderEmail: {
+                kind: "task",
+                task: "text.renderSection",
+                inputSchema: {
+                    type: "object",
+                    required: ["section", "items"],
+                    properties: {
+                        section: { type: "string" },
+                        items: { type: "array" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["section", "body"],
+                    properties: {
+                        section: { type: "string" },
+                        body: { type: "string" },
+                    },
+                },
+                inputs: {
+                    section: "email",
+                    items: {
+                        $from: "scope",
+                        name: "emailMessages",
+                    },
+                },
+                next: "repoLoop",
+                bind: "emailSection",
+            },
+            emailUnavailable: {
+                kind: "task",
+                task: "text.placeholderSection",
+                inputSchema: {
+                    type: "object",
+                    required: ["section", "reason", "error", "trigger"],
+                    properties: {
+                        section: { type: "string" },
+                        reason: { type: "string" },
+                        error: { type: "object" },
+                        trigger: { type: "object" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["section", "body"],
+                    properties: {
+                        section: { type: "string" },
+                        body: { type: "string" },
+                    },
+                },
+                inputs: {
+                    section: "email",
+                    reason: {
+                        $from: "input",
+                        name: "error",
+                        path: ["message"],
+                    },
+                },
+                next: "repoLoop",
+                bind: "emailSection",
+            },
+
+            // Repo loop
+            repoLoop: {
+                kind: "loop",
+                inputs: {
+                    repos: { $from: "input", name: "repos" },
+                    maxCommits: { $from: "input", name: "maxCommits" },
+                },
+                state: {
+                    i: { schema: { type: "integer" }, initial: 0 },
+                    sections: {
+                        schema: { type: "array" },
+                        initial: [] as Template,
+                    },
+                },
+                body: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["repos", "maxCommits"],
+                        properties: {
+                            repos: {
+                                type: "array",
+                                items: { type: "string" },
+                            },
+                            maxCommits: { type: "integer" },
+                        },
+                    },
+                    entry: "pickRepo",
+                    nodes: {
+                        pickRepo: {
+                            kind: "task",
+                            task: "list.elementAt",
+                            inputSchema: {
+                                type: "object",
+                                required: ["list", "index"],
+                                properties: {
+                                    list: { type: "array" },
+                                    index: { type: "integer" },
+                                },
+                            },
+                            outputSchema: {},
+                            inputs: {
+                                list: { $from: "input", name: "repos" },
+                                index: { $from: "state", name: "i" },
+                            },
+                            next: "fetchRepo",
+                            bind: "picked",
+                        },
+                        fetchRepo: {
+                            kind: "task",
+                            task: "git.fetchCommits",
+                            inputSchema: {
+                                type: "object",
+                                required: ["repo", "max"],
+                                properties: {
+                                    repo: { type: "string" },
+                                    max: { type: "integer" },
+                                },
+                            },
+                            outputSchema: {
+                                type: "object",
+                                required: ["repo", "commits"],
+                                properties: {
+                                    repo: { type: "string" },
+                                    commits: { type: "array" },
+                                },
+                            },
+                            inputs: {
+                                repo: {
+                                    $from: "scope",
+                                    name: "picked",
+                                },
+                                max: { $from: "input", name: "maxCommits" },
+                            },
+                            next: "renderRepo",
+                            onError: "repoUnavailable",
+                            bind: "repoFetch",
+                        },
+                        renderRepo: {
+                            kind: "task",
+                            task: "text.renderSection",
+                            inputSchema: {
+                                type: "object",
+                                required: ["section", "items"],
+                                properties: {
+                                    section: { type: "string" },
+                                    items: { type: "array" },
+                                },
+                            },
+                            outputSchema: {
+                                type: "object",
+                                required: ["section", "body"],
+                                properties: {
+                                    section: { type: "string" },
+                                    body: { type: "string" },
+                                },
+                            },
+                            inputs: {
+                                section: "repo",
+                                items: {
+                                    $from: "scope",
+                                    name: "repoFetch",
+                                    path: ["commits"],
+                                },
+                            },
+                            next: "appendSection",
+                            bind: "newSection",
+                        },
+                        repoUnavailable: {
+                            kind: "task",
+                            task: "text.placeholderSection",
+                            inputSchema: {
+                                type: "object",
+                                required: [
+                                    "section",
+                                    "reason",
+                                    "error",
+                                    "trigger",
+                                ],
+                                properties: {
+                                    section: { type: "string" },
+                                    reason: { type: "string" },
+                                    error: { type: "object" },
+                                    trigger: { type: "object" },
+                                },
+                            },
+                            outputSchema: {
+                                type: "object",
+                                required: ["section", "body"],
+                                properties: {
+                                    section: { type: "string" },
+                                    body: { type: "string" },
+                                },
+                            },
+                            inputs: {
+                                section: "repo",
+                                reason: {
+                                    $from: "input",
+                                    name: "error",
+                                    path: ["message"],
+                                },
+                            },
+                            next: "appendSection",
+                            bind: "newSection",
+                        },
+                        appendSection: {
+                            kind: "task",
+                            task: "list.append",
+                            inputSchema: {
+                                type: "object",
+                                required: ["list", "item"],
+                                properties: {
+                                    list: { type: "array" },
+                                    item: {},
+                                },
+                            },
+                            outputSchema: { type: "array" },
+                            inputs: {
+                                list: { $from: "state", name: "sections" },
+                                item: { $from: "scope", name: "newSection" },
+                            },
+                            next: "stepIndex",
+                            bind: "appended",
+                        },
+                        stepIndex: {
+                            kind: "task",
+                            task: "math.add",
+                            inputSchema: {
+                                type: "object",
+                                required: ["left", "right"],
+                                properties: {
+                                    left: { type: "number" },
+                                    right: { type: "number" },
+                                },
+                            },
+                            outputSchema: { type: "number" },
+                            inputs: {
+                                left: { $from: "state", name: "i" },
+                                right: 1,
+                            },
+                            next: "computeLength",
+                            bind: "stepped",
+                        },
+                        computeLength: {
+                            kind: "task",
+                            task: "list.length",
+                            inputSchema: {
+                                type: "object",
+                                required: ["list"],
+                                properties: { list: { type: "array" } },
+                            },
+                            outputSchema: { type: "integer" },
+                            inputs: {
+                                list: { $from: "input", name: "repos" },
+                            },
+                            next: "compareIndex",
+                            bind: "repoCount",
+                        },
+                        compareIndex: {
+                            kind: "task",
+                            task: "compare.lessThan",
+                            inputSchema: {
+                                type: "object",
+                                required: ["left", "right"],
+                                properties: {
+                                    left: { type: "number" },
+                                    right: { type: "number" },
+                                },
+                            },
+                            outputSchema: { type: "boolean" },
+                            inputs: {
+                                left: {
+                                    $from: "scope",
+                                    name: "stepped",
+                                },
+                                right: {
+                                    $from: "scope",
+                                    name: "repoCount",
+                                },
+                            },
+                            next: "checkDone",
+                            bind: "hasMore",
+                        },
+                        checkDone: {
+                            kind: "branch",
+                            selector: {
+                                $from: "scope",
+                                name: "hasMore",
+                            },
+                            selectorSchema: { type: "boolean" },
+                            cases: {
+                                true: {
+                                    inputs: {},
+                                    scope: {
+                                        inputSchema: { type: "object" },
+                                        entry: "noop",
+                                        nodes: {
+                                            noop: {
+                                                kind: "task",
+                                                task: "identity",
+                                                inputSchema: {
+                                                    type: "object",
+                                                    required: ["value"],
+                                                    properties: { value: {} },
+                                                },
+                                                outputSchema: { type: "null" },
+                                                inputs: { value: null },
+                                            },
+                                        },
+                                        output: null as Template,
+                                        outputSchema: { type: "null" },
+                                    },
+                                },
+                                false: {
+                                    inputs: {},
+                                    scope: {
+                                        inputSchema: { type: "object" },
+                                        entry: "noop",
+                                        nodes: {
+                                            noop: {
+                                                kind: "task",
+                                                task: "identity",
+                                                inputSchema: {
+                                                    type: "object",
+                                                    required: ["value"],
+                                                    properties: { value: {} },
+                                                },
+                                                outputSchema: { type: "null" },
+                                                inputs: { value: null },
+                                            },
+                                        },
+                                        output: null as Template,
+                                        outputSchema: { type: "null" },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    // NOTE: output reads from scope (body binding), not state.
+                    // At loop exit (continueWhen=false), state reflects the
+                    // beginning of the last iteration. The final
+                    // appendSection result is only in the scope binding
+                    // "appended".
+                    output: {
+                        $from: "scope",
+                        name: "appended",
+                    } as Template,
+                    outputSchema: { type: "array" },
+                },
+                iterateState: {
+                    i: {
+                        $from: "scope",
+                        name: "stepped",
+                    } as Template,
+                    sections: {
+                        $from: "scope",
+                        name: "appended",
+                    } as Template,
+                },
+                continueWhen: {
+                    $from: "scope",
+                    name: "hasMore",
+                } as Template,
+                maxIterations: 1000,
+                next: "compose",
+                bind: "repoSections",
+            },
+
+            // Compose
+            compose: {
+                kind: "task",
+                task: "markdown.compose",
+                inputSchema: {
+                    type: "object",
+                    required: [
+                        "emailSection",
+                        "calendarSection",
+                        "repoSections",
+                    ],
+                    properties: {
+                        emailSection: { type: "object" },
+                        calendarSection: { type: "object" },
+                        repoSections: { type: "array" },
                     },
                 },
                 outputSchema: { type: "string" },
-                entry: "fetchCalendar",
-                nodes: {
-                    // Calendar
-                    fetchCalendar: {
-                        kind: "task",
-                        task: "calendar.today",
-                        inputSchema: { type: "object", properties: {} },
-                        outputSchema: { type: "array" },
-                        inputs: {},
-                        next: "renderCalendar",
-                        onError: "calendarUnavailable",
-                        bind: "calendarEvents",
+                inputs: {
+                    emailSection: { $from: "scope", name: "emailSection" },
+                    calendarSection: {
+                        $from: "scope",
+                        name: "calendarSection",
                     },
-                    renderCalendar: {
-                        kind: "task",
-                        task: "text.renderSection",
-                        inputSchema: {
-                            type: "object",
-                            required: ["section", "items"],
-                            properties: {
-                                section: { type: "string" },
-                                items: { type: "array" },
-                            },
-                        },
-                        outputSchema: {
-                            type: "object",
-                            required: ["section", "body"],
-                            properties: {
-                                section: { type: "string" },
-                                body: { type: "string" },
-                            },
-                        },
-                        inputs: {
-                            section: "calendar",
-                            items: {
-                                $from: "scope",
-                                name: "calendarEvents",
-                            },
-                        },
-                        next: "fetchEmail",
-                        bind: "calendarSection",
-                    },
-                    calendarUnavailable: {
-                        kind: "task",
-                        task: "text.placeholderSection",
-                        inputSchema: {
-                            type: "object",
-                            required: ["section", "reason", "error", "trigger"],
-                            properties: {
-                                section: { type: "string" },
-                                reason: { type: "string" },
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
-                        outputSchema: {
-                            type: "object",
-                            required: ["section", "body"],
-                            properties: {
-                                section: { type: "string" },
-                                body: { type: "string" },
-                            },
-                        },
-                        inputs: {
-                            section: "calendar",
-                            reason: {
-                                $from: "input",
-                                name: "error",
-                                path: ["message"],
-                            },
-                        },
-                        next: "fetchEmail",
-                        bind: "calendarSection",
-                    },
-
-                    // Email
-                    fetchEmail: {
-                        kind: "task",
-                        task: "email.fetchUnread",
-                        inputSchema: {
-                            type: "object",
-                            required: ["max"],
-                            properties: { max: { type: "integer" } },
-                        },
-                        outputSchema: { type: "array" },
-                        inputs: {
-                            max: { $from: "input", name: "maxEmails" },
-                        },
-                        next: "renderEmail",
-                        onError: "emailUnavailable",
-                        bind: "emailMessages",
-                    },
-                    renderEmail: {
-                        kind: "task",
-                        task: "text.renderSection",
-                        inputSchema: {
-                            type: "object",
-                            required: ["section", "items"],
-                            properties: {
-                                section: { type: "string" },
-                                items: { type: "array" },
-                            },
-                        },
-                        outputSchema: {
-                            type: "object",
-                            required: ["section", "body"],
-                            properties: {
-                                section: { type: "string" },
-                                body: { type: "string" },
-                            },
-                        },
-                        inputs: {
-                            section: "email",
-                            items: {
-                                $from: "scope",
-                                name: "emailMessages",
-                            },
-                        },
-                        next: "repoLoop",
-                        bind: "emailSection",
-                    },
-                    emailUnavailable: {
-                        kind: "task",
-                        task: "text.placeholderSection",
-                        inputSchema: {
-                            type: "object",
-                            required: ["section", "reason", "error", "trigger"],
-                            properties: {
-                                section: { type: "string" },
-                                reason: { type: "string" },
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
-                        outputSchema: {
-                            type: "object",
-                            required: ["section", "body"],
-                            properties: {
-                                section: { type: "string" },
-                                body: { type: "string" },
-                            },
-                        },
-                        inputs: {
-                            section: "email",
-                            reason: {
-                                $from: "input",
-                                name: "error",
-                                path: ["message"],
-                            },
-                        },
-                        next: "repoLoop",
-                        bind: "emailSection",
-                    },
-
-                    // Repo loop
-                    repoLoop: {
-                        kind: "loop",
-                        inputs: {
-                            repos: { $from: "input", name: "repos" },
-                            maxCommits: { $from: "input", name: "maxCommits" },
-                        },
-                        state: {
-                            i: { schema: { type: "integer" }, initial: 0 },
-                            sections: {
-                                schema: { type: "array" },
-                                initial: [] as Template,
-                            },
-                        },
-                        body: {
-                            inputSchema: {
-                                type: "object",
-                                required: ["repos", "maxCommits"],
-                                properties: {
-                                    repos: {
-                                        type: "array",
-                                        items: { type: "string" },
-                                    },
-                                    maxCommits: { type: "integer" },
-                                },
-                            },
-                            entry: "pickRepo",
-                            nodes: {
-                                pickRepo: {
-                                    kind: "task",
-                                    task: "list.elementAt",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["list", "index"],
-                                        properties: {
-                                            list: { type: "array" },
-                                            index: { type: "integer" },
-                                        },
-                                    },
-                                    outputSchema: {},
-                                    inputs: {
-                                        list: { $from: "input", name: "repos" },
-                                        index: { $from: "state", name: "i" },
-                                    },
-                                    next: "fetchRepo",
-                                    bind: "picked",
-                                },
-                                fetchRepo: {
-                                    kind: "task",
-                                    task: "git.fetchCommits",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["repo", "max"],
-                                        properties: {
-                                            repo: { type: "string" },
-                                            max: { type: "integer" },
-                                        },
-                                    },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["repo", "commits"],
-                                        properties: {
-                                            repo: { type: "string" },
-                                            commits: { type: "array" },
-                                        },
-                                    },
-                                    inputs: {
-                                        repo: {
-                                            $from: "scope",
-                                            name: "picked",
-                                        },
-                                        max: {
-                                            $from: "input",
-                                            name: "maxCommits",
-                                        },
-                                    },
-                                    next: "renderRepo",
-                                    onError: "repoUnavailable",
-                                    bind: "repoFetch",
-                                },
-                                renderRepo: {
-                                    kind: "task",
-                                    task: "text.renderSection",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["section", "items"],
-                                        properties: {
-                                            section: { type: "string" },
-                                            items: { type: "array" },
-                                        },
-                                    },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["section", "body"],
-                                        properties: {
-                                            section: { type: "string" },
-                                            body: { type: "string" },
-                                        },
-                                    },
-                                    inputs: {
-                                        section: "repo",
-                                        items: {
-                                            $from: "scope",
-                                            name: "repoFetch",
-                                            path: ["commits"],
-                                        },
-                                    },
-                                    next: "appendSection",
-                                    bind: "newSection",
-                                },
-                                repoUnavailable: {
-                                    kind: "task",
-                                    task: "text.placeholderSection",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: [
-                                            "section",
-                                            "reason",
-                                            "error",
-                                            "trigger",
-                                        ],
-                                        properties: {
-                                            section: { type: "string" },
-                                            reason: { type: "string" },
-                                            error: { type: "object" },
-                                            trigger: { type: "object" },
-                                        },
-                                    },
-                                    outputSchema: {
-                                        type: "object",
-                                        required: ["section", "body"],
-                                        properties: {
-                                            section: { type: "string" },
-                                            body: { type: "string" },
-                                        },
-                                    },
-                                    inputs: {
-                                        section: "repo",
-                                        reason: {
-                                            $from: "input",
-                                            name: "error",
-                                            path: ["message"],
-                                        },
-                                    },
-                                    next: "appendSection",
-                                    bind: "newSection",
-                                },
-                                appendSection: {
-                                    kind: "task",
-                                    task: "list.append",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["list", "item"],
-                                        properties: {
-                                            list: { type: "array" },
-                                            item: {},
-                                        },
-                                    },
-                                    outputSchema: { type: "array" },
-                                    inputs: {
-                                        list: {
-                                            $from: "state",
-                                            name: "sections",
-                                        },
-                                        item: {
-                                            $from: "scope",
-                                            name: "newSection",
-                                        },
-                                    },
-                                    next: "stepIndex",
-                                    bind: "appended",
-                                },
-                                stepIndex: {
-                                    kind: "task",
-                                    task: "math.add",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["left", "right"],
-                                        properties: {
-                                            left: { type: "number" },
-                                            right: { type: "number" },
-                                        },
-                                    },
-                                    outputSchema: { type: "number" },
-                                    inputs: {
-                                        left: { $from: "state", name: "i" },
-                                        right: 1,
-                                    },
-                                    next: "computeLength",
-                                    bind: "stepped",
-                                },
-                                computeLength: {
-                                    kind: "task",
-                                    task: "list.length",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["list"],
-                                        properties: { list: { type: "array" } },
-                                    },
-                                    outputSchema: { type: "integer" },
-                                    inputs: {
-                                        list: { $from: "input", name: "repos" },
-                                    },
-                                    next: "compareIndex",
-                                    bind: "repoCount",
-                                },
-                                compareIndex: {
-                                    kind: "task",
-                                    task: "compare.lessThan",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["left", "right"],
-                                        properties: {
-                                            left: { type: "number" },
-                                            right: { type: "number" },
-                                        },
-                                    },
-                                    outputSchema: { type: "boolean" },
-                                    inputs: {
-                                        left: {
-                                            $from: "scope",
-                                            name: "stepped",
-                                        },
-                                        right: {
-                                            $from: "scope",
-                                            name: "repoCount",
-                                        },
-                                    },
-                                    next: "checkDone",
-                                    bind: "hasMore",
-                                },
-                                checkDone: {
-                                    kind: "branch",
-                                    selector: {
-                                        $from: "scope",
-                                        name: "hasMore",
-                                    },
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { true: "@iterate", false: "@exit" },
-                                    default: "@exit",
-                                },
-                            },
-                            // NOTE: output reads from scope (body binding), not state.
-                            // At @exit, state reflects the beginning of the last iteration
-                            // (set by the prior @iterate). The final appendSection result
-                            // is only in the scope binding "appended".
-                            output: {
-                                $from: "scope",
-                                name: "appended",
-                            } as Template,
-                            outputSchema: { type: "array" },
-                        },
-                        iterateState: {
-                            i: {
-                                $from: "scope",
-                                name: "stepped",
-                            } as Template,
-                            sections: {
-                                $from: "scope",
-                                name: "appended",
-                            } as Template,
-                        },
-                        maxIterations: 1000,
-                        next: "compose",
-                        bind: "repoSections",
-                    },
-
-                    // Compose
-                    compose: {
-                        kind: "task",
-                        task: "markdown.compose",
-                        inputSchema: {
-                            type: "object",
-                            required: [
-                                "emailSection",
-                                "calendarSection",
-                                "repoSections",
-                            ],
-                            properties: {
-                                emailSection: { type: "object" },
-                                calendarSection: { type: "object" },
-                                repoSections: { type: "array" },
-                            },
-                        },
-                        outputSchema: { type: "string" },
-                        inputs: {
-                            emailSection: {
-                                $from: "scope",
-                                name: "emailSection",
-                            },
-                            calendarSection: {
-                                $from: "scope",
-                                name: "calendarSection",
-                            },
-                            repoSections: {
-                                $from: "scope",
-                                name: "repoSections",
-                            },
-                        },
-                        bind: "result",
-                    },
+                    repoSections: { $from: "scope", name: "repoSections" },
                 },
-                output: { $from: "scope", name: "result" } as Template,
+                bind: "result",
             },
         },
-    };
+        entry: "fetchCalendar",
+        output: { $from: "scope", name: "result" } as Template,
+    });
 }
 
 // ---- Helpers ----
@@ -878,51 +963,41 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("standard-library tasks", () => {
         it("math.add computes correctly", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "addTest",
                 version: "1",
-                entry: "addTest",
-                workflows: {
-                    ["addTest"]: {
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        a: { type: "integer" },
+                        b: { type: "integer" },
+                    },
+                },
+                outputSchema: { type: "number" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
+                            required: ["left", "right"],
                             properties: {
-                                a: { type: "integer" },
-                                b: { type: "integer" },
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
                         outputSchema: { type: "number" },
-                        entry: "add",
-                        nodes: {
-                            add: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "input",
-                                        name: "a",
-                                    } as Template,
-                                    right: {
-                                        $from: "input",
-                                        name: "b",
-                                    } as Template,
-                                },
-                                bind: "sum",
-                            },
+                        inputs: {
+                            left: { $from: "input", name: "a" } as Template,
+                            right: { $from: "input", name: "b" } as Template,
                         },
-                        output: { $from: "scope", name: "sum" } as Template,
+                        bind: "sum",
                     },
                 },
-            };
+                entry: "add",
+                output: { $from: "scope", name: "sum" } as Template,
+            });
 
             const result = await engine.run(ir, { input: { a: 3, b: 7 } });
             expect(result.success).toBe(true);
@@ -932,41 +1007,37 @@ describe("WorkflowEngine (IR v1)", () => {
         it("bool.toLabel converts boolean to string (legacy)", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "labelTest",
                 version: "1",
-                entry: "labelTest",
-                workflows: {
-                    ["labelTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "label",
-                        nodes: {
-                            label: {
-                                kind: "task",
-                                task: "bool.toLabel",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["value", "ifTrue", "ifFalse"],
-                                    properties: {
-                                        value: { type: "boolean" },
-                                        ifTrue: { type: "string" },
-                                        ifFalse: { type: "string" },
-                                    },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    value: true as Template,
-                                    ifTrue: "yes",
-                                    ifFalse: "no",
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    label: {
+                        kind: "task",
+                        task: "bool.toLabel",
+                        inputSchema: {
+                            type: "object",
+                            required: ["value", "ifTrue", "ifFalse"],
+                            properties: {
+                                value: { type: "boolean" },
+                                ifTrue: { type: "string" },
+                                ifFalse: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            value: true as Template,
+                            ifTrue: "yes",
+                            ifFalse: "no",
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "label",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -976,64 +1047,90 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("branch nodes", () => {
         it("routes based on boolean discriminant", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "branchTest",
                 version: "1",
-                entry: "branchTest",
-                workflows: {
-                    ["branchTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "decide",
-                        nodes: {
-                            decide: {
-                                kind: "branch",
-                                selector: false as Template,
-                                selectorSchema: { type: "boolean" },
-                                cases: { true: "onYes", false: "onNo" },
-                                default: "onNo",
-                            },
-                            onYes: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    decide: {
+                        kind: "branch",
+                        selector: false as Template,
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onYes",
+                                    nodes: {
+                                        onYes: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 1 as Template,
+                                                right: 1 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
                                     },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
                                 },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "answer",
                             },
-                            onNo: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
+                            false: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onNo",
+                                    nodes: {
+                                        onNo: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 0 as Template,
+                                                right: 0 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
                                     },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
                                 },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 0 as Template,
-                                    right: 0 as Template,
-                                },
-                                bind: "answer",
                             },
                         },
-                        output: { $from: "scope", name: "answer" } as Template,
+                        bind: "answer",
+                        outputSchema: { type: "number" },
                     },
                 },
-            };
+                entry: "decide",
+                output: { $from: "scope", name: "answer" } as Template,
+            });
 
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
@@ -1079,43 +1176,39 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "templateTest",
                 version: "1",
-                entry: "templateTest",
-                workflows: {
-                    ["templateTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "tmpl",
-                        nodes: {
-                            tmpl: {
-                                kind: "task",
-                                task: "text.template",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["template", "vars"],
-                                    properties: {
-                                        template: { type: "string" },
-                                        vars: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    template:
-                                        "Hello {{name}}, you have {{count}} items",
-                                    vars: {
-                                        name: "Alice" as Template,
-                                        count: 3 as Template,
-                                    },
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    tmpl: {
+                        kind: "task",
+                        task: "text.template",
+                        inputSchema: {
+                            type: "object",
+                            required: ["template", "vars"],
+                            properties: {
+                                template: { type: "string" },
+                                vars: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            template:
+                                "Hello {{name}}, you have {{count}} items",
+                            vars: {
+                                name: "Alice" as Template,
+                                count: 3 as Template,
+                            },
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "tmpl",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1126,42 +1219,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "multiReplace",
                 version: "1",
-                entry: "multiReplace",
-                workflows: {
-                    ["multiReplace"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "tmpl",
-                        nodes: {
-                            tmpl: {
-                                kind: "task",
-                                task: "text.template",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["template", "vars"],
-                                    properties: {
-                                        template: { type: "string" },
-                                        vars: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    template: "{{x}} + {{x}} = {{y}}",
-                                    vars: {
-                                        x: "2" as Template,
-                                        y: "4" as Template,
-                                    },
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    tmpl: {
+                        kind: "task",
+                        task: "text.template",
+                        inputSchema: {
+                            type: "object",
+                            required: ["template", "vars"],
+                            properties: {
+                                template: { type: "string" },
+                                vars: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            template: "{{x}} + {{x}} = {{y}}",
+                            vars: {
+                                x: "2" as Template,
+                                y: "4" as Template,
+                            },
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "tmpl",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1174,46 +1263,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "joinTest",
                 version: "1",
-                entry: "joinTest",
-                workflows: {
-                    ["joinTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "join",
-                        nodes: {
-                            join: {
-                                kind: "task",
-                                task: "string.join",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["list", "delimiter"],
-                                    properties: {
-                                        list: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                        delimiter: { type: "string" },
-                                    },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    join: {
+                        kind: "task",
+                        task: "string.join",
+                        inputSchema: {
+                            type: "object",
+                            required: ["list", "delimiter"],
+                            properties: {
+                                list: {
+                                    type: "array",
+                                    items: { type: "string" },
                                 },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    list: [
-                                        "alpha",
-                                        "beta",
-                                        "gamma",
-                                    ] as Template,
-                                    delimiter: ", ",
-                                },
-                                bind: "result",
+                                delimiter: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            list: ["alpha", "beta", "gamma"] as Template,
+                            delimiter: ", ",
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "join",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1224,42 +1305,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "joinEmpty",
                 version: "1",
-                entry: "joinEmpty",
-                workflows: {
-                    ["joinEmpty"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "join",
-                        nodes: {
-                            join: {
-                                kind: "task",
-                                task: "string.join",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["list", "delimiter"],
-                                    properties: {
-                                        list: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                        delimiter: { type: "string" },
-                                    },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    join: {
+                        kind: "task",
+                        task: "string.join",
+                        inputSchema: {
+                            type: "object",
+                            required: ["list", "delimiter"],
+                            properties: {
+                                list: {
+                                    type: "array",
+                                    items: { type: "string" },
                                 },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    list: [] as Template,
-                                    delimiter: "\n",
-                                },
-                                bind: "result",
+                                delimiter: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            list: [] as Template,
+                            delimiter: "\n",
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "join",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1272,53 +1349,49 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "echoTest",
                 version: "1",
-                entry: "echoTest",
-                workflows: {
-                    ["echoTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "echo",
-                        nodes: {
-                            echo: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command"],
-                                    properties: {
-                                        command: { type: "string" },
-                                        args: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                    },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    echo: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
                                 },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    command: "node",
-                                    args: [
-                                        "-e",
-                                        "process.stdout.write('hello world')",
-                                    ] as unknown as Template,
-                                },
-                                bind: "result",
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "node",
+                            args: [
+                                "-e",
+                                "process.stdout.write('hello world')",
+                            ] as unknown as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "echo",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1338,53 +1411,49 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "falseTest",
                 version: "1",
-                entry: "falseTest",
-                workflows: {
-                    ["falseTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fail",
-                        nodes: {
-                            fail: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command"],
-                                    properties: {
-                                        command: { type: "string" },
-                                        args: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                    },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fail: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
                                 },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    command: "node",
-                                    args: [
-                                        "-e",
-                                        "process.exit(1)",
-                                    ] as unknown as Template,
-                                },
-                                bind: "result",
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "node",
+                            args: [
+                                "-e",
+                                "process.exit(1)",
+                            ] as unknown as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fail",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1403,45 +1472,41 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "notFoundTest",
                 version: "1",
-                entry: "notFoundTest",
-                workflows: {
-                    ["notFoundTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "bad",
-                        nodes: {
-                            bad: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command"],
-                                    properties: {
-                                        command: { type: "string" },
-                                    },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    command: "this-command-does-not-exist-xyz",
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    bad: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "this-command-does-not-exist-xyz",
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "bad",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1655,42 +1720,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "splitTest",
                 version: "1",
-                entry: "splitTest",
-                workflows: {
-                    ["splitTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "split",
-                        nodes: {
-                            split: {
-                                kind: "task",
-                                task: "string.split",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["text", "delimiter"],
-                                    properties: {
-                                        text: { type: "string" },
-                                        delimiter: { type: "string" },
-                                    },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                                inputs: {
-                                    text: "foo.ts\nbar.ts\nbaz.ts\n" as Template,
-                                    delimiter: "\n",
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    split: {
+                        kind: "task",
+                        task: "string.split",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text", "delimiter"],
+                            properties: {
+                                text: { type: "string" },
+                                delimiter: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        inputs: {
+                            text: "foo.ts\nbar.ts\nbaz.ts\n" as Template,
+                            delimiter: "\n",
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "split",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1701,42 +1762,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "splitEmpty",
                 version: "1",
-                entry: "splitEmpty",
-                workflows: {
-                    ["splitEmpty"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "split",
-                        nodes: {
-                            split: {
-                                kind: "task",
-                                task: "string.split",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["text", "delimiter"],
-                                    properties: {
-                                        text: { type: "string" },
-                                        delimiter: { type: "string" },
-                                    },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                                inputs: {
-                                    text: "" as Template,
-                                    delimiter: "\n",
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    split: {
+                        kind: "task",
+                        task: "string.split",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text", "delimiter"],
+                            properties: {
+                                text: { type: "string" },
+                                delimiter: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        inputs: {
+                            text: "" as Template,
+                            delimiter: "\n",
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "split",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1920,42 +1977,36 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "httpTest",
                 version: "1",
-                entry: "httpTest",
-                workflows: {
-                    ["httpTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "https://example.com" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: { url: "https://example.com" as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1983,39 +2034,35 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // Write
-            const writeIr: WorkflowIR = {
+            const writeIr: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "writeTest",
                 version: "1",
-                entry: "writeTest",
-                workflows: {
-                    ["writeTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "write",
-                        nodes: {
-                            write: {
-                                kind: "task",
-                                task: "file.write",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["path", "content"],
-                                    properties: {
-                                        path: { type: "string" },
-                                        content: { type: "string" },
-                                    },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    path: testFile as Template,
-                                    content: "hello from workflow" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    write: {
+                        kind: "task",
+                        task: "file.write",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path", "content"],
+                            properties: {
+                                path: { type: "string" },
+                                content: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            path: testFile as Template,
+                            content: "hello from workflow" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "write",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const writeResult = await eng.run(writeIr, {
                 input: {},
@@ -2025,33 +2072,29 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(writeResult.output).toBe(testFile);
 
             // Read back
-            const readIr: WorkflowIR = {
+            const readIr: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "readTest",
                 version: "1",
-                entry: "readTest",
-                workflows: {
-                    ["readTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "read",
-                        nodes: {
-                            read: {
-                                kind: "task",
-                                task: "file.read",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["path"],
-                                    properties: { path: { type: "string" } },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: { path: testFile as Template },
-                                bind: "result",
-                            },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    read: {
+                        kind: "task",
+                        task: "file.read",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: { path: testFile as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "read",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const readResult = await eng.run(readIr, {
                 input: {},
@@ -2301,33 +2344,29 @@ describe("WorkflowEngine (IR v1)", () => {
     describe("task policy", () => {
         // Minimal workflow that calls a single side-effecting task.
         function sideEffectWorkflow(taskName: string): WorkflowIR {
-            return {
+            return wrapIR({
                 kind: "workflow",
+                name: "policyTest",
                 version: "1",
-                entry: "policyTest",
-                workflows: {
-                    ["policyTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: taskName,
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["path"],
-                                    properties: { path: { type: "string" } },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: { path: "/etc/shadow" as Template },
-                                bind: "result",
-                            },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: taskName,
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: { path: "/etc/shadow" as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
         }
 
         it("denies a side-effecting task when policy is 'deny'", async () => {
@@ -2422,39 +2461,32 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // math.add has no sideEffects, should run even with no approve fn
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "pureTest",
                 version: "1",
-                entry: "pureTest",
-                workflows: {
-                    ["pureTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "add",
-                        nodes: {
-                            add: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 2 as Template,
-                                    right: 3 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 2 as Template, right: 3 as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "add",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             // No policy, no approve fn: pure tasks should still work
             const opts: RunOptions = { input: {} };
@@ -2468,39 +2500,32 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // Confirm the old two-arg signature still works for pure tasks
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "legacyTest",
                 version: "1",
-                entry: "legacyTest",
-                workflows: {
-                    ["legacyTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "add",
-                        nodes: {
-                            add: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 10 as Template,
-                                    right: 20 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 10 as Template, right: 20 as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "add",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: { a: 1, b: 2 } });
             expect(result.success).toBe(true);
@@ -2535,29 +2560,25 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, badTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "schemaViolation",
                 version: "1",
-                entry: "schemaViolation",
-                workflows: {
-                    ["schemaViolation"]: {
-                        inputSchema: { type: "object" },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "bad.output",
+                        inputSchema: { type: "object", properties: {} },
                         outputSchema: { type: "integer" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "bad.output",
-                                inputSchema: { type: "object", properties: {} },
-                                outputSchema: { type: "integer" },
-                                inputs: {},
-                                bind: "result",
-                            },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {},
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -2579,29 +2600,25 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, goodTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "schemaOk",
                 version: "1",
-                entry: "schemaOk",
-                workflows: {
-                    ["schemaOk"]: {
-                        inputSchema: { type: "object" },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "good.output",
+                        inputSchema: { type: "object", properties: {} },
                         outputSchema: { type: "integer" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "good.output",
-                                inputSchema: { type: "object", properties: {} },
-                                outputSchema: { type: "integer" },
-                                inputs: {},
-                                bind: "result",
-                            },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {},
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -2614,62 +2631,55 @@ describe("WorkflowEngine (IR v1)", () => {
             // Node "consumer" references $from: "scope", name: "data",
             // path: ["nonexistent"] - but the producer's outputSchema
             // has no such property.
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "badRef",
                 version: "1",
-                entry: "badRef",
-                workflows: {
-                    ["badRef"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "producer",
-                        nodes: {
-                            producer: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                next: "consumer",
-                                bind: "data",
-                            },
-                            consumer: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "scope",
-                                        name: "data",
-                                        path: ["nonexistent"],
-                                    } as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "final",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "final" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
+                            },
+                        },
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["nonexistent"],
+                            } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "final",
                     },
                 },
-            };
+                entry: "producer",
+                output: { $from: "scope", name: "final" } as Template,
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2683,61 +2693,54 @@ describe("WorkflowEngine (IR v1)", () => {
         it("static validator passes valid scope path reference", async () => {
             const { validateWorkflowIR } = await import("workflow-model");
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "goodRef",
                 version: "1",
-                entry: "goodRef",
-                workflows: {
-                    ["goodRef"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "producer",
-                        nodes: {
-                            producer: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                next: "consumer",
-                                bind: "data",
-                            },
-                            consumer: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "scope",
-                                        name: "data",
-                                    } as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "final",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "final" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
+                            },
+                        },
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "scope",
+                                name: "data",
+                            } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "final",
                     },
                 },
-            };
+                entry: "producer",
+                output: { $from: "scope", name: "final" } as Template,
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2747,30 +2750,140 @@ describe("WorkflowEngine (IR v1)", () => {
         it("static validator detects invalid path in loop iterateState", async () => {
             const { validateWorkflowIR } = await import("workflow-model");
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "badLoopState",
                 version: "1",
-                entry: "badLoopState",
-                workflows: {
-                    ["badLoopState"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "integer" },
-                        entry: "loop",
-                        nodes: {
-                            loop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    i: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                        },
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "math.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
                                     },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        left: 1 as Template,
+                                        right: 1 as Template,
+                                    },
+                                    bind: "stepped",
                                 },
-                                body: {
+                            },
+                            output: 0 as Template,
+                            outputSchema: { type: "integer" },
+                        },
+                        iterateState: {
+                            i: {
+                                $from: "scope",
+                                name: "stepped",
+                                path: ["nonexistent"],
+                            } as Template,
+                        },
+                        continueWhen: false as Template,
+                        maxIterations: 1,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            });
+
+            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
+            const validation = validateWorkflowIR(ir, tasks);
+            expect(validation.valid).toBe(false);
+            expect(validation.errors[0].message).toContain("nonexistent");
+        });
+    });
+
+    describe("input schema validation", () => {
+        it("rejects input that violates workflow inputSchema", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "typedInput",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["count"],
+                    properties: { count: { type: "integer" } },
+                },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
+                            },
+                        },
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: { $from: "input", name: "count" } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
+
+            // String where integer is required
+            const result = await eng.run(ir, {
+                input: { count: "not a number" },
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Input schema violation");
+        });
+    });
+
+    describe("branch node events", () => {
+        it("emits nodeStarted and nodeCompleted for branch nodes", async () => {
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "branchEvents",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    decide: {
+                        kind: "branch",
+                        selector: false as Template,
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
                                     inputSchema: { type: "object" },
-                                    entry: "step",
+                                    entry: "onTrue",
                                     nodes: {
-                                        step: {
+                                        onTrue: {
                                             kind: "task",
                                             task: "math.add",
                                             inputSchema: {
@@ -2786,198 +2899,56 @@ describe("WorkflowEngine (IR v1)", () => {
                                                 left: 1 as Template,
                                                 right: 1 as Template,
                                             },
-                                            next: "done",
-                                            bind: "stepped",
-                                        },
-                                        done: {
-                                            kind: "branch",
-                                            selector: true as Template,
-                                            selectorSchema: { type: "boolean" },
-                                            cases: {
-                                                false: "@iterate",
-                                                true: "@exit",
-                                            },
-                                            default: "@exit",
+                                            bind: "answer",
                                         },
                                     },
-                                    output: 0 as Template,
-                                    outputSchema: { type: "integer" },
-                                },
-                                iterateState: {
-                                    i: {
+                                    output: {
                                         $from: "scope",
-                                        name: "stepped",
-                                        path: ["nonexistent"],
+                                        name: "answer",
                                     } as Template,
+                                    outputSchema: { type: "number" },
                                 },
-                                maxIterations: 1,
-                                bind: "result",
                             },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
-                    },
-                },
-            };
-
-            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
-            const validation = validateWorkflowIR(ir, tasks);
-            expect(validation.valid).toBe(false);
-            expect(validation.errors[0].message).toContain("nonexistent");
-        });
-    });
-
-    describe("input schema validation", () => {
-        it("rejects input that violates workflow inputSchema", async () => {
-            const reg = makeRegistry(...allBuiltinTasks);
-            const eng = new WorkflowEngine(reg);
-
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                version: "1",
-                entry: "typedInput",
-                workflows: {
-                    ["typedInput"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["count"],
-                            properties: { count: { type: "integer" } },
-                        },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
+                            false: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onFalse",
+                                    nodes: {
+                                        onFalse: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 0 as Template,
+                                                right: 0 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
                                     },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "input",
-                                        name: "count",
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
                                     } as Template,
-                                    right: 1 as Template,
+                                    outputSchema: { type: "number" },
                                 },
-                                bind: "result",
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        bind: "answer",
+                        outputSchema: { type: "number" },
                     },
                 },
-            };
-
-            // String where integer is required
-            const result = await eng.run(ir, {
-                input: { count: "not a number" },
+                entry: "decide",
+                output: { $from: "scope", name: "answer" } as Template,
             });
-            expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("Input schema violation");
-        });
-    });
-
-    describe("sentinel validation", () => {
-        it("rejects @iterate in top-level branch node", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                version: "1",
-                entry: "badSentinel",
-                workflows: {
-                    ["badSentinel"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "decide",
-                        nodes: {
-                            decide: {
-                                kind: "branch",
-                                selector: true as Template,
-                                selectorSchema: { type: "boolean" },
-                                cases: { true: "@iterate", false: "@exit" },
-                                default: "@exit",
-                            },
-                        },
-                        output: null as Template,
-                    },
-                },
-            };
-
-            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
-            const validation = validateWorkflowIR(ir, tasks);
-            expect(validation.valid).toBe(false);
-            expect(validation.errors.length).toBeGreaterThanOrEqual(2);
-            expect(validation.errors[0].message).toContain(
-                "only valid inside a loop body",
-            );
-        });
-    });
-
-    describe("branch node events", () => {
-        it("emits nodeStarted and nodeCompleted for branch nodes", async () => {
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                version: "1",
-                entry: "branchEvents",
-                workflows: {
-                    ["branchEvents"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "decide",
-                        nodes: {
-                            decide: {
-                                kind: "branch",
-                                selector: false as Template,
-                                selectorSchema: { type: "boolean" },
-                                cases: { true: "onTrue", false: "onFalse" },
-                                default: "onFalse",
-                            },
-                            onTrue: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "answer",
-                            },
-                            onFalse: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 0 as Template,
-                                    right: 0 as Template,
-                                },
-                                bind: "answer",
-                            },
-                        },
-                        output: { $from: "scope", name: "answer" } as Template,
-                    },
-                },
-            };
 
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
@@ -3015,75 +2986,63 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "loopOnError",
                 version: "1",
-                entry: "loopOnError",
-                workflows: {
-                    ["loopOnError"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "badLoop",
-                        nodes: {
-                            badLoop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    i: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
-                                    },
-                                },
-                                body: {
-                                    inputSchema: { type: "object" },
-                                    entry: "willFail",
-                                    nodes: {
-                                        willFail: {
-                                            kind: "task",
-                                            task: "test.fail",
-                                            inputSchema: { type: "object" },
-                                            outputSchema: { type: "object" },
-                                            inputs: {},
-                                        },
-                                    },
-                                    output: null as Template,
-                                    outputSchema: { type: "null" },
-                                },
-                                iterateState: {
-                                    i: {
-                                        $from: "state",
-                                        name: "i",
-                                    } as Template,
-                                },
-                                maxIterations: 1,
-                                onError: "recover",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 99 as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "recovered",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    badLoop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
                             },
                         },
-                        output: {
-                            $from: "scope",
-                            name: "recovered",
-                        } as Template,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "willFail",
+                            nodes: {
+                                willFail: {
+                                    kind: "task",
+                                    task: "test.fail",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                },
+                            },
+                            output: null as Template,
+                            outputSchema: { type: "null" },
+                        },
+                        iterateState: {
+                            i: { $from: "state", name: "i" } as Template,
+                        },
+                        continueWhen: false as Template,
+                        maxIterations: 1,
+                        onError: "recover",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
+                            },
+                        },
+                        outputSchema: { type: "number" },
+                        inputs: { left: 99 as Template, right: 1 as Template },
+                        bind: "recovered",
                     },
                 },
-            };
+                entry: "badLoop",
+                output: { $from: "scope", name: "recovered" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3127,32 +3086,28 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "timeoutTest",
                 version: "1",
-                entry: "timeoutTest",
-                workflows: {
-                    ["timeoutTest"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.slow",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.slow",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                bind: "result",
-                            },
-                        },
-                        output: {
-                            $from: "scope",
-                            name: "result",
-                        } as Template,
+                        inputs: {},
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: {
+                    $from: "scope",
+                    name: "result",
+                } as Template,
+            });
 
             const start = Date.now();
             const result = await eng.run(ir, {
@@ -3172,42 +3127,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fastTask",
                 version: "1",
-                entry: "fastTask",
-                workflows: {
-                    ["fastTask"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "add",
-                        nodes: {
-                            add: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: {
-                            $from: "scope",
-                            name: "result",
-                        } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: 1 as Template,
+                            right: 2 as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "add",
+                output: {
+                    $from: "scope",
+                    name: "result",
+                } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3223,35 +3174,31 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "pathTraversalRead",
                 version: "1",
-                entry: "pathTraversalRead",
-                workflows: {
-                    ["pathTraversalRead"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "read",
-                        nodes: {
-                            read: {
-                                kind: "task",
-                                task: "file.read",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["path"],
-                                    properties: { path: { type: "string" } },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    path: "/etc/passwd" as Template,
-                                },
-                                bind: "result",
-                            },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    read: {
+                        kind: "task",
+                        task: "file.read",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            path: "/etc/passwd" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "read",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3267,39 +3214,35 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "pathTraversalWrite",
                 version: "1",
-                entry: "pathTraversalWrite",
-                workflows: {
-                    ["pathTraversalWrite"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "write",
-                        nodes: {
-                            write: {
-                                kind: "task",
-                                task: "file.write",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["path", "content"],
-                                    properties: {
-                                        path: { type: "string" },
-                                        content: { type: "string" },
-                                    },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    path: "/etc/evil.txt" as Template,
-                                    content: "pwned" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    write: {
+                        kind: "task",
+                        task: "file.write",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path", "content"],
+                            properties: {
+                                path: { type: "string" },
+                                content: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            path: "/etc/evil.txt" as Template,
+                            content: "pwned" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "write",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3324,38 +3267,29 @@ describe("WorkflowEngine (IR v1)", () => {
             writeFileSync(testPath, "safe-content", "utf8");
 
             try {
-                const ir: WorkflowIR = {
+                const ir: WorkflowIR = wrapIR({
                     kind: "workflow",
+                    name: "allowedRead",
                     version: "1",
-                    entry: "allowedRead",
-                    workflows: {
-                        ["allowedRead"]: {
-                            inputSchema: { type: "object" },
-                            outputSchema: { type: "string" },
-                            entry: "read",
-                            nodes: {
-                                read: {
-                                    kind: "task",
-                                    task: "file.read",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["path"],
-                                        properties: {
-                                            path: { type: "string" },
-                                        },
-                                    },
-                                    outputSchema: { type: "string" },
-                                    inputs: { path: testPath as Template },
-                                    bind: "result",
-                                },
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "string" },
+                    nodes: {
+                        read: {
+                            kind: "task",
+                            task: "file.read",
+                            inputSchema: {
+                                type: "object",
+                                required: ["path"],
+                                properties: { path: { type: "string" } },
                             },
-                            output: {
-                                $from: "scope",
-                                name: "result",
-                            } as Template,
+                            outputSchema: { type: "string" },
+                            inputs: { path: testPath as Template },
+                            bind: "result",
                         },
                     },
-                };
+                    entry: "read",
+                    output: { $from: "scope", name: "result" } as Template,
+                });
 
                 const result = await eng.run(ir, {
                     input: {},
@@ -3417,46 +3351,42 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "httpTruncateTest",
                 version: "1",
-                entry: "httpTruncateTest",
-                workflows: {
-                    ["httpTruncateTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: {
-                                        url: { type: "string" },
-                                        maxResponseBytes: { type: "integer" },
-                                    },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "https://example.com/big" as Template,
-                                    maxResponseBytes: 100 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: {
+                                url: { type: "string" },
+                                maxResponseBytes: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "https://example.com/big" as Template,
+                            maxResponseBytes: 100 as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3472,68 +3402,83 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "branchNoDefault",
                 version: "1",
-                entry: "branchNoDefault",
-                workflows: {
-                    ["branchNoDefault"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "decide",
-                        nodes: {
-                            decide: {
-                                kind: "branch",
-                                selector: "unknown" as Template,
-                                selectorSchema: { type: "string" },
-                                cases: {
-                                    yes: "onYes",
-                                    no: "onNo",
-                                },
-                            } as any, // no default field
-                            onYes: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    decide: {
+                        kind: "branch",
+                        selector: "unknown" as Template,
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onYes",
+                                    nodes: {
+                                        onYes: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: { value: 2 as Template },
+                                            bind: "answer",
+                                        },
                                     },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
                                 },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "answer",
                             },
-                            onNo: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
+                            no: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onNo",
+                                    nodes: {
+                                        onNo: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: { value: 0 as Template },
+                                            bind: "answer",
+                                        },
                                     },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
                                 },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 0 as Template,
-                                    right: 0 as Template,
-                                },
-                                bind: "answer",
                             },
                         },
-                        output: { $from: "scope", name: "answer" } as Template,
-                    },
+                        bind: "answer",
+                        outputSchema: { type: "number" },
+                    } as any, // no default field
                 },
-            };
+                entry: "decide",
+                output: { $from: "scope", name: "answer" } as Template,
+            });
 
-            const result = await eng.run(ir, { input: {} });
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
             expect(result.success).toBe(false);
             expect(result.error?.message).toBeDefined();
         });
@@ -3544,45 +3489,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "badConstant",
                 version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 constants: {
                     limit: {
                         schema: { type: "integer" },
                         value: "not-a-number", // violates integer schema
                     },
                 },
-                entry: "badConstant",
-                workflows: {
-                    ["badConstant"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "result",
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3595,48 +3533,44 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "goodConstant",
                 version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 constants: {
                     offset: {
                         schema: { type: "integer" },
                         value: 42,
                     },
                 },
-                entry: "goodConstant",
-                workflows: {
-                    ["goodConstant"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "constant",
-                                        name: "offset",
-                                    } as Template,
-                                    right: 8 as Template,
-                                },
-                                bind: "result",
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "constant",
+                                name: "offset",
+                            } as Template,
+                            right: 8 as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -3649,35 +3583,31 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "approvalTimeout",
                 version: "1",
-                entry: "approvalTimeout",
-                workflows: {
-                    ["approvalTimeout"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "string" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "file.read",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["path"],
-                                    properties: { path: { type: "string" } },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    path: "/some/file.txt" as Template,
-                                },
-                                bind: "result",
-                            },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "string" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "file.read",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            path: "/some/file.txt" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3720,29 +3650,25 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "abortTest",
                 version: "1",
-                entry: "abortTest",
-                workflows: {
-                    ["abortTest"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.slow",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.slow",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                bind: "result",
-                            },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {},
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const ac = new AbortController();
             setTimeout(() => ac.abort(), 50);
@@ -3773,76 +3699,65 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, counterTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "loopAbortTest",
                 version: "1",
-                entry: "loopAbortTest",
-                workflows: {
-                    ["loopAbortTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "integer" },
-                        entry: "loop",
-                        nodes: {
-                            loop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    count: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
-                                    },
-                                },
-                                body: {
-                                    inputSchema: { type: "object" },
-                                    entry: "inc",
-                                    nodes: {
-                                        inc: {
-                                            kind: "task",
-                                            task: "test.counter",
-                                            inputSchema: {
-                                                type: "object",
-                                                properties: {
-                                                    n: { type: "integer" },
-                                                },
-                                            },
-                                            outputSchema: { type: "integer" },
-                                            inputs: {
-                                                n: {
-                                                    $from: "state",
-                                                    name: "count",
-                                                } as Template,
-                                            },
-                                            bind: "incResult",
-                                            next: "check",
-                                        },
-                                        check: {
-                                            kind: "branch",
-                                            selector: false as Template,
-                                            selectorSchema: { type: "boolean" },
-                                            cases: { true: "@exit" },
-                                            default: "@iterate",
-                                        },
-                                    },
-                                    output: {
-                                        $from: "state",
-                                        name: "count",
-                                    } as Template,
-                                    outputSchema: { type: "integer" },
-                                },
-                                iterateState: {
-                                    count: {
-                                        $from: "scope",
-                                        name: "incResult",
-                                    } as Template,
-                                },
-                                maxIterations: 1000,
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            count: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "inc",
+                            nodes: {
+                                inc: {
+                                    kind: "task",
+                                    task: "test.counter",
+                                    inputSchema: {
+                                        type: "object",
+                                        properties: {
+                                            n: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: { type: "integer" },
+                                    inputs: {
+                                        n: {
+                                            $from: "state",
+                                            name: "count",
+                                        } as Template,
+                                    },
+                                    bind: "incResult",
+                                },
+                            },
+                            output: {
+                                $from: "state",
+                                name: "count",
+                            } as Template,
+                            outputSchema: { type: "integer" },
+                        },
+                        iterateState: {
+                            count: {
+                                $from: "scope",
+                                name: "incResult",
+                            } as Template,
+                        },
+                        continueWhen: true as Template,
+                        maxIterations: 1000,
+                        bind: "result",
                     },
                 },
-            };
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const ac = new AbortController();
             setTimeout(() => ac.abort(), 100);
@@ -3860,79 +3775,68 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "maxIterTest",
                 version: "1",
-                entry: "maxIterTest",
-                workflows: {
-                    ["maxIterTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "integer" },
-                        entry: "loop",
-                        nodes: {
-                            loop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    i: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
-                                    },
-                                },
-                                body: {
-                                    inputSchema: { type: "object" },
-                                    entry: "add",
-                                    nodes: {
-                                        add: {
-                                            kind: "task",
-                                            task: "math.add",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["left", "right"],
-                                                properties: {
-                                                    left: { type: "number" },
-                                                    right: { type: "number" },
-                                                },
-                                            },
-                                            outputSchema: { type: "number" },
-                                            inputs: {
-                                                left: {
-                                                    $from: "state",
-                                                    name: "i",
-                                                } as Template,
-                                                right: 1 as Template,
-                                            },
-                                            bind: "next",
-                                            next: "cont",
-                                        },
-                                        cont: {
-                                            kind: "branch",
-                                            selector: false as Template,
-                                            selectorSchema: { type: "boolean" },
-                                            cases: { true: "@exit" },
-                                            default: "@iterate",
-                                        },
-                                    },
-                                    output: {
-                                        $from: "state",
-                                        name: "i",
-                                    } as Template,
-                                    outputSchema: { type: "integer" },
-                                },
-                                iterateState: {
-                                    i: {
-                                        $from: "scope",
-                                        name: "next",
-                                    } as Template,
-                                },
-                                maxIterations: 3,
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "add",
+                            nodes: {
+                                add: {
+                                    kind: "task",
+                                    task: "math.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        left: {
+                                            $from: "state",
+                                            name: "i",
+                                        } as Template,
+                                        right: 1 as Template,
+                                    },
+                                    bind: "next",
+                                },
+                            },
+                            output: {
+                                $from: "state",
+                                name: "i",
+                            } as Template,
+                            outputSchema: { type: "integer" },
+                        },
+                        iterateState: {
+                            i: {
+                                $from: "scope",
+                                name: "next",
+                            } as Template,
+                        },
+                        continueWhen: true as Template,
+                        maxIterations: 3,
+                        bind: "result",
                     },
                 },
-            };
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3945,121 +3849,132 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "loopConstantTest",
                 version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
                 constants: {
                     step: {
                         schema: { type: "integer" },
                         value: 10,
                     },
                 },
-                entry: "loopConstantTest",
-                workflows: {
-                    ["loopConstantTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "loop",
-                        nodes: {
-                            loop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    total: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
-                                    },
-                                    iter: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
-                                    },
-                                },
-                                body: {
-                                    inputSchema: { type: "object" },
-                                    entry: "addStep",
-                                    nodes: {
-                                        addStep: {
-                                            kind: "task",
-                                            task: "math.add",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["left", "right"],
-                                                properties: {
-                                                    left: { type: "number" },
-                                                    right: { type: "number" },
-                                                },
-                                            },
-                                            outputSchema: { type: "number" },
-                                            inputs: {
-                                                left: {
-                                                    $from: "state",
-                                                    name: "total",
-                                                } as Template,
-                                                right: {
-                                                    $from: "constant",
-                                                    name: "step",
-                                                } as Template,
-                                            },
-                                            bind: "sum",
-                                            next: "incIter",
-                                        },
-                                        incIter: {
-                                            kind: "task",
-                                            task: "math.add",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["left", "right"],
-                                                properties: {
-                                                    left: { type: "number" },
-                                                    right: { type: "number" },
-                                                },
-                                            },
-                                            outputSchema: { type: "number" },
-                                            inputs: {
-                                                left: {
-                                                    $from: "state",
-                                                    name: "iter",
-                                                } as Template,
-                                                right: 1 as Template,
-                                            },
-                                            bind: "nextIter",
-                                            next: "check",
-                                        },
-                                        check: {
-                                            kind: "branch",
-                                            selector: {
-                                                $from: "scope",
-                                                name: "nextIter",
-                                            } as Template,
-                                            selectorSchema: { type: "number" },
-                                            cases: { 2: "@exit" },
-                                            default: "@iterate",
-                                        },
-                                    },
-                                    output: {
-                                        $from: "scope",
-                                        name: "sum",
-                                    } as Template,
-                                    outputSchema: { type: "number" },
-                                },
-                                iterateState: {
-                                    total: {
-                                        $from: "scope",
-                                        name: "sum",
-                                    } as Template,
-                                    iter: {
-                                        $from: "scope",
-                                        name: "nextIter",
-                                    } as Template,
-                                },
-                                maxIterations: 10,
-                                bind: "result",
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            total: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                            iter: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "addStep",
+                            nodes: {
+                                addStep: {
+                                    kind: "task",
+                                    task: "math.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        left: {
+                                            $from: "state",
+                                            name: "total",
+                                        } as Template,
+                                        right: {
+                                            $from: "constant",
+                                            name: "step",
+                                        } as Template,
+                                    },
+                                    bind: "sum",
+                                    next: "incIter",
+                                },
+                                incIter: {
+                                    kind: "task",
+                                    task: "math.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        left: {
+                                            $from: "state",
+                                            name: "iter",
+                                        } as Template,
+                                        right: 1 as Template,
+                                    },
+                                    bind: "nextIter",
+                                    next: "check",
+                                },
+                                check: {
+                                    kind: "task",
+                                    task: "compare.lessThan",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "boolean" },
+                                    inputs: {
+                                        left: {
+                                            $from: "scope",
+                                            name: "nextIter",
+                                        } as Template,
+                                        right: 2 as Template,
+                                    },
+                                    bind: "shouldContinue",
+                                },
+                            },
+                            output: {
+                                $from: "scope",
+                                name: "sum",
+                            } as Template,
+                            outputSchema: { type: "number" },
+                        },
+                        iterateState: {
+                            total: {
+                                $from: "scope",
+                                name: "sum",
+                            } as Template,
+                            iter: {
+                                $from: "scope",
+                                name: "nextIter",
+                            } as Template,
+                        },
+                        continueWhen: {
+                            $from: "scope",
+                            name: "shouldContinue",
+                        } as Template,
+                        maxIterations: 10,
+                        bind: "result",
                     },
                 },
-            };
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4096,45 +4011,41 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "nodeFailedTest",
                 version: "1",
-                entry: "nodeFailedTest",
-                workflows: {
-                    ["nodeFailedTest"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "recover",
-                                bind: "r",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "test.noop",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                                bind: "r",
+                        inputs: {},
+                        onError: "recover",
+                        bind: "r",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "r" } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "r",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            });
 
             await eng.run(ir, { input: {} });
 
@@ -4164,29 +4075,25 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "runFailedTest",
                 version: "1",
-                entry: "runFailedTest",
-                workflows: {
-                    ["runFailedTest"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                bind: "r",
-                            },
-                        },
-                        output: { $from: "scope", name: "r" } as Template,
+                        inputs: {},
+                        bind: "r",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -4199,39 +4106,32 @@ describe("WorkflowEngine (IR v1)", () => {
         it("emits runStarted and runCompleted in order", async () => {
             const events = collectEvents(engine);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "eventOrderTest",
                 version: "1",
-                entry: "eventOrderTest",
-                workflows: {
-                    ["eventOrderTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "r",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "r" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "r",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            });
 
             await engine.run(ir, { input: {} });
 
@@ -4260,39 +4160,32 @@ describe("WorkflowEngine (IR v1)", () => {
             eng.on(listener1);
             eng.on(listener2);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "offTest",
                 version: "1",
-                entry: "offTest",
-                workflows: {
-                    ["offTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "r",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "r" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "r",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            });
 
             // Both get events from first run
             await eng.run(ir, { input: {} });
@@ -4317,58 +4210,48 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "bindOverwrite",
                 version: "1",
-                entry: "bindOverwrite",
-                workflows: {
-                    ["bindOverwrite"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "first",
-                        nodes: {
-                            first: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "firstAnswer",
-                                next: "second",
-                            },
-                            second: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 10 as Template,
-                                    right: 20 as Template,
-                                },
-                                bind: "answer",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    first: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "answer" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "firstAnswer",
+                        next: "second",
+                    },
+                    second: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
+                            },
+                        },
+                        outputSchema: { type: "number" },
+                        inputs: { left: 10 as Template, right: 20 as Template },
+                        bind: "answer",
                     },
                 },
-            };
+                entry: "first",
+                output: { $from: "scope", name: "answer" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4411,45 +4294,41 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "cascadeError",
                 version: "1",
-                entry: "cascadeError",
-                workflows: {
-                    ["cascadeError"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "recover",
-                                bind: "r",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "test.failRecovery",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                                bind: "r",
+                        inputs: {},
+                        onError: "recover",
+                        bind: "r",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.failRecovery",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "r" } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "r",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -4475,35 +4354,31 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "optionalRef",
                 version: "1",
-                entry: "optionalRef",
-                workflows: {
-                    ["optionalRef"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.echo",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.echo",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {
-                                    value: {
-                                        $from: "scope",
-                                        name: "nonexistent",
-                                        optional: true,
-                                    } as Template,
-                                },
-                                bind: "result",
-                            },
+                        inputs: {
+                            value: {
+                                $from: "scope",
+                                name: "nonexistent",
+                                optional: true,
+                            } as Template,
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4538,55 +4413,51 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "optionalPath",
                 version: "1",
-                entry: "optionalPath",
-                workflows: {
-                    ["optionalPath"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    first: {
+                        kind: "task",
+                        task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "first",
-                        nodes: {
-                            first: {
-                                kind: "task",
-                                task: "test.echo",
-                                inputSchema: { type: "object" },
-                                outputSchema: {
-                                    type: "object",
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                nested: {
+                                    type: ["object", "null"],
                                     properties: {
-                                        nested: {
-                                            type: ["object", "null"],
-                                            properties: {
-                                                deep: { type: "string" },
-                                            },
-                                        },
+                                        deep: { type: "string" },
                                     },
                                 },
-                                inputs: { nested: null as Template },
-                                bind: "data",
-                                next: "second",
-                            },
-                            second: {
-                                kind: "task",
-                                task: "test.echo",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "object" },
-                                inputs: {
-                                    nested: {
-                                        $from: "scope",
-                                        name: "data",
-                                        path: ["nested", "deep"],
-                                        optional: true,
-                                    } as Template,
-                                },
-                                bind: "result",
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: { nested: null as Template },
+                        bind: "data",
+                        next: "second",
+                    },
+                    second: {
+                        kind: "task",
+                        task: "test.echo",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            nested: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["nested", "deep"],
+                                optional: true,
+                            } as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "first",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4600,55 +4471,51 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "cwdTest",
                 version: "1",
-                entry: "cwdTest",
-                workflows: {
-                    ["cwdTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command"],
-                                    properties: {
-                                        command: { type: "string" },
-                                        args: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                        cwd: { type: "string" },
-                                    },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
                                 },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    command: "node" as Template,
-                                    args: [
-                                        "-e",
-                                        "process.stdout.write(process.cwd())",
-                                    ] as unknown as Template,
-                                    cwd: tmpdir() as Template,
-                                },
-                                bind: "result",
+                                cwd: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "node" as Template,
+                            args: [
+                                "-e",
+                                "process.stdout.write(process.cwd())",
+                            ] as unknown as Template,
+                            cwd: tmpdir() as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4665,53 +4532,46 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "stderrTest",
                 version: "1",
-                entry: "stderrTest",
-                workflows: {
-                    ["stderrTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command", "args"],
-                                    properties: {
-                                        command: { type: "string" },
-                                        args: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                    },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command", "args"],
+                            properties: {
+                                command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
                                 },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    command: "bash" as Template,
-                                    args: [
-                                        "-c",
-                                        "echo errormsg >&2",
-                                    ] as Template,
-                                },
-                                bind: "result",
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "bash" as Template,
+                            args: ["-c", "echo errormsg >&2"] as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4737,36 +4597,32 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "literalTest",
                 version: "1",
-                entry: "literalTest",
-                workflows: {
-                    ["literalTest"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.echo",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.echo",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {
-                                    data: {
-                                        $literal: {
-                                            $from: "scope",
-                                            name: "shouldNotResolve",
-                                        },
-                                    } as Template,
+                        inputs: {
+                            data: {
+                                $literal: {
+                                    $from: "scope",
+                                    name: "shouldNotResolve",
                                 },
-                                bind: "result",
-                            },
+                            } as Template,
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4784,42 +4640,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "ssrfTest",
                 version: "1",
-                entry: "ssrfTest",
-                workflows: {
-                    ["ssrfTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "http://localhost:8080/admin" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "http://localhost:8080/admin" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4833,42 +4685,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "ssrfMetadata",
                 version: "1",
-                entry: "ssrfMetadata",
-                workflows: {
-                    ["ssrfMetadata"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "http://169.254.169.254/latest/meta-data/" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "http://169.254.169.254/latest/meta-data/" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4882,42 +4730,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "ssrf127",
                 version: "1",
-                entry: "ssrf127",
-                workflows: {
-                    ["ssrf127"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "http://127.0.0.1/secret" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "http://127.0.0.1/secret" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4931,42 +4775,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "ssrf192",
                 version: "1",
-                entry: "ssrf192",
-                workflows: {
-                    ["ssrf192"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "http://192.168.1.1/config" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "http://192.168.1.1/config" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4980,42 +4820,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "ssrfFile",
                 version: "1",
-                entry: "ssrfFile",
-                workflows: {
-                    ["ssrfFile"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "file:///etc/passwd" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "file:///etc/passwd" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5101,49 +4937,45 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask, captureTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "errorStructure",
                 version: "1",
-                entry: "errorStructure",
-                workflows: {
-                    ["errorStructure"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "capture",
-                            },
-                            capture: {
-                                kind: "task",
-                                task: "test.capture",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {
-                                    error: {
-                                        $from: "input",
-                                        name: "error",
-                                    } as Template,
-                                },
-                                bind: "result",
+                        inputs: {},
+                        onError: "capture",
+                    },
+                    capture: {
+                        kind: "task",
+                        task: "test.capture",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -5183,49 +5015,45 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "runtimeError",
                 version: "1",
-                entry: "runtimeError",
-                workflows: {
-                    ["runtimeError"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.throw",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.throw",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "capture",
-                            },
-                            capture: {
-                                kind: "task",
-                                task: "test.capture",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {
-                                    error: {
-                                        $from: "input",
-                                        name: "error",
-                                    } as Template,
-                                },
-                                bind: "result",
+                        inputs: {},
+                        onError: "capture",
+                    },
+                    capture: {
+                        kind: "task",
+                        task: "test.capture",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -5242,47 +5070,63 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "unrecoverable",
                 version: "1",
-                entry: "unrecoverable",
-                workflows: {
-                    ["unrecoverable"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "branch",
-                        nodes: {
-                            branch: {
-                                kind: "branch",
-                                selector: {
-                                    $from: "input",
-                                    name: "x",
-                                } as Template,
-                                selectorSchema: { type: "string" },
-                                cases: { a: "done" },
-                                // no default — any value other than "a" is unmatched
-                            } as any,
-                            done: {
-                                kind: "task",
-                                task: "identity",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    branch: {
+                        kind: "branch",
+                        selector: { $from: "input", name: "x" } as Template,
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            a: {
                                 inputs: {},
-                                bind: "result",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "identity",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                bind: "result",
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "done",
+                                    nodes: {
+                                        done: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: {},
+                                            inputs: { value: null },
+                                            bind: "result",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "result",
+                                    } as Template,
+                                    outputSchema: {},
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        // no default — any value other than "a" is unmatched
+                    } as any,
+                    recover: {
+                        kind: "task",
+                        task: "identity",
+                        inputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
+                        },
+                        outputSchema: {},
+                        inputs: { value: null },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "branch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             // Even if the branch node had an onError, unrecoverable errors bypass it.
             // Here we just confirm the run fails (not recovers silently).
@@ -5301,63 +5145,59 @@ describe("WorkflowEngine (IR v1)", () => {
         it("detects type mismatch (producer: string, consumer: integer)", async () => {
             const { validateWorkflowIR } = await import("workflow-model");
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "typeMismatch",
                 version: "1",
-                entry: "typeMismatch",
-                workflows: {
-                    ["typeMismatch"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "producer",
-                        nodes: {
-                            producer: {
-                                kind: "task",
-                                task: "bool.toLabel",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["value", "ifTrue", "ifFalse"],
-                                    properties: {
-                                        value: { type: "boolean" },
-                                        ifTrue: { type: "string" },
-                                        ifFalse: { type: "string" },
-                                    },
-                                },
-                                outputSchema: { type: "string" },
-                                inputs: {
-                                    value: true as Template,
-                                    ifTrue: "yes" as Template,
-                                    ifFalse: "no" as Template,
-                                },
-                                next: "consumer",
-                                bind: "data",
-                            },
-                            consumer: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "scope",
-                                        name: "data",
-                                    } as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "final",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "bool.toLabel",
+                        inputSchema: {
+                            type: "object",
+                            required: ["value", "ifTrue", "ifFalse"],
+                            properties: {
+                                value: { type: "boolean" },
+                                ifTrue: { type: "string" },
+                                ifFalse: { type: "string" },
                             },
                         },
-                        output: { $from: "scope", name: "final" } as Template,
+                        outputSchema: { type: "string" },
+                        inputs: {
+                            value: true as Template,
+                            ifTrue: "yes" as Template,
+                            ifFalse: "no" as Template,
+                        },
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
+                            },
+                        },
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "scope",
+                                name: "data",
+                            } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "final",
                     },
                 },
-            };
+                entry: "producer",
+                output: { $from: "scope", name: "final" } as Template,
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -5366,107 +5206,40 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    describe("loop sentinel validation", () => {
-        it("rejects loop body without sentinel at validation time", async () => {
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                version: "1",
-                entry: "noSentinel",
-                workflows: {
-                    ["noSentinel"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "integer" },
-                        entry: "loop",
-                        nodes: {
-                            loop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    i: {
-                                        schema: { type: "integer" },
-                                        initial: 0 as Template,
-                                    },
-                                },
-                                body: {
-                                    inputSchema: { type: "object" },
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "math.add",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["left", "right"],
-                                                properties: {
-                                                    left: { type: "number" },
-                                                    right: { type: "number" },
-                                                },
-                                            },
-                                            outputSchema: { type: "number" },
-                                            inputs: {
-                                                left: 1 as Template,
-                                                right: 1 as Template,
-                                            },
-                                            bind: "r",
-                                        },
-                                    },
-                                    output: 0 as Template,
-                                    outputSchema: { type: "integer" },
-                                },
-                                iterateState: {},
-                                maxIterations: 10,
-                                bind: "result",
-                            },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
-                    },
-                },
-            };
-
-            const result = await engine.run(ir, { input: {} });
-            expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("@iterate or @exit");
-        });
-    });
-
     describe("unresolved $from reference", () => {
         it("fails with clear error for missing scope binding", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "missingRef",
                 version: "1",
-                entry: "missingRef",
-                workflows: {
-                    ["missingRef"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "scope",
-                                        name: "doesNotExist",
-                                    } as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "scope",
+                                name: "doesNotExist",
+                            } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5477,42 +5250,38 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("unknown $from namespace", () => {
         it("fails with clear error for invalid namespace", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "badNamespace",
                 version: "1",
-                entry: "badNamespace",
-                workflows: {
-                    ["badNamespace"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "magic",
-                                        name: "x",
-                                    } as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "magic",
+                                name: "x",
+                            } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5535,52 +5304,48 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, numTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "badProjection",
                 version: "1",
-                entry: "badProjection",
-                workflows: {
-                    ["badProjection"]: {
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    first: {
+                        kind: "task",
+                        task: "test.num",
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "first",
-                        nodes: {
-                            first: {
-                                kind: "task",
-                                task: "test.num",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "integer" },
-                                inputs: {},
-                                bind: "data",
-                                next: "second",
-                            },
-                            second: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: {
-                                        $from: "scope",
-                                        name: "data",
-                                        path: ["value", "nested"],
-                                    } as Template,
-                                    right: 1 as Template,
-                                },
-                                bind: "result",
+                        outputSchema: { type: "integer" },
+                        inputs: {},
+                        bind: "data",
+                        next: "second",
+                    },
+                    second: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: {
+                            left: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["value", "nested"],
+                            } as Template,
+                            right: 1 as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "first",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5607,29 +5372,25 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "unhandledFail",
                 version: "1",
-                entry: "unhandledFail",
-                workflows: {
-                    ["unhandledFail"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                bind: "result",
-                            },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {},
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5647,39 +5408,32 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "defaultTimeoutOk",
                 version: "1",
-                entry: "defaultTimeoutOk",
-                workflows: {
-                    ["defaultTimeoutOk"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "number" },
-                        entry: "add",
-                        nodes: {
-                            add: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "number" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "math.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "add",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             // No taskTimeoutMs: should use 60s default, fast task succeeds
             const result = await eng.run(ir, { input: {} });
@@ -5700,29 +5454,25 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(slow);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "noTimeout",
                 version: "1",
-                entry: "noTimeout",
-                workflows: {
-                    ["noTimeout"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.slow200",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.slow200",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                bind: "result",
-                            },
-                        },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {},
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             // taskTimeoutMs: 0 disables timeout; 200ms task should succeed
             const result = await eng.run(ir, {
@@ -5738,43 +5488,36 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "inputValidation",
                 version: "1",
-                entry: "inputValidation",
-                workflows: {
-                    ["inputValidation"]: {
+                inputSchema: {
+                    type: "object",
+                    required: ["name"],
+                    properties: { name: { type: "string" } },
+                },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["name"],
-                            properties: { name: { type: "string" } },
-                        },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "result",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             // Missing required "name" field
             const result = await eng.run(ir, { input: {} });
@@ -5786,43 +5529,36 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "missingInput",
                 version: "1",
-                entry: "missingInput",
-                workflows: {
-                    ["missingInput"]: {
+                inputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "integer" } },
+                },
+                outputSchema: { type: "number" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "math.add",
                         inputSchema: {
                             type: "object",
-                            required: ["value"],
-                            properties: { value: { type: "integer" } },
-                        },
-                        outputSchema: { type: "number" },
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "math.add",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["left", "right"],
-                                    properties: {
-                                        left: { type: "number" },
-                                        right: { type: "number" },
-                                    },
-                                },
-                                outputSchema: { type: "number" },
-                                inputs: {
-                                    left: 1 as Template,
-                                    right: 2 as Template,
-                                },
-                                bind: "result",
+                            required: ["left", "right"],
+                            properties: {
+                                left: { type: "number" },
+                                right: { type: "number" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "number" },
+                        inputs: { left: 1 as Template, right: 2 as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             // No input at all
             const result = await eng.run(ir);
@@ -5870,41 +5606,37 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(mockExec);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "blockedCmd",
                 version: "1",
-                entry: "blockedCmd",
-                workflows: {
-                    ["blockedCmd"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command"],
-                                    properties: { command: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: { command: "rm" as Template },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: { command: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: { command: "rm" as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5955,41 +5687,37 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(mockExec);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "allowedCmd",
                 version: "1",
-                entry: "allowedCmd",
-                workflows: {
-                    ["allowedCmd"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "shell.exec",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["command"],
-                                    properties: { command: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["stdout", "stderr", "exitCode"],
-                                    properties: {
-                                        stdout: { type: "string" },
-                                        stderr: { type: "string" },
-                                        exitCode: { type: "integer" },
-                                    },
-                                },
-                                inputs: { command: "git" as Template },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: { command: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: { command: "git" as Template },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6006,42 +5734,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "blockedHost",
                 version: "1",
-                entry: "blockedHost",
-                workflows: {
-                    ["blockedHost"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "https://evil.example.com/data" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "https://evil.example.com/data" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6059,42 +5783,38 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "notAllowedHost",
                 version: "1",
-                entry: "notAllowedHost",
-                workflows: {
-                    ["notAllowedHost"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fetch",
-                        nodes: {
-                            fetch: {
-                                kind: "task",
-                                task: "http.get",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["url"],
-                                    properties: { url: { type: "string" } },
-                                },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["body", "status"],
-                                    properties: {
-                                        body: { type: "string" },
-                                        status: { type: "integer" },
-                                    },
-                                },
-                                inputs: {
-                                    url: "https://other.example.com/data" as Template,
-                                },
-                                bind: "result",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        inputs: {
+                            url: "https://other.example.com/data" as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6138,48 +5858,44 @@ describe("WorkflowEngine (IR v1)", () => {
 
             // step fails -> cleanup runs (binds "cleanupResult")
             // but output references "happyResult" which was never bound
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "cleanupFail",
                 version: "1",
-                entry: "cleanupFail",
-                workflows: {
-                    ["cleanupFail"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "cleanup",
-                                bind: "happyResult",
-                            },
-                            cleanup: {
-                                kind: "task",
-                                task: "test.cleanup",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                                bind: "cleanupResult",
+                        inputs: {},
+                        onError: "cleanup",
+                        bind: "happyResult",
+                    },
+                    cleanup: {
+                        kind: "task",
+                        task: "test.cleanup",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: {
-                            $from: "scope",
-                            name: "happyResult",
-                        } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "cleanupResult",
                     },
                 },
-            };
+                entry: "step",
+                output: {
+                    $from: "scope",
+                    name: "happyResult",
+                } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6224,49 +5940,45 @@ describe("WorkflowEngine (IR v1)", () => {
 
             // step fails -> recover runs and binds "result"
             // output references "result", which IS bound by the recovery node
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "recoverSuccess",
                 version: "1",
-                entry: "recoverSuccess",
-                workflows: {
-                    ["recoverSuccess"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "step",
-                        nodes: {
-                            step: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "recover",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "test.recover",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {
-                                    error: {
-                                        $from: "input",
-                                        name: "error",
-                                    } as Template,
-                                },
-                                bind: "result",
+                        inputs: {},
+                        onError: "recover",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.recover",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "input",
+                                name: "error",
+                            } as Template,
+                        },
+                        bind: "result",
                     },
                 },
-            };
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -6300,48 +6012,44 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask, noopTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "nodeIdCheck",
                 version: "1",
-                entry: "nodeIdCheck",
-                workflows: {
-                    ["nodeIdCheck"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                nodes: {
+                    doWork: {
+                        kind: "task",
+                        task: "test.fail",
                         inputSchema: { type: "object" },
                         outputSchema: {},
-                        entry: "doWork",
-                        nodes: {
-                            doWork: {
-                                kind: "task",
-                                task: "test.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: {},
-                                inputs: {},
-                                onError: "cleanup",
-                                bind: "workOutput",
-                            },
-                            cleanup: {
-                                kind: "task",
-                                task: "test.noop",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["error", "trigger"],
-                                    properties: {
-                                        error: { type: "object" },
-                                        trigger: { type: "object" },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                inputs: {},
-                                bind: "cleanedUp",
+                        inputs: {},
+                        onError: "cleanup",
+                        bind: "workOutput",
+                    },
+                    cleanup: {
+                        kind: "task",
+                        task: "test.noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
                             },
                         },
-                        output: {
-                            $from: "scope",
-                            name: "workOutput",
-                        } as Template,
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "cleanedUp",
                     },
                 },
-            };
+                entry: "doWork",
+                output: {
+                    $from: "scope",
+                    name: "workOutput",
+                } as Template,
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6752,92 +6460,74 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-test",
                 version: "1",
-                entry: "fork-test",
-                workflows: {
-                    ["fork-test"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    a: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "a_step",
-                                            nodes: {
-                                                a_step: {
-                                                    kind: "task",
-                                                    task: "mock.branchA",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                        required: ["val"],
-                                                        properties: {
-                                                            val: {
-                                                                type: "string",
-                                                            },
-                                                        },
-                                                    },
-                                                    inputs: {},
-                                                    bind: "aOut",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: {
+                                            kind: "task",
+                                            task: "mock.branchA",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["val"],
+                                                properties: {
+                                                    val: { type: "string" },
                                                 },
                                             },
-                                            output: {
-                                                $from: "scope",
-                                                name: "aOut",
-                                            },
-                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "aOut",
                                         },
                                     },
-                                    b: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "b_step",
-                                            nodes: {
-                                                b_step: {
-                                                    kind: "task",
-                                                    task: "mock.branchB",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                        required: ["val"],
-                                                        properties: {
-                                                            val: {
-                                                                type: "string",
-                                                            },
-                                                        },
-                                                    },
-                                                    inputs: {},
-                                                    bind: "bOut",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "bOut",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                bind: "forkResult",
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: {
+                                            kind: "task",
+                                            task: "mock.branchB",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["val"],
+                                                properties: {
+                                                    val: { type: "string" },
+                                                },
+                                            },
+                                            inputs: {},
+                                            bind: "bOut",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "forkResult" },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
                     },
                 },
-            };
+                output: { $from: "scope", name: "forkResult" },
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6867,54 +6557,46 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-min2-test",
                 version: "1",
-                entry: "fork-min2-test",
-                workflows: {
-                    ["fork-min2-test"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    only: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "only_step",
-                                            nodes: {
-                                                only_step: {
-                                                    kind: "task",
-                                                    task: "mock.only",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "onlyOut",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "onlyOut",
-                                            },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            only: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "only_step",
+                                    nodes: {
+                                        only_step: {
+                                            kind: "task",
+                                            task: "mock.only",
+                                            inputSchema: { type: "object" },
                                             outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "onlyOut",
                                         },
                                     },
+                                    output: {
+                                        $from: "scope",
+                                        name: "onlyOut",
+                                    },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                bind: "forkResult",
                             },
                         },
-                        output: { $from: "scope", name: "forkResult" },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
                     },
                 },
-            };
+                output: { $from: "scope", name: "forkResult" },
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6957,107 +6639,82 @@ describe("WorkflowEngine (IR v1)", () => {
             reg.register(makeSlowTask("mock.slow3"));
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-concurrency",
                 version: "1",
-                entry: "fork-concurrency",
-                workflows: {
-                    ["fork-concurrency"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    a: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "s1",
-                                            nodes: {
-                                                s1: {
-                                                    kind: "task",
-                                                    task: "mock.slow1",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "x",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "x",
-                                            },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "s1",
+                                    nodes: {
+                                        s1: {
+                                            kind: "task",
+                                            task: "mock.slow1",
+                                            inputSchema: { type: "object" },
                                             outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
                                         },
                                     },
-                                    b: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "s2",
-                                            nodes: {
-                                                s2: {
-                                                    kind: "task",
-                                                    task: "mock.slow2",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "x",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "x",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
-                                    c: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "s3",
-                                            nodes: {
-                                                s3: {
-                                                    kind: "task",
-                                                    task: "mock.slow3",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "x",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "x",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                maxConcurrency: 1,
-                                bind: "out",
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "s2",
+                                    nodes: {
+                                        s2: {
+                                            kind: "task",
+                                            task: "mock.slow2",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            c: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "s3",
+                                    nodes: {
+                                        s3: {
+                                            kind: "task",
+                                            task: "mock.slow3",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "out" },
+                        outputSchema: { type: "object" },
+                        maxConcurrency: 1,
+                        bind: "out",
                     },
                 },
-            };
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -7110,131 +6767,107 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-multinode",
                 version: "1",
-                entry: "fork-multinode",
-                workflows: {
-                    ["fork-multinode"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    a: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "a1",
-                                            nodes: {
-                                                a1: {
-                                                    kind: "task",
-                                                    task: "mock.step1",
-                                                    inputSchema: {
-                                                        type: "object",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a1",
+                                    nodes: {
+                                        a1: {
+                                            kind: "task",
+                                            task: "mock.step1",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["intermediate"],
+                                                properties: {
+                                                    intermediate: {
+                                                        type: "number",
                                                     },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                        required: [
-                                                            "intermediate",
-                                                        ],
-                                                        properties: {
-                                                            intermediate: {
-                                                                type: "number",
-                                                            },
-                                                        },
-                                                    },
-                                                    inputs: {},
-                                                    bind: "mid",
-                                                    next: "a2",
-                                                },
-                                                a2: {
-                                                    kind: "task",
-                                                    task: "mock.step2",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                        required: [
-                                                            "intermediate",
-                                                        ],
-                                                        properties: {
-                                                            intermediate: {
-                                                                type: "number",
-                                                            },
-                                                        },
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                        required: ["final"],
-                                                        properties: {
-                                                            final: {
-                                                                type: "number",
-                                                            },
-                                                        },
-                                                    },
-                                                    inputs: {
-                                                        intermediate: {
-                                                            $from: "scope",
-                                                            name: "mid",
-                                                            path: [
-                                                                "intermediate",
-                                                            ],
-                                                        },
-                                                    },
-                                                    bind: "result",
                                                 },
                                             },
-                                            output: {
-                                                $from: "scope",
-                                                name: "result",
+                                            inputs: {},
+                                            bind: "mid",
+                                            next: "a2",
+                                        },
+                                        a2: {
+                                            kind: "task",
+                                            task: "mock.step2",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["intermediate"],
+                                                properties: {
+                                                    intermediate: {
+                                                        type: "number",
+                                                    },
+                                                },
                                             },
-                                            outputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["final"],
+                                                properties: {
+                                                    final: { type: "number" },
+                                                },
+                                            },
+                                            inputs: {
+                                                intermediate: {
+                                                    $from: "scope",
+                                                    name: "mid",
+                                                    path: ["intermediate"],
+                                                },
+                                            },
+                                            bind: "result",
                                         },
                                     },
-                                    b: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "b1",
-                                            nodes: {
-                                                b1: {
-                                                    kind: "task",
-                                                    task: "mock.step1",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                        required: [
-                                                            "intermediate",
-                                                        ],
-                                                        properties: {
-                                                            intermediate: {
-                                                                type: "number",
-                                                            },
-                                                        },
-                                                    },
-                                                    inputs: {},
-                                                    bind: "bOut",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "bOut",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
+                                    output: { $from: "scope", name: "result" },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                bind: "forkResult",
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b1",
+                                    nodes: {
+                                        b1: {
+                                            kind: "task",
+                                            task: "mock.step1",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["intermediate"],
+                                                properties: {
+                                                    intermediate: {
+                                                        type: "number",
+                                                    },
+                                                },
+                                            },
+                                            inputs: {},
+                                            bind: "bOut",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "forkResult" },
+                        outputSchema: { type: "object" },
+                        bind: "forkResult",
                     },
                 },
-            };
+                output: { $from: "scope", name: "forkResult" },
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -7291,95 +6924,75 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-error",
                 version: "1",
-                entry: "fork-error",
-                workflows: {
-                    ["fork-error"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    good: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "ok",
-                                            nodes: {
-                                                ok: {
-                                                    kind: "task",
-                                                    task: "mock.okTask",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "ok",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "ok",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
-                                    bad: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "fail",
-                                            nodes: {
-                                                fail: {
-                                                    kind: "task",
-                                                    task: "mock.failTask",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "fail",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "fail",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                onError: "recover",
-                                bind: "forkOut",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "mock.recovery",
-                                inputSchema: { type: "object" },
-                                outputSchema: {
-                                    type: "object",
-                                    required: ["fallback"],
-                                    properties: {
-                                        fallback: { type: "string" },
-                                    },
-                                },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            good: {
                                 inputs: {},
-                                bind: "out",
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "ok",
+                                    nodes: {
+                                        ok: {
+                                            kind: "task",
+                                            task: "mock.okTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "ok",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "ok" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "fail",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "fail" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "out" },
+                        outputSchema: { type: "object" },
+                        onError: "recover",
+                        bind: "forkOut",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "mock.recovery",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["fallback"],
+                            properties: { fallback: { type: "string" } },
+                        },
+                        inputs: {},
+                        bind: "out",
                     },
                 },
-            };
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -7416,80 +7029,62 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-no-onerror",
                 version: "1",
-                entry: "fork-no-onerror",
-                workflows: {
-                    ["fork-no-onerror"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    good: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "ok",
-                                            nodes: {
-                                                ok: {
-                                                    kind: "task",
-                                                    task: "mock.okTask",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "r",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "r",
-                                            },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            good: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "ok",
+                                    nodes: {
+                                        ok: {
+                                            kind: "task",
+                                            task: "mock.okTask",
+                                            inputSchema: { type: "object" },
                                             outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
                                         },
                                     },
-                                    bad: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "fail",
-                                            nodes: {
-                                                fail: {
-                                                    kind: "task",
-                                                    task: "mock.failTask",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "r",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "r",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                bind: "forkOut",
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "forkOut" },
+                        outputSchema: { type: "object" },
+                        bind: "forkOut",
                     },
                 },
-            };
+                output: { $from: "scope", name: "forkOut" },
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -7525,71 +7120,61 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "forkmap-test",
                 version: "1",
-                entry: "forkmap-test",
-                workflows: {
-                    ["forkmap-test"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["nums"],
-                            properties: {
-                                nums: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                            },
-                        },
-                        outputSchema: { type: "array" },
-                        entry: "forkMap_0",
-                        nodes: {
-                            forkMap_0: {
-                                kind: "forkMap",
-                                collection: { $from: "input", name: "nums" },
-                                collectionSchema: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                                elementParam: "n",
-                                body: {
-                                    inputSchema: {},
-                                    entry: "double",
-                                    nodes: {
-                                        double: {
-                                            kind: "task",
-                                            task: "mock.double",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["n"],
-                                                properties: {
-                                                    n: { type: "number" },
-                                                },
-                                            },
-                                            outputSchema: { type: "number" },
-                                            inputs: {
-                                                n: {
-                                                    $from: "input",
-                                                    name: "n",
-                                                },
-                                            },
-                                            bind: "doubled",
-                                        },
-                                    },
-                                    output: { $from: "scope", name: "doubled" },
-                                    outputSchema: { type: "object" },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "object" },
-                                },
-                                bind: "out",
-                            },
-                        },
-                        output: { $from: "scope", name: "out" },
+                inputSchema: {
+                    type: "object",
+                    required: ["nums"],
+                    properties: {
+                        nums: { type: "array", items: { type: "number" } },
                     },
                 },
-            };
+                outputSchema: { type: "array" },
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "nums" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "double",
+                            nodes: {
+                                double: {
+                                    kind: "task",
+                                    task: "mock.double",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["n"],
+                                        properties: {
+                                            n: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "doubled",
+                                },
+                            },
+                            output: { $from: "scope", name: "doubled" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: { nums: [1, 2, 3, 4] },
@@ -7628,61 +7213,54 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "forkmap-concurrency",
                 version: "1",
-                entry: "forkmap-concurrency",
-                workflows: {
-                    ["forkmap-concurrency"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["items"],
-                            properties: {
-                                items: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                            },
-                        },
-                        outputSchema: { type: "array" },
-                        entry: "fm",
-                        nodes: {
-                            fm: {
-                                kind: "forkMap",
-                                collection: { $from: "input", name: "items" },
-                                collectionSchema: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                                elementParam: "item",
-                                body: {
-                                    inputSchema: {},
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "mock.slowItem",
-                                            inputSchema: { type: "object" },
-                                            outputSchema: { type: "object" },
-                                            inputs: {},
-                                            bind: "r",
-                                        },
-                                    },
-                                    output: { $from: "scope", name: "r" },
-                                    outputSchema: { type: "object" },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "object" },
-                                },
-                                maxConcurrency: 2,
-                                bind: "out",
-                            },
-                        },
-                        output: { $from: "scope", name: "out" },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
                     },
                 },
-            };
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.slowItem",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        maxConcurrency: 2,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: { items: ["a", "b", "c", "d", "e"] },
@@ -7711,61 +7289,54 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "forkmap-maxiter",
                 version: "1",
-                entry: "forkmap-maxiter",
-                workflows: {
-                    ["forkmap-maxiter"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["items"],
-                            properties: {
-                                items: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                            },
-                        },
-                        outputSchema: { type: "array" },
-                        entry: "fm",
-                        nodes: {
-                            fm: {
-                                kind: "forkMap",
-                                collection: { $from: "input", name: "items" },
-                                collectionSchema: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                                elementParam: "item",
-                                body: {
-                                    inputSchema: {},
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "mock.counter",
-                                            inputSchema: { type: "object" },
-                                            outputSchema: { type: "object" },
-                                            inputs: {},
-                                            bind: "r",
-                                        },
-                                    },
-                                    output: { $from: "scope", name: "r" },
-                                    outputSchema: { type: "object" },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "object" },
-                                },
-                                maxIterations: 3,
-                                bind: "out",
-                            },
-                        },
-                        output: { $from: "scope", name: "out" },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "number" } },
                     },
                 },
-            };
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.counter",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        maxIterations: 3,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: { items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
@@ -7792,60 +7363,53 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "forkmap-empty",
                 version: "1",
-                entry: "forkmap-empty",
-                workflows: {
-                    ["forkmap-empty"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["items"],
-                            properties: {
-                                items: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                            },
-                        },
-                        outputSchema: { type: "array" },
-                        entry: "fm",
-                        nodes: {
-                            fm: {
-                                kind: "forkMap",
-                                collection: { $from: "input", name: "items" },
-                                collectionSchema: {
-                                    type: "array",
-                                    items: { type: "string" },
-                                },
-                                elementParam: "item",
-                                body: {
-                                    inputSchema: {},
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "mock.noop",
-                                            inputSchema: { type: "object" },
-                                            outputSchema: { type: "object" },
-                                            inputs: {},
-                                            bind: "r",
-                                        },
-                                    },
-                                    output: { $from: "scope", name: "r" },
-                                    outputSchema: { type: "object" },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "object" },
-                                },
-                                bind: "out",
-                            },
-                        },
-                        output: { $from: "scope", name: "out" },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
                     },
                 },
-            };
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.noop",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: { items: [] },
@@ -7881,72 +7445,62 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "forkmap-fail",
                 version: "1",
-                entry: "forkmap-fail",
-                workflows: {
-                    ["forkmap-fail"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["nums"],
-                            properties: {
-                                nums: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                            },
-                        },
-                        outputSchema: { type: "array" },
-                        entry: "fm",
-                        nodes: {
-                            fm: {
-                                kind: "forkMap",
-                                collection: { $from: "input", name: "nums" },
-                                collectionSchema: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                                elementParam: "n",
-                                body: {
-                                    inputSchema: {},
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "mock.mayFail",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["n"],
-                                                properties: {
-                                                    n: { type: "number" },
-                                                },
-                                            },
-                                            outputSchema: { type: "number" },
-                                            inputs: {
-                                                n: {
-                                                    $from: "input",
-                                                    name: "n",
-                                                },
-                                            },
-                                            bind: "r",
-                                        },
-                                    },
-                                    output: { $from: "scope", name: "r" },
-                                    outputSchema: { type: "number" },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                                maxConcurrency: 1,
-                                bind: "out",
-                            },
-                        },
-                        output: { $from: "scope", name: "out" },
+                inputSchema: {
+                    type: "object",
+                    required: ["nums"],
+                    properties: {
+                        nums: { type: "array", items: { type: "number" } },
                     },
                 },
-            };
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "nums" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.mayFail",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["n"],
+                                        properties: {
+                                            n: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "number" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        maxConcurrency: 1,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
 
             const result = await eng.run(ir, {
                 input: { nums: [1, 2, 3, 4, 5] },
@@ -7978,80 +7532,62 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-events",
                 version: "1",
-                entry: "fork-events",
-                workflows: {
-                    ["fork-events"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    a: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "a_s",
-                                            nodes: {
-                                                a_s: {
-                                                    kind: "task",
-                                                    task: "mock.noop",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "x",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "x",
-                                            },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_s",
+                                    nodes: {
+                                        a_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
                                             outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
                                         },
                                     },
-                                    b: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "b_s",
-                                            nodes: {
-                                                b_s: {
-                                                    kind: "task",
-                                                    task: "mock.noop",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "y",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "y",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                bind: "out",
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_s",
+                                    nodes: {
+                                        b_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "y",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "y" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "out" },
+                        outputSchema: { type: "object" },
+                        bind: "out",
                     },
                 },
-            };
+                output: { $from: "scope", name: "out" },
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -8102,89 +7638,71 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-fail-events",
                 version: "1",
-                entry: "fork-fail-events",
-                workflows: {
-                    ["fork-fail-events"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    a: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "a_s",
-                                            nodes: {
-                                                a_s: {
-                                                    kind: "task",
-                                                    task: "mock.failTask",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "x",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "x",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
-                                    b: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "b_s",
-                                            nodes: {
-                                                b_s: {
-                                                    kind: "task",
-                                                    task: "mock.failTask",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "y",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "y",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
-                                },
-                                outputSchema: { type: "object" },
-                                onError: "recover",
-                                bind: "out",
-                            },
-                            recover: {
-                                kind: "task",
-                                task: "mock.recovery",
-                                inputSchema: { type: "object" },
-                                outputSchema: { type: "object" },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
                                 inputs: {},
-                                bind: "recovered",
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_s",
+                                    nodes: {
+                                        a_s: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_s",
+                                    nodes: {
+                                        b_s: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "y",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "y" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "recovered" },
+                        outputSchema: { type: "object" },
+                        onError: "recover",
+                        bind: "out",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "mock.recovery",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "recovered",
                     },
                 },
-            };
+                output: { $from: "scope", name: "recovered" },
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -8216,65 +7734,55 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "forkmap-events",
                 version: "1",
-                entry: "forkmap-events",
-                workflows: {
-                    ["forkmap-events"]: {
-                        inputSchema: {
-                            type: "object",
-                            required: ["items"],
-                            properties: {
-                                items: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                            },
-                        },
-                        outputSchema: { type: "array" },
-                        entry: "fm",
-                        nodes: {
-                            fm: {
-                                kind: "forkMap",
-                                collection: { $from: "input", name: "items" },
-                                collectionSchema: {
-                                    type: "array",
-                                    items: { type: "number" },
-                                },
-                                elementParam: "n",
-                                body: {
-                                    inputSchema: {},
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "mock.identity",
-                                            inputSchema: { type: "object" },
-                                            outputSchema: { type: "object" },
-                                            inputs: {
-                                                n: {
-                                                    $from: "input",
-                                                    name: "n",
-                                                },
-                                            },
-                                            bind: "r",
-                                        },
-                                    },
-                                    output: { $from: "scope", name: "r" },
-                                    outputSchema: { type: "object" },
-                                },
-                                outputSchema: {
-                                    type: "array",
-                                    items: { type: "object" },
-                                },
-                                bind: "out",
-                            },
-                        },
-                        output: { $from: "scope", name: "out" },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "number" } },
                     },
                 },
-            };
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.identity",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
 
             await eng.run(ir, {
                 input: { items: [10, 20, 30] },
@@ -8314,80 +7822,62 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "fork-order",
                 version: "1",
-                entry: "fork-order",
-                workflows: {
-                    ["fork-order"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fork_0",
-                        nodes: {
-                            fork_0: {
-                                kind: "fork",
-                                branches: {
-                                    a: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "a_s",
-                                            nodes: {
-                                                a_s: {
-                                                    kind: "task",
-                                                    task: "mock.noop",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "x",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "x",
-                                            },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_s",
+                                    nodes: {
+                                        a_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
                                             outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "x",
                                         },
                                     },
-                                    b: {
-                                        inputs: {},
-                                        scope: {
-                                            inputSchema: {},
-                                            entry: "b_s",
-                                            nodes: {
-                                                b_s: {
-                                                    kind: "task",
-                                                    task: "mock.noop",
-                                                    inputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    outputSchema: {
-                                                        type: "object",
-                                                    },
-                                                    inputs: {},
-                                                    bind: "y",
-                                                },
-                                            },
-                                            output: {
-                                                $from: "scope",
-                                                name: "y",
-                                            },
-                                            outputSchema: { type: "object" },
-                                        },
-                                    },
+                                    output: { $from: "scope", name: "x" },
+                                    outputSchema: { type: "object" },
                                 },
-                                outputSchema: { type: "object" },
-                                bind: "out",
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_s",
+                                    nodes: {
+                                        b_s: {
+                                            kind: "task",
+                                            task: "mock.noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "y",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "y" },
+                                    outputSchema: { type: "object" },
+                                },
                             },
                         },
-                        output: { $from: "scope", name: "out" },
+                        outputSchema: { type: "object" },
+                        bind: "out",
                     },
                 },
-            };
+                output: { $from: "scope", name: "out" },
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -8417,28 +7907,24 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "never-output-violation",
                 version: "1",
-                entry: "never-output-violation",
-                workflows: {
-                    ["never-output-violation"]: {
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fail_node",
+                nodes: {
+                    fail_node: {
+                        kind: "task",
+                        task: "rogue.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fail_node",
-                        nodes: {
-                            fail_node: {
-                                kind: "task",
-                                task: "rogue.fail",
-                                inputSchema: { type: "object" },
-                                outputSchema: { not: {} },
-                                inputs: {},
-                            },
-                        },
-                        output: {},
+                        outputSchema: { not: {} },
+                        inputs: {},
                     },
                 },
-            };
+                output: {},
+            });
 
             const reg = makeRegistry(...allBuiltinTasks, rogueFail);
             const engine = new WorkflowEngine(reg);
@@ -8453,32 +7939,28 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("allows a proper never-output task that fails", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "proper-throw",
                 version: "1",
-                entry: "proper-throw",
-                workflows: {
-                    ["proper-throw"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        entry: "fail_node",
-                        nodes: {
-                            fail_node: {
-                                kind: "task",
-                                task: "error.fail",
-                                inputSchema: {
-                                    type: "object",
-                                    required: ["value"],
-                                    properties: { value: {} },
-                                },
-                                outputSchema: { not: {} },
-                                inputs: { value: "boom" },
-                            },
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fail_node",
+                nodes: {
+                    fail_node: {
+                        kind: "task",
+                        task: "error.fail",
+                        inputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
                         },
-                        output: {},
+                        outputSchema: { not: {} },
+                        inputs: { value: "boom" },
                     },
                 },
-            };
+                output: {},
+            });
 
             const reg = makeRegistry(...allBuiltinTasks);
             const engine = new WorkflowEngine(reg);
@@ -8520,89 +8002,91 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const loopIR: WorkflowIR = {
+            const loopIR: WorkflowIR = wrapIR({
                 kind: "workflow",
+                name: "iterTest",
                 version: "1",
-                entry: "iterTest",
-                workflows: {
-                    ["iterTest"]: {
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "integer" },
-                        entry: "loop",
-                        nodes: {
-                            loop: {
-                                kind: "loop",
-                                inputs: {},
-                                state: {
-                                    i: {
-                                        schema: { type: "integer" },
-                                        initial: 0,
-                                    },
-                                },
-                                body: {
-                                    inputSchema: { type: "object" },
-                                    entry: "step",
-                                    nodes: {
-                                        step: {
-                                            kind: "task",
-                                            task: "test.counter",
-                                            inputSchema: {
-                                                type: "object",
-                                                required: ["i"],
-                                                properties: {
-                                                    i: { type: "integer" },
-                                                },
-                                            },
-                                            outputSchema: {
-                                                type: "object",
-                                                required: ["next"],
-                                                properties: {
-                                                    next: { type: "integer" },
-                                                },
-                                            },
-                                            inputs: {
-                                                i: {
-                                                    $from: "state",
-                                                    name: "i",
-                                                } as Template,
-                                            },
-                                            next: "check",
-                                            bind: "counted",
-                                        },
-                                        check: {
-                                            kind: "branch",
-                                            selector: {
-                                                $from: "scope",
-                                                name: "counted",
-                                                path: ["next"],
-                                            } as Template,
-                                            selectorSchema: { type: "integer" },
-                                            // exit when counter reaches 3
-                                            cases: { "3": "@exit" },
-                                            default: "@iterate",
-                                        },
-                                    },
-                                    output: {
-                                        $from: "state",
-                                        name: "i",
-                                    } as Template,
-                                    outputSchema: { type: "integer" },
-                                },
-                                iterateState: {
-                                    i: {
-                                        $from: "scope",
-                                        name: "counted",
-                                        path: ["next"],
-                                    } as Template,
-                                },
-                                maxIterations: 10,
-                                bind: "result",
-                            },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "integer" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            i: { schema: { type: "integer" }, initial: 0 },
                         },
-                        output: { $from: "scope", name: "result" } as Template,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "test.counter",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["i"],
+                                        properties: { i: { type: "integer" } },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["next"],
+                                        properties: {
+                                            next: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        i: {
+                                            $from: "state",
+                                            name: "i",
+                                        } as Template,
+                                    },
+                                    next: "check",
+                                    bind: "counted",
+                                },
+                                check: {
+                                    kind: "task",
+                                    task: "compare.notEquals",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: {},
+                                            right: {},
+                                        },
+                                    },
+                                    outputSchema: { type: "boolean" },
+                                    inputs: {
+                                        left: {
+                                            $from: "scope",
+                                            name: "counted",
+                                            path: ["next"],
+                                        } as Template,
+                                        right: 3 as Template,
+                                    },
+                                    bind: "shouldContinue",
+                                },
+                            },
+                            output: { $from: "state", name: "i" } as Template,
+                            outputSchema: { type: "integer" },
+                        },
+                        iterateState: {
+                            i: {
+                                $from: "scope",
+                                name: "counted",
+                                path: ["next"],
+                            } as Template,
+                        },
+                        continueWhen: {
+                            $from: "scope",
+                            name: "shouldContinue",
+                        } as Template,
+                        maxIterations: 10,
+                        bind: "result",
                     },
                 },
-            };
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            });
 
             const result = await eng.run(loopIR, { input: {} });
             expect(result.success).toBe(true);

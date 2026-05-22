@@ -216,4 +216,70 @@ describe("PortRegistrar", () => {
             expect(r.hasActiveAllocations()).toBe(false);
         });
     });
+
+    describe("client counts", () => {
+        test("getClientCount returns undefined when never set", () => {
+            const r = new PortRegistrar();
+            r.register("browser", "ws", 1, SID_A);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBeUndefined();
+        });
+
+        test("setClientCount round-trips on a live allocation", () => {
+            const r = new PortRegistrar();
+            r.register("browser", "ws", 1, SID_A);
+            r.setClientCount("browser", "ws", SID_A, 3);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBe(3);
+        });
+
+        test("setClientCount drops writes with no live allocation", () => {
+            const r = new PortRegistrar();
+            r.setClientCount("browser", "ws", SID_A, 5);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBeUndefined();
+        });
+
+        test("setClientCount accepts 0 and distinguishes it from undefined", () => {
+            const r = new PortRegistrar();
+            r.register("browser", "ws", 1, SID_A);
+            r.setClientCount("browser", "ws", SID_A, 0);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBe(0);
+        });
+
+        test("setClientCount rejects negative and non-integer values", () => {
+            const r = new PortRegistrar();
+            r.register("browser", "ws", 1, SID_A);
+            r.setClientCount("browser", "ws", SID_A, -1);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBeUndefined();
+            r.setClientCount("browser", "ws", SID_A, 1.5);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBeUndefined();
+        });
+
+        test("release drops the matching count entry", () => {
+            const r = new PortRegistrar();
+            const id = r.register("browser", "ws", 1, SID_A);
+            r.setClientCount("browser", "ws", SID_A, 4);
+            r.release(id);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBeUndefined();
+        });
+
+        test("releaseAllForSession drops counts for that session only", () => {
+            const r = new PortRegistrar();
+            r.register("browser", "ws", 1, SID_A);
+            r.register("browser", "ws", 2, SID_B);
+            r.setClientCount("browser", "ws", SID_A, 7);
+            r.setClientCount("browser", "ws", SID_B, 9);
+            r.releaseAllForSession(SID_A);
+            expect(r.getClientCount("browser", "ws", SID_A)).toBeUndefined();
+            expect(r.getClientCount("browser", "ws", SID_B)).toBe(9);
+        });
+
+        test("counts are per-session under the same (agent, role)", () => {
+            const r = new PortRegistrar();
+            r.register("code", "default", 8082, SID_A);
+            r.register("code", "default", 8082, SID_B);
+            r.setClientCount("code", "default", SID_A, 1);
+            r.setClientCount("code", "default", SID_B, 2);
+            expect(r.getClientCount("code", "default", SID_A)).toBe(1);
+            expect(r.getClientCount("code", "default", SID_B)).toBe(2);
+        });
+    });
 });

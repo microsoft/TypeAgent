@@ -4,15 +4,16 @@ Status: **Accepted.**
 
 ## Problem
 
-The IR has four places that embed a "sub-workflow" (a sequence of nodes with
+The IR has five places that embed a "sub-workflow" (a sequence of nodes with
 inputs and an output):
 
-| Site                   | `entry`    | `nodes`    | `inputSchema` | `inputs`              | `output`    | `outputSchema` |
-| ---------------------- | ---------- | ---------- | ------------- | --------------------- | ----------- | -------------- |
-| WorkflowIR (top-level) | yes        | yes        | yes           | no (runtime-provided) | yes         | yes            |
-| LoopNode               | body.entry | body.nodes | on LoopNode   | on LoopNode           | on LoopNode | on LoopNode    |
-| ForkNode branches      | yes        | yes        | **missing**   | **missing**           | **missing** | **missing**    |
-| ForkMapNode body       | yes        | yes        | **missing**   | **missing**           | **missing** | **missing**    |
+| Site                   | `entry`     | `nodes`     | `inputSchema`           | `inputs`              | `output`           | `outputSchema`           |
+| ---------------------- | ----------- | ----------- | ----------------------- | --------------------- | ------------------ | ------------------------ |
+| WorkflowIR (top-level) | yes         | yes         | yes                     | no (runtime-provided) | yes                | yes                      |
+| LoopNode               | body.entry  | body.nodes  | body.inputSchema (0010) | on LoopNode           | body.output (0010) | body.outputSchema (0010) |
+| ForkNode branches      | scope.entry | scope.nodes | scope.inputSchema       | per-branch `inputs`   | scope.output       | scope.outputSchema       |
+| ForkMapNode body       | body.entry  | body.nodes  | body.inputSchema        | on ForkMapNode        | body.output        | body.outputSchema        |
+| BranchNode arms (0010) | scope.entry | scope.nodes | scope.inputSchema       | per-arm `inputs`      | scope.output       | scope.outputSchema       |
 
 Three problems:
 
@@ -135,7 +136,11 @@ is already valid: it has `inputSchema`, `entry`, `nodes`, `output`,
 
 **LoopNode** - The `body` field gains `inputSchema`, `output`, `outputSchema`.
 These move from the LoopNode top level into `body`. The `inputs` field stays
-on LoopNode (it's the outer -> inner wiring). Net change:
+on LoopNode (it's the outer -> inner wiring).
+[Decision 0010](decisions/0010-finish-workflow-scope-unification.md)
+also retires `@iterate` / `@exit` sentinels in favour of a top-level
+`continueWhen` reference resolved at body natural completion. Net
+change:
 
 ```
 Before:                          After:
@@ -144,7 +149,8 @@ LoopNode.body.entry       ->     LoopNode.body.entry        (same)
 LoopNode.body.nodes       ->     LoopNode.body.nodes        (same)
 LoopNode.output           ->     LoopNode.body.output
 LoopNode.outputSchema     ->     LoopNode.body.outputSchema
-LoopNode.inputs           ->     LoopNode.inputs             (same)
+LoopNode.inputs           ->     LoopNode.inputs            (same)
+(sentinels @iterate/@exit) ->    LoopNode.continueWhen      (Template -> boolean)
 ```
 
 **ForkNode** - Branches gain `inputs` and `scope` (a WorkflowScope). Branch
@@ -172,6 +178,22 @@ body.nodes                ->     body.nodes              (same)
 (missing)                 ->     body.outputSchema
 (missing)                 ->     ForkMapNode.inputs
 ```
+
+**BranchNode arms** - Each `cases[k]` and `default` becomes
+`{ inputs, scope }` where `scope` is a `WorkflowScope`, parallel to
+`ForkNode.branches[k]`. Adopted by
+[decision 0010](decisions/0010-finish-workflow-scope-unification.md).
+
+```
+Before (v0.1):                              After (0010):
+cases[k]: "<nodeId>"             ->         cases[k]: { inputs, scope }
+default:  "<nodeId>"             ->         default:  { inputs, scope }
+(no inputs other than selector)  ->         per-arm `inputs` (outer -> arm wiring)
+(no output, no bind)             ->         arm `scope.output`; optional `bind` on the branch
+```
+
+Branch and fork differ in dispatch (exactly one arm runs vs. all
+branches run), but the per-arm shape is identical.
 
 ## Impact on runner
 

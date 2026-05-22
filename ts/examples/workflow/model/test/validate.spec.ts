@@ -7,6 +7,7 @@ import {
     TaskNode,
     LoopNode,
     BranchNode,
+    BranchArm,
     ForkNode,
     ForkMapNode,
     JSONSchema,
@@ -69,7 +70,10 @@ function makeMinimalIR(overrides?: IROverrides): WorkflowIR {
                 bind: "out",
             },
         },
-        output: o.output ?? { $from: "scope", name: "out" },
+        output:
+            "output" in o
+                ? (o.output as Template)
+                : { $from: "scope", name: "out" },
     };
     const ir: WorkflowIR = {
         kind: "workflow",
@@ -96,9 +100,9 @@ function makeTaskNode(overrides?: Partial<TaskNode>): TaskNode {
 }
 
 /**
- * Build a loop node with a single-counter state and a branch body that
- * exits/iterates. Override any field via `overrides`; override the body
- * scope fields via `bodyOverrides`.
+ * Build a loop node with a single-counter state and a simple task body.
+ * Override any field via `overrides`; override the body scope fields via
+ * `bodyOverrides`.
  */
 function makeLoopNode(
     overrides?: Partial<LoopNode>,
@@ -109,15 +113,15 @@ function makeLoopNode(
         inputs: {},
         body: {
             inputSchema: { type: "object" },
-            entry: "decide",
+            entry: "step",
             nodes: {
-                decide: {
-                    kind: "branch",
-                    selector: true,
-                    selectorSchema: { type: "boolean" },
-                    cases: { true: "@exit", false: "@iterate" },
-                    default: "@iterate",
-                } as BranchNode,
+                step: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {},
+                },
             },
             output: { $from: "state", name: "i" },
             outputSchema: { type: "integer" },
@@ -127,8 +131,25 @@ function makeLoopNode(
             i: { schema: { type: "integer" }, initial: 0 },
         },
         iterateState: { i: { $from: "state", name: "i" } },
+        continueWhen: { $literal: false },
         maxIterations: 10,
         ...overrides,
+    };
+}
+
+/** Build a minimal valid BranchArm with a single noop task scope. */
+function makeSimpleArm(entryName: string = "step"): BranchArm {
+    return {
+        inputs: {},
+        scope: {
+            inputSchema: { type: "object" },
+            entry: entryName,
+            nodes: {
+                [entryName]: makeTaskNode(),
+            },
+            output: null,
+            outputSchema: { type: "null" },
+        },
     };
 }
 
@@ -204,16 +225,27 @@ describe("validateWorkflowIR", () => {
         expect(result.errors[0].message).toContain("ghost");
     });
 
-    it("rejects branch case pointing to non-existent node", () => {
+    it("rejects branch arm scope with missing entry node", () => {
         const ir = makeMinimalIR({
             nodes: {
                 start: {
                     kind: "branch",
                     selector: true,
                     selectorSchema: { type: "boolean" },
-                    cases: { true: "missing", false: "start" },
-                    default: "start",
-                } as any,
+                    cases: {
+                        true: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "missing",
+                                nodes: { exists: makeTaskNode() },
+                                output: null,
+                                outputSchema: { type: "null" },
+                            },
+                        },
+                    },
+                    default: makeSimpleArm("defaultStep"),
+                } as BranchNode,
             },
         });
         const result = validateWorkflowIR(ir);
@@ -223,16 +255,27 @@ describe("validateWorkflowIR", () => {
         );
     });
 
-    it("rejects branch default pointing to non-existent node", () => {
+    it("rejects branch default arm scope with missing entry node", () => {
         const ir = makeMinimalIR({
             nodes: {
                 start: {
                     kind: "branch",
                     selector: true,
                     selectorSchema: { type: "boolean" },
-                    cases: { true: "start" },
-                    default: "nowhere",
-                } as any,
+                    cases: {
+                        true: makeSimpleArm("trueStep"),
+                    },
+                    default: {
+                        inputs: {},
+                        scope: {
+                            inputSchema: { type: "object" },
+                            entry: "nowhere",
+                            nodes: { exists: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                    },
+                } as BranchNode,
             },
         });
         const result = validateWorkflowIR(ir);
@@ -284,36 +327,6 @@ describe("validateWorkflowIR", () => {
         );
     });
 
-    it("allows sentinel @iterate and @exit inside loop body branch", () => {
-        const ir = makeMinimalIR({
-            nodes: {
-                start: makeLoopNode({ bind: "out" }),
-            },
-            outputSchema: { type: "integer" },
-        });
-        const result = validateWorkflowIR(ir);
-        expect(result.valid).toBe(true);
-    });
-
-    it("rejects sentinel @iterate outside loop body", () => {
-        const ir = makeMinimalIR({
-            nodes: {
-                start: {
-                    kind: "branch",
-                    selector: true,
-                    selectorSchema: { type: "boolean" },
-                    cases: { true: "@iterate" },
-                    default: "start",
-                } as any,
-            },
-        });
-        const result = validateWorkflowIR(ir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.message.includes("@iterate"))).toBe(
-            true,
-        );
-    });
-
     it("rejects loop next pointing to non-existent node", () => {
         const ir = makeMinimalIR({
             nodes: {
@@ -322,14 +335,10 @@ describe("validateWorkflowIR", () => {
                     {
                         entry: "step",
                         nodes: {
-                            step: {
-                                kind: "branch",
-                                selector: true,
-                                selectorSchema: { type: "boolean" },
-                                cases: { true: "@exit" },
-                                default: "@iterate",
-                            } as BranchNode,
+                            step: makeTaskNode(),
                         },
+                        output: null,
+                        outputSchema: { type: "null" },
                     },
                 ),
             },
@@ -380,28 +389,35 @@ describe("validateWorkflowIR", () => {
         expect(result.errors[0].path).toContain("nodes.start");
     });
 
-    it("rejects loop body without sentinel when no onError", () => {
+    it("rejects loop missing continueWhen", () => {
         const ir = makeMinimalIR({
             nodes: {
-                start: makeLoopNode(
-                    { bind: "out" },
-                    {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    body: {
+                        inputSchema: { type: "object" },
                         entry: "step",
-                        nodes: {
-                            step: makeTaskNode(),
-                        },
+                        nodes: { step: makeTaskNode() },
+                        output: null,
+                        outputSchema: { type: "null" },
                     },
-                ),
+                    state: {},
+                    iterateState: {},
+                    // continueWhen intentionally omitted
+                } as any,
             },
+            output: null,
+            outputSchema: { type: "null" },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
         expect(result.valid).toBe(false);
         expect(
-            result.errors.some((e) => e.message.includes("@iterate or @exit")),
+            result.errors.some((e) => e.message.includes("continueWhen")),
         ).toBe(true);
     });
 
-    it("allows loop body without sentinel when onError is set", () => {
+    it("accepts loop with continueWhen and simple body", () => {
         const ir = makeMinimalIR({
             nodes: {
                 start: makeLoopNode(
@@ -418,7 +434,9 @@ describe("validateWorkflowIR", () => {
                         },
                     },
                 ),
-                recover: makeTaskNode({
+                recover: {
+                    kind: "task",
+                    task: "noop",
                     inputSchema: {
                         type: "object",
                         required: ["error", "trigger"],
@@ -427,8 +445,10 @@ describe("validateWorkflowIR", () => {
                             trigger: { type: "object" },
                         },
                     },
+                    outputSchema: { type: "object" },
+                    inputs: {},
                     bind: "out",
-                }),
+                },
             },
         });
         const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -680,19 +700,15 @@ describe("validateWorkflowIR", () => {
                     kind: "branch",
                     selector: true,
                     selectorSchema: { type: "boolean" },
-                    cases: { true: "end", false: "end" },
-                    default: "end",
-                } as any,
-                end: {
-                    kind: "task",
-                    task: "noop",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    inputs: {},
-                },
+                    cases: {
+                        true: makeSimpleArm("trueStep"),
+                        false: makeSimpleArm("falseStep"),
+                    },
+                    default: makeSimpleArm("defaultStep"),
+                } as BranchNode,
             },
-            output: "done",
-            outputSchema: { type: "string" },
+            output: null,
+            outputSchema: {},
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -705,19 +721,15 @@ describe("validateWorkflowIR", () => {
                     kind: "branch",
                     selector: 1,
                     selectorSchema: { type: "integer" },
-                    cases: { "1": "end", "2": "end" },
-                    default: "end",
-                } as any,
-                end: {
-                    kind: "task",
-                    task: "noop",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    inputs: {},
-                },
+                    cases: {
+                        "1": makeSimpleArm("oneStep"),
+                        "2": makeSimpleArm("twoStep"),
+                    },
+                    default: makeSimpleArm("defaultStep"),
+                } as BranchNode,
             },
-            output: "done",
-            outputSchema: { type: "string" },
+            output: null,
+            outputSchema: {},
         });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(true);
@@ -1254,17 +1266,13 @@ describe("validateWorkflowIR", () => {
                         kind: "branch",
                         selectorSchema: { type: "boolean" },
                         selector: true,
-                        cases: { true: "start" },
-                        default: "end",
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                        },
+                        default: makeSimpleArm("defaultStep"),
+                        next: "start",
                     },
-                    end: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
+                    end: makeTaskNode({ bind: "out" }),
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -1516,73 +1524,72 @@ describe("validateWorkflowIR", () => {
                 ),
             ).toBe(true);
         });
+
+        it("rejects loop recovery target with its own onError exactly once (no Rule 3+4 double-fire)", () => {
+            // Regression test for the validateOnErrorRules fix: a loop-kind
+            // recovery target that also declares onError used to trip both
+            // Rule 3 ("no recursive recovery") and Rule 4 ("must be a
+            // task"). Rule 3 / Rule 5 are task-specific; only Rule 4
+            // should fire here.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        bind: "out",
+                        onError: "handler",
+                    }),
+                    handler: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: {
+                                step: makeTaskNode({ bind: "h" }),
+                            },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        iterateState: {},
+                        continueWhen: false,
+                        maxIterations: 1,
+                        onError: "end",
+                    } as any,
+                    end: makeTaskNode({ bind: "end" }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            // Exactly one error mentions the recovery-target-kind rule.
+            const kindErrors = result.errors.filter((e) =>
+                e.message.includes("must be a task node"),
+            );
+            expect(kindErrors).toHaveLength(1);
+            // No Rule 3 ("Recursive recovery") error should be present.
+            const recursiveErrors = result.errors.filter((e) =>
+                e.message.includes("Recursive recovery"),
+            );
+            expect(recursiveErrors).toHaveLength(0);
+        });
     });
 
     // ---- Phase 3: Termination (pass 9) ----
 
     describe("termination", () => {
-        it("rejects a node that cannot reach any terminal", () => {
-            // Create a graph where a side branch has no path to a terminal:
-            // start -> end (terminal), but "orphan" is a node with no incoming
-            // or outgoing edges (unreachable). However the termination check
-            // only cares about reachable nodes. Let's create a node that IS
-            // reachable but has no outgoing path to a terminal.
-            // Actually, in a DAG with entry, if a node can't reach a terminal,
-            // it has to be on a dead-end branch. Let's use a branch where one
-            // case leads to a node with no outgoing edges that isn't terminal.
-            // Wait: a node with no `next` IS a terminal. So we need something
-            // more specific. Termination means every node can reach a terminal.
-            // If a node has next pointing to a nonexistent node, that's caught
-            // earlier. Let's test loop body termination instead.
+        it("rejects loop body node that cannot reach a terminal", () => {
             const ir = makeMinimalIR({
                 nodes: {
-                    start: {
-                        kind: "loop",
-                        inputs: {},
-                        state: {
-                            i: {
-                                schema: { type: "integer" },
-                                initial: 0,
-                            },
-                        },
-                        body: {
-                            inputSchema: { type: "object" },
+                    start: makeLoopNode(
+                        { bind: "out" },
+                        {
                             entry: "step",
                             nodes: {
-                                step: {
-                                    kind: "task",
-                                    task: "noop",
-                                    inputSchema: { type: "object" },
-                                    outputSchema: { type: "object" },
-                                    inputs: {},
-                                    next: "dead",
-                                },
-                                dead: {
-                                    kind: "task",
-                                    task: "noop",
-                                    inputSchema: { type: "object" },
-                                    outputSchema: { type: "object" },
-                                    inputs: {},
-                                    // no next, and not pointing to @iterate or @exit
-                                },
-                                sentinel: {
-                                    kind: "task",
-                                    task: "noop",
-                                    inputSchema: { type: "object" },
-                                    outputSchema: { type: "object" },
-                                    inputs: {},
-                                    next: "@iterate",
-                                },
+                                step: makeTaskNode({ next: "step" }),
                             },
                             output: null,
                             outputSchema: { type: "null" },
                         },
-                        iterateState: {
-                            i: { $from: "state", name: "i" },
-                        },
-                        maxIterations: 10,
-                        bind: "out",
-                    } as any,
+                    ),
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -1590,46 +1597,28 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("cannot reach any sentinel"),
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Cycle detected") ||
+                        e.message.includes("cannot reach a terminal"),
                 ),
             ).toBe(true);
         });
 
-        it("accepts loop body where all nodes reach a sentinel", () => {
+        it("accepts loop body where all nodes reach a terminal", () => {
             const ir = makeMinimalIR({
                 nodes: {
-                    start: {
-                        kind: "loop",
-                        inputs: {},
-                        state: {
-                            i: {
-                                schema: { type: "integer" },
-                                initial: 0,
-                            },
-                        },
-                        body: {
-                            inputSchema: { type: "object" },
+                    start: makeLoopNode(
+                        { bind: "out" },
+                        {
                             entry: "step",
                             nodes: {
-                                step: {
-                                    kind: "task",
-                                    task: "noop",
-                                    inputSchema: { type: "object" },
-                                    outputSchema: { type: "object" },
-                                    inputs: {},
-                                    next: "@iterate",
-                                },
+                                step: makeTaskNode(),
                             },
                             output: null,
                             outputSchema: { type: "null" },
                         },
-                        iterateState: {
-                            i: { $from: "state", name: "i" },
-                        },
-                        maxIterations: 10,
-                        bind: "out",
-                    } as any,
+                    ),
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -1767,7 +1756,6 @@ describe("validateWorkflowIR", () => {
                                             name: "i",
                                         },
                                     },
-                                    next: "@iterate",
                                 },
                             },
                             output: null,
@@ -1776,6 +1764,7 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
                         bind: "out",
                     } as any,
@@ -1884,15 +1873,17 @@ describe("validateWorkflowIR", () => {
     // ---- Phase 5: Dominator analysis (pass 6) ----
 
     describe("dominator analysis", () => {
-        it("rejects reference to binding behind a branch (not on all paths)", () => {
+        it("rejects reference to binding not on all execution paths", () => {
             const ir = makeMinimalIR({
                 nodes: {
-                    start: {
-                        kind: "branch",
-                        selectorSchema: { type: "boolean" },
-                        selector: true,
-                        cases: { true: "producer" },
-                        default: "consumer",
+                    trigger: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "producer",
+                        onError: "failHandler",
                     },
                     producer: {
                         kind: "task",
@@ -1902,6 +1893,21 @@ describe("validateWorkflowIR", () => {
                         inputs: {},
                         next: "consumer",
                         bind: "data",
+                    },
+                    failHandler: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "consumer",
                     },
                     consumer: {
                         kind: "task",
@@ -1914,6 +1920,7 @@ describe("validateWorkflowIR", () => {
                         bind: "out",
                     },
                 },
+                entry: "trigger",
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
@@ -2024,12 +2031,14 @@ describe("validateWorkflowIR", () => {
         it("allows optional ref to skip coverage check", () => {
             const ir = makeMinimalIR({
                 nodes: {
-                    start: {
-                        kind: "branch",
-                        selectorSchema: { type: "boolean" },
-                        selector: true,
-                        cases: { true: "producer" },
-                        default: "consumer",
+                    trigger: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "producer",
+                        onError: "failHandler",
                     },
                     producer: {
                         kind: "task",
@@ -2039,6 +2048,21 @@ describe("validateWorkflowIR", () => {
                         inputs: {},
                         next: "consumer",
                         bind: "data",
+                    },
+                    failHandler: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "consumer",
                     },
                     consumer: {
                         kind: "task",
@@ -2055,6 +2079,7 @@ describe("validateWorkflowIR", () => {
                         bind: "out",
                     },
                 },
+                entry: "trigger",
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
@@ -2363,11 +2388,13 @@ describe("validateWorkflowIR", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: {
-                        kind: "branch",
-                        selectorSchema: { type: "boolean" },
-                        selector: true,
-                        cases: { true: "producer" },
-                        default: "skipper",
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "skipper",
+                        next: "producer",
                     },
                     producer: {
                         kind: "task",
@@ -2380,7 +2407,14 @@ describe("validateWorkflowIR", () => {
                     skipper: {
                         kind: "task",
                         task: "noop",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
                         outputSchema: { type: "object" },
                         inputs: {},
                         // does NOT bind "data"
@@ -2399,49 +2433,49 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        it("accepts output ref covered by binders on all branch arms", () => {
+        it("accepts output ref covered by binders on all paths", () => {
             const ir = makeMinimalIR({
-                entry: "branch",
+                entry: "start",
                 nodes: {
-                    branch: {
-                        kind: "branch",
-                        selectorSchema: { type: "boolean" },
-                        selector: true,
-                        cases: { true: "trueArm" },
-                        default: "falseArm",
-                    },
-                    trueArm: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "boolean" } },
-                        },
-                        inputs: {},
-                        bind: "data",
-                        next: "merge",
-                    },
-                    falseArm: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: {
-                            type: "object",
-                            required: ["result"],
-                            properties: { result: { type: "boolean" } },
-                        },
-                        inputs: {},
-                        bind: "data",
-                        next: "merge",
-                    },
-                    merge: {
+                    start: {
                         kind: "task",
                         task: "noop",
                         inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {},
+                        next: "producer",
+                        onError: "recover",
+                    },
+                    producer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        bind: "data",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "boolean" } },
+                        },
+                        inputs: {},
+                        bind: "data",
                     },
                 },
                 output: {
@@ -2603,18 +2637,14 @@ describe("validateWorkflowIR", () => {
                         kind: "branch",
                         selector: "done",
                         selectorSchema: { type: "string" },
-                        cases: { done: "end" },
-                        default: "end",
-                    } as any,
-                    end: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
+                        cases: {
+                            done: makeSimpleArm("doneStep"),
+                        },
+                        default: makeSimpleArm("defaultStep"),
+                    } as BranchNode,
                 },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir);
             expect(result.valid).toBe(true);
@@ -2668,49 +2698,40 @@ describe("validateWorkflowIR", () => {
                             type: "string",
                             enum: ["yes", "no"],
                         },
-                        cases: { yes: "end", no: "end" },
-                        default: "end",
-                    } as any,
-                    end: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
+                        cases: {
+                            yes: makeSimpleArm("yesStep"),
+                            no: makeSimpleArm("noStep"),
+                        },
+                        default: makeSimpleArm("defaultStep"),
+                    } as BranchNode,
                 },
                 inputSchema: {
                     type: "object",
                     properties: { choice: { type: "string" } },
                 },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir);
             expect(result.valid).toBe(true);
         });
 
         it("accepts exhaustive branch with literal string selector (no default)", () => {
-            // Selector is a string literal "yes" — resolveTemplateType must
-            // return { type: "string", const: "yes" } so isProvablyNarrowedTo
-            // can confirm the single-element enum is covered.
             const ir = makeMinimalIR({
                 nodes: {
                     start: {
                         kind: "branch",
                         selector: "yes",
                         selectorSchema: { type: "string", enum: ["yes", "no"] },
-                        cases: { yes: "end", no: "end" },
+                        cases: {
+                            yes: makeSimpleArm("yesStep"),
+                            no: makeSimpleArm("noStep"),
+                        },
                         // no default — exhaustiveness must be inferred
-                    } as any,
-                    end: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
+                    } as BranchNode,
                 },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir);
             expect(result.valid).toBe(true);
@@ -2726,17 +2747,14 @@ describe("validateWorkflowIR", () => {
                             type: "integer",
                             enum: [42, 99],
                         },
-                        cases: { 42: "end", 99: "end" },
-                    } as any,
-                    end: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
+                        cases: {
+                            "42": makeSimpleArm("fortyTwoStep"),
+                            "99": makeSimpleArm("ninetyNineStep"),
+                        },
+                    } as BranchNode,
                 },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir);
             expect(result.valid).toBe(true);
@@ -2749,18 +2767,14 @@ describe("validateWorkflowIR", () => {
                         kind: "branch",
                         selector: true,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "end", false: "end" },
-                        // no default — boolean is implicitly [true, false]
-                    } as any,
-                    end: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                            false: makeSimpleArm("falseStep"),
+                        },
+                    } as BranchNode,
                 },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir);
             expect(result.valid).toBe(true);
@@ -3783,24 +3797,279 @@ describe("validateWorkflowIR", () => {
                 result.errors.some((e) => e.message.includes('"$bad"')),
             ).toBe(true);
         });
-    });
 
-    // ---- Gap 4: bind on branch node ----
-
-    describe("bind on branch node", () => {
-        it("rejects branch node with bind field", () => {
+        it("rejects unknown $-prefixed key in branch arm inputs", () => {
+            const arm = makeSimpleArm("armStep");
+            (arm.inputs as any).bad = { $weird: 1 };
             const ir = makeMinimalIR({
                 nodes: {
                     start: {
                         kind: "branch",
                         selector: true,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "end", false: "end" },
-                        default: "end",
-                        bind: "shouldNotExist",
+                        cases: { true: arm },
+                        default: makeSimpleArm("defStep"),
                     } as any,
-                    end: makeTaskNode({ bind: "out" }),
                 },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weird"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in fork branch inputs", () => {
+            const ir = makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: { bad: { $weirdA: 1 } } as any,
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "object" },
+                                b: { type: "object" },
+                            },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdA"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in fork branch scope.output", () => {
+            const ir = makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $weirdOut: 1 } as any,
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "object" },
+                                b: { type: "object" },
+                            },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdOut"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in forkMap.collection template", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $weirdColl: 1 } as any,
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdColl"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in forkMap.inputs", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        inputs: { bad: { $weirdInputs: 1 } } as any,
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$weirdInputs"')),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in forkMap.body.output", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $weirdBodyOut: 1 } as any,
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as any,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes('"$weirdBodyOut"'),
+                ),
+            ).toBe(true);
+        });
+    });
+
+    // ---- Gap 4: bind on branch node ----
+
+    describe("bind on branch node", () => {
+        it("rejects branch node with bind but no outputSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                            false: makeSimpleArm("falseStep"),
+                        },
+                        default: makeSimpleArm("defaultStep"),
+                        bind: "shouldNotExist",
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
@@ -3813,18 +4082,22 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        it("accepts branch node without bind field", () => {
+        it("accepts branch node without bind or outputSchema", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: {
                         kind: "branch",
                         selector: true,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "end", false: "end" },
-                        default: "end",
-                    } as any,
-                    end: makeTaskNode({ bind: "out" }),
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                            false: makeSimpleArm("falseStep"),
+                        },
+                        default: makeSimpleArm("defaultStep"),
+                    } as BranchNode,
                 },
+                output: null,
+                outputSchema: {},
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
@@ -4230,6 +4503,490 @@ describe("validateWorkflowIR", () => {
                     },
                 },
                 entry: "producer",
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    describe("branch as value-producing node", () => {
+        it("accepts branch with bind+outputSchema where arms are assignable", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "yesTask",
+                                    nodes: {
+                                        yesTask: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["val"],
+                                                properties: {
+                                                    val: { type: "string" },
+                                                },
+                                            },
+                                            inputs: {},
+                                            bind: "result",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "result" },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["val"],
+                                        properties: {
+                                            val: { type: "string" },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "noTask",
+                                nodes: {
+                                    noTask: {
+                                        kind: "task",
+                                        task: "noop",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            required: ["val"],
+                                            properties: {
+                                                val: { type: "string" },
+                                            },
+                                        },
+                                        inputs: {},
+                                        bind: "result",
+                                    },
+                                },
+                                output: { $from: "scope", name: "result" },
+                                outputSchema: {
+                                    type: "object",
+                                    required: ["val"],
+                                    properties: {
+                                        val: { type: "string" },
+                                    },
+                                },
+                            },
+                        },
+                        bind: "branchOut",
+                        outputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "string" } },
+                        },
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects branch where arm outputSchema is incompatible with branch outputSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "yesTask",
+                                    nodes: {
+                                        yesTask: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "integer" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "integer" },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "defTask",
+                                nodes: {
+                                    defTask: makeTaskNode({ bind: "r" }),
+                                },
+                                output: { $from: "scope", name: "r" },
+                                outputSchema: { type: "object" },
+                            },
+                        },
+                        bind: "branchOut",
+                        outputSchema: { type: "object" },
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("not assignable to branch outputSchema"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects branch with bind but no outputSchema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                            false: makeSimpleArm("falseStep"),
+                        },
+                        bind: "x",
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("bind") &&
+                        e.message.includes("outputSchema"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects branch with outputSchema but no bind", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                            false: makeSimpleArm("falseStep"),
+                        },
+                        outputSchema: { type: "object" },
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("outputSchema") &&
+                        e.message.includes("bind"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects branch.next pointing to missing node", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: makeSimpleArm("trueStep"),
+                            false: makeSimpleArm("falseStep"),
+                        },
+                        next: "doesNotExist",
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("doesNotExist")),
+            ).toBe(true);
+        });
+
+        // continueWhen is a Template resolved against the body scope on each
+        // iteration. The validator checks $from:scope and $from:state refs in
+        // continueWhen against the body's binding map and the loop's declared
+        // state variables respectively.
+        it("rejects continueWhen referencing an unknown scope name", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {},
+                        iterateState: {},
+                        continueWhen: {
+                            $from: "scope",
+                            name: "doesNotExist",
+                        } as any,
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("doesNotExist")),
+            ).toBe(true);
+        });
+
+        it("rejects continueWhen referencing an undeclared state variable", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {},
+                        iterateState: {},
+                        continueWhen: {
+                            $from: "state",
+                            name: "noSuchVar",
+                        } as any,
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("noSuchVar")),
+            ).toBe(true);
+        });
+
+        it("rejects loop missing continueWhen entirely", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {},
+                        iterateState: {},
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("continueWhen")),
+            ).toBe(true);
+        });
+    });
+
+    describe("branch arm state isolation", () => {
+        it("rejects $from:state ref in a branch arm node input", () => {
+            // Branch arms are isolated sub-scopes with no state namespace.
+            // $from:"state" inside an arm is invalid; state must be threaded
+            // through arm.inputs.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "step",
+                                    nodes: {
+                                        step: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: {
+                                                type: "object",
+                                                properties: {
+                                                    x: { type: "integer" },
+                                                },
+                                            },
+                                            outputSchema: { type: "null" },
+                                            inputs: {
+                                                x: {
+                                                    $from: "state",
+                                                    name: "counter",
+                                                } as any,
+                                            },
+                                        },
+                                    },
+                                    output: null,
+                                    outputSchema: { type: "null" },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "noop",
+                                nodes: { noop: makeTaskNode() },
+                                output: null,
+                                outputSchema: { type: "null" },
+                            },
+                        },
+                    } as any,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("counter") &&
+                        e.message.includes("state namespace"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts $from:state in arm.inputs (crosses the boundary correctly)", () => {
+            // State values may appear in arm.inputs (evaluated in outer scope).
+            // Inside the arm they are accessed via $from:"input".
+            const ir = makeMinimalIR({
+                entry: "loop",
+                output: null,
+                outputSchema: { type: "null" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        state: {
+                            counter: {
+                                schema: { type: "integer" },
+                                initial: 0 as any,
+                            },
+                        },
+                        iterateState: {
+                            counter: { $from: "state", name: "counter" } as any,
+                        },
+                        continueWhen: false as any,
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "branch",
+                            nodes: {
+                                branch: {
+                                    kind: "branch",
+                                    selector: "yes",
+                                    selectorSchema: { type: "string" },
+                                    cases: {
+                                        yes: {
+                                            inputs: {
+                                                // state value crosses boundary here
+                                                counter: {
+                                                    $from: "state",
+                                                    name: "counter",
+                                                } as any,
+                                            },
+                                            scope: {
+                                                inputSchema: {
+                                                    type: "object",
+                                                    properties: {
+                                                        counter: {
+                                                            type: "integer",
+                                                        },
+                                                    },
+                                                },
+                                                entry: "step",
+                                                nodes: {
+                                                    step: {
+                                                        kind: "task",
+                                                        task: "noop",
+                                                        inputSchema: {
+                                                            type: "object",
+                                                            properties: {
+                                                                counter: {
+                                                                    type: "integer",
+                                                                },
+                                                            },
+                                                        },
+                                                        outputSchema: {
+                                                            type: "null",
+                                                        },
+                                                        inputs: {
+                                                            // inside arm: $from:"input"
+                                                            counter: {
+                                                                $from: "input",
+                                                                name: "counter",
+                                                            } as any,
+                                                        },
+                                                    },
+                                                },
+                                                output: null,
+                                                outputSchema: { type: "null" },
+                                            },
+                                        },
+                                    },
+                                    default: {
+                                        inputs: {},
+                                        scope: {
+                                            inputSchema: { type: "object" },
+                                            entry: "noop",
+                                            nodes: { noop: makeTaskNode() },
+                                            output: null,
+                                            outputSchema: { type: "null" },
+                                        },
+                                    },
+                                } as any,
+                            },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                    } as any,
+                },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);

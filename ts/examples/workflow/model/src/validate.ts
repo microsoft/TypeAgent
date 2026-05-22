@@ -10,6 +10,8 @@ import {
     ForkNode,
     ForkMapNode,
     WorkflowCallNode,
+    BranchNode,
+    BranchArm,
     Template,
     JSONSchema,
     ConstantDef,
@@ -26,6 +28,22 @@ export interface ValidationResult {
     valid: boolean;
     errors: ValidationError[];
 }
+
+/** Primitive JSON Schema types that branch selectors may resolve to.
+ *  String() coercion at runtime only produces useful case labels for
+ *  these. Objects and arrays cannot be meaningfully coerced. */
+const SELECTOR_PRIMITIVE_TYPES = new Set([
+    "string",
+    "number",
+    "integer",
+    "boolean",
+]);
+
+/** Field names the engine injects into recovery task inputs (§3.8). */
+const RECOVERY_INJECTED_FIELDS = ["error", "trigger"] as const;
+
+/** Valid namespaces for `$from` template refs. */
+const VALID_FROM_NAMESPACES = new Set(["input", "constant", "scope", "state"]);
 
 /**
  * A JSON Schema `{ "not": {} }` rejects every value (equivalent to `never`).
@@ -161,7 +179,7 @@ function validateWorkflowBody(
         });
     }
 
-    validateScope(body.nodes, nodesPath, tasks, errors, false);
+    validateScopeNodes(body.nodes, nodesPath, tasks, errors);
 
     validateSchemaCompat(body.nodes, nodesPath, errors);
 
@@ -184,14 +202,13 @@ function validateWorkflowBody(
                 }
             } else {
                 const producerSchema = bindings.get(ref.name)!;
-                const err = checkSchemaCompat(
+                checkSchemaCompat(
                     producerSchema,
                     ref.path,
+                    ref.templatePath,
                     `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+                    errors,
                 );
-                if (err) {
-                    errors.push({ path: ref.templatePath, message: err });
-                }
             }
         }
     }
@@ -201,8 +218,7 @@ function validateWorkflowBody(
         body.entry,
         nodesPath,
         errors,
-        false,
-        body.output,
+        body.output ?? undefined,
         `${basePath}.output`,
     );
 
@@ -405,77 +421,45 @@ function findCallGraphCycle(graph: Map<string, Set<string>>): string[] | null {
 // ---- CFG data structure ----
 
 interface ScopeCFG {
-    /** nodeId -> set of successor nodeIds (excluding sentinels) */
+    /** nodeId -> set of successor nodeIds */
     edges: Map<string, Set<string>>;
     entry: string;
-    /** nodes with no successors (task with no next, or all successors are sentinels) */
+    /** nodes with no successors (natural-completion sites). In the top
+     *  level scope these terminate the workflow; in a sub-scope
+     *  (loop body, fork branch, forkMap body, branch arm) these are
+     *  natural-completion sites where the scope's `output` resolves. */
     terminals: Set<string>;
-    /** nodes whose next/case target is a sentinel */
-    sentinelTargets: Map<string, Set<"@iterate" | "@exit">>;
 }
 
 /**
  * Build a CFG for a scope. Control-flow edges include next, onError,
- * and branch cases/default. Sentinels (@iterate, @exit) are tracked
- * separately rather than as graph nodes.
+ * and (for branches) the branch's own next/onError. Branch arms are
+ * independent WorkflowScopes that do not contribute edges to the
+ * parent CFG. Loop body natural completion + `continueWhen` handle
+ * loop termination.
  */
 function buildScopeCFG(
     nodes: Record<string, WorkflowNode>,
     entry: string,
 ): ScopeCFG {
     const edges = new Map<string, Set<string>>();
-    const sentinelTargets = new Map<string, Set<"@iterate" | "@exit">>();
-
-    function addSentinel(id: string, target: "@iterate" | "@exit"): void {
-        let st = sentinelTargets.get(id);
-        if (!st) {
-            st = new Set();
-            sentinelTargets.set(id, st);
-        }
-        st.add(target);
-    }
 
     for (const [id, node] of Object.entries(nodes)) {
         const succs = new Set<string>();
         edges.set(id, succs);
 
         if (node.kind === "task") {
-            if (node.next) {
-                if (isSentinel(node.next)) {
-                    addSentinel(id, node.next);
-                } else {
-                    succs.add(node.next);
-                }
-            }
-            if (node.onError) {
-                succs.add(node.onError);
-            }
+            if (node.next) succs.add(node.next);
+            if (node.onError) succs.add(node.onError);
         } else if (node.kind === "branch") {
-            for (const target of Object.values(node.cases)) {
-                if (isSentinel(target)) {
-                    addSentinel(id, target);
-                } else {
-                    succs.add(target);
-                }
-            }
-            if (node.default !== undefined) {
-                if (isSentinel(node.default)) {
-                    addSentinel(id, node.default);
-                } else {
-                    succs.add(node.default);
-                }
-            }
+            if (node.next) succs.add(node.next);
+            if (node.onError) succs.add(node.onError);
         } else if (isBindableNode(node)) {
-            if (node.next) {
-                succs.add(node.next);
-            }
-            if (node.onError) {
-                succs.add(node.onError);
-            }
+            if (node.next) succs.add(node.next);
+            if (node.onError) succs.add(node.onError);
         }
     }
 
-    // Terminals: nodes with no non-sentinel successors
     const terminals = new Set<string>();
     for (const [id, succs] of edges) {
         if (succs.size === 0) {
@@ -483,7 +467,7 @@ function buildScopeCFG(
         }
     }
 
-    return { edges, entry, terminals, sentinelTargets };
+    return { edges, entry, terminals };
 }
 
 // ---- Pass 10: Acyclicity ----
@@ -552,26 +536,14 @@ function detectCycles(cfg: ScopeCFG): string[][] {
 // ---- Pass 9: Termination ----
 
 /**
- * Check that every node can reach a terminal (top-level) or a sentinel
- * (loop body). Uses reverse reachability from terminals/sentinel nodes.
+ * Check that every node can reach a terminal (a node with no
+ * outgoing edges). This applies uniformly across all scopes
+ * (top-level, loop body, fork branch, forkMap body, and branch arm):
+ * a terminal in a sub-scope is the scope's natural completion site
+ * where its `output` resolves.
  */
-function checkTermination(cfg: ScopeCFG, insideLoop: boolean): Set<string> {
-    // Collect "exit" nodes: terminals for top-level, sentinel targets for bodies
-    const exitNodes = new Set<string>();
-    if (insideLoop) {
-        for (const id of cfg.sentinelTargets.keys()) {
-            exitNodes.add(id);
-        }
-        // Also include terminals (nodes with no next) as they can still
-        // be valid in a loop body if they're onError recovery nodes
-        // that don't continue.
-        // Actually, in a loop body, every path must reach a sentinel.
-        // Terminals without sentinels are dead ends.
-    } else {
-        for (const id of cfg.terminals) {
-            exitNodes.add(id);
-        }
-    }
+function checkTermination(cfg: ScopeCFG): Set<string> {
+    const exitNodes = new Set<string>(cfg.terminals);
 
     // Build reverse graph
     const reverseEdges = new Map<string, Set<string>>();
@@ -782,7 +754,7 @@ function buildOnErrorSplits(
             const errorSide = dominatedSet(errorTarget, idom);
             let successSide = new Set<string>();
             const nextTarget = node.next;
-            if (nextTarget && !isSentinel(nextTarget)) {
+            if (nextTarget) {
                 successSide = dominatedSet(nextTarget, idom);
             }
             // The trigger node itself is on the success side: its binding
@@ -910,10 +882,12 @@ function isBindingCoveredAtNode(
 
 /**
  * Run the dominator-based checks for a scope:
- * - Coverage (6b): every $from scope ref is covered on all paths
  * - Phi soundness (6a): no two binders of the same name on the same path
+ * - Coverage (6b): every $from scope ref is covered on all paths
+ * - Output coverage: output refs covered on all paths to terminals
+ * - Phi-merge (Pass 7): merged binder types compatible with consumers
  */
-function checkDominance(
+function checkDominanceAndPhi(
     nodes: Record<string, WorkflowNode>,
     cfg: ScopeCFG,
     idom: Map<string, string>,
@@ -1050,7 +1024,6 @@ function validateScopeCFG(
     entry: string,
     prefix: string,
     errors: ValidationError[],
-    insideLoop: boolean,
     outputTemplate?: Template,
     outputPrefix?: string,
     skipTermination?: boolean,
@@ -1067,8 +1040,7 @@ function validateScopeCFG(
             path: prefix,
             message:
                 `Cycle detected: ${cycle.join(" -> ")} -> ${cycle[0]}. ` +
-                `Intra-scope cycles are not allowed; use a loop construct ` +
-                `with @iterate instead.`,
+                `Intra-scope cycles are not allowed; use a loop construct instead.`,
         });
     }
 
@@ -1083,20 +1055,18 @@ function validateScopeCFG(
 
     // Pass 9: Termination
     if (!skipTermination) {
-        const unreachable = checkTermination(cfg, insideLoop);
+        const unreachable = checkTermination(cfg);
         for (const id of unreachable) {
             errors.push({
                 path: `${prefix}.${id}`,
-                message: insideLoop
-                    ? `Node "${id}" cannot reach any sentinel (@iterate or @exit).`
-                    : `Node "${id}" cannot reach a terminal node.`,
+                message: `Node "${id}" cannot reach a terminal node.`,
             });
         }
     }
 
     // Pass 6: Dominator analysis
     const idom = computeImmediateDominators(cfg);
-    checkDominance(
+    checkDominanceAndPhi(
         nodes,
         cfg,
         idom,
@@ -1122,7 +1092,6 @@ function validateScopeCFG(
                 node.body.entry,
                 bodyPrefix,
                 errors,
-                true,
                 node.body.output,
                 `${prefix}.${id}.body.output`,
                 !!node.onError, // skip body termination check when loop has onError
@@ -1136,7 +1105,8 @@ function validateScopeCFG(
                         branch.scope.entry,
                         branchPrefix,
                         errors,
-                        false,
+                        branch.scope.output,
+                        `${prefix}.${id}.branches.${bName}.scope.output`,
                     );
                 }
             }
@@ -1148,7 +1118,37 @@ function validateScopeCFG(
                     node.body.entry,
                     bodyPrefix,
                     errors,
-                    false,
+                    node.body.output,
+                    `${prefix}.${id}.body.output`,
+                );
+            }
+        } else if (node.kind === "branch") {
+            // Recursively validate each branch arm sub-scope.
+            for (const [label, arm] of Object.entries(node.cases)) {
+                if (arm?.scope && arm.scope.entry in arm.scope.nodes) {
+                    const armPrefix = `${prefix}.${id}.cases.${label}.scope.nodes`;
+                    validateScopeCFG(
+                        arm.scope.nodes,
+                        arm.scope.entry,
+                        armPrefix,
+                        errors,
+                        arm.scope.output,
+                        `${prefix}.${id}.cases.${label}.scope.output`,
+                    );
+                }
+            }
+            if (
+                node.default?.scope &&
+                node.default.scope.entry in node.default.scope.nodes
+            ) {
+                const armPrefix = `${prefix}.${id}.default.scope.nodes`;
+                validateScopeCFG(
+                    node.default.scope.nodes,
+                    node.default.scope.entry,
+                    armPrefix,
+                    errors,
+                    node.default.scope.output,
+                    `${prefix}.${id}.default.scope.output`,
                 );
             }
         }
@@ -1185,15 +1185,6 @@ function validateOnErrorRules(
                     onErrorTargetToTrigger.set(node.onError, id);
                 }
             }
-        } else if (node.kind === "branch") {
-            for (const target of Object.values(node.cases)) {
-                if (!isSentinel(target)) {
-                    normalTargets.add(target);
-                }
-            }
-            if (node.default !== undefined && !isSentinel(node.default)) {
-                normalTargets.add(node.default);
-            }
         }
     }
 
@@ -1212,11 +1203,21 @@ function validateOnErrorRules(
             });
         }
 
-        // Rule 3: no recursive recovery
-        if (
-            (targetNode.kind === "task" || targetNode.kind === "loop") &&
-            targetNode.onError
-        ) {
+        // Rule 4: recovery target must be a task. If it isn't, Rules 3
+        // and 5 (task-specific) don't apply, so skip them.
+        if (targetNode.kind !== "task") {
+            errors.push({
+                path: `${prefix}.${trigger}.onError`,
+                message:
+                    `Recovery target "${target}" must be a task node ` +
+                    `(got "${targetNode.kind}").`,
+            });
+            continue;
+        }
+
+        // Rule 3: no recursive recovery (task only; loops are already
+        // rejected above as non-task targets).
+        if (targetNode.onError) {
             errors.push({
                 path: `${prefix}.${target}.onError`,
                 message:
@@ -1226,29 +1227,17 @@ function validateOnErrorRules(
             });
         }
 
-        // Rule 4: recovery target must be a task
-        if (targetNode.kind !== "task") {
-            errors.push({
-                path: `${prefix}.${trigger}.onError`,
-                message:
-                    `Recovery target "${target}" must be a task node ` +
-                    `(got "${targetNode.kind}").`,
-            });
-        }
-
         // Rule 5: recovery task inputSchema must declare "error" and "trigger" (§3.8)
-        if (targetNode.kind === "task") {
-            const required = targetNode.inputSchema.required ?? [];
-            for (const field of ["error", "trigger"] as const) {
-                if (!required.includes(field)) {
-                    errors.push({
-                        path: `${prefix}.${target}.inputSchema`,
-                        message:
-                            `Recovery task "${target}" must declare "${field}" ` +
-                            `as a required input field. The engine injects ` +
-                            `"error" and "trigger" when dispatching via onError (§3.8).`,
-                    });
-                }
+        const required = targetNode.inputSchema.required ?? [];
+        for (const field of RECOVERY_INJECTED_FIELDS) {
+            if (!required.includes(field)) {
+                errors.push({
+                    path: `${prefix}.${target}.inputSchema`,
+                    message:
+                        `Recovery task "${target}" must declare "${field}" ` +
+                        `as a required input field. The engine injects ` +
+                        `"error" and "trigger" when dispatching via onError (§3.8).`,
+                });
             }
         }
     }
@@ -1384,15 +1373,110 @@ function checkStateSoundness(
     }
 }
 
-function validateScope(
+/**
+ * Branch arm sub-scope validation: structural validation, schema
+ * compatibility, and the arm-scope $from:"state" restriction.
+ *
+ * The parameter is typed `unknown` because callers may pass malformed
+ * IR objects (tests use `as any` and downstream tooling generates IR
+ * from untrusted sources). The function reports structural errors
+ * rather than throwing on malformed input.
+ *
+ * Branch arms are isolated sub-scopes — they have no state namespace
+ * in their ScopeContext. State values must cross the arm boundary via
+ * `arm.inputs` (the DSL emitter does this automatically).
+ */
+function validateBranchArm(
+    arm: unknown,
+    armPath: string,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    if (arm === null || typeof arm !== "object") {
+        errors.push({
+            path: armPath,
+            message:
+                `Branch arm must be an object with "inputs" and "scope" ` +
+                `fields.`,
+        });
+        return;
+    }
+    const armObj = arm as Partial<BranchArm>;
+    if (
+        armObj.inputs === undefined ||
+        typeof armObj.inputs !== "object" ||
+        armObj.inputs === null
+    ) {
+        errors.push({
+            path: `${armPath}.inputs`,
+            message: `Branch arm "inputs" must be an object template.`,
+        });
+    }
+    const scope = armObj.scope;
+    if (!scope || typeof scope !== "object") {
+        errors.push({
+            path: `${armPath}.scope`,
+            message: `Branch arm "scope" must be a WorkflowScope object.`,
+        });
+        return;
+    }
+    if (typeof scope.entry !== "string") {
+        errors.push({
+            path: `${armPath}.scope.entry`,
+            message: `Branch arm scope must declare a string "entry".`,
+        });
+        return;
+    }
+    const armNodes = scope.nodes;
+    if (!armNodes || typeof armNodes !== "object") {
+        errors.push({
+            path: `${armPath}.scope.nodes`,
+            message: `Branch arm scope must declare a "nodes" object.`,
+        });
+        return;
+    }
+    if (!(scope.entry in armNodes)) {
+        errors.push({
+            path: `${armPath}.scope.entry`,
+            message: `Branch arm entry "${scope.entry}" does not exist.`,
+        });
+    }
+    validateSubScope(armNodes, `${armPath}.scope.nodes`, tasks, errors);
+
+    for (const [id, node] of Object.entries(armNodes)) {
+        if (!hasInputs(node)) continue;
+        const stateRefs = collectTemplateRefs(
+            node.inputs,
+            `${armPath}.scope.nodes.${id}.inputs`,
+            "state",
+        );
+        for (const ref of stateRefs) {
+            errors.push({
+                path: ref.templatePath,
+                message:
+                    `$from "state", name "${ref.name}": branch arm nodes ` +
+                    `have no state namespace. Thread state values through ` +
+                    `arm.inputs instead.`,
+            });
+        }
+    }
+}
+
+/**
+ * Structural validation for the nodes of a scope (top-level workflow,
+ * loop body, fork branch, forkMap body, or branch arm).
+ *
+ * Per-node-kind validation is delegated to dedicated helpers
+ * (validateTaskNode / validateBranchNode / validateLoopNode /
+ * validateForkNode / validateForkMapNode); this function is the
+ * dispatch loop.
+ */
+function validateScopeNodes(
     nodes: Record<string, WorkflowNode>,
     prefix: string,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     errors: ValidationError[],
-    insideLoop: boolean,
 ): void {
-    const nodeIds = new Set(Object.keys(nodes));
-
     // NOTE: Binding name uniqueness is intentionally NOT validated.
     // Duplicate bindings are a deliberate design pattern used for:
     //  1. onError recovery: both the happy path and the error handler
@@ -1402,325 +1486,321 @@ function validateScope(
     //     earlier binding (e.g., refining a value across steps).
     // The last writer wins at runtime. If this causes confusion during
     // authoring, consider a lint-level warning (not a hard error).
-
+    const nodeIds = new Set(Object.keys(nodes));
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
-
-        if (node.kind === "task") {
-            if (tasks && !tasks.has(node.task)) {
-                errors.push({
-                    path: `${path}.task`,
-                    message: `Task "${node.task}" is not registered.`,
-                });
-            } else if (tasks) {
-                const taskDef = tasks.get(node.task);
-                if (taskDef) {
-                    checkNodeTaskSchemas(taskDef, node, path, errors);
-                }
-            }
-            // Never-output tasks always fail: next, bind, and onError
-            // are unreachable.
-            if (isNeverSchema(node.outputSchema)) {
-                if (node.next) {
-                    errors.push({
-                        path: `${path}.next`,
-                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "next".`,
-                    });
-                }
-                if (node.bind) {
-                    errors.push({
-                        path: `${path}.bind`,
-                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "bind".`,
-                    });
-                }
-                if (node.onError) {
-                    errors.push({
-                        path: `${path}.onError`,
-                        message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "onError".`,
-                    });
-                }
-            }
-            checkTargetExists(
-                nodeIds,
-                node.next,
-                path,
-                "next",
-                insideLoop,
-                errors,
-            );
-            checkTargetExists(
-                nodeIds,
-                node.onError,
-                path,
-                "onError",
-                insideLoop,
-                errors,
-            );
-        } else if (node.kind === "branch") {
-            // §3.6: Branch nodes must not declare bind.
-            if (
-                (node as unknown as Record<string, unknown>)["bind"] !==
-                undefined
-            ) {
-                errors.push({
-                    path: `${path}.bind`,
-                    message: `Branch nodes must not declare "bind". Branches produce no output.`,
-                });
-            }
-            // Validate selectorSchema type: String() coercion at runtime
-            // only produces useful results for string, number, and boolean.
-            const selectorType = node.selectorSchema?.type;
-            if (selectorType) {
-                const allowed = ["string", "number", "integer", "boolean"];
-                const types = Array.isArray(selectorType)
-                    ? selectorType
-                    : [selectorType];
-                const invalid = types.filter(
-                    (t: string) => !allowed.includes(t),
-                );
-                if (invalid.length > 0) {
-                    errors.push({
-                        path: `${path}.selectorSchema`,
-                        message:
-                            `Selector type must be string, number, or boolean ` +
-                            `(got ${JSON.stringify(selectorType)}). ` +
-                            `Objects and arrays cannot be meaningfully coerced to case labels.`,
-                    });
-                }
-            }
-            for (const [label, target] of Object.entries(node.cases)) {
-                if (isSentinel(target)) {
-                    if (!insideLoop) {
-                        errors.push({
-                            path: `${path}.cases.${label}`,
-                            message: `Sentinel "${target}" is only valid inside a loop body.`,
-                        });
-                    }
-                } else if (!nodeIds.has(target)) {
-                    errors.push({
-                        path: `${path}.cases.${label}`,
-                        message: `Target "${target}" does not exist.`,
-                    });
-                }
-            }
-            if (node.default !== undefined) {
-                if (isSentinel(node.default)) {
-                    if (!insideLoop) {
-                        errors.push({
-                            path: `${path}.default`,
-                            message: `Sentinel "${node.default}" is only valid inside a loop body.`,
-                        });
-                    }
-                } else if (!nodeIds.has(node.default)) {
-                    errors.push({
-                        path: `${path}.default`,
-                        message: `Default target "${node.default}" does not exist.`,
-                    });
-                }
-            }
-        } else if (node.kind === "loop") {
-            if (!(node.body.entry in node.body.nodes)) {
-                errors.push({
-                    path: `${path}.body.entry`,
-                    message: `Body entry "${node.body.entry}" does not exist.`,
-                });
-            }
-            validateScope(
-                node.body.nodes,
-                `${path}.body.nodes`,
-                tasks,
-                errors,
-                true,
-            );
-            validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
-
-            // W6: Verify that the loop body contains at least one
-            // branch/task target referencing @iterate or @exit.
-            // Skip this check when the loop has an onError handler,
-            // since the body may intentionally fail every iteration.
-            if (!node.onError && !bodyScopeHasSentinel(node.body.nodes)) {
-                errors.push({
-                    path: `${path}.body`,
-                    message: `Loop body must contain at least one reference to @iterate or @exit.`,
-                });
-            }
-
-            if (
-                node.maxIterations !== undefined &&
-                (!Number.isInteger(node.maxIterations) ||
-                    node.maxIterations < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxIterations`,
-                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
-                });
-            }
-
-            checkTargetExists(
-                nodeIds,
-                node.next,
-                path,
-                "next",
-                insideLoop,
-                errors,
-            );
-            checkTargetExists(
-                nodeIds,
-                node.onError,
-                path,
-                "onError",
-                insideLoop,
-                errors,
-            );
-        } else if (node.kind === "fork") {
-            const branchNames = Object.keys(node.branches);
-            if (branchNames.length < 2) {
-                errors.push({
-                    path: `${path}.branches`,
-                    message: `Fork must have at least 2 branches (got ${branchNames.length}).`,
-                });
-            }
-            for (const [bName, branch] of Object.entries(node.branches)) {
-                if (!(branch.scope.entry in branch.scope.nodes)) {
-                    errors.push({
-                        path: `${path}.branches.${bName}.scope.entry`,
-                        message: `Branch entry "${branch.scope.entry}" does not exist.`,
-                    });
-                }
-                validateScope(
-                    branch.scope.nodes,
-                    `${path}.branches.${bName}.scope.nodes`,
-                    tasks,
-                    errors,
-                    false,
-                );
-                validateSchemaCompat(
-                    branch.scope.nodes,
-                    `${path}.branches.${bName}.scope.nodes`,
-                    errors,
-                );
-            }
-            if (
-                node.maxConcurrency !== undefined &&
-                (!Number.isInteger(node.maxConcurrency) ||
-                    node.maxConcurrency < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxConcurrency`,
-                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
-                });
-            }
-            checkTargetExists(
-                nodeIds,
-                node.next,
-                path,
-                "next",
-                insideLoop,
-                errors,
-            );
-            checkTargetExists(
-                nodeIds,
-                node.onError,
-                path,
-                "onError",
-                insideLoop,
-                errors,
-            );
-        } else if (node.kind === "forkMap") {
-            if (
-                node.collectionSchema?.type !== "array" &&
-                !(
-                    Array.isArray(node.collectionSchema?.type) &&
-                    (node.collectionSchema.type as string[]).includes("array")
-                )
-            ) {
-                errors.push({
-                    path: `${path}.collectionSchema`,
-                    message: `forkMap collectionSchema must be type "array".`,
-                });
-            }
-            if (!(node.body.entry in node.body.nodes)) {
-                errors.push({
-                    path: `${path}.body.entry`,
-                    message: `Body entry "${node.body.entry}" does not exist.`,
-                });
-            }
-            validateScope(
-                node.body.nodes,
-                `${path}.body.nodes`,
-                tasks,
-                errors,
-                false,
-            );
-            validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
-            // forkMap body must not use $from: "state"
-            for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
-                if (hasInputs(bNode) && templateRefersToState(bNode.inputs)) {
-                    errors.push({
-                        path: `${path}.body.nodes.${bNodeId}.inputs`,
-                        message: `forkMap body nodes must not use $from: "state".`,
-                    });
-                }
-            }
-            if (
-                node.maxConcurrency !== undefined &&
-                (!Number.isInteger(node.maxConcurrency) ||
-                    node.maxConcurrency < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxConcurrency`,
-                    message: `maxConcurrency must be a positive integer (got ${node.maxConcurrency}).`,
-                });
-            }
-            if (
-                node.maxIterations !== undefined &&
-                (!Number.isInteger(node.maxIterations) ||
-                    node.maxIterations < 1)
-            ) {
-                errors.push({
-                    path: `${path}.maxIterations`,
-                    message: `maxIterations must be a positive integer (got ${node.maxIterations}).`,
-                });
-            }
-            checkTargetExists(
-                nodeIds,
-                node.next,
-                path,
-                "next",
-                insideLoop,
-                errors,
-            );
-            checkTargetExists(
-                nodeIds,
-                node.onError,
-                path,
-                "onError",
-                insideLoop,
-                errors,
-            );
+        switch (node.kind) {
+            case "task":
+                validateTaskNode(node, path, nodeIds, tasks, errors);
+                break;
+            case "branch":
+                validateBranchNode(node, path, nodeIds, tasks, errors);
+                break;
+            case "loop":
+                validateLoopNode(node, path, nodeIds, tasks, errors);
+                break;
+            case "fork":
+                validateForkNode(node, path, nodeIds, tasks, errors);
+                break;
+            case "forkMap":
+                validateForkMapNode(node, path, nodeIds, tasks, errors);
+                break;
         }
     }
 }
 
-/**
- * Check whether a set of nodes contains at least one reference to a
- * loop sentinel (@iterate or @exit). This catches loop bodies that
- * will always fail at runtime because they terminate without a sentinel.
- */
-function bodyScopeHasSentinel(nodes: Record<string, WorkflowNode>): boolean {
-    for (const node of Object.values(nodes)) {
-        if (node.kind === "branch") {
-            for (const target of Object.values(node.cases)) {
-                if (isSentinel(target)) return true;
-            }
-            if (node.default !== undefined && isSentinel(node.default)) {
-                return true;
-            }
-        } else if (node.kind === "task") {
-            if (node.next && isSentinel(node.next)) return true;
+function validateTaskNode(
+    node: TaskNode,
+    path: string,
+    nodeIds: Set<string>,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    if (tasks && !tasks.has(node.task)) {
+        errors.push({
+            path: `${path}.task`,
+            message: `Task "${node.task}" is not registered.`,
+        });
+    } else if (tasks) {
+        const taskDef = tasks.get(node.task);
+        if (taskDef) {
+            checkNodeTaskSchemas(taskDef, node, path, errors);
         }
     }
-    return false;
+    // Never-output tasks always fail: next, bind, and onError are unreachable.
+    if (isNeverSchema(node.outputSchema)) {
+        if (node.next) {
+            errors.push({
+                path: `${path}.next`,
+                message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "next".`,
+            });
+        }
+        if (node.bind) {
+            errors.push({
+                path: `${path}.bind`,
+                message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "bind".`,
+            });
+        }
+        if (node.onError) {
+            errors.push({
+                path: `${path}.onError`,
+                message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "onError".`,
+            });
+        }
+    }
+    checkBindableTargets(nodeIds, node, path, errors);
+}
+
+function validateBranchNode(
+    node: BranchNode,
+    path: string,
+    nodeIds: Set<string>,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    // Validate selectorSchema type: String() coercion at runtime only
+    // produces useful results for primitive types.
+    const selectorType = node.selectorSchema?.type;
+    if (selectorType) {
+        const types = normalizeTypeSet(selectorType);
+        const invalid = types.filter((t) => !SELECTOR_PRIMITIVE_TYPES.has(t));
+        if (invalid.length > 0) {
+            errors.push({
+                path: `${path}.selectorSchema`,
+                message:
+                    `Selector type must be string, number, or boolean ` +
+                    `(got ${JSON.stringify(selectorType)}). ` +
+                    `Objects and arrays cannot be meaningfully coerced to case labels.`,
+            });
+        }
+    }
+    for (const [label, arm] of Object.entries(node.cases)) {
+        validateBranchArm(arm, `${path}.cases.${label}`, tasks, errors);
+    }
+    if (node.default !== undefined) {
+        validateBranchArm(node.default, `${path}.default`, tasks, errors);
+    }
+    // Branch bind / outputSchema are mutually required.
+    if (node.bind !== undefined && node.outputSchema === undefined) {
+        errors.push({
+            path: `${path}.outputSchema`,
+            message:
+                `Branch declares bind "${node.bind}" but no outputSchema. ` +
+                `When a branch declares bind, outputSchema is required.`,
+        });
+    }
+    if (node.outputSchema !== undefined && node.bind === undefined) {
+        errors.push({
+            path: `${path}.outputSchema`,
+            message:
+                `Branch declares outputSchema without bind. ` +
+                `outputSchema is only meaningful when the ` +
+                `branch publishes its value via bind.`,
+        });
+    }
+    // Per-arm outputSchema covariance vs branch.outputSchema.
+    if (node.outputSchema !== undefined) {
+        const branchOutput = node.outputSchema;
+        for (const [label, arm] of Object.entries(node.cases)) {
+            checkArmCovariance(
+                arm,
+                `${path}.cases.${label}`,
+                "Arm",
+                branchOutput,
+                errors,
+            );
+        }
+        if (node.default) {
+            checkArmCovariance(
+                node.default,
+                `${path}.default`,
+                "Default arm",
+                branchOutput,
+                errors,
+            );
+        }
+    }
+    // Branch carries its own next / onError.
+    checkBindableTargets(nodeIds, node, path, errors);
+}
+
+function validateLoopNode(
+    node: LoopNode,
+    path: string,
+    nodeIds: Set<string>,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    if (!(node.body.entry in node.body.nodes)) {
+        errors.push({
+            path: `${path}.body.entry`,
+            message: `Body entry "${node.body.entry}" does not exist.`,
+        });
+    }
+    validateSubScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
+
+    // continueWhen is required; loop body natural completion triggers evaluation.
+    if (node.continueWhen === undefined) {
+        errors.push({
+            path: `${path}.continueWhen`,
+            message:
+                `Loop must declare continueWhen (a Template that ` +
+                `resolves to a boolean in the body scope at body ` +
+                `natural completion).`,
+        });
+    } else {
+        // $from:scope refs in continueWhen must resolve to names bound
+        // in the body scope.
+        const bodyBindings = buildBindingMap(node.body.nodes);
+        const cwScopeRefs = collectTemplateRefs(
+            node.continueWhen,
+            `${path}.continueWhen`,
+            "scope",
+        );
+        for (const ref of cwScopeRefs) {
+            if (!bodyBindings.has(ref.name)) {
+                errors.push({
+                    path: ref.templatePath,
+                    message:
+                        `$from "scope", name "${ref.name}": no node ` +
+                        `in the loop body binds "${ref.name}".`,
+                });
+            }
+        }
+        // $from:state refs in continueWhen must resolve to declared state vars.
+        const stateNames = new Set(Object.keys(node.state ?? {}));
+        const cwStateRefs = collectTemplateRefs(
+            node.continueWhen,
+            `${path}.continueWhen`,
+            "state",
+        );
+        for (const ref of cwStateRefs) {
+            if (!stateNames.has(ref.name)) {
+                errors.push({
+                    path: ref.templatePath,
+                    message:
+                        `$from "state", name "${ref.name}": no state ` +
+                        `variable "${ref.name}" is declared on this loop.`,
+                });
+            }
+        }
+    }
+
+    checkPositiveIntegerField(
+        node.maxIterations,
+        path,
+        "maxIterations",
+        errors,
+    );
+    checkBindableTargets(nodeIds, node, path, errors);
+}
+
+function validateForkNode(
+    node: ForkNode,
+    path: string,
+    nodeIds: Set<string>,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    const branchNames = Object.keys(node.branches);
+    if (branchNames.length < 2) {
+        errors.push({
+            path: `${path}.branches`,
+            message: `Fork must have at least 2 branches (got ${branchNames.length}).`,
+        });
+    }
+    for (const [bName, branch] of Object.entries(node.branches)) {
+        if (!(branch.scope.entry in branch.scope.nodes)) {
+            errors.push({
+                path: `${path}.branches.${bName}.scope.entry`,
+                message: `Branch entry "${branch.scope.entry}" does not exist.`,
+            });
+        }
+        validateSubScope(
+            branch.scope.nodes,
+            `${path}.branches.${bName}.scope.nodes`,
+            tasks,
+            errors,
+        );
+    }
+    checkPositiveIntegerField(
+        node.maxConcurrency,
+        path,
+        "maxConcurrency",
+        errors,
+    );
+    checkBindableTargets(nodeIds, node, path, errors);
+}
+
+function validateForkMapNode(
+    node: ForkMapNode,
+    path: string,
+    nodeIds: Set<string>,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    if (!normalizeTypeSet(node.collectionSchema?.type).includes("array")) {
+        errors.push({
+            path: `${path}.collectionSchema`,
+            message: `forkMap collectionSchema must be type "array".`,
+        });
+    }
+    if (!(node.body.entry in node.body.nodes)) {
+        errors.push({
+            path: `${path}.body.entry`,
+            message: `Body entry "${node.body.entry}" does not exist.`,
+        });
+    }
+    validateSubScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
+    // forkMap body must not use $from: "state"
+    for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
+        if (hasInputs(bNode) && templateRefersToState(bNode.inputs)) {
+            errors.push({
+                path: `${path}.body.nodes.${bNodeId}.inputs`,
+                message: `forkMap body nodes must not use $from: "state".`,
+            });
+        }
+    }
+    checkPositiveIntegerField(
+        node.maxConcurrency,
+        path,
+        "maxConcurrency",
+        errors,
+    );
+    checkPositiveIntegerField(
+        node.maxIterations,
+        path,
+        "maxIterations",
+        errors,
+    );
+    checkBindableTargets(nodeIds, node, path, errors);
+}
+
+/**
+ * Per-arm outputSchema covariance against the branch's declared
+ * outputSchema. Shared by `cases[label]` and `default` (§3.8 / §8.15).
+ * Tolerant of malformed `arm` (see `validateBranchArm`).
+ */
+function checkArmCovariance(
+    arm: unknown,
+    armPath: string,
+    armLabel: string,
+    branchOutputSchema: JSONSchema,
+    errors: ValidationError[],
+): void {
+    if (!arm || typeof arm !== "object") return;
+    const scope = (arm as Partial<BranchArm>).scope;
+    if (!scope || typeof scope !== "object") return;
+    const armOutput = scope.outputSchema;
+    if (armOutput === undefined) return;
+    if (isStructuralSubtype(armOutput, branchOutputSchema)) return;
+    errors.push({
+        path: `${armPath}.scope.outputSchema`,
+        message:
+            `${armLabel} outputSchema ${formatSchemaType(armOutput)} ` +
+            `is not assignable to branch outputSchema ` +
+            `${formatSchemaType(branchOutputSchema)}.`,
+    });
 }
 
 /**
@@ -1798,32 +1878,49 @@ function resolveSchemaPath(
  * This is a lightweight structural check: it verifies that the producer
  * declares the path exists and that the leaf types are compatible.
  */
+/**
+ * Verify that a producer's `outputSchema` declares the path that a
+ * consumer references, and that the resolved types are compatible.
+ * Pushes one error to `errors` per failure.
+ *
+ * `errorPath` is the JSON path attributed to the error (typically the
+ * consumer's template path). `refDesc` is the human-readable prefix
+ * embedded in error messages (e.g. `${templatePath} ($from "scope",
+ * name "x")`).
+ */
 function checkSchemaCompat(
     producerSchema: JSONSchema,
     path: (string | number)[] | undefined,
+    errorPath: string,
     refDesc: string,
+    errors: ValidationError[],
     consumerType?: string | string[],
-): string | undefined {
+): void {
     if (!path || path.length === 0) {
         // Reference to the whole output; compatible by definition
         // (consumer will validate at their end).
-        return undefined;
+        return;
     }
     const resolved = resolveSchemaPath(producerSchema, path);
     if (resolved === undefined) {
-        return `${refDesc}: path ${JSON.stringify(path)} not declared in producer outputSchema`;
+        errors.push({
+            path: errorPath,
+            message: `${refDesc}: path ${JSON.stringify(path)} not declared in producer outputSchema`,
+        });
+        return;
     }
     // Type compatibility check: if the consumer declares a type and the
     // producer declares a type, verify they overlap.
     if (consumerType && resolved.type) {
         if (!typeSetsOverlap(resolved.type, consumerType)) {
-            return (
-                `${refDesc}: type mismatch: producer declares ` +
-                `${JSON.stringify(resolved.type)} but consumer expects ${JSON.stringify(consumerType)}`
-            );
+            errors.push({
+                path: errorPath,
+                message:
+                    `${refDesc}: type mismatch: producer declares ` +
+                    `${JSON.stringify(resolved.type)} but consumer expects ${JSON.stringify(consumerType)}`,
+            });
         }
     }
-    return undefined;
 }
 
 /** Normalize a JSON Schema type (string or array) to an array of type strings. */
@@ -1851,16 +1948,19 @@ function typeSetsOverlap(aType: unknown, bType: unknown): boolean {
     return aTypes.some((a) => bTypes.some((b) => typeAssignableTo(a, b)));
 }
 
-/** True when `target` is a loop sentinel. */
-function isSentinel(target: string): target is "@iterate" | "@exit" {
-    return target === "@iterate" || target === "@exit";
-}
-
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
 function isBindableNode(
     node: WorkflowNode,
-): node is TaskNode | LoopNode | ForkNode | ForkMapNode | WorkflowCallNode {
-    return node.kind !== "branch";
+): node is
+    | TaskNode
+    | LoopNode
+    | ForkNode
+    | ForkMapNode
+    | WorkflowCallNode
+    | BranchNode {
+    // Branches now produce values when `bind` + `outputSchema` are
+    // declared (ir-v0.2 branch-as-value-producing-node).
+    return true;
 }
 
 /** Type guard: node kinds that carry `inputs` (task, loop, workflowCall). */
@@ -1883,33 +1983,30 @@ function nodeInputSchema(
 
 /** Get the effective output schema for a bindable node. */
 function nodeOutputSchema(
-    node: TaskNode | LoopNode | ForkNode | ForkMapNode | WorkflowCallNode,
+    node:
+        | TaskNode
+        | LoopNode
+        | ForkNode
+        | ForkMapNode
+        | WorkflowCallNode
+        | BranchNode,
 ): JSONSchema {
-    return node.kind === "loop" ? node.body.outputSchema : node.outputSchema;
+    if (node.kind === "loop") return node.body.outputSchema;
+    if (node.kind === "branch") return node.outputSchema ?? {};
+    return node.outputSchema;
 }
 
 /**
  * Check that a target reference exists in the scope; push an error if not.
- * For `next` targets, also validates sentinel usage.
  */
 function checkTargetExists(
     nodeIds: Set<string>,
     target: string | undefined,
     path: string,
     field: "next" | "onError",
-    insideLoop: boolean,
     errors: ValidationError[],
 ): void {
     if (!target) return;
-    if (field === "next" && isSentinel(target)) {
-        if (!insideLoop) {
-            errors.push({
-                path: `${path}.next`,
-                message: `Sentinel "${target}" is only valid inside a loop body.`,
-            });
-        }
-        return;
-    }
     if (!nodeIds.has(target)) {
         errors.push({
             path: `${path}.${field}`,
@@ -1919,6 +2016,71 @@ function checkTargetExists(
                     : `Target "${target}" does not exist.`,
         });
     }
+}
+
+/**
+ * Validate that both `next` and `onError` (when present) point to existing
+ * nodes in the enclosing scope. All bindable node kinds (task/branch/loop/
+ * fork/forkMap) carry the same pair of fields.
+ */
+function checkBindableTargets(
+    nodeIds: Set<string>,
+    node: { next?: string; onError?: string },
+    path: string,
+    errors: ValidationError[],
+): void {
+    checkTargetExists(nodeIds, node.next, path, "next", errors);
+    checkTargetExists(nodeIds, node.onError, path, "onError", errors);
+}
+
+/**
+ * Validate a sub-scope's nodes: structural validation followed by static
+ * schema compatibility. Used for loop bodies, fork branches, forkMap
+ * bodies, and branch arms.
+ */
+function validateSubScope(
+    nodes: Record<string, WorkflowNode>,
+    prefix: string,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    errors: ValidationError[],
+): void {
+    validateScopeNodes(nodes, prefix, tasks, errors);
+    validateSchemaCompat(nodes, prefix, errors);
+}
+
+/**
+ * Validate that a numeric field (when present) is a positive integer.
+ * Used for `maxConcurrency` and `maxIterations` on loop/fork/forkMap.
+ */
+function checkPositiveIntegerField(
+    value: number | undefined,
+    path: string,
+    field: string,
+    errors: ValidationError[],
+): void {
+    if (value === undefined) return;
+    if (!Number.isInteger(value) || value < 1) {
+        errors.push({
+            path: `${path}.${field}`,
+            message: `${field} must be a positive integer (got ${value}).`,
+        });
+    }
+}
+
+/**
+ * Build an array schema whose `items` is set only when every element
+ * schema is structurally identical. Used by both `jsonValueToSchema`
+ * (array literals) and `resolveTemplateType` (Template arrays).
+ */
+function buildArraySchema(elemSchemas: JSONSchema[]): JSONSchema {
+    if (elemSchemas.length === 0) return { type: "array" };
+    const firstKey = canonicalStringify(elemSchemas[0]);
+    const allSame = elemSchemas.every(
+        (s) => s === elemSchemas[0] || canonicalStringify(s) === firstKey,
+    );
+    return allSame
+        ? { type: "array", items: elemSchemas[0] }
+        : { type: "array" };
 }
 
 /** True when a schema is the top type (empty object: no constraints). */
@@ -1996,14 +2158,7 @@ function jsonValueToSchema(value: unknown): JSONSchema {
     if (typeof value === "boolean") return { type: "boolean", const: value };
     if (Array.isArray(value)) {
         if (value.length === 0) return { type: "array" };
-        const elemSchemas = value.map(jsonValueToSchema);
-        const firstKey = canonicalStringify(elemSchemas[0]);
-        const allSame = elemSchemas.every(
-            (s) => s === elemSchemas[0] || canonicalStringify(s) === firstKey,
-        );
-        return allSame
-            ? { type: "array", items: elemSchemas[0] }
-            : { type: "array" };
+        return buildArraySchema(value.map(jsonValueToSchema));
     }
     if (typeof value === "object") {
         const properties: Record<string, JSONSchema> = {};
@@ -2043,14 +2198,7 @@ function resolveTemplateType(
         const elemSchemas = template
             .map((e) => resolveTemplateType(e, ctx))
             .filter((s): s is JSONSchema => s !== undefined);
-        if (elemSchemas.length === 0) return { type: "array" };
-        const firstKey = canonicalStringify(elemSchemas[0]);
-        const allSame = elemSchemas.every(
-            (s) => s === elemSchemas[0] || canonicalStringify(s) === firstKey,
-        );
-        return allSame
-            ? { type: "array", items: elemSchemas[0] }
-            : { type: "array" };
+        return buildArraySchema(elemSchemas);
     }
 
     const obj = template as Record<string, unknown>;
@@ -2358,11 +2506,7 @@ function validateTypeCompatibility(
                 if (selectorType.type) {
                     const resolvedTypes = normalizeTypeSet(selectorType.type);
                     const nonPrimitive = resolvedTypes.filter(
-                        (t) =>
-                            t !== "string" &&
-                            t !== "number" &&
-                            t !== "integer" &&
-                            t !== "boolean",
+                        (t) => !SELECTOR_PRIMITIVE_TYPES.has(t),
                     );
                     if (nonPrimitive.length > 0) {
                         errors.push({
@@ -2795,14 +2939,8 @@ function checkReservedTemplateKeys(
     }
     // Don't recurse into $from or $literal — they have their own semantics.
     if ("$from" in obj) {
-        const VALID_NAMESPACES = new Set([
-            "input",
-            "constant",
-            "scope",
-            "state",
-        ]);
         const from = obj["$from"];
-        if (typeof from !== "string" || !VALID_NAMESPACES.has(from)) {
+        if (typeof from !== "string" || !VALID_FROM_NAMESPACES.has(from)) {
             errors.push({
                 path: templatePath,
                 message:
@@ -2813,7 +2951,7 @@ function checkReservedTemplateKeys(
         return;
     }
     if ("$literal" in obj) return;
-    for (const [, value] of Object.entries(obj)) {
+    for (const value of Object.values(obj)) {
         checkReservedTemplateKeys(value as Template, templatePath, errors);
     }
 }
@@ -2840,6 +2978,20 @@ function validateScopeTemplates(
                 `${path}.selector`,
                 errors,
             );
+            for (const [label, arm] of Object.entries(node.cases)) {
+                validateBranchArmTemplates(
+                    arm,
+                    `${path}.cases.${label}`,
+                    errors,
+                );
+            }
+            if (node.default !== undefined) {
+                validateBranchArmTemplates(
+                    node.default,
+                    `${path}.default`,
+                    errors,
+                );
+            }
         }
         if (node.kind === "loop") {
             checkReservedTemplateKeys(
@@ -2860,6 +3012,93 @@ function validateScopeTemplates(
                 errors,
             );
         }
+        if (node.kind === "fork") {
+            for (const [bName, branch] of Object.entries(node.branches)) {
+                for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.branches.${bName}.inputs.${fieldName}`,
+                        errors,
+                    );
+                }
+                checkReservedTemplateKeys(
+                    branch.scope.output,
+                    `${path}.branches.${bName}.scope.output`,
+                    errors,
+                );
+                validateScopeTemplates(
+                    branch.scope.nodes,
+                    `${path}.branches.${bName}.scope.nodes`,
+                    errors,
+                );
+            }
+        }
+        if (node.kind === "forkMap") {
+            checkReservedTemplateKeys(
+                node.collection,
+                `${path}.collection`,
+                errors,
+            );
+            if (node.inputs) {
+                for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.inputs.${fieldName}`,
+                        errors,
+                    );
+                }
+            }
+            checkReservedTemplateKeys(
+                node.body.output,
+                `${path}.body.output`,
+                errors,
+            );
+            validateScopeTemplates(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                errors,
+            );
+        }
+    }
+}
+
+/**
+ * Recurse template checks into a branch arm: arm `inputs` templates,
+ * the arm scope's `output` template, and the arm scope's nodes.
+ */
+function validateBranchArmTemplates(
+    arm: unknown,
+    prefix: string,
+    errors: ValidationError[],
+): void {
+    if (!arm || typeof arm !== "object") return;
+    const armObj = arm as Record<string, unknown>;
+    if (armObj.inputs && typeof armObj.inputs === "object") {
+        for (const [fieldName, tmpl] of Object.entries(
+            armObj.inputs as Record<string, Template>,
+        )) {
+            checkReservedTemplateKeys(
+                tmpl,
+                `${prefix}.inputs.${fieldName}`,
+                errors,
+            );
+        }
+    }
+    const scope = armObj.scope as Record<string, unknown> | undefined;
+    if (!scope || typeof scope !== "object") return;
+    if (scope.output !== undefined) {
+        checkReservedTemplateKeys(
+            scope.output as Template,
+            `${prefix}.scope.output`,
+            errors,
+        );
+    }
+    if (scope.nodes && typeof scope.nodes === "object") {
+        validateScopeTemplates(
+            scope.nodes as Record<string, WorkflowNode>,
+            `${prefix}.scope.nodes`,
+            errors,
+        );
     }
 }
 
@@ -2939,14 +3178,13 @@ function checkScopeRefsAgainstBindings(
     for (const ref of refs) {
         const producerSchema = bindings.get(ref.name);
         if (!producerSchema) continue;
-        const err = checkSchemaCompat(
+        checkSchemaCompat(
             producerSchema,
             ref.path,
+            ref.templatePath,
             `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+            errors,
         );
-        if (err) {
-            errors.push({ path: ref.templatePath, message: err });
-        }
     }
 }
 
@@ -3013,15 +3251,14 @@ function validateSchemaCompat(
                 inputsPrefix,
                 nodeInputSchema(node),
             )?.type;
-            const err = checkSchemaCompat(
+            checkSchemaCompat(
                 producerSchema,
                 ref.path,
+                ref.templatePath,
                 `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+                errors,
                 consumerType,
             );
-            if (err) {
-                errors.push({ path: ref.templatePath, message: err });
-            }
         }
     }
 }
