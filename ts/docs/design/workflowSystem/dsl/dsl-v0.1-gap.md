@@ -8,45 +8,41 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G14: Fix switch lowering always taking first case.** This is a core
-   control-flow runtime correctness bug and should be fixed before richer switch
-   typing or exhaustiveness work.
-2. **G16: Fix `throw` message propagation.** This is a direct user-visible
+1. **G16: Fix `throw` message propagation.** This is a direct user-visible
    correctness issue in already-supported error semantics.
-3. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
+2. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
    into the full sub-scope contract before improving fork runtime behavior.
-4. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
+3. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
    structurally valid, align fork execution with the spec's failure and cleanup
    semantics.
-5. **G13: Fix structural type comparison for objects and arrays.** Type-system
+4. **G13: Fix structural type comparison for objects and arrays.** Type-system
    expansions should build on sound object and array compatibility checks.
-6. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
+5. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
    one-way before adding more type-system expressiveness.
-7. **G3: Add TypeScript-style named type aliases.** Once structural
+6. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-8. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
+7. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
    parsing and checking, and becomes more ergonomic once named aliases exist.
-9. **G18: Add union/literal types.** This is the broadest type-system expansion
-   and should come after type soundness, named types, and switch runtime
-   correctness.
-10. **G1: Implement sub-workflow calls and compile-time inlining.** This is
-    strategically important, but touches compiler architecture and emitter
-    lowering, so it should follow the core correctness and type-system
-    foundations.
-11. **G11: Decide/document bind stripping for explicit user names.** This is
+8. **G18: Add union/literal types.** This is the broadest type-system expansion
+   and should come after type soundness and named types.
+9. **G1: Implement sub-workflow calls and compile-time inlining.** This is
+   strategically important, but touches compiler architecture and emitter
+   lowering, so it should follow the core correctness and type-system
+   foundations.
+10. **G11: Decide/document bind stripping for explicit user names.** This is
     primarily debuggability and spec clarity.
-12. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+11. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
     AST honesty and visual-editor clarity, but current behavior works.
-13. **G12: Decide `list.append` naming/semantics.** This is naming/API
+12. **G12: Decide `list.append` naming/semantics.** This is naming/API
     consistency with coordinated emitter, engine, and snapshot churn.
-14. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+13. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
     Decision 0010 removed `identity` / `noop` as load-bearing at branch
     convergence, but the emitter still synthesizes them in several other
     places. Classify each remaining usage as (a) reducible after 0010,
     (b) forced by an IR shape that could be relaxed additively, or (c)
     inherent to decision 0006 (no expressions). Pure audit; only
     schedules follow-up work.
-15. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+14. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
 
@@ -55,10 +51,6 @@ Dependency spine:
 - `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
 - `G13 + G10 -> G3 -> G4 -> G18` builds type-system features on sound
   assignability.
-- `G14 -> G18` ensures switch runtime behavior is correct before adding
-  exhaustive union-typed switch support.
-- `G14 + G16` makes implemented control-flow and error features
-  trustworthy before adding major new DSL surface area.
 
 ## G1: Sub-workflow calls
 
@@ -358,21 +350,6 @@ compatibility. It skips structural comparison for object and array kinds.
    the structural contexts.
 4. Add tests for mismatched object types in return position and ternary
    arms.
-
-## G14: Switch lowering always takes first case
-
-**Spec:** dsl-v0.1.md section 7.4. Switch emits a chain of
-condition-check nodes, each comparing the discriminant to the arm's
-value.
-
-**Current state:** The emitted IR always evaluates to the first case's
-body regardless of the discriminant's runtime value. Likely the
-branch condition for the compare.equals node is not wired to the
-actual discriminant input, or the branch edges (true/false) are
-reversed.
-
-**Reproduction:** Compile a switch with string cases, run with a value
-matching the second case. Output is always from the first case.
 
 ## G16: `throw` produces empty error message
 
