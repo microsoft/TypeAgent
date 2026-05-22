@@ -34,10 +34,9 @@ export const DEFAULT_FALLBACK_PARAM = "err";
  * Top-level module: a sequence of imports followed by workflow
  * declarations. A `.wf` source file parses to one Module.
  *
- * Phase 2 introduces this as a top-level container so import declarations
- * have a place to live. The existing `parse()` API still returns a
- * `WorkflowDecl[]` (extracted from the module's `workflows`) for backward
- * compatibility with downstream code; new code should use `parseModule()`.
+ * Phase 2 introduced this as a top-level container so import
+ * declarations have a place to live; `Parser.parseModule()` is the
+ * canonical top-level parse entry point.
  */
 export interface Module {
     kind: "Module";

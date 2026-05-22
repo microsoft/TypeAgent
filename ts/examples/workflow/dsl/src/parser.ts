@@ -326,11 +326,13 @@ export class Parser {
         return { items, innerComments };
     }
 
-    parse(): {
-        workflows: WorkflowDecl[];
-        imports: ImportDecl[];
-        errors: ParseError[];
-    } {
+    /**
+     * Parse the source into a `Module` (top-level container holding
+     * imports and workflow declarations). The canonical top-level
+     * parse entry point.
+     */
+    parseModule(): { module: Module; errors: ParseError[] } {
+        const l = this.loc();
         const workflows: WorkflowDecl[] = [];
         const imports: ImportDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
@@ -350,20 +352,9 @@ export class Parser {
             );
             this.advance();
         }
-        return { workflows, imports, errors: this.errors };
-    }
-
-    /**
-     * Parse the source into a `Module` (top-level container holding
-     * imports and workflow declarations). The canonical top-level
-     * parse entry point.
-     */
-    parseModule(): { module: Module; errors: ParseError[] } {
-        const l = this.loc();
-        const { workflows, imports, errors } = this.parse();
         return {
             module: { kind: "Module", imports, workflows, loc: l },
-            errors,
+            errors: this.errors,
         };
     }
 

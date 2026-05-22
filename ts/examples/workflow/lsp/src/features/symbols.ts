@@ -35,10 +35,10 @@ export function computeDocumentSymbols(doc: TextDocument): DocumentSymbol[] {
     if (lexErrors.length > 0) return [];
 
     const parser = new Parser(tokens, comments);
-    const { workflows } = parser.parse();
-    if (workflows.length === 0) return [];
+    const { module } = parser.parseModule();
+    if (module.workflows.length === 0) return [];
 
-    return workflows.map((wf) => workflowSymbol(wf, doc));
+    return module.workflows.map((wf) => workflowSymbol(wf, doc));
 }
 
 function workflowSymbol(wf: WorkflowDecl, doc: TextDocument): DocumentSymbol {

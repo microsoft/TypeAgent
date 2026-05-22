@@ -1058,8 +1058,9 @@ workflow b(): string {
         const { tokens, errors: lexErrors, comments } = lex(src);
         expect(lexErrors).toEqual([]);
         const parser = new Parser(tokens, comments);
-        const { workflows, errors } = parser.parse();
+        const { module, errors } = parser.parseModule();
         expect(errors).toEqual([]);
+        const workflows = module.workflows;
         expect(workflows).toHaveLength(2);
         expect(workflows[0].body[0].trailingComments).toHaveLength(1);
         expect(workflows[0].body[0].trailingComments![0].text).toBe(
@@ -1079,10 +1080,10 @@ workflow b(): string {
     return "b"; // tail-b
 }`;
         const { tokens, comments } = lex(src);
-        const m = new Parser(tokens, comments).parse();
+        const m = new Parser(tokens, comments).parseModule().module;
         const combined = m.workflows.map((w) => format(w)).join("");
         const { tokens: t2, comments: c2 } = lex(combined);
-        const m2 = new Parser(t2, c2).parse();
+        const m2 = new Parser(t2, c2).parseModule().module;
         expect(m2.workflows).toHaveLength(2);
         expect(m2.workflows[0].body[0].trailingComments![0].text).toBe(
             "// tail-a",

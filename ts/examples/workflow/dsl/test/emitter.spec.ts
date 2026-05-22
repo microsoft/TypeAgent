@@ -170,16 +170,16 @@ function compile(source: string): {
         };
     }
     const parser = new Parser(tokens.tokens);
-    const ast = parser.parse();
-    if (ast.errors.length > 0) {
+    const { module, errors } = parser.parseModule();
+    if (errors.length > 0) {
         return {
             ir: undefined,
-            errors: ast.errors.map((e: { message: string }) => ({
+            errors: errors.map((e: { message: string }) => ({
                 message: e.message,
             })),
         };
     }
-    if (ast.workflows.length === 0) {
+    if (module.workflows.length === 0) {
         return { ir: undefined, errors: [{ message: "No workflow found" }] };
     }
     const emitter = new Emitter(taskSchemas);
@@ -188,8 +188,9 @@ function compile(source: string): {
     // workflow if none exported (matches compiler.ts behavior for
     // single-workflow tests).
     const entry =
-        ast.workflows.find((w) => w.exported)?.name ?? ast.workflows[0].name;
-    return emitter.emitAll(ast.workflows, entry);
+        module.workflows.find((w) => w.exported)?.name ??
+        module.workflows[0].name;
+    return emitter.emitAll(module.workflows, entry);
 }
 
 function compileOk(source: string): WorkflowIR {

@@ -72,11 +72,11 @@ function check(source: string): TypeError[] {
     const { tokens, errors: lexErrors } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens);
-    const { workflows, errors: parseErrors } = parser.parse();
+    const { module, errors: parseErrors } = parser.parseModule();
     expect(parseErrors).toEqual([]);
-    expect(workflows.length).toBeGreaterThan(0);
+    expect(module.workflows.length).toBeGreaterThan(0);
     const checker = new TypeChecker(TASK_SCHEMAS);
-    return checker.checkAll(workflows);
+    return checker.checkAll(module.workflows);
 }
 
 function expectNoErrors(source: string): void {
@@ -758,7 +758,7 @@ describe("type checker", () => {
             // Build a checker with a single-segment task that collides
             // with a workflow name.
             const { tokens } = lex(`workflow myTask(): number { return 1; }`);
-            const { workflows } = new Parser(tokens).parse();
+            const { module } = new Parser(tokens).parseModule();
             const checker = new TypeChecker([
                 {
                     name: "myTask",
@@ -766,7 +766,7 @@ describe("type checker", () => {
                     outputSchema: { type: "number" },
                 },
             ]);
-            const errors = checker.checkAll(workflows);
+            const errors = checker.checkAll(module.workflows);
             expect(
                 errors.some((e) => e.message.includes("shadows a task")),
             ).toBe(true);
