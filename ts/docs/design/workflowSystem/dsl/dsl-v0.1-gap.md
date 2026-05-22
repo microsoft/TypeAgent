@@ -312,16 +312,6 @@ suggests mutation in many languages (Python `list.append`, JS
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
 
-## G13: `typeEq` skips structural comparison for objects and arrays ✅ Resolved
-
-**Status:** Resolved. `typeEq` has been split into `isAssignableTo`
-(recursive structural comparison used by return-type, const-annotation,
-ternary-arm, default-value, and workflow-call-arg checks) and
-`isEqualityComparable` (loose, kind-level, used by `===` / `!==`).
-Objects compare field-by-field with required/optional handling and
-arrays compare element types recursively. Follow-up diagnostic UX is
-tracked under G22.
-
 ## G16: `throw` produces empty error message
 
 **Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
