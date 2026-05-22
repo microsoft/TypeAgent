@@ -6,14 +6,18 @@
  *
  * The VS Code extension (and any other LSP-capable client) issues
  * `workflow/previewGraph` with a document URI; the server lexes and
- * parses the current text and returns either the {@link GraphModel}
- * produced by `extractGraph()` or the lex/parse error list. The graph
- * is intentionally returned untyped — `extractGraph()` operates on the
- * parsed AST without requiring a clean typecheck, so a graph is still
- * available when there are typecheck errors elsewhere in the file.
+ * parses the current text and returns the {@link GraphModel} for each
+ * workflow declared in the document (or the lex/parse error list).
+ * The graphs are intentionally returned untyped — `extractGraph()`
+ * operates on the parsed AST without requiring a clean typecheck, so
+ * graphs are still available when there are typecheck errors
+ * elsewhere in the file.
  *
  * The return shape mirrors {@link CompileIRResult} so editors can use
- * the same error rendering for both previews.
+ * the same error rendering for both previews. Multi-workflow files
+ * surface every workflow via `graphs`; the legacy `graph` field
+ * mirrors the first workflow's graph for clients that have not been
+ * updated to render the full list.
  */
 
 import { TextDocuments } from "vscode-languageserver/node.js";
@@ -24,8 +28,16 @@ export interface PreviewGraphParams {
     uri: string;
 }
 
+export interface NamedGraph {
+    name: string;
+    graph: GraphModel;
+}
+
 export interface PreviewGraphResult {
+    /** First workflow's graph; preserved for legacy single-workflow clients. */
     graph?: GraphModel;
+    /** Per-workflow graphs in source order. */
+    graphs?: NamedGraph[];
     errors: {
         phase: string;
         message: string;
@@ -65,9 +77,8 @@ export function previewGraph(
     }
 
     const parser = new Parser(tokens, comments);
-    const { workflows, errors: parseErrors } = parser.parse();
-    const ast = workflows[0];
-    if (!ast) {
+    const { module, errors: parseErrors } = parser.parseModule();
+    if (module.workflows.length === 0) {
         return {
             errors: parseErrors.map((e) => ({
                 phase: "parse",
@@ -78,8 +89,14 @@ export function previewGraph(
         };
     }
 
+    const graphs: NamedGraph[] = module.workflows.map((wf) => ({
+        name: wf.name,
+        graph: extractGraph(wf),
+    }));
+
     return {
-        graph: extractGraph(ast),
+        graph: graphs[0]!.graph,
+        graphs,
         // Parse errors that did not prevent recovery still surface, so
         // the client can show squiggle-equivalents alongside the graph.
         errors: parseErrors.map((e) => ({

@@ -17,7 +17,7 @@
 import { Hover, MarkupKind } from "vscode-languageserver/node.js";
 import type { TextDocument } from "vscode-languageserver-textdocument";
 import { TypeChecker, formatType } from "workflow-dsl";
-import { getParsed } from "../parsedDocument.js";
+import { getParsed, findWorkflowAt } from "../parsedDocument.js";
 import { fromLspPosition } from "../util/position.js";
 import {
     findReferenceAt,
@@ -33,7 +33,7 @@ export function computeHover(
     schemas: TaskSchema[],
 ): Hover | null {
     const parsed = getParsed(doc);
-    if (!parsed.symbols) return null;
+    if (parsed.workflows.length === 0) return null;
 
     const { line, col } = fromLspPosition(position);
 
@@ -48,11 +48,14 @@ export function computeHover(
     const def = ref?.def ?? findDefinitionAt(parsed.symbols, line, col);
     if (!def) return null;
 
-    // Look up the inferred type when the AST is available.
+    // Look up the inferred type from the workflow that contains the
+    // definition, so multi-workflow files resolve types in the right
+    // scope.
     let typeLabel: string | undefined;
-    if (parsed.ast) {
+    const wf = findWorkflowAt(parsed, def.loc.line, def.loc.col);
+    if (wf) {
         const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(
-            parsed.ast,
+            wf.decl,
         );
         const info = symbolTypes.get(def.loc.offset);
         if (info && info.kind !== "unresolved") {

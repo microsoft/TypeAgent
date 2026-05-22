@@ -66,10 +66,11 @@ export function compile(
     }
 
     // Parse (multi-workflow). The Phase 3 type checker needs the full
-    // workflow table to resolve `WorkflowCallExpr`, so we use parse()
-    // (which returns every workflow) instead of parseSingle().
+    // workflow table to resolve `WorkflowCallExpr`, so we parse the
+    // entire module and use every declared workflow.
     const parser = new Parser(tokens, comments);
-    const { workflows, errors: parseErrors } = parser.parse();
+    const { module, errors: parseErrors } = parser.parseModule();
+    const workflows = module.workflows;
     for (const e of parseErrors) {
         errors.push({
             phase: "parse",
