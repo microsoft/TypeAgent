@@ -11,18 +11,19 @@ address them. Filled gaps are tracked by the test diff itself.
 
 ## Phase 5 — Engine
 
-### P5-T1. Caller-side `onError` _recovery_ path for `workflowCall`
+### P5-T1. ✅ Caller-side `onError` _recovery_ path for `workflowCall`
 
 - **Gap:** A test that compiles a workflow where the caller installs
   an `onError` recovery edge on a `WorkflowCallNode`, the callee
   throws, and the caller routes to its recovery target rather than
   failing.
-- **Reason not filled:** The DSL surface has no syntax for attaching
-  `onError` to a workflow-call site; today such an IR can only be
-  hand-written. The engine path itself is exercised indirectly by
-  task-error recovery tests, which share the same dispatch.
-- **Re-trigger:** Add when the DSL gains `try/catch`-style sugar
-  for sub-workflow calls.
+- **Resolution:** Added manual-IR integration test
+  `"caller onError recovers from sub-workflow failure (manual IR)"`
+  in `examples/workflow/engine/test/dsl-integration.spec.ts`. The
+  test constructs the IR directly (the DSL still has no surface
+  syntax for `onError` on a workflow call site) and verifies that
+  a failing sub-workflow routes to the caller's `recover` node
+  while the success path remains unreachable.
 
 ### P5-T2. Named-record argument shape (`helper({a: 1, b: 2})`)
 
@@ -84,8 +85,7 @@ address them. Filled gaps are tracked by the test diff itself.
   applied only at `resolve()` time for import statements; the entry
   file is not subject to it. This is a deliberate carve-out (the
   caller chose to point `compileFile` at this file), but it is also
-  unexercised. Add when the policy is firmed up — see
-  workflow-composition-decision-log.md P7-D6.
+  unexercised. Add when the policy is firmed up.
 
 ### P7-T5. Relative `workspaceRoot` path
 
