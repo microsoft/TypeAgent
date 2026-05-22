@@ -52,13 +52,6 @@ address them. Filled gaps are tracked by the test diff itself.
   contract on ordering exists yet. Add a contract test if the CLI
   starts dedup-or-sorting errors.
 
-### P7-T6. Empty import list `import { } from "./foo.wf"`
-
-- **Gap:** Whether parser accepts, and whether the loader still
-  pulls the file into the module graph.
-- **Reason not filled:** No clear use case; behavior is whatever the
-  parser produces. Add a test once the parser specifies a rule.
-
 ### P7-T7. Re-export through an import (`export { foo } from "./bar.wf"`)
 
 - **Gap:** Verify the parser rejects this construct cleanly.

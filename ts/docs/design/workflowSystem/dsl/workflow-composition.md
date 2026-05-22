@@ -348,6 +348,21 @@ Internally, the compiler mangles all non-entry-file workflow names
 to `__f{N}_{name}` to ensure unique keys in the flat IR map; this
 is an implementation detail invisible to DSL authors.
 
+**Emit is non-tree-shaking.** Every workflow declared in every
+loaded file is emitted into the merged IR, whether or not any
+entry-file workflow calls it. Two consequences worth knowing:
+
+- `import { } from "./foo.wf"` is accepted; it pulls `foo.wf` into
+  the module graph but binds no local names, so nothing in the entry
+  can call the imported bodies. They still appear (mangled) in the
+  IR.
+- Importing one helper from a library file drags every other
+  workflow in that file into the artifact.
+
+This mirrors TypeScript's per-file emit model. A future
+reachability prune (especially for bundle mode) is tracked in
+`dsl/future/tree-shaking.md`.
+
 **Resolver scope (`workspaceRoot`).** The default Node file resolver
 restricts imports to the directory of the entry file. Any `import`
 path that resolves outside this root — including via `../` or

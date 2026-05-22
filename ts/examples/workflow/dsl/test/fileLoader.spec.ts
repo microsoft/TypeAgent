@@ -195,6 +195,44 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         expect([...refs][0]).toBe(helperKeys[0]);
     });
 
+    // P7-T6: empty import `import { } from "./foo.wf"`. Parser accepts it
+    // (zero specifiers); loader BFS still pulls foo.wf into the module
+    // graph, so foo.wf's workflows are mangled and emitted into the merged
+    // IR. They are unreachable from source names in the entry file (no
+    // local-map entry binds them). See dsl/future/tree-shaking.md for
+    // the open question of pruning unreachable workflows.
+    test("empty import pulls file into graph but binds no local names", () => {
+        const resolver = new MemoryResolver({
+            "/p/lib.wf": `
+                export workflow helper(n: number): number {
+                    return n;
+                }
+            `,
+            "/p/main.wf": `
+                import { } from "./lib.wf";
+                export workflow main(x: number): number {
+                    return x;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        expect(result.errors).toEqual([]);
+
+        // helper is in the merged IR (loader pulled lib.wf into the graph
+        // despite the empty import; emit is non-tree-shaking).
+        const helperKeys = Object.keys(result.ir!.workflows).filter((k) =>
+            /(^|_)helper$/.test(k),
+        );
+        expect(helperKeys).toHaveLength(1);
+
+        // But no local name in main.wf binds it, so main has no calls.
+        const mainBody = result.ir!.workflows["main"];
+        const calls = Object.values(mainBody.nodes).filter(
+            (n: any) => n.kind === "workflowCall",
+        );
+        expect(calls).toHaveLength(0);
+    });
+
     test("rejects duplicate exported workflow names across files", () => {
         const resolver = new MemoryResolver({
             "/p/a.wf": `
