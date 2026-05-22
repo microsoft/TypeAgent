@@ -145,7 +145,16 @@ export interface CaseResult {
 export interface OptimizationRunCorpusCoverage {
     totalCollisionMass: number;
     reachableMass: number;
+    /** Agent schemas that couldn't be materialized into the sandbox —
+     *  typically PAS-only agents the sandbox builder rejected, or
+     *  dynamic sub-actions that don't resolve in the live provider. */
     skippedAgents: string[];
+    /** Cases (neighborhoods) the corpus loop selected by gravity but
+     *  then skipped because at least one of their member schemas
+     *  couldn't be materialized. Surfaces dynamic-sub-action cases
+     *  (e.g. `taskflow.dailyAgendaEmail`) so the operator knows what
+     *  fell out before lever evaluation. */
+    skippedCases?: { neighborhoodId: string; reason: string }[];
 }
 
 export interface OptimizationRun {

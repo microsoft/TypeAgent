@@ -30,6 +30,10 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { replaceManifestDescription } from "../apply.js";
+import {
+    formatMembersBlock,
+    isValidMemberReference,
+} from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:manifest");
 
@@ -106,9 +110,21 @@ export const manifestLever: LeverPlugin = {
             );
         }
 
+        const memberSchemas = new Set(
+            caseDesc.members.map((m) => m.schemaName),
+        );
         const hypotheses: Hypothesis[] = [];
         for (let i = 0; i < parsed.hypotheses.length; i++) {
             const raw = parsed.hypotheses[i]!;
+            if (
+                typeof raw.targetSchema !== "string" ||
+                !memberSchemas.has(raw.targetSchema)
+            ) {
+                debug(
+                    `manifest: rejecting hypothesis with non-member targetSchema='${raw.targetSchema}'`,
+                );
+                continue;
+            }
             const payload: ManifestPayload = {
                 targetSchema: raw.targetSchema,
                 newDescription: raw.newDescription,
@@ -201,9 +217,8 @@ function buildProposePrompt(
     k: number,
     schemaGuidelines: string,
 ): string {
-    const memberLines = caseDesc.members
-        .map((m) => `  - ${m.schemaName}.${m.actionName}`)
-        .join("\n");
+    const memberBlock = formatMembersBlock(caseDesc.members);
+    void isValidMemberReference; // kept in scope for symmetry with other levers
     const misroute = caseDesc.misroutePhrases
         .slice(0, 8)
         .map(
@@ -235,8 +250,8 @@ The manifest's schema.description is the schema-level identity line the translat
 CASE:
   failurePattern: ${caseDesc.failurePattern} (heuristic: ${caseDesc.failurePatternHeuristic})
   severityTier: ${caseDesc.severityTier}
-  members:
-${memberLines}
+
+${memberBlock}
 
 Current manifest descriptions:
 ${currentDescs}
@@ -252,7 +267,7 @@ Generate ${k} hypotheses. For each, pick ONE schema's manifest to widen — typi
 {
   "hypotheses": [
     {
-      "targetSchema": "<schema name, e.g. player>",
+      "targetSchema": "<copy verbatim from one of the Member lines above>",
       "newDescription": "<the new schema.description text — 1-3 sentences, plain text (no comment markers)>",
       "mechanism": "<one of: ${ALLOWED_MECHANISMS.join(", ")}>",
       "guidelineHook": "<one of: ${ALLOWED_GUIDELINE_HOOKS.join(", ")}, or null>",

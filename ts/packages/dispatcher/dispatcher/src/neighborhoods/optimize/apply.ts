@@ -280,6 +280,14 @@ function findActionInPas(
     if (guess && typeof guess === "object") {
         return guess as { comments?: string[] };
     }
+    // Strategy 3: the caller (typically an LLM-generated payload) may
+    // have prefixed actionName with the schema name (e.g.
+    // "visualStudio.removeBreakpoint" instead of "removeBreakpoint").
+    // Retry with the bit after the last dot.
+    const lastDot = actionName.lastIndexOf(".");
+    if (lastDot > 0 && lastDot < actionName.length - 1) {
+        return findActionInPas(parsed, actionName.slice(lastDot + 1));
+    }
     return null;
 }
 

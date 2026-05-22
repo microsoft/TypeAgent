@@ -45,7 +45,7 @@ import {
     pmap,
 } from "./util.js";
 
-import { openai } from "aiclient";
+import { openai, type ChatModel } from "aiclient";
 import { schemaGuidelines } from "../../translation/schemaGuidelines.js";
 
 // =============================================================================
@@ -132,12 +132,48 @@ export async function runCorpusLoop(
     });
     snapshotSandboxOriginal(sandboxDir);
 
+    // ---- Filter cases whose schemas aren't all materializable ----
+    // Dynamic sub-actions (e.g. taskflow flows registered at runtime)
+    // can appear as neighborhood members but lack a buildable
+    // ActionConfig — the live provider returns undefined for
+    // `tryGetActionConfig("taskflow.dailyAgendaEmail")`. Letting these
+    // through means the lever crashes at apply time with a missing-
+    // checksum error. Skip them up front and surface in coverage.
+    const skippedSchemaSet = new Set(
+        buildResult.skipped.map((s) => s.schemaName),
+    );
+    const runnableNeighborhoods: Neighborhood[] = [];
+    const skippedCases: { neighborhoodId: string; reason: string }[] = [];
+    for (const n of top) {
+        const unbuildable = n.members.filter((m) =>
+            skippedSchemaSet.has(m.schemaName),
+        );
+        if (unbuildable.length > 0) {
+            skippedCases.push({
+                neighborhoodId: n.id,
+                reason: `schema(s) not materializable in sandbox: ${unbuildable
+                    .map((m) => m.schemaName)
+                    .join(", ")}`,
+            });
+            continue;
+        }
+        runnableNeighborhoods.push(n);
+    }
+    if (skippedCases.length > 0) {
+        opts.onProgress?.(
+            `skipping ${skippedCases.length} case(s) with non-materializable schemas (e.g. dynamic sub-actions)`,
+        );
+    }
+
     // ---- Run per-case loops ----
     const casesDir = path.join(runRoot, "cases");
     ensureDir(casesDir);
     const caseResults: CaseResult[] = [];
 
-    const cases = top.map((n, i) => ({ neighborhood: n, index: i }));
+    const cases = runnableNeighborhoods.map((n, i) => ({
+        neighborhood: n,
+        index: i,
+    }));
 
     // Run cases sequentially. Within a case, hypotheses are evaluated
     // sequentially too (sandbox state requires it). The concurrency knob
@@ -153,43 +189,70 @@ export async function runCorpusLoop(
         opts.onProgress?.(
             `[case ${c.index + 1}/${cases.length}] ${caseSlug} — analyzing…`,
         );
-        const caseDesc = await analyzeCase({
-            neighborhood: c.neighborhood,
-            translationResults,
-            provider: opts.sourceProvider,
-            createModel: (name) => openai.createChatModel(name),
-            schemaGuidelines,
-            ...(opts.dryRun && { skipLLM: true }),
-            severityTier: pickSeverity(c.neighborhood, gravity),
-        });
+        let caseDesc;
+        try {
+            caseDesc = await analyzeCase({
+                neighborhood: c.neighborhood,
+                translationResults,
+                provider: opts.sourceProvider,
+                createModel: (name) => openai.createChatModel(name),
+                schemaGuidelines,
+                ...(opts.dryRun && { skipLLM: true }),
+                severityTier: pickSeverity(c.neighborhood, gravity),
+                sandboxDir,
+            });
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            skippedCases.push({
+                neighborhoodId: c.neighborhood.id,
+                reason: `analyzeCase failed: ${reason}`,
+            });
+            opts.onProgress?.(
+                `[case ${c.index + 1}/${cases.length}] ${caseSlug} — skipped (${reason})`,
+            );
+            continue;
+        }
 
         opts.onProgress?.(
             `[case ${c.index + 1}/${cases.length}] ${caseSlug} — generating + evaluating…`,
         );
 
-        const result = await runCaseLoop({
-            caseDesc,
-            caseDir,
-            buildProposeCtx: (cd) => buildProposeCtx(cd, runRoot),
-            buildApplyCtx: (cd) =>
-                buildApplyCtx(cd, opts.sourceProvider, sandboxDir),
-            ...(opts.leverFilter && { leverFilter: opts.leverFilter }),
-            maxDepth: opts.depth ?? 0,
-            runProbe: async (hypothesis, cd) => {
-                if (opts.runProbe) {
-                    return opts.runProbe(runRoot, hypothesis, cd);
-                }
-                // Dry-run fallthrough — should not be reached when dryRun
-                // is set because caseLoop short-circuits before calling.
-                return { rescues: 0, regressions: 0, regressionPhrases: [] };
-            },
-            revertSandbox: () => {
-                // Revert ALL schemas — the stacked-winner flow in Phase 5
-                // will replace this with a more targeted revert.
-                revertAllFromOriginal(sandboxDir);
-            },
-            ...(opts.dryRun && { dryRun: true }),
-        });
+        let result;
+        try {
+            result = await runCaseLoop({
+                caseDesc,
+                caseDir,
+                buildProposeCtx: (cd) => buildProposeCtx(cd, runRoot),
+                buildApplyCtx: (cd) =>
+                    buildApplyCtx(cd, opts.sourceProvider, sandboxDir),
+                ...(opts.leverFilter && { leverFilter: opts.leverFilter }),
+                maxDepth: opts.depth ?? 0,
+                runProbe: async (hypothesis, cd) => {
+                    if (opts.runProbe) {
+                        return opts.runProbe(runRoot, hypothesis, cd);
+                    }
+                    // Dry-run fallthrough — should not be reached when dryRun
+                    // is set because caseLoop short-circuits before calling.
+                    return { rescues: 0, regressions: 0, regressionPhrases: [] };
+                },
+                revertSandbox: () => {
+                    // Revert ALL schemas — the stacked-winner flow in Phase 5
+                    // will replace this with a more targeted revert.
+                    revertAllFromOriginal(sandboxDir);
+                },
+                ...(opts.dryRun && { dryRun: true }),
+            });
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            skippedCases.push({
+                neighborhoodId: c.neighborhood.id,
+                reason: `caseLoop crashed: ${reason}`,
+            });
+            opts.onProgress?.(
+                `[case ${c.index + 1}/${cases.length}] ${caseSlug} — skipped mid-run (${reason})`,
+            );
+            continue;
+        }
         caseResults.push(result);
 
         // Append patterns.jsonl rows (one per attempt).
@@ -214,6 +277,16 @@ export async function runCorpusLoop(
     }
 
     // ---- Write optimization-run.json ----
+    const coverage = computeCoverage(
+        ranked,
+        top,
+        involvedSchemas,
+        buildResult.skipped.map((s) => s.schemaName),
+        gravity,
+    );
+    if (skippedCases.length > 0) {
+        coverage.skippedCases = skippedCases;
+    }
     const run: OptimizationRun = {
         schemaVersion: 1,
         runId,
@@ -225,13 +298,7 @@ export async function runCorpusLoop(
         cases: caseResults,
         ...(combinedReprobe && { combinedReprobe }),
         sandboxRoot: sandboxDir,
-        corpusCoverage: computeCoverage(
-            ranked,
-            top,
-            involvedSchemas,
-            buildResult.skipped.map((s) => s.schemaName),
-            gravity,
-        ),
+        corpusCoverage: coverage,
     };
     fs.writeFileSync(
         path.join(runRoot, "optimization-run.json"),
@@ -251,12 +318,84 @@ export async function runCorpusLoop(
 
 function buildProposeCtx(caseDir: string, runRoot: string): ProposeContext {
     return {
-        createModel: (name) => openai.createChatModel(name),
+        createModel: (name) => createProposeModel(name, 16384),
         pmap,
         workdir: runRoot,
         outDir: caseDir,
         schemaGuidelines,
     };
+}
+
+/**
+ * Build a ChatModel for the lever propose path with an enlarged response
+ * cap. Bumping the cap matters because propose prompts emit verbose JSON
+ * (schema rewrites with WRONG/RIGHT example blocks, K hypotheses per call).
+ * The default cap (~4k tokens) truncates responses and fails the whole
+ * batch's JSON parse.
+ *
+ * The cap parameter migrated from `max_tokens` to `max_completion_tokens`
+ * between GPT-4 and GPT-5/reasoning-model APIs:
+ *   - GPT-4 family: accepts `max_tokens`; may not recognize the newer
+ *     parameter.
+ *   - GPT-5 / reasoning models: reject `max_tokens` with a 400 error;
+ *     require `max_completion_tokens`.
+ *
+ * The caller can't tell which family the resolved endpoint belongs to at
+ * createChatModel time, so this wrapper probes: try the modern parameter
+ * first, fall back to the legacy one on a 400 that names the parameter.
+ * The choice is cached per logical endpoint name so subsequent calls
+ * skip the probe.
+ */
+const tokenParamCache = new Map<string, "modern" | "legacy">();
+
+function createProposeModel(
+    endpointName: string,
+    cap: number,
+): ChatModel {
+    const buildModel = (param: "modern" | "legacy") =>
+        openai.createChatModel(
+            endpointName,
+            param === "modern"
+                ? { max_completion_tokens: cap }
+                : { max_tokens: cap },
+        );
+
+    const cached = tokenParamCache.get(endpointName);
+    if (cached) {
+        return buildModel(cached);
+    }
+
+    // First call for this endpoint — probe via a wrapper that retries
+    // on the specific 400 signature ("Setting 'max_tokens'" /
+    // "max_completion_tokens" in the error message). On success, cache
+    // the working param for the rest of the run.
+    const modernModel = buildModel("modern");
+    const originalComplete = modernModel.complete.bind(modernModel);
+    const wrapped: ChatModel = {
+        ...modernModel,
+        complete: async (...args: Parameters<typeof originalComplete>) => {
+            const result = await originalComplete(...args);
+            if (result.success) {
+                tokenParamCache.set(endpointName, "modern");
+                return result;
+            }
+            const msg = result.message ?? "";
+            const looksLikeParamRejection =
+                /400/.test(msg) &&
+                (/max_completion_tokens/i.test(msg) ||
+                    /unsupported parameter/i.test(msg) ||
+                    /unknown parameter/i.test(msg));
+            if (!looksLikeParamRejection) {
+                return result;
+            }
+            // Endpoint doesn't accept max_completion_tokens. Retry
+            // with max_tokens, cache the legacy choice.
+            tokenParamCache.set(endpointName, "legacy");
+            const legacy = buildModel("legacy");
+            return legacy.complete(...args);
+        },
+    };
+    return wrapped;
 }
 
 function buildApplyCtx(

@@ -232,6 +232,7 @@ export async function runTranslationProbe(
     context: ActionContext<CommandHandlerContext>,
     opts: TranslationProbeOpts = {},
     onProgress?: (done: number, total: number) => void,
+    onPartial?: (getFile: () => TranslationProbeFile) => void,
 ): Promise<TranslationProbeFile> {
     const concurrency = opts.concurrency ?? 4;
     const targetStrategy: CollisionStrategy = opts.strategy ?? "first-match";
@@ -327,6 +328,136 @@ export async function runTranslationProbe(
     const t0 = Date.now();
     let strategyChanged = false;
 
+    // Collect rows in completion order so partial snapshots reflect what's
+    // actually landed so far. `pmap` separately returns results in task
+    // order, which we use for the final return value.
+    const corpusModels = new Set<string>();
+    for (const action of corpus.actions) {
+        for (const p of action.phrases) {
+            for (const s of p.sources) corpusModels.add(s.model);
+        }
+    }
+    const corpusModelsSorted = [...corpusModels].sort();
+    const rowsSoFar: TranslationProbeRow[] = [];
+
+    function snapshotFile(): TranslationProbeFile {
+        const counts: Record<TranslationOutcome, number> = {
+            CLEAN: 0,
+            MISROUTE: 0,
+            CLARIFY: 0,
+            INVALID: 0,
+            ERROR: 0,
+        };
+        for (const r of rowsSoFar) counts[r.outcome]++;
+        return {
+            summary: {
+                scannedAt: new Date().toISOString(),
+                elapsedMs: Date.now() - t0,
+                totalPhrases: rowsSoFar.length,
+                counts,
+                strategyUsed: targetStrategy,
+                strategyRestored: priorStrategy,
+                corpusModels: corpusModelsSorted,
+                userContextMode,
+                ...(userContextMode === "fixed" && opts.fixedUserContext
+                    ? { fixedUserContext: opts.fixedUserContext }
+                    : {}),
+            },
+            results: rowsSoFar.slice(),
+        };
+    }
+
+    async function computeRow(t: Task): Promise<TranslationProbeRow> {
+        const startMs = Date.now();
+        try {
+            const out = await translateRequest(
+                context,
+                t.phraseText,
+                undefined, // history
+                undefined, // attachments
+                undefined, // streamingActionIndex
+                allSchemas,
+                undefined, // usageCallback
+                t.userContext,
+                opts.actionConfigProvider,
+            );
+            const actions = out.requestAction.actions;
+            const elapsedMs = Date.now() - startMs;
+            if (!actions.length) {
+                return {
+                    expectedSchema: t.expectedSchema,
+                    expectedAction: t.expectedAction,
+                    phraseText: t.phraseText,
+                    phraseSources: t.phraseSources,
+                    multipleActions: false,
+                    model: opts.modelLabel ?? "default",
+                    outcome: "ERROR",
+                    elapsedMs,
+                    error: "translator returned 0 actions",
+                    userContext: t.userContext,
+                };
+            }
+            const first = actions[0]!.action;
+            const schemaName = (first as any).schemaName as string;
+            const actionName = (first as any).actionName as string;
+            const parameters = (first as any).parameters;
+
+            if (isClarifyAction(schemaName, actionName)) {
+                return {
+                    expectedSchema: t.expectedSchema,
+                    expectedAction: t.expectedAction,
+                    phraseText: t.phraseText,
+                    phraseSources: t.phraseSources,
+                    chosenSchema: schemaName,
+                    chosenAction: actionName,
+                    chosenParameters: parameters,
+                    multipleActions: actions.length > 1,
+                    model: opts.modelLabel ?? "default",
+                    outcome: "CLARIFY",
+                    elapsedMs,
+                    userContext: t.userContext,
+                };
+            }
+
+            const isMatch = strictMatch(
+                schemaName,
+                actionName,
+                t.expectedSchema,
+                t.expectedAction,
+            );
+            const outcome: TranslationOutcome = isMatch
+                ? "CLEAN"
+                : "MISROUTE";
+            return {
+                expectedSchema: t.expectedSchema,
+                expectedAction: t.expectedAction,
+                phraseText: t.phraseText,
+                phraseSources: t.phraseSources,
+                chosenSchema: schemaName,
+                chosenAction: actionName,
+                chosenParameters: parameters,
+                multipleActions: actions.length > 1,
+                model: opts.modelLabel ?? "default",
+                outcome,
+                elapsedMs,
+                userContext: t.userContext,
+            };
+        } catch (err) {
+            return {
+                expectedSchema: t.expectedSchema,
+                expectedAction: t.expectedAction,
+                phraseText: t.phraseText,
+                phraseSources: t.phraseSources,
+                multipleActions: false,
+                model: opts.modelLabel ?? "default",
+                outcome: "ERROR",
+                elapsedMs: Date.now() - startMs,
+                error: err instanceof Error ? err.message : String(err),
+                userContext: t.userContext,
+            };
+        }
+    }
+
     try {
         if (priorStrategy !== targetStrategy) {
             await changeContextConfig(
@@ -344,94 +475,10 @@ export async function runTranslationProbe(
             limited,
             concurrency,
             async (t): Promise<TranslationProbeRow> => {
-                const startMs = Date.now();
-                try {
-                    const out = await translateRequest(
-                        context,
-                        t.phraseText,
-                        undefined, // history
-                        undefined, // attachments
-                        undefined, // streamingActionIndex
-                        allSchemas,
-                        undefined, // usageCallback
-                        t.userContext,
-                        opts.actionConfigProvider,
-                    );
-                    const actions = out.requestAction.actions;
-                    const elapsedMs = Date.now() - startMs;
-                    if (!actions.length) {
-                        return {
-                            expectedSchema: t.expectedSchema,
-                            expectedAction: t.expectedAction,
-                            phraseText: t.phraseText,
-                            phraseSources: t.phraseSources,
-                            multipleActions: false,
-                            model: opts.modelLabel ?? "default",
-                            outcome: "ERROR",
-                            elapsedMs,
-                            error: "translator returned 0 actions",
-                            userContext: t.userContext,
-                        };
-                    }
-                    const first = actions[0]!.action;
-                    const schemaName = (first as any).schemaName as string;
-                    const actionName = (first as any).actionName as string;
-                    const parameters = (first as any).parameters;
-
-                    if (isClarifyAction(schemaName, actionName)) {
-                        return {
-                            expectedSchema: t.expectedSchema,
-                            expectedAction: t.expectedAction,
-                            phraseText: t.phraseText,
-                            phraseSources: t.phraseSources,
-                            chosenSchema: schemaName,
-                            chosenAction: actionName,
-                            chosenParameters: parameters,
-                            multipleActions: actions.length > 1,
-                            model: opts.modelLabel ?? "default",
-                            outcome: "CLARIFY",
-                            elapsedMs,
-                            userContext: t.userContext,
-                        };
-                    }
-
-                    const isMatch = strictMatch(
-                        schemaName,
-                        actionName,
-                        t.expectedSchema,
-                        t.expectedAction,
-                    );
-                    const outcome: TranslationOutcome = isMatch
-                        ? "CLEAN"
-                        : "MISROUTE";
-                    return {
-                        expectedSchema: t.expectedSchema,
-                        expectedAction: t.expectedAction,
-                        phraseText: t.phraseText,
-                        phraseSources: t.phraseSources,
-                        chosenSchema: schemaName,
-                        chosenAction: actionName,
-                        chosenParameters: parameters,
-                        multipleActions: actions.length > 1,
-                        model: opts.modelLabel ?? "default",
-                        outcome,
-                        elapsedMs,
-                        userContext: t.userContext,
-                    };
-                } catch (err) {
-                    return {
-                        expectedSchema: t.expectedSchema,
-                        expectedAction: t.expectedAction,
-                        phraseText: t.phraseText,
-                        phraseSources: t.phraseSources,
-                        multipleActions: false,
-                        model: opts.modelLabel ?? "default",
-                        outcome: "ERROR",
-                        elapsedMs: Date.now() - startMs,
-                        error: err instanceof Error ? err.message : String(err),
-                        userContext: t.userContext,
-                    };
-                }
+                const row = await computeRow(t);
+                rowsSoFar.push(row);
+                onPartial?.(snapshotFile);
+                return row;
             },
             onProgress,
         );
@@ -446,13 +493,6 @@ export async function runTranslationProbe(
         };
         for (const r of results) counts[r.outcome]++;
 
-        const corpusModels = new Set<string>();
-        for (const action of corpus.actions) {
-            for (const p of action.phrases) {
-                for (const s of p.sources) corpusModels.add(s.model);
-            }
-        }
-
         return {
             summary: {
                 scannedAt: new Date().toISOString(),
@@ -461,7 +501,7 @@ export async function runTranslationProbe(
                 counts,
                 strategyUsed: targetStrategy,
                 strategyRestored: priorStrategy,
-                corpusModels: [...corpusModels].sort(),
+                corpusModels: corpusModelsSorted,
                 userContextMode,
                 ...(userContextMode === "fixed" && opts.fixedUserContext
                     ? { fixedUserContext: opts.fixedUserContext }

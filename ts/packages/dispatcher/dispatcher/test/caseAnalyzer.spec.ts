@@ -204,6 +204,7 @@ describe("analyzeCase", () => {
             provider: emptyProvider(),
             createModel: () => mockModel('{"failurePattern":"cross-agent-verb"}'),
             schemaGuidelines: GUIDELINES,
+            skipChecksumValidation: true,
         });
 
         expect(caseDesc.misroutePhrases).toHaveLength(1);
@@ -232,6 +233,7 @@ describe("analyzeCase", () => {
             createModel: () =>
                 mockModel('{"failurePattern":"synonymous-actions"}'),
             schemaGuidelines: GUIDELINES,
+            skipChecksumValidation: true,
         });
 
         expect(caseDesc.failurePatternHeuristic).toBe("similar-verb");
@@ -249,6 +251,7 @@ describe("analyzeCase", () => {
             provider: emptyProvider(),
             createModel: () => mockModel("nope, not JSON, no fields"),
             schemaGuidelines: GUIDELINES,
+            skipChecksumValidation: true,
         });
 
         expect(caseDesc.failurePatternHeuristic).toBe("similar-verb");
@@ -272,6 +275,7 @@ describe("analyzeCase", () => {
             provider: emptyProvider(),
             createModel: () => failingModel,
             schemaGuidelines: GUIDELINES,
+            skipChecksumValidation: true,
         });
         expect(caseDesc.failurePattern).toBe("similar-verb");
     });
@@ -288,6 +292,7 @@ describe("analyzeCase", () => {
             createModel: () =>
                 mockModel('{"failurePattern":"not-a-real-label"}'),
             schemaGuidelines: GUIDELINES,
+            skipChecksumValidation: true,
         });
         expect(caseDesc.failurePattern).toBe("similar-verb");
     });
@@ -311,6 +316,7 @@ describe("analyzeCase", () => {
             createModel: () => tracker,
             schemaGuidelines: GUIDELINES,
             skipLLM: true,
+            skipChecksumValidation: true,
         });
         expect(modelCalls).toBe(0);
         expect(caseDesc.failurePattern).toBe("similar-verb");

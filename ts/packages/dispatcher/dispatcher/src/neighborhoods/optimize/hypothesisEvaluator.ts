@@ -136,7 +136,14 @@ export interface EvaluateHypothesisOpts {
 }
 
 /** Full per-attempt pipeline: writeProposal → revert → apply → probe →
- *  writeEvaluation. Returns an `AttemptRecord`. */
+ *  writeEvaluation. Returns an `AttemptRecord`.
+ *
+ *  Apply failures (e.g. a lever targeting a schema whose checksum
+ *  couldn't be computed) are caught here and recorded as a zero-rescue
+ *  attempt with an `applyError` field on `evaluation.json`. The case
+ *  loop continues with the next hypothesis. Without this catch, a
+ *  single bad hypothesis crashes the whole run — and the operator
+ *  loses all the prior LLM work. */
 export async function evaluateHypothesis(
     opts: EvaluateHypothesisOpts,
 ): Promise<AttemptRecord> {
@@ -144,7 +151,36 @@ export async function evaluateHypothesis(
 
     opts.revertSandbox?.(opts.hypothesis);
 
-    await opts.lever.applyToSandbox(opts.hypothesis, opts.applyCtx);
+    try {
+        await opts.lever.applyToSandbox(opts.hypothesis, opts.applyCtx);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const evaluation: EvaluationResult = {
+            schemaVersion: 1,
+            probeType: "translator",
+            rescues: 0,
+            regressions: 0,
+            netDelta: 0,
+            score: 0,
+            regressionPhrases: [],
+        };
+        // Augment the on-disk evaluation with the apply error so the
+        // archive captures why this attempt produced no signal.
+        ensureDir(opts.attemptDir);
+        fs.writeFileSync(
+            path.join(opts.attemptDir, "evaluation.json"),
+            JSON.stringify(
+                { ...evaluation, applyError: message },
+                undefined,
+                2,
+            ),
+        );
+        return {
+            hypothesis: opts.hypothesis,
+            evaluation,
+            artifactPath: opts.attemptDir,
+        };
+    }
 
     const diff = await opts.runProbe(opts.hypothesis, opts.caseDesc);
     const evaluation = scoreFromDiff(diff);

@@ -18,6 +18,8 @@
 // time.
 
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 import type { ChatModel } from "aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
@@ -62,6 +64,16 @@ export interface AnalyzeCaseOpts {
     /** Skip the LLM refinement step. Used by tests that only exercise the
      *  heuristic path. */
     skipLLM?: boolean;
+    /** Skip the post-analyze "every member has a checksum" validation.
+     *  Production callers leave this off so missing-schema cases fail
+     *  loud. Tests with stubbed providers pass `true`. */
+    skipChecksumValidation?: boolean;
+    /** When set, the analyzer reads the sandbox's `.original/` snapshot
+     *  to compute schema and manifest checksums. The manifest checksum
+     *  in particular MUST come from the sandbox — the sandbox manifest
+     *  is synthetic (constructed by sandboxBuilder) and bytewise differs
+     *  from the live manifest file. */
+    sandboxDir?: string;
     /** Limit on misroute / clean samples kept in the case description.
      *  Default 40 each. */
     sampleCap?: number;
@@ -154,6 +166,62 @@ export async function analyzeCase(
         // top-level schema description.
         if (config.description) {
             currentManifestDescriptions[m.schemaName] = config.description;
+        }
+        // Manifest checksum — read from the sandbox's `.original/`
+        // snapshot when sandboxDir is supplied. The manifest lever
+        // writes to the SANDBOX manifest (which is synthetic, built by
+        // sandboxBuilder), so the checksum must match what the lever's
+        // verifyChecksum will see at apply time.
+        if (opts.sandboxDir) {
+            const manifestPath = path.join(
+                opts.sandboxDir,
+                ".original",
+                "agents",
+                m.schemaName,
+                "manifest.json",
+            );
+            if (fs.existsSync(manifestPath)) {
+                try {
+                    const manifestContent = fs.readFileSync(
+                        manifestPath,
+                        "utf-8",
+                    );
+                    originalChecksum[`${m.schemaName}:manifest`] =
+                        sha1(manifestContent);
+                } catch {
+                    // skip — validation below will flag it
+                }
+            }
+        }
+    }
+
+    // ---- Validate checksum coverage ----
+    // Every member's schema must have produced a checksum. A member
+    // without a checksum is unusable downstream — levers can't apply
+    // against it. Fail loud so the case loop can skip the whole case
+    // rather than letting the lever crash mid-run. Common cause:
+    // dynamic sub-actions (e.g. taskflow flows registered at runtime)
+    // appear as neighborhood members but lack a static schemaFile.
+    if (!opts.skipChecksumValidation) {
+        const missing: string[] = [];
+        for (const m of neighborhood.members) {
+            if (!originalChecksum[`${m.schemaName}:schema`]) {
+                missing.push(`${m.schemaName}.${m.actionName} (schema)`);
+            }
+            // Manifest checksums are only required when the sandbox is
+            // in play. Without a sandbox the manifest lever can't run
+            // anyway, so don't fail on a missing manifest checksum.
+            if (
+                opts.sandboxDir &&
+                !originalChecksum[`${m.schemaName}:manifest`]
+            ) {
+                missing.push(`${m.schemaName}.${m.actionName} (manifest)`);
+            }
+        }
+        if (missing.length > 0) {
+            throw new Error(
+                `analyzeCase: ${missing.length} member checksum(s) missing: ${missing.join(", ")}`,
+            );
         }
     }
 

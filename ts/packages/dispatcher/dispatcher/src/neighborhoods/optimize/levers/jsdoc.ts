@@ -29,6 +29,10 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { replaceJSDoc, replacePasActionDescription } from "../apply.js";
+import {
+    formatMembersBlock,
+    isValidMemberReference,
+} from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:jsdoc");
 
@@ -125,6 +129,18 @@ export const jsdocLever: LeverPlugin = {
         const hypotheses: Hypothesis[] = [];
         for (let i = 0; i < parsed.hypotheses.length; i++) {
             const raw = parsed.hypotheses[i]!;
+            if (
+                !isValidMemberReference(
+                    caseDesc.members,
+                    raw.targetSchema,
+                    raw.targetAction,
+                )
+            ) {
+                // LLM picked a (targetSchema, targetAction) that isn't
+                // an actual member of the case. Drop it rather than
+                // letting the lever crash at apply time.
+                continue;
+            }
             const targetSourceKind = sourceKindFor(caseDesc, raw.targetSchema);
             const targetActionTypeName =
                 targetSourceKind === "ts"
@@ -298,9 +314,7 @@ function buildProposePrompt(
     k: number,
     schemaGuidelines: string,
 ): string {
-    const memberLines = caseDesc.members
-        .map((m) => `  - ${m.schemaName}.${m.actionName}`)
-        .join("\n");
+    const memberBlock = formatMembersBlock(caseDesc.members);
     const misrouteSamples = caseDesc.misroutePhrases
         .slice(0, 8)
         .map(
@@ -334,8 +348,8 @@ You are proposing fixes for a translator-collision case. ${k} hypotheses are nee
 CASE:
   failurePattern: ${caseDesc.failurePattern}  (heuristic: ${caseDesc.failurePatternHeuristic})
   severityTier: ${caseDesc.severityTier}
-  members:
-${memberLines}
+
+${memberBlock}
 
 Current action documentation (JSDoc or PAS description):
 ${currentDocs}
@@ -346,13 +360,13 @@ ${misrouteSamples}
 Clean phrases that already work (do not break these):
 ${cleanSamples}${priorBlock}
 
-Generate ${k} hypotheses. For each, pick ONE member action to rewrite (typically the action the misroutes were EXPECTED to hit -- widen it to absorb the intent, per the WORK WITH THE LLM INTENT guideline above). Return JSON only:
+Generate ${k} hypotheses. For each, pick ONE member to rewrite (typically the action the misroutes were EXPECTED to hit -- widen it to absorb the intent, per the WORK WITH THE LLM INTENT guideline above). Return JSON only:
 
 {
   "hypotheses": [
     {
-      "targetSchema": "<schema name, e.g. player>",
-      "targetAction": "<action name, e.g. playTrack>",
+      "targetSchema": "<copy verbatim from one of the Member lines above>",
+      "targetAction": "<the matching actionName from that Member line>",
       "newText": "<the new comment block — for .ts, use // line comments; for PAS, plain text. Must include a one-sentence identity line as the LAST line.>",
       "mechanism": "<one of: ${ALLOWED_MECHANISMS.join(", ")}>",
       "guidelineHook": "<one of: ${ALLOWED_GUIDELINE_HOOKS.join(", ")}, or null>",

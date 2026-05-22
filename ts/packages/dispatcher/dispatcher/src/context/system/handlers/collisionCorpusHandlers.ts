@@ -325,6 +325,135 @@ function defaultPath(
     return path.join(dir, filename);
 }
 
+// Resolve and validate a `--out` value (or fall through to the default path).
+// Catches the common mistake of passing a directory where a file is expected
+// (e.g. `--out d:\collisions2`) and emits a clear, actionable warning before
+// the underlying `mkdir` fails with a cryptic `EPERM` on the parent.
+// Returns `null` when the flag is rejected; callers should bail out.
+function resolveOutFilePath(
+    systemContext: CommandHandlerContext,
+    flag: string | undefined,
+    flagName: string,
+    workdir: string | undefined,
+    defaultFilename: string,
+    context: ActionContext<CommandHandlerContext>,
+): string | null {
+    if (flag === undefined) {
+        const dir = workdir ?? defaultWorkdir(systemContext);
+        const out = path.join(dir, defaultFilename);
+        ensureDir(path.dirname(out));
+        return out;
+    }
+    const resolved = path.resolve(flag);
+    const suggestPath = path.join(
+        resolved && path.dirname(resolved) !== resolved ? resolved : flag,
+        defaultFilename,
+    );
+    // Trailing path separator → user meant a directory.
+    if (/[\\/]$/.test(flag)) {
+        displayWarn(
+            `--${flagName} expects a file path, not a directory (${flag}). Use --workdir to set the directory, or pass a file name (e.g. --${flagName} ${suggestPath}).`,
+            context,
+        );
+        return null;
+    }
+    // Drive root (e.g. "d:\") or filesystem root — `path.dirname` returns
+    // the same string, so we'd fail to create any parent.
+    if (path.dirname(resolved) === resolved) {
+        displayWarn(
+            `--${flagName} expects a file path, not a drive root (${flag}). Use --workdir to set the directory, or pass a file name (e.g. --${flagName} ${suggestPath}).`,
+            context,
+        );
+        return null;
+    }
+    // Path resolves to an existing directory → user meant the directory.
+    try {
+        if (fs.statSync(resolved).isDirectory()) {
+            displayWarn(
+                `--${flagName} expects a file path, but ${flag} is an existing directory. Use --workdir ${flag} for the default file name, or pass an explicit file name (e.g. --${flagName} ${suggestPath}).`,
+                context,
+            );
+            return null;
+        }
+    } catch {
+        // ENOENT — fine, we'll create the parent below.
+    }
+    try {
+        ensureDir(path.dirname(resolved));
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        displayWarn(
+            `Could not create parent directory for --${flagName} (${path.dirname(resolved)}): ${msg}. Did you mean to pass a file path (e.g. --${flagName} ${suggestPath}) or use --workdir for the directory?`,
+            context,
+        );
+        return null;
+    }
+    return resolved;
+}
+
+// Throttled, atomic partial-results writer. Long-running pipelines call
+// `snapshot(getData)` after each unit of work; this serializes writes so
+// only one is in flight at a time, throttles them, and lands them via
+// rename so a partially-written file is never visible to anyone reading
+// it. On `finalize(data)`, the final result lands at `finalPath` (sync,
+// for crash safety on the closing write) and the `.partial` file is
+// removed. If the process dies mid-run, the partial file is what the
+// user has to inspect or resume from.
+function createThrottledFileWriter(finalPath: string, throttleMs: number) {
+    const partialPath = finalPath + ".partial";
+    const tmpPath = partialPath + ".tmp";
+    let lastWriteAt = 0;
+    let writing = false;
+    let dirty = false;
+
+    async function maybeWrite(getData: () => unknown): Promise<void> {
+        if (writing) {
+            dirty = true;
+            return;
+        }
+        if (Date.now() - lastWriteAt < throttleMs) {
+            dirty = true;
+            return;
+        }
+        writing = true;
+        try {
+            do {
+                dirty = false;
+                const json = JSON.stringify(getData(), null, 2);
+                await fs.promises.writeFile(tmpPath, json);
+                await fs.promises.rename(tmpPath, partialPath);
+                lastWriteAt = Date.now();
+            } while (dirty && Date.now() - lastWriteAt >= throttleMs);
+        } catch {
+            // Best-effort — failures here aren't fatal; finalize will retry.
+        } finally {
+            writing = false;
+        }
+    }
+
+    function snapshot(getData: () => unknown) {
+        void maybeWrite(getData);
+    }
+
+    function finalize(data: unknown) {
+        // Land the canonical file synchronously so it's guaranteed on disk
+        // before we declare success. Then remove the partial.
+        fs.writeFileSync(finalPath, JSON.stringify(data, null, 2));
+        try {
+            fs.unlinkSync(partialPath);
+        } catch {
+            // Already gone — fine.
+        }
+        try {
+            fs.unlinkSync(tmpPath);
+        } catch {
+            // Already gone — fine.
+        }
+    }
+
+    return { snapshot, finalize, partialPath };
+}
+
 // =============================================================================
 // pmap — bounded-concurrency async map with progress callback
 // =============================================================================
@@ -509,6 +638,7 @@ async function generateCorpus(
         done?: number,
         total?: number,
     ) => void,
+    onPartial?: (getCorpus: () => Corpus) => void,
 ): Promise<{
     corpus: Corpus;
     errorCount: number;
@@ -558,89 +688,45 @@ async function generateCorpus(
         error: string;
     }[] = [];
 
-    onProgress?.("generating", 0, tasks.length);
-    interface CallResult {
-        task: Task;
-        phrases: { text: string; style: PhraseStyle; model: string }[];
-        error?: string;
-    }
-    const results = await pmap<Task, CallResult>(
-        tasks,
-        opts.concurrency,
-        async (task) => {
-            const prompt = buildCorpusPrompt(task.action, opts.styles);
-            try {
-                const result = await task.model.complete(prompt);
-                if (!result.success) {
-                    return {
-                        task,
-                        error: result.message ?? "unknown failure",
-                        phrases: [],
-                    };
-                }
-                let parsed: any;
-                try {
-                    parsed = JSON.parse(extractJSON(result.data ?? ""));
-                } catch (err) {
-                    return {
-                        task,
-                        error: `JSON parse failed: ${err instanceof Error ? err.message : String(err)}`,
-                        phrases: [],
-                    };
-                }
-                const phrases: {
-                    text: string;
-                    style: PhraseStyle;
-                    model: string;
-                }[] = [];
-                for (const style of opts.styles) {
-                    const text =
-                        typeof parsed[style] === "string"
-                            ? parsed[style].trim()
-                            : "";
-                    if (text)
-                        phrases.push({
-                            text,
-                            style,
-                            model: task.modelName,
-                        });
-                }
-                return { task, phrases };
-            } catch (err) {
-                return {
-                    task,
-                    error: err instanceof Error ? err.message : String(err),
-                    phrases: [],
-                };
-            }
-        },
-        (done, total) => onProgress?.("generating", done, total),
-    );
-
-    onProgress?.("merging");
+    // The merge state lives outside `pmap` so we can publish partial corpora
+    // as each task completes — previously we accumulated raw results and
+    // merged at the end, which meant nothing landed on disk until the whole
+    // ~12-minute run finished.
     const byAction = new Map<string, CorpusAction>();
-    for (const r of results) {
-        if (r.error) {
-            perCallErrors.push({
-                schemaName: r.task.action.schemaName,
-                actionName: r.task.action.actionName,
-                model: r.task.modelName,
-                error: r.error,
-            });
-            continue;
-        }
-        const key = `${r.task.action.schemaName}.${r.task.action.actionName}`;
+
+    function snapshotCorpus(): Corpus {
+        return {
+            scannedAt: new Date().toISOString(),
+            models: opts.models,
+            sampledSchemas: opts.schemas,
+            actionCount: byAction.size,
+            actions: Array.from(byAction.values()).sort((a, b) =>
+                `${a.schemaName}.${a.actionName}`.localeCompare(
+                    `${b.schemaName}.${b.actionName}`,
+                ),
+            ),
+        };
+    }
+
+    // Synchronous: invoked inside `pmap`'s runOne after the LLM call resolves.
+    // Safe under concurrency because JS gives us run-to-completion semantics
+    // between awaits — no two merges interleave.
+    function mergeTaskResult(
+        task: Task,
+        phrases: { text: string; style: PhraseStyle; model: string }[],
+    ) {
+        const key = `${task.action.schemaName}.${task.action.actionName}`;
         let slot = byAction.get(key);
         if (!slot) {
             slot = {
-                schemaName: r.task.action.schemaName,
-                actionName: r.task.action.actionName,
-                description: r.task.action.actionDescription,
+                schemaName: task.action.schemaName,
+                actionName: task.action.actionName,
+                description: task.action.actionDescription,
                 phrases: [],
             };
             byAction.set(key, slot);
         }
-        for (const p of r.phrases) {
+        for (const p of phrases) {
             const existing = slot.phrases.find(
                 (x) => x.text.toLowerCase() === p.text.toLowerCase(),
             );
@@ -663,17 +749,69 @@ async function generateCorpus(
             }
         }
     }
-    const corpus: Corpus = {
-        scannedAt: new Date().toISOString(),
-        models: opts.models,
-        sampledSchemas: opts.schemas,
-        actionCount: byAction.size,
-        actions: Array.from(byAction.values()).sort((a, b) =>
-            `${a.schemaName}.${a.actionName}`.localeCompare(
-                `${b.schemaName}.${b.actionName}`,
-            ),
-        ),
-    };
+
+    onProgress?.("generating", 0, tasks.length);
+    await pmap<Task, void>(
+        tasks,
+        opts.concurrency,
+        async (task) => {
+            const prompt = buildCorpusPrompt(task.action, opts.styles);
+            try {
+                const result = await task.model.complete(prompt);
+                if (!result.success) {
+                    perCallErrors.push({
+                        schemaName: task.action.schemaName,
+                        actionName: task.action.actionName,
+                        model: task.modelName,
+                        error: result.message ?? "unknown failure",
+                    });
+                    return;
+                }
+                let parsed: any;
+                try {
+                    parsed = JSON.parse(extractJSON(result.data ?? ""));
+                } catch (err) {
+                    perCallErrors.push({
+                        schemaName: task.action.schemaName,
+                        actionName: task.action.actionName,
+                        model: task.modelName,
+                        error: `JSON parse failed: ${err instanceof Error ? err.message : String(err)}`,
+                    });
+                    return;
+                }
+                const phrases: {
+                    text: string;
+                    style: PhraseStyle;
+                    model: string;
+                }[] = [];
+                for (const style of opts.styles) {
+                    const text =
+                        typeof parsed[style] === "string"
+                            ? parsed[style].trim()
+                            : "";
+                    if (text)
+                        phrases.push({
+                            text,
+                            style,
+                            model: task.modelName,
+                        });
+                }
+                mergeTaskResult(task, phrases);
+                onPartial?.(snapshotCorpus);
+            } catch (err) {
+                perCallErrors.push({
+                    schemaName: task.action.schemaName,
+                    actionName: task.action.actionName,
+                    model: task.modelName,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+        },
+        (done, total) => onProgress?.("generating", done, total),
+    );
+
+    onProgress?.("merging");
+    const corpus = snapshotCorpus();
     return {
         corpus,
         errorCount: perCallErrors.length,
@@ -3325,7 +3463,7 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
             },
             out: {
                 description:
-                    "Output corpus JSON path. Default: <instanceDir>/collisions/corpus.json",
+                    "Output corpus JSON file path (file name, not directory — use --workdir to choose the directory). Default: <instanceDir>/collisions/corpus.json",
                 type: "string",
                 optional: true,
             },
@@ -3366,13 +3504,16 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
         const workdir = params.flags.workdir
             ? resolveWorkdir(systemContext, params.flags.workdir)
             : undefined;
-        const outPath = defaultPath(
+        const outPath = resolveOutFilePath(
             systemContext,
             params.flags.out,
+            "out",
             workdir,
             DEFAULT_FILES.corpus,
+            context,
         );
-        ensureDir(path.dirname(outPath));
+        if (outPath === null) return;
+        const partialWriter = createThrottledFileWriter(outPath, 3000);
 
         await withReadOnlySession(context, async () => {
             displayStatus(
@@ -3410,9 +3551,10 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
                             );
                         }
                     },
+                    (getCorpus) => partialWriter.snapshot(getCorpus),
                 );
 
-            fs.writeFileSync(outPath, JSON.stringify(corpus, null, 2));
+            partialWriter.finalize(corpus);
             const elapsedSec = ((Date.now() - t0) / 1000).toFixed(1);
             const totalPhrases = corpus.actions.reduce(
                 (n, a) => n + a.phrases.length,
@@ -3610,7 +3752,7 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             },
             out: {
                 description:
-                    "Output translation-results JSON path. Default: <workdir>/translation-results.json (or translation-results-<suffix>.json when --output-suffix is set).",
+                    "Output translation-results JSON file path (file name, not directory — use --workdir to choose the directory). Default: <workdir>/translation-results.json (or translation-results-<suffix>.json when --output-suffix is set).",
                 type: "string",
                 optional: true,
             },
@@ -3683,12 +3825,15 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
         const defaultOutName = outputSuffix
             ? `translation-results-${outputSuffix}.json`
             : "translation-results.json";
-        const outPath = defaultPath(
+        const outPath = resolveOutFilePath(
             systemContext,
             params.flags.out,
+            "out",
             workdir,
             defaultOutName,
+            context,
         );
+        if (outPath === null) return;
         if (!fs.existsSync(inPath)) {
             displayWarn(
                 `Corpus file not found: ${inPath}. Generate one with \`@collision corpus generate\`.`,
@@ -3763,7 +3908,7 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             }
         }
 
-        ensureDir(path.dirname(outPath));
+        const partialWriter = createThrottledFileWriter(outPath, 3000);
 
         await withReadOnlySession(context, async () => {
             displayStatus(`Translation probe\nLoading ${inPath}…`, context);
@@ -3807,8 +3952,9 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
                         );
                     }
                 },
+                (getFile) => partialWriter.snapshot(getFile),
             );
-            fs.writeFileSync(outPath, JSON.stringify(probeFile, null, 2));
+            partialWriter.finalize(probeFile);
 
             const c = probeFile.summary.counts;
             const total = probeFile.summary.totalPhrases;

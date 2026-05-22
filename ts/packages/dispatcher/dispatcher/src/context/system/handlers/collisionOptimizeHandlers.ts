@@ -249,10 +249,21 @@ class CollisionOptimizeExploreCommandHandler implements CommandHandler {
                     onProgress,
                 });
 
+                const skippedCases =
+                    run.corpusCoverage.skippedCases ?? [];
                 const text = [
                     `Optimize run ${run.runId} written`,
                     `  cases: ${run.cases.length}`,
                     `  winners: ${run.cases.filter((c) => c.winner !== null).length}`,
+                    skippedCases.length > 0
+                        ? `  skipped ${skippedCases.length} case(s) — see optimization-run.json corpusCoverage.skippedCases for reasons:\n    ${skippedCases
+                              .slice(0, 3)
+                              .map(
+                                  (s) =>
+                                      `${s.neighborhoodId}: ${s.reason.slice(0, 100)}${s.reason.length > 100 ? "…" : ""}`,
+                              )
+                              .join("\n    ")}${skippedCases.length > 3 ? "\n    …" : ""}`
+                        : "",
                     `  sandbox: ${run.sandboxRoot}`,
                     `  coverage: ${run.corpusCoverage.reachableMass}/${run.corpusCoverage.totalCollisionMass} mass`,
                     dryRun ? "  (dry-run — no LLM, no probe)" : "",
@@ -291,9 +302,7 @@ async function runRealProbe(
     const corpus = buildFocusedCorpus(caseDesc);
 
     // Build a baseline-row index so we can diff each phrase result.
-    const baseline = JSON.parse(
-        require("node:fs").readFileSync(baselinePath, "utf-8"),
-    );
+    const baseline = JSON.parse(fs.readFileSync(baselinePath, "utf-8"));
     const baselineByPhrase = new Map<
         string,
         { chosenSchema?: string; chosenAction?: string; outcome: string }

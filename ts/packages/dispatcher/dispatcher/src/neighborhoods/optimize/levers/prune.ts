@@ -31,6 +31,10 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { markDeprecated, writeActionConfigOverride } from "../apply.js";
+import {
+    formatMembersBlock,
+    isValidMemberReference,
+} from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:prune");
 
@@ -105,6 +109,15 @@ export const pruneLever: LeverPlugin = {
         const hypotheses: Hypothesis[] = [];
         for (let i = 0; i < parsed.hypotheses.length; i++) {
             const raw = parsed.hypotheses[i]!;
+            if (
+                !isValidMemberReference(
+                    caseDesc.members,
+                    raw.targetSchema,
+                    raw.targetAction,
+                )
+            ) {
+                continue;
+            }
             const targetSourceKind = sourceKindFor(caseDesc, raw.targetSchema);
             const targetActionTypeName =
                 targetSourceKind === "ts"
@@ -231,9 +244,7 @@ function buildProposePrompt(
     k: number,
     schemaGuidelines: string,
 ): string {
-    const memberLines = caseDesc.members
-        .map((m) => `  - ${m.schemaName}.${m.actionName}`)
-        .join("\n");
+    const memberBlock = formatMembersBlock(caseDesc.members);
     const misroute = caseDesc.misroutePhrases
         .slice(0, 8)
         .map(
@@ -255,8 +266,8 @@ Deprecation is a LAST RESORT mechanism, used only when one of the case's member 
 
 CASE:
   failurePattern: ${caseDesc.failurePattern}
-  members:
-${memberLines}
+
+${memberBlock}
 
 Misroute samples:
 ${misroute}${priorBlock}
@@ -266,8 +277,8 @@ Generate ${k} hypotheses. Each picks ONE member action to deprecate, with a shor
 {
   "hypotheses": [
     {
-      "targetSchema": "<schema name>",
-      "targetAction": "<action to deprecate>",
+      "targetSchema": "<copy verbatim from one of the Member lines above>",
+      "targetAction": "<the matching actionName from that Member line>",
       "reason": "<short reason — e.g. 'absorbed by playTrack'>",
       "guidelineHook": null,
       "rationale": "<1-2 sentence reason why this action is the right one to prune>"

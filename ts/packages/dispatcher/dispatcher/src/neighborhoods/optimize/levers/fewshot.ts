@@ -32,6 +32,10 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { appendExampleTag } from "../apply.js";
+import {
+    formatMembersBlock,
+    isValidMemberReference,
+} from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:fewshot");
 
@@ -123,6 +127,15 @@ export const fewshotLever: LeverPlugin = {
         const hypotheses: Hypothesis[] = [];
         for (let i = 0; i < parsed.hypotheses.length; i++) {
             const raw = parsed.hypotheses[i]!;
+            if (
+                !isValidMemberReference(
+                    caseDesc.members,
+                    raw.targetSchema,
+                    raw.targetAction,
+                )
+            ) {
+                continue;
+            }
             const targetSourceKind = sourceKindFor(caseDesc, raw.targetSchema);
             const examples = Array.isArray(raw.examples)
                 ? raw.examples
@@ -265,9 +278,7 @@ function buildProposePrompt(
     k: number,
     schemaGuidelines: string,
 ): string {
-    const memberLines = caseDesc.members
-        .map((m) => `  - ${m.schemaName}.${m.actionName}`)
-        .join("\n");
+    const memberBlock = formatMembersBlock(caseDesc.members);
     const misroute = caseDesc.misroutePhrases
         .slice(0, 10)
         .map(
@@ -293,8 +304,8 @@ Examples must be POSITIVE — phrases the action SHOULD absorb. Never write "DO 
 
 CASE:
   failurePattern: ${caseDesc.failurePattern}
-  members:
-${memberLines}
+
+${memberBlock}
 
 Misroute samples (you want these to start landing on the RIGHT action):
 ${misroute}
@@ -307,8 +318,8 @@ Generate ${k} hypotheses. For each, pick ONE member action — typically the act
 {
   "hypotheses": [
     {
-      "targetSchema": "<schema name>",
-      "targetAction": "<action name>",
+      "targetSchema": "<copy verbatim from one of the Member lines above>",
+      "targetAction": "<the matching actionName from that Member line>",
       "examples": [
         { "user": "<user phrasing — short, natural>", "agent": "<concise agent reply showing the action fired>" }
       ],
