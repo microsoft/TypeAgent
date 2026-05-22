@@ -778,21 +778,3 @@ schema for registry-style resolution) but it is not used by the bundler today.
   expose a `workflowOrigins` side-table mapping mangled name → original path + name.
 
 **Raised during:** P7-D2 decision log review.
-
-## G24: ✅ Engine test for caller-side onError recovery from sub-workflow failure
-
-**Spec/intent:** When a sub-workflow call fails and the caller has an `onError`
-target, execution should recover into the caller's `onError` handler (same
-`pendingError` threading used for tasks and loops).
-
-**Resolution:** Added manual-IR integration test
-`"caller onError recovers from sub-workflow failure (manual IR)"` in
-`ts/examples/workflow/engine/test/dsl-integration.spec.ts`. The test constructs
-an IR where `callHelper` has `onError: "recover"` — `helper` always fails, and
-`recover` returns 99 as fallback (on the mutually-exclusive success path `done`
-returns 1). Confirmed 223 engine tests passing.
-
-**DSL syntax gap:** The DSL still does not expose `onError` on workflow call
-nodes; see G22 for call-site annotation roadmap.
-
-**Raised during:** P5-D6 decision log review.
