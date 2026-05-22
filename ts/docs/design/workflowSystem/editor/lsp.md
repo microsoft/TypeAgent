@@ -2,7 +2,21 @@
 
 > This document describes the implementation that lives in
 > `ts/examples/workflow/lsp/` and `ts/examples/workflow/vscode/`.
-> The original feature plan is in [`lsp-plan.md`](./lsp-plan.md).
+
+---
+
+## Design Rationale
+
+**LSP, not in-process.** The server runs as a separate Node process
+communicating over stdio (JSON-RPC). This lets any LSP-capable editor
+(Neovim, Zed, IntelliJ, ...) reuse the server without any VS Code
+dependency. The VS Code extension is a thin client that spawns the
+server and provides static resources (grammar, snippets, icon).
+
+**Server is bundle-only.** The extension bundles `dist/server.js` via
+esbuild; the server is not published to npm or the VS Code Marketplace.
+Standalone install for other editors is a future task; the server stays
+architecturally decoupled so that path is straightforward.
 
 ---
 
@@ -118,8 +132,19 @@ points to the `const` keyword; the actual name is scanned forward).
 | Semantic tokens    | `textDocument/semanticTokens/full`      | `features/semanticTokens.ts` |
 | Rename             | `textDocument/rename` + `prepareRename` | `features/rename.ts`         |
 | Code actions       | `textDocument/codeAction`               | `features/codeActions.ts`    |
-| IR preview         | `workflow/compileIR` (custom)           | `features/compileIR.ts`      |
-| Graph preview      | `workflow/previewGraph` (custom)        | `features/previewGraph.ts`   |
+
+### Rename scope rules
+
+`prepareRename` rejects the request when the cursor is on a built-in
+task name, a namespace token (e.g. `shell`, `string`), or a keyword.
+The rename walks the symbol table and updates:
+
+- All `SymbolRef` entries whose `defOffset` matches the target definition.
+- Identifiers inside template-literal `${...}` substitutions.
+- Lexically scoped shadowing is respected: renaming an inner `const`
+  does not touch an outer `const` with the same name.
+  | IR preview | `workflow/compileIR` (custom) | `features/compileIR.ts` |
+  | Graph preview | `workflow/previewGraph` (custom) | `features/previewGraph.ts` |
 
 ---
 
@@ -203,3 +228,18 @@ Coverage thresholds (v8): branches 60%, functions/lines/statements 70%.
 - **`builtinTaskSchemas.ts` sync** — schemas are duplicated between
   `builtinTasks.ts` and `builtinTaskSchemas.ts`; a jest spec asserts
   parity. A future cleanup can generate one from the other.
+
+---
+
+## Out of Scope
+
+- **Debugger / DAP integration** — running and stepping through
+  workflows inside the editor. No timeline.
+- **Visual graph editor** — the graph preview is read-only. An
+  interactive drag-and-drop editor is tracked separately in
+  `docs/design/workflowSystem/editor/plan.md`.
+- **Workspace-wide refactors** — cross-file go-to-definition,
+  workspace rename, etc. The v0.1 DSL is single-file; revisit when
+  the language gains imports.
+- **Marketplace publishing** — the extension is distributed as a
+  `.vsix` for internal use only.
