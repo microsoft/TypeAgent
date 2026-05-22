@@ -684,8 +684,8 @@ therefore a non-standard extension with no TypeScript precedent.
 TypeScript (positional only, or explicit destructuring) or keep the
 named-record convenience syntax as a DSL-specific ergonomic feature?
 
-**Raised during:** G1 workflow composition implementation (Phase 3 — call
-syntax design).
+**Raised during:** G1 workflow composition implementation (designing workflow
+call syntax).
 
 ## G21: `export` conflates entry-point selection with cross-file importability; no library compile mode
 
@@ -728,8 +728,8 @@ concrete problems:
   stem) as the entry when no explicit `--entry` is given, making `export`
   purely a visibility qualifier.
 
-**Raised during:** G1 workflow composition implementation (Phase 3 — export /
-entry-point semantics).
+**Raised during:** G1 workflow composition implementation (designing
+export / entry-point semantics).
 
 ## G22: No DSL syntax for `timeoutMs` on workflow calls
 
@@ -753,8 +753,8 @@ field is only reachable by tools that build IR directly.
   — declares max runtime on the callee declaration rather than each call
   site. Simpler but less flexible (no per-call override).
 
-**Raised during:** G1 workflow composition implementation (Phase 5 — sub-workflow
-call design).
+**Raised during:** G1 workflow composition implementation (designing
+sub-workflow call nodes in the IR).
 
 ## G23: No per-file namespacing for exported workflows in IR
 
@@ -777,5 +777,5 @@ schema for registry-style resolution) but it is not used by the bundler today.
 - **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
   expose a `workflowOrigins` side-table mapping mangled name → original path + name.
 
-**Raised during:** G1 workflow composition implementation (Phase 7 — cross-file
-bundler / name mangling).
+**Raised during:** G1 workflow composition implementation (building the
+cross-file bundler and name mangling strategy).
