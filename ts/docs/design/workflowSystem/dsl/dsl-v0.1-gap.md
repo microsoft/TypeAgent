@@ -322,21 +322,6 @@ Objects compare field-by-field with required/optional handling and
 arrays compare element types recursively. Follow-up diagnostic UX is
 tracked under G22.
 
-## G14: Switch lowering always takes first case
-
-**Spec:** dsl-v0.1.md section 7.4. Switch emits a chain of
-condition-check nodes, each comparing the discriminant to the arm's
-value.
-
-**Current state:** The emitted IR always evaluates to the first case's
-body regardless of the discriminant's runtime value. Likely the
-branch condition for the compare.equals node is not wired to the
-actual discriminant input, or the branch edges (true/false) are
-reversed.
-
-**Reproduction:** Compile a switch with string cases, run with a value
-matching the second case. Output is always from the first case.
-
 ## G16: `throw` produces empty error message
 
 **Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
