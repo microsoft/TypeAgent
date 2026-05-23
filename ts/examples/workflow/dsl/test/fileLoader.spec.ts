@@ -447,6 +447,66 @@ describe("compileFile (Phase 7 — cross-file imports)", () => {
         expect(hasWorkflow(result.ir, "getDefault")).toBe(true);
     });
 
+    test("parameter default in an imported workflow references a transitively-imported workflow", () => {
+        // main imports `bWrap` from b.wf; bWrap's param default calls
+        // `seed()`, which b.wf itself imports from c.wf. Verifies that
+        // the per-file param-default rewrite composes correctly across
+        // three files (entry -> B -> C).
+        const resolver = new MemoryResolver({
+            "/p/c.wf": `
+                export workflow seed(): number {
+                    return 7;
+                }
+            `,
+            "/p/b.wf": `
+                import { seed } from "./c.wf";
+                export workflow bWrap(x: number = seed()): number {
+                    return x;
+                }
+            `,
+            "/p/main.wf": `
+                import { bWrap } from "./b.wf";
+                export workflow main(): number {
+                    const r = bWrap();
+                    return r;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        expect(result.errors).toEqual([]);
+        expect(result.ir?.entry).toBe("main");
+        expect(hasWorkflow(result.ir, "bWrap")).toBe(true);
+        expect(hasWorkflow(result.ir, "seed")).toBe(true);
+    });
+
+    test("loader reports multiple errors in a single compile", () => {
+        // Two independent Phase 3 errors in the same file: one
+        // missing import and one not-exported import. The loader
+        // should report both rather than fail-fast on the first.
+        const resolver = new MemoryResolver({
+            "/p/lib.wf": `
+                workflow priv(): number {
+                    return 1;
+                }
+                export workflow other(): number {
+                    return 2;
+                }
+            `,
+            "/p/main.wf": `
+                import { nope, priv } from "./lib.wf";
+                export workflow main(): number {
+                    const a = nope();
+                    const b = priv();
+                    return a + b;
+                }
+            `,
+        });
+        const result = compileFile("/p/main.wf", taskSchemas, { resolver });
+        const messages = result.errors.map((e) => e.message).join("\n");
+        expect(messages).toMatch(/'nope' not found/);
+        expect(messages).toMatch(/'priv' is not exported/);
+    });
+
     test("mutually-importing files load without infinite loop", () => {
         const resolver = new MemoryResolver({
             "/p/a.wf": `
