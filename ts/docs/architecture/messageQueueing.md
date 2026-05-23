@@ -8,41 +8,35 @@
 > multi-client orchestration on top (broadcast fan-out, reconnect
 > snapshot, no-clients grace timer, server-restart persistence).
 >
-> **Out of scope (separate doc):** > [`messageSteering.md`](./messageSteering.md) covers everything a
-> user/client can do to actively shape the queue beyond submit and
-> cancel: `editQueued`, `pauseQueue` / `resumeQueue`, `interrupt`,
-> respond-to-interaction, the CLI slash-command UX, and the
-> multi-client steering matrix.
+> **Out of scope (separate doc):** a forthcoming steering design
+> document will cover everything a user/client can do to actively
+> shape the queue beyond submit and cancel: `editQueued`,
+> `pauseQueue` / `resumeQueue`, `interrupt`, respond-to-interaction,
+> the CLI slash-command UX, and the multi-client steering matrix.
+> That document is not yet included in this branch.
 >
 > **Superseded:** the original client-side queue design and its review
 > live in [`_deprecated/`](./_deprecated/) for historical context.
 
-**Status:** Draft — decisions captured from review walkthrough.
-**Last Updated:** 2026-05-22 (added §8.5 client compatibility).
+**Status:** Draft — design landed.
+**Last Updated:** 2026-05-22 (editorial pass; removed forward-pointers to
+forthcoming steering doc).
 
 ---
 
 ## Reading order
 
-This doc is meant to be walked through in a design discussion. The
-fastest path:
+§1 – §3 give the elevator pitch, today's dispatcher layout, and a
+one-screen before/after. §4 – §8 are the meat: layering, data model,
+state machine, wire protocol. §9 – §12 cover interactions with
+existing dispatcher state (activity context, batch mode, pending
+interactions, reconnect, multi-client). §13 – §14 are testing and
+references.
 
-1. **§1** — one-paragraph elevator pitch.
-2. **§2** — what's in the codebase today and which files this change
-   touches. Skip if everyone already knows the dispatcher layout.
-3. **§3** — before/after diagram. The whole change on one screen.
-4. **§4 – §8** — the meat: layered architecture, data model, state
-   machine, protocol.
-5. **§9 – §12** — how the change interacts with existing behaviour
-   (activity context, batch mode, pending interactions, reconnect,
-   multi-client).
-6. **§13 – §14** — testing and references.
-
-The **steering operations** layered on top of this queue
-(`editQueued`, `pauseQueue` / `resumeQueue`, `interrupt`, the CLI
-slash-command UX) are specified in
-[`messageSteering.md`](./messageSteering.md) and intentionally not
-discussed here.
+Steering operations (`editQueued`, `pauseQueue` / `resumeQueue`,
+`interrupt`, the CLI slash-command UX) are intentionally out of
+scope; they will be specified in a separate steering design document
+when it lands.
 
 ---
 
@@ -68,27 +62,6 @@ The existing `Dispatcher.processCommand` contract is preserved
 (`Promise<CommandResult>`); we add `submitCommand` for ack-on-enqueue
 semantics plus `ClientIO` push events so every connected client sees
 the queue's lifecycle in real time.
-
-This unlocks:
-
-- **Universal type-ahead.** Control returns to the caller the
-  instant a request is enqueued, regardless of host. Shell direct,
-  Web API, and agent-server-mediated clients all benefit.
-- **One execution model.** Same submit-then-drain semantics whether
-  you talk to a `Dispatcher` directly or through `SharedDispatcher`.
-  No fallback code path that drifts from the real implementation.
-- **Multi-client visibility.** When the host is `SharedDispatcher`,
-  every connected client renders the same queue and observes the
-  same lifecycle events. Single-host callers (Shell, Web, tests)
-  see their own one `ClientIO`'s events.
-- **Disconnect resilience.** The queue survives client disconnect; a
-  reconnecting client restores the queue from a snapshot via
-  `SharedDispatcher`'s `joinConversation`.
-- **Foundation for steering.** `editQueued`, `pauseQueue` /
-  `resumeQueue`, and `interrupt` (specified in
-  [`messageSteering.md`](./messageSteering.md)) all build on the
-  data model, addressing scheme, and broadcast pipeline defined
-  here.
 
 ---
 
@@ -146,10 +119,6 @@ _block on the lock_; clients see this as "the agent is busy."
 5. **Replay is incomplete.** Today's DisplayLog records execution
    start, not submission. A server-side queue lets us record both.
 
-A more detailed motivation (with the multi-client benefit table) is
-preserved in the deprecated review doc:
-[`_deprecated/messageQueueing-review.md`](./_deprecated/messageQueueing-review.md).
-
 ---
 
 ## 3. The change on one screen
@@ -161,44 +130,45 @@ BEFORE                                       AFTER
 client.processCommand("foo")                 client.submitCommand("foo")
         │                                            │
         ▼                                            ▼
-SharedDispatcher.processCommand              SharedDispatcher.submitCommand
-        │                                            │ (thin wrapper —
-        │                                            │  delegates to inner
-        ▼                                            ▼  Dispatcher; ClientIO
-Dispatcher.processCommand                    Dispatcher.submitCommand        wrapper fans out
-        │                                            │                       events to all
-        ▼                                            ▼  (returns immediately, connected clients)
-commandLock (serializes here)                RequestQueue.submit              ─────────
-        │                                            │  → emits requestQueued through ClientIO
+SharedDispatcher.processCommand              SharedDispatcher.submitCommand    (1)
+        │                                            │
+        ▼                                            ▼
+Dispatcher.processCommand                    Dispatcher.submitCommand          (2)
+        │                                            │
+        ▼                                            ▼
+commandLock (serializes here)                RequestQueue.submit               (3)
+        │                                            │
         ▼                                            ▼
 agent.executeAction                          tail.push(entry); drain()
                                                      │
                                                      ▼
                                              drain loop (inside Dispatcher):
                                                 head = tail.shift()
-                                                emits requestStarted through ClientIO
-                                                processCommand(head, …)
+                                                emits requestStarted via ClientIO
+                                                processCommand(head, …)        (4)
                                                      │
                                                      ▼
-                                             commandLock (still here, but
-                                             no contention by construction)
+                                             commandLock — no contention
                                                      │
                                                      ▼
                                              agent.executeAction
 ```
 
-The queue lives **inside `Dispatcher`** — direct callers (Shell, Web,
-tests) get the same submit-then-drain semantics as agent-server-
-mediated clients. `SharedDispatcher` adds nothing to the execution
-path; it just wraps the host `ClientIO` so the lifecycle events
+(1) Thin wrapper; the `ClientIO` wrapper fans queue lifecycle events
 (`requestQueued`, `requestStarted`, `requestCancelled`,
-`queueStateChanged`) reach every connected client instead of the one
-local consumer.
+`queueStateChanged`) out to every connected client.
+(2) Returns immediately once the entry is on the queue (ack-on-enqueue).
+(3) Emits `requestQueued` through `ClientIO` at this point.
+(4) Original `processCommand` body, unchanged. `commandLock` is kept as
+defense-in-depth (see §5.3); the drain loop guarantees no contention.
 
-The wire-level `processCommand` RPC is kept for backward compatibility
-(it's just `submitCommand` + await-completion server-side). Adding a
-new `submitCommand` RPC lets queue-aware clients get ack-on-enqueue
-latency without giving up the legacy fire-and-await callers.
+The queue lives **inside `Dispatcher`**, so direct callers (Shell, Web,
+tests) get the same submit-then-drain semantics as agent-server-mediated
+clients. `SharedDispatcher` adds nothing to the execution path — it only
+wraps the host `ClientIO` so lifecycle events reach every connected
+client. The wire-level `processCommand` RPC is preserved (server-side it
+is `submitCommand` + await-completion), keeping legacy fire-and-await
+callers working unchanged.
 
 ---
 
@@ -221,19 +191,15 @@ latency without giving up the legacy fire-and-await callers.
   human) restores queue state from a snapshot.
 - **Backward-compatible.** Old clients that don't subscribe to queue
   events still work and see today's behaviour (one in-flight,
-  serialized) via the preserved `processCommand` RPC.
+  serialized) via the preserved `processCommand` RPC. See §8.5 for
+  the full transparent-upgrade matrix.
 - **Auditable.** Queue lifecycle (enter, leave, cancel) is logged to
   `DisplayLog` and replayable.
-- **Foundation for steering.** Data model, addressing scheme, and
-  broadcast pipeline are designed so steering operations
-  ([`messageSteering.md`](./messageSteering.md)) layer on without
-  reshaping the core mechanism.
 
 ### 4.2 Non-goals
 
-- **Steering operations.** `editQueued`, `pauseQueue` / `resumeQueue`,
-  and `interrupt` are specified in
-  [`messageSteering.md`](./messageSteering.md), not here.
+- **Steering operations** (`editQueued`, `pauseQueue` / `resumeQueue`,
+  `interrupt`). Out of scope — see opening note.
 - **Cross-conversation scheduling.** Each `Dispatcher` manages its own
   queue; no global fairness.
 - **Persistence across server restart.** Queue is in-memory; queued
@@ -379,11 +345,7 @@ queue-assigned `requestId`, so existing `setUserRequest`,
 `processCommand` as the execute callback — `RequestQueue` is purely
 mechanical and has no Dispatcher-internal knowledge.
 
-### 5.3 `commandLock` — what stays, what becomes a no-op
-
-> **TL;DR.** `commandLock` stays in place. It still _runs_ on every
-> request, but in the contention sense it becomes a no-op because the
-> queue guarantees only one request can reach it at a time.
+### 5.3 `commandLock` — kept as defense-in-depth
 
 `commandLock` (`commandHandlerContext.ts`, initialized via
 `createLimiter(1)`) is acquired inside `command.ts` around every
@@ -393,22 +355,19 @@ mechanical and has no Dispatcher-internal knowledge.
 
 After the queue ships, the drain loop only ever calls
 `processCommand` when `head === null`, so the lock acquisition
-always wins immediately. **No removal**, because:
+always wins immediately. The lock stays in place because three other
+paths still depend on it:
 
 - **Agent-mutation paths** in `sessionContext.ts` (lines around 47,
   65, 82, 167, 254) re-acquire `commandLock` to safely mutate
-  context. Removing it would risk those paths.
+  context.
 - **`respondToChoice`** acquires the lock independently
   (`dispatcher.ts` around line 560). The queue is unaware of choice
   responses; the lock is what prevents a choice response from racing
   with a recursive command invocation.
 - **`flowInterpreter.ts`** uses lock state to avoid re-entry.
 
-The lock is cheap when uncontended. Keeping it is pure defense in
-depth.
-
-> **`REVIEW 5.1` — resolved: keep inner `commandLock`** as
-> defense-in-depth.
+The lock is cheap when uncontended, so keeping it costs nothing.
 
 ### 5.4 `requestId` ownership
 
@@ -418,12 +377,11 @@ at enqueue time and passes it in. This requires plumbing a
 `requestId` parameter through `Dispatcher.processCommand` (currently
 auto-generated).
 
-Why this matters: every steering operation refers to entries by
-`requestId`. If the id were generated only at execution time, queued
-entries would not yet have one, and clients couldn't address them.
-
-> **`REVIEW 5.2` — resolved:** plumb `requestId` through
-> `processCommand`.
+Why this matters: clients need a stable handle on an entry as soon as
+it's submitted — for cancellation, snapshot diffing, and future
+steering operations. If the id were generated only at execution time,
+queued entries would not yet have one, and clients couldn't address
+them.
 
 ### 5.5 Implementation safeguards
 
@@ -647,11 +605,6 @@ on an `await clientIO.question(...)`. This does not leave `running`
                                          [cancelled]
 ```
 
-> Steering operations that mutate queue entries (`editQueued`,
-> `pauseQueue` / `resumeQueue`, `interrupt`) compose with this state
-> machine — see [`messageSteering.md`](./messageSteering.md) for
-> their per-state validity rules.
-
 ### Invariants
 
 - At most one entry has `state === "running"` at any time.
@@ -678,10 +631,7 @@ on an `await clientIO.question(...)`. This does not leave `running`
 ## 8. Protocol additions
 
 This section is the **wire reference** — every RPC, every event,
-every result-payload field the core queue mechanism ships. Steering
-RPCs (`editQueued`, `pauseQueue` / `resumeQueue`, `interrupt`) and
-their wire formats are specified in
-[`messageSteering.md`](./messageSteering.md).
+every result-payload field the core queue mechanism ships.
 
 ### 8.1 `Dispatcher` interface additions
 
@@ -790,9 +740,6 @@ the **last** snapshot per 100ms window wins, and intermediate
 snapshots are dropped. This keeps event volume bounded under bursty
 submits while preserving event ordering for animated UI.
 
-> **`REVIEW 8.2` / `P1-broadcasts` — resolved:** keep both; coalesce
-> snapshots only.
-
 ### 8.3 RPC wire additions
 
 For agent-server-mediated clients,
@@ -812,10 +759,6 @@ Legacy MCP-style "fire and await" callers continue to work unchanged.
 Direct hosts (Shell, Web) call the same `Dispatcher` methods over
 their own RPC channel (e.g. Electron IPC for Shell) — the same wire
 shapes apply, just without the SharedDispatcher hop.
-
-> **`REVIEW 8.3` — resolved:** add `submitCommand` alongside
-> `processCommand`. The new one is what queue-aware clients should
-> use; the old one stays for back-compat.
 
 ### 8.4 `JoinConversationResult.queueSnapshot`
 
@@ -843,19 +786,14 @@ Compat model: **additive field + protocol version bump.** Existing
 clients that don't read it degrade gracefully (they just don't render
 queue state on reconnect). No hard compat gate.
 
-> **`REVIEW 12.2` — resolved:** additive field, graceful degradation.
-
 ### 8.5 Client compatibility — what existing `processCommand` callers get for free
 
-The queue lives inside `Dispatcher` itself, and the legacy
+The queue lives inside `Dispatcher`, and the legacy
 `processCommand(text, ...)` entry point is implemented as
 `requestQueue.submit(...)` + await `entry.completion`. **Every caller
-of `processCommand` is automatically queued**, with no API changes.
-
-This means the following non-Shell/non-CLI clients all inherit FIFO
-ordering, single-in-flight execution, and per-request cancellation
-the moment the Dispatcher upgrade lands — no client-side work
-required:
+of `processCommand` is automatically queued** with no API changes —
+they inherit FIFO ordering, single-in-flight execution, and
+per-request cancellation the moment the upgrade lands:
 
 | Client / caller                                             | Path                        | Free with queueing             |
 | ----------------------------------------------------------- | --------------------------- | ------------------------------ |
@@ -877,28 +815,23 @@ required:
 | Queue-full backpressure (rejected promise)            | `QueueFullError` thrown from submit                          | ✅                                 |
 | Ack-only submit (don't await completion)              | `dispatcher.submitCommand(...)`                              | ✋ opt-in (new API)                |
 | Inspect queue contents / depth                        | `dispatcher.getQueueSnapshot()`                              | ✋ opt-in (new API)                |
-| Jump-the-line                                         | `dispatcher.interrupt(...)` (steering)                       | ✋ opt-in (new API)                |
+| Jump-the-line                                         | `dispatcher.interrupt(...)`                                  | ✋ opt-in (new API)                |
 | Per-request UI affordances ("queued"/"running" chips) | `ClientIO.requestQueued / requestStarted / requestCancelled` | ✋ opt-in (implement push events)  |
 | Authoritative re-render                               | `ClientIO.queueStateChanged`                                 | ✋ opt-in (implement push event)   |
 | Multi-client snapshot on (re)connect                  | `JoinConversationResult.queueSnapshot`                       | ✋ opt-in (read additive field)    |
 
-**Upshot.** A client only needs to touch its codebase if it wants to
-_surface_ queue state to the user (chips, badge, queue list, cancel
-buttons) or use the new ack-only / interrupt / snapshot APIs. The
-underlying queuing semantics — including ordering and cancellation —
-are transparent to every existing `processCommand` caller.
-
-> **`REVIEW 8.5` / `client-compat` — resolved:** queueing is
-> transparent at the `processCommand` boundary; UI / steering features
-> are opt-in.
+A client only needs to touch its codebase if it wants to _surface_
+queue state to the user (chips, badge, queue list, cancel buttons) or
+use the new ack-only / interrupt / snapshot APIs. The underlying
+queuing semantics — including ordering and cancellation — are
+transparent to every existing `processCommand` caller.
 
 ---
 
 ## 9. Existing dispatcher state — how each interacts with the queue
 
 Concrete answers for the dispatcher-state hooks the queue must reason
-about. Detailed background in
-[`_deprecated/messageQueueing-review.md`](./_deprecated/messageQueueing-review.md) §4.
+about.
 
 ### 9.1 `activityContext`
 
@@ -1007,10 +940,6 @@ stalled. The counter is internal to the queue — `markBlocked` /
 > drain loop's completion broadcast one version higher is the
 > authoritative snapshot for the cancel transition.
 
-> Steering of pending interactions (UX, multi-client races on
-> `respondToInteraction`) is covered in
-> [`messageSteering.md`](./messageSteering.md) §4.6.
-
 ---
 
 ## 11. Reconnect / disconnect / server restart
@@ -1066,9 +995,6 @@ This persistence layer lives entirely in `SharedDispatcher` because
 only agent-server has the restart problem; pure `Dispatcher` hosts
 are unaffected.
 
-> **`REVIEW 12.3` — resolved:** defer persistence to v1.5; in-flight
-> marked failed on restart.
-
 ### 11.4 All clients disconnect
 
 `SharedDispatcher` observes the connection roster. When the **last**
@@ -1086,20 +1012,16 @@ If the deadline elapses with no clients connected, `SharedDispatcher`:
    (`state: "running"`, `blockedOn: "interaction"`). With no client to
    answer the prompt, the entry will stall indefinitely; cancellation
    is the honest outcome. The grace-expiry callback in
-   `sharedDispatcher.ts` does three things in order:
+   `sharedDispatcher.ts`:
 
    - calls `dispatcher.cancelCommand(rid)` with reason `"no_clients"`
      (the queue records the cancel reason on the head entry and the
-     `ClientIO.requestCancelled` event fans out via the wrapper),
+     `ClientIO.requestCancelled` event fans out via the wrapper, and
+     the same call fires the `AbortController` for the running entry),
    - rejects any matching pending interaction with an `Error` whose
      `name === "AbortError"` (so `command.ts`'s standard AbortError
      classification translates the agent's thrown rejection into
-     `cancelled: true` rather than `failed`),
-   - the cancel call already fires the `AbortController` for the
-     running entry — no separate `bareDispatcher` path needed under
-     this design (the originator-disconnect fallback in
-     `sharedDispatcher.ts:414` goes away once the queue owns the
-     execution callback).
+     `cancelled: true` rather than `failed`).
 
    When the drain loop sees the resulting `cancelled: true`, it
    stamps `entry.error = "cancelled:no_clients"` from the
@@ -1116,17 +1038,6 @@ If the deadline elapses with no clients connected, `SharedDispatcher`:
 When a client reconnects later, it sees an empty (or running-only)
 queue via `JoinConversationResult.queueSnapshot` and the usual
 lifecycle events on subsequent submits.
-
-> The cancel-on-grace-expiry behaviour above is the core mechanism's
-> answer to "no clients." Once the steering layer adds `pauseQueue` /
-> `resumeQueue` ([`messageSteering.md`](./messageSteering.md)), this
-> default can be revisited (e.g. auto-pause with
-> `pauseReason: "no-clients"` instead of cancelling). The choice
-> documented here is intentionally lossy so the core mechanism does
-> not depend on steering primitives.
-
-> **`REVIEW 12.4` — resolved:** core mechanism cancels on grace
-> expiry; steering layer may later switch this to auto-pause.
 
 ---
 
@@ -1152,11 +1063,6 @@ submit and any connected client can cancel any entry — the model is
 **No queue-ownership in v1.** Any connected client can act on any
 entry regardless of which client originally submitted it. Add an
 `owner-only` mode later if real usage demands.
-
-> The full steering-ops matrix (edit / pause / resume / interrupt) is
-> in [`messageSteering.md`](./messageSteering.md) §5.
-
-> **`REVIEW 9.2` — resolved:** no ownership in v1.
 
 ---
 
@@ -1211,16 +1117,10 @@ inner Dispatcher is wrapped:
   completes if not blocked; assert blocked-on-interaction running
   entry and all queued entries are cancelled with reason
   `"no_clients"` after the 30s grace timer (§11.4). Verify
-  cancellation paths go through `dispatcher.cancelCommand` (not the
-  removed `bareDispatcher` fallback).
+  cancellation paths go through `dispatcher.cancelCommand`.
 - **Privacy redaction.** Submit with attachments; assert the
   originator's local `ClientIO` callback sees full attachments while
   fanned-out copies to other clients see only `attachmentCount`.
-
-Steering-op test cases (edit-while-running rejection, pause + submit
-
-- resume, interrupt cancels current and prepends new) are in
-  [`messageSteering.md`](./messageSteering.md).
 
 ### 13.1 Telemetry
 
@@ -1229,10 +1129,7 @@ Steering-op test cases (edit-while-running rejection, pause + submit
 
 Payloads include `connectionId` of the actor so we can answer
 "which client submitted what?" type questions. Direct-host events
-record the host kind (`"shell"`, `"api"`) in place of
-`connectionId`. Steering ops emit their own
-`requestQueue:edit` / `:pause` / `:resume` / `:interrupt` events
-specified in [`messageSteering.md`](./messageSteering.md).
+record the host kind (`"shell"`, `"api"`) in place of `connectionId`.
 
 Note for anyone migrating from earlier sketches: events are prefixed
 `requestQueue:` (not `messageQueue:`) and there is no `:reorder`
@@ -1242,10 +1139,6 @@ event. See the deprecated docs for the earlier draft that had both.
 
 ## 14. References
 
-- [`messageSteering.md`](./messageSteering.md) — steering operations
-  (`editQueued`, `pauseQueue` / `resumeQueue`, `interrupt`, pending-
-  interaction handling) and the CLI slash-command UX layered on top
-  of this queue.
 - [`_deprecated/messageQueueing-original.md`](./_deprecated/messageQueueing-original.md)
   — the original client-side design; preserved for the §4
   dispatcher-state analysis.
@@ -1255,13 +1148,11 @@ event. See the deprecated docs for the earlier draft that had both.
 - `packages/dispatcher/dispatcher/src/dispatcher.ts` — owns the
   queue under this design; gains `submitCommand` and
   `getQueueSnapshot` as real (non-fallback) implementations.
-- `packages/dispatcher/dispatcher/src/requestQueue.ts` (proposed
-  new home) — the `RequestQueue` class. Currently lives in
-  `packages/agentServer/server/src/requestQueue.ts`; the move is
-  part of this design.
+- `packages/dispatcher/dispatcher/src/requestQueue.ts` — the
+  `RequestQueue` class.
 - `packages/dispatcher/types/src/queue.ts` — wire types
   (`QueuedRequest`, `QueueSnapshot`, `SubmitResult`,
-  `QueueCancelReason`). Already at the correct layer.
+  `QueueCancelReason`).
 - `packages/agentServer/server/src/sharedDispatcher.ts` — orchestrates
   multi-client fan-out, reconnect snapshot, no-clients grace timer,
   and v1.5 server-restart persistence. Owns no queue state.
