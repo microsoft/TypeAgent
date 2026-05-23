@@ -427,7 +427,13 @@ export default class Connect extends Command {
                     },
                     activeDispatcher,
                     undefined,
-                    createCompletionController(activeDispatcher),
+                    createCompletionController({
+                        getCommandCompletion: (input, direction) =>
+                            activeDispatcher.getCommandCompletion(
+                                input,
+                                direction,
+                            ),
+                    }),
                     activeDispatcher,
                     () => loadUserSettings().ui.autoComplete,
                 );

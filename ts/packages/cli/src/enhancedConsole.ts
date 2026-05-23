@@ -2342,6 +2342,12 @@ export async function processCommandsEnhanced<T>(
     dispatcherForCancel?: Dispatcher,
     isCompletionEnabled?: () => boolean,
 ) {
+    // Always resolve the dispatcher at call time so @conversation switch
+    // (which rebinds via bindDispatcher) doesn't leave us holding a closed
+    // channel from the previously joined conversation.
+    const getDispatcher = (): Dispatcher | undefined =>
+        moduleDispatcherRef.current ?? dispatcherForCancel;
+
     const fs = await import("node:fs");
     const historyFile = path.join(
         os.homedir(),
@@ -2372,18 +2378,19 @@ export async function processCommandsEnhanced<T>(
     // Queue-mode Ctrl+C handler: the non-blocking submit path bypasses raw-mode,
     // so install a readline SIGINT handler that cancels the queue head.
     // Double-press-to-exit is preserved.
-    if (rl && dispatcherForCancel?.submitCommand) {
+    if (rl && getDispatcher()?.submitCommand) {
         rl.on("SIGINT", () => {
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
                 process.exit(0);
             }
             lastCtrlCTime = now;
+            const d = getDispatcher();
             // Snapshot's running id is authoritative; currentRequestId is the pre-snapshot fallback.
             const running =
                 cliQueueState?.running?.requestId ?? currentRequestId;
-            if (running) {
-                dispatcherForCancel.cancelCommand(running);
+            if (running && d) {
+                d.cancelCommand(running);
                 return;
             }
             const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
@@ -2474,7 +2481,8 @@ export async function processCommandsEnhanced<T>(
             // Non-blocking submit path: when the dispatcher exposes submitCommand,
             // the call resolves on enqueue. Output/completion arrive via setDisplay,
             // commandComplete, and queue lifecycle events.
-            const submitCommand = dispatcherForCancel?.submitCommand;
+            const liveDispatcher = getDispatcher();
+            const submitCommand = liveDispatcher?.submitCommand;
             if (typeof submitCommand === "function") {
                 isProcessing = true;
                 currentRequestId = undefined;
@@ -2484,7 +2492,7 @@ export async function processCommandsEnhanced<T>(
                     let result;
                     try {
                         result = await submitCommand.call(
-                            dispatcherForCancel,
+                            liveDispatcher,
                             request,
                             undefined,
                             undefined,
@@ -2553,8 +2561,7 @@ export async function processCommandsEnhanced<T>(
             isProcessing = true;
             currentRequestId = undefined;
             currentClientRequestId = randomUUID();
-            const stopKeyListener =
-                startExecutionKeyListener(dispatcherForCancel);
+            const stopKeyListener = startExecutionKeyListener(getDispatcher());
             let result: any;
             try {
                 result = await processCommand(
