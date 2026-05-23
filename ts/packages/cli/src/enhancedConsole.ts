@@ -1835,16 +1835,22 @@ async function questionWithCompletion(
                 const isDouble =
                     now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
                 lastEscapeTime = isDouble ? 0 : now;
-                if (controller && filteredCompletions.length > 0) {
+                // Single-Escape priority: completions → input text → running command.
+                // The last branch restores the pre-queue legacy behavior where a
+                // bare Escape at an empty prompt cancels what's currently executing.
+                const hadCompletions =
+                    !!controller && filteredCompletions.length > 0;
+                const hadInput = input.length > 0;
+                if (hadCompletions) {
                     if (isSlashCommand(input)) {
                         // Slash completions are recomputed every render; use a
                         // flag to suppress them until the input changes.
                         slashCompletionsDismissed = true;
                     } else {
-                        controller.dismiss(input, "forward");
+                        controller!.dismiss(input, "forward");
                     }
-                } else {
-                    // Esc with no completions — clear input.
+                } else if (hadInput) {
+                    // Esc with text but no completions — clear input.
                     // Also hide the controller in case a fetch is in-flight
                     // that would otherwise resolve and show stale completions.
                     controller?.hide();
@@ -1852,6 +1858,22 @@ async function questionWithCompletion(
                     cursorPos = 0;
                     historyIndex = history.length;
                     slashCompletionsDismissed = false;
+                } else if (!isDouble) {
+                    // Empty prompt, no completions, single press — cancel the
+                    // currently running command if any. Double-Escape is handled
+                    // separately below and clears the whole queue.
+                    const d = moduleDispatcherRef.current;
+                    const running =
+                        cliQueueState?.running?.requestId ?? currentRequestId;
+                    if (running && d) {
+                        try {
+                            void Promise.resolve(
+                                d.cancelCommand(running),
+                            ).catch(() => {});
+                        } catch {
+                            // Channel gone; nothing to cancel.
+                        }
+                    }
                 }
                 if (isDouble) {
                     const snap = cliQueueState;
