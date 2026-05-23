@@ -48,8 +48,8 @@ export interface Module {
 /**
  * An `import { name1, name2 as alias } from "./path.wf"` declaration.
  *
- * Phase 2 only parses this syntax — semantic resolution (path resolution,
- * symbol binding, visibility) lands in Phase 7.
+ * The parser only handles the syntax; semantic resolution (path resolution,
+ * symbol binding, visibility) is handled by the type checker and fileLoader.
  */
 export interface ImportDecl {
     kind: "ImportDecl";

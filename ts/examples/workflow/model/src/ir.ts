@@ -176,8 +176,9 @@ export interface ForkMapNode {
 // ---- Workflow call (sub-workflow invocation) ----
 
 /**
- * Reference to a workflow. Currently only intra-artifact ("bundle") references
- * are supported; cross-file imports are deferred to Phase 7.
+ * Reference to a workflow. Cross-file imports are resolved at compile time
+ * by the fileLoader into the artifact bundle; all IR references therefore use
+ * `source: "bundle"`.
  */
 export interface WorkflowRef {
     /** Name of the referenced workflow (key in `WorkflowIR.workflows`). */

@@ -526,8 +526,8 @@ export class Parser {
     /**
      * Parse an import declaration:
      *   import { name1, name2 as alias } from "./path.wf";
-     * Phase 2 parses the syntax only — path resolution and symbol
-     * binding land in Phase 7.
+     * The parser handles the syntax only; path resolution and symbol
+     * binding are handled by the type checker and fileLoader.
      */
     private parseImport(): ImportDecl | undefined {
         const leadingComments = this.takeLeadingComments();

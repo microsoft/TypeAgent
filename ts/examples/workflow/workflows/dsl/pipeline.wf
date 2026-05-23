@@ -1,5 +1,5 @@
 // Pipeline entry: composes summarization over a batch of articles.
-// Demonstrates cross-file imports (G1 / Phase 7) by delegating the
+// Demonstrates cross-file imports by delegating the
 // per-article work to summarize() from writing.wf.
 
 import { summarize } from "./writing.wf";
