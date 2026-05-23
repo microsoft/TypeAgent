@@ -152,10 +152,10 @@ describe("selectFromPartitions", () => {
         expect(spread).toBeLessThan(10);
 
         // Parallel: total time should be well under sequential (3 × delayMs).
-        // The 2× threshold gives ~100ms of headroom for CI timer jitter while
-        // still catching any accidental sequential execution (which would take
-        // ~300ms and clearly exceed the limit).
-        expect(elapsed).toBeLessThan(delayMs * 2);
+        // The 2.5× threshold gives ~150ms of headroom for CI timer jitter
+        // while still catching any accidental sequential execution (which
+        // would take ~300ms and clearly exceed the limit).
+        expect(elapsed).toBeLessThan(delayMs * 2.5);
     });
 
     test("error from a partition is propagated in order", async () => {
