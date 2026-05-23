@@ -17,7 +17,7 @@ import type {
     ConversationSwitchResult,
 } from "../preload/electronTypes.js";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
-import type { ClientIO, Dispatcher } from "agent-dispatcher";
+import type { ClientIO, Dispatcher, QueueSnapshot } from "agent-dispatcher";
 import { debugShell } from "./debug.js";
 import { saveUserSettings } from "agent-dispatcher/helpers/userSettings";
 
@@ -301,7 +301,11 @@ export function createRemoteConversationBackend(
     clientIO: ClientIO,
     initialConversationId: string,
     initialName: string,
-    sendConversationChanged: (conversationId: string, name: string) => void,
+    sendConversationChanged: (
+        conversationId: string,
+        name: string,
+        queueSnapshot?: QueueSnapshot,
+    ) => void,
     onDispatcherSwitch?: (newDispatcher: Dispatcher) => void,
     markHistoryFn?: () => void,
 ): ConversationManagerBackend {
@@ -417,7 +421,11 @@ export function createRemoteConversationBackend(
                 );
             }
 
-            sendConversationChanged(currentConversationId, currentName);
+            sendConversationChanged(
+                currentConversationId,
+                currentName,
+                newConversation.queueSnapshot,
+            );
 
             return {
                 success: true,

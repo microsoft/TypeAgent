@@ -37,6 +37,7 @@ import {
     createDispatcher,
     Dispatcher,
     PortRegistrar,
+    QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -75,6 +76,7 @@ type InitResult = {
     connection?: AgentServerConnection;
     initialConversationId?: string;
     initialConversationName?: string;
+    initialQueueSnapshot?: QueueSnapshot;
     rebindDispatcher?: (freshDispatcher: Dispatcher) => void;
 };
 
@@ -199,6 +201,8 @@ async function initializeDispatcher(
         let connection: AgentServerConnection | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
+        // Bootstrap snapshot from joinConversation (remote mode only).
+        let initialQueueSnapshot: QueueSnapshot | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-session support.
@@ -439,6 +443,7 @@ async function initializeDispatcher(
             newDispatcher = conversation.dispatcher;
             initialConversationId = conversation.conversationId;
             initialConversationName = conversation.name;
+            initialQueueSnapshot = conversation.queueSnapshot;
             // Persist the conversation we ended up on so the next launch
             // restores it. Wrapped in try/catch because user-settings I/O
             // shouldn't block startup if the disk write fails.
@@ -659,6 +664,7 @@ async function initializeDispatcher(
             connection,
             initialConversationId,
             initialConversationName,
+            initialQueueSnapshot,
             rebindDispatcher,
         };
     } catch (e: any) {
@@ -802,6 +808,7 @@ export function initializeInstance(
             connection,
             initialConversationId,
             initialConversationName,
+            initialQueueSnapshot,
             rebindDispatcher,
         } = result;
 
@@ -821,8 +828,12 @@ export function initializeInstance(
                 clientIO,
                 initialConversationId,
                 initialConversationName,
-                (conversationId, name) => {
-                    shellWindow.sendConversationChanged(conversationId, name);
+                (conversationId, name, queueSnapshot) => {
+                    shellWindow.sendConversationChanged(
+                        conversationId,
+                        name,
+                        queueSnapshot,
+                    );
                 },
                 rebindDispatcher,
                 () => shellWindow.sendMarkHistory(),
@@ -848,7 +859,10 @@ export function initializeInstance(
             });
 
             // Notify the renderer process that the dispatcher is initialized
-            chatView.webContents.send("dispatcher-initialized");
+            chatView.webContents.send(
+                "dispatcher-initialized",
+                initialQueueSnapshot,
+            );
 
             // Give focus to the chat view once initialization is done.
             chatView.webContents.focus();
@@ -900,7 +914,8 @@ export function initializeInstance(
         });
 
         // Notify the renderer process that the dispatcher is initialized
-        chatView.webContents.send("dispatcher-initialized");
+        // (standalone path: no queue snapshot).
+        chatView.webContents.send("dispatcher-initialized", undefined);
 
         // Give focus to the chat view once initialization is done.
         chatView.webContents.focus();

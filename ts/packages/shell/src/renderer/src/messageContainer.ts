@@ -112,6 +112,8 @@ export class MessageContainer {
     private action?: TypeAgentAction | string[];
     private feedbackWidget?: FeedbackWidget;
     private trashButton?: HTMLButtonElement;
+    /** Lazily-created "queued"/"running" chip; user bubbles only. */
+    private queueStatusChip?: HTMLDivElement;
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
@@ -331,6 +333,86 @@ export class MessageContainer {
 
     public getMessageDiv() {
         return this.messageDiv;
+    }
+
+    /**
+     * Render a "queued"/"running" chip above the message body. No-op on non-user
+     * bubbles. Pass `null` to remove the chip. When `status === "queued"` and
+     * `onCancel` is provided, a small X button is rendered inside the chip and
+     * invokes `onCancel()` on click.
+     */
+    public setQueueStatus(
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ): void {
+        if (this.classNameSuffix !== "user") return;
+        if (status === null) {
+            if (this.queueStatusChip) {
+                this.queueStatusChip.remove();
+                this.queueStatusChip = undefined;
+            }
+            return;
+        }
+        if (!this.queueStatusChip) {
+            const chip = document.createElement("div");
+            chip.className = "chat-queue-status-chip";
+            chip.style.display = "inline-flex";
+            chip.style.alignItems = "center";
+            chip.style.gap = "4px";
+            chip.style.padding = "1px 6px";
+            chip.style.marginLeft = "4px";
+            chip.style.marginTop = "4px";
+            chip.style.marginBottom = "2px";
+            chip.style.fontSize = "11px";
+            chip.style.lineHeight = "1";
+            chip.style.borderRadius = "8px";
+            chip.style.opacity = "0.85";
+            this.messageBodyDiv.insertBefore(
+                chip,
+                this.messageBodyDiv.firstChild,
+            );
+            this.queueStatusChip = chip;
+        }
+        const chip = this.queueStatusChip;
+        chip.replaceChildren();
+        const label = document.createElement("span");
+        label.textContent = status;
+        chip.appendChild(label);
+        if (status === "queued") {
+            chip.style.background = "rgba(255, 200, 0, 0.18)";
+            chip.style.color = "rgba(120, 80, 0, 0.95)";
+            if (onCancel) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "chat-queue-cancel-button";
+                btn.title = "Cancel this queued request";
+                btn.setAttribute("aria-label", "Cancel queued request");
+                // A bare "×" glyph sized by `font-size: 0.7em` scales with the
+                // chip's own font, avoids loading an SVG icon for a single
+                // character, and keeps the button height roughly 2/3 of the
+                // chip text. Using inline-flex for vertical centering.
+                btn.textContent = "×";
+                btn.style.display = "inline-flex";
+                btn.style.alignItems = "center";
+                btn.style.justifyContent = "center";
+                btn.style.padding = "0";
+                btn.style.border = "none";
+                btn.style.background = "transparent";
+                btn.style.color = "inherit";
+                btn.style.cursor = "pointer";
+                btn.style.fontSize = "0.7em";
+                btn.style.lineHeight = "1";
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel();
+                });
+                chip.appendChild(btn);
+            }
+        } else {
+            chip.style.background = "rgba(0, 150, 255, 0.18)";
+            chip.style.color = "rgba(0, 80, 140, 0.95)";
+        }
     }
 
     /**

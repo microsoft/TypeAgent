@@ -27,6 +27,7 @@ import {
     DiscoveryChannelName,
     createDiscoveryHandlers,
     DispatcherConnectOptions,
+    JoinConversationResult,
     UserIdentity,
     getDispatcherChannelName,
     getClientIOChannelName,
@@ -346,13 +347,17 @@ async function main() {
                             connectionId: result.connectionId,
                         });
 
-                        return {
+                        const joinResult: JoinConversationResult = {
                             connectionId: result.connectionId,
                             conversationId,
                             name: result.name,
                             pendingInteractions:
                                 result.pendingInteractions ?? [],
                         };
+                        if (result.queueSnapshot !== undefined) {
+                            joinResult.queueSnapshot = result.queueSnapshot;
+                        }
+                        return joinResult;
                     } catch (e) {
                         channelProvider.deleteChannel(
                             getClientIOChannelName(conversationId),
@@ -368,13 +373,9 @@ async function main() {
                             `Not joined to conversation: ${conversationId}`,
                         );
                     }
-                    channelProvider.deleteChannel(
-                        getDispatcherChannelName(conversationId),
-                    );
-                    channelProvider.deleteChannel(
-                        getClientIOChannelName(conversationId),
-                    );
-                    joinedConversations.delete(conversationId);
+                    // Channel cleanup runs in the closeFn passed to
+                    // sharedDispatcher.join() via dispatcher.close(); don't
+                    // double-delete here.
                     await conversationManager.leaveConversation(
                         conversationId,
                         entry.connectionId,
@@ -400,18 +401,10 @@ async function main() {
                 },
 
                 deleteConversation: async (conversationId: string) => {
-                    // If this client is in the conversation being deleted,
-                    // clean up local channels first
-                    const entry = joinedConversations.get(conversationId);
-                    if (entry !== undefined) {
-                        channelProvider.deleteChannel(
-                            getDispatcherChannelName(conversationId),
-                        );
-                        channelProvider.deleteChannel(
-                            getClientIOChannelName(conversationId),
-                        );
-                        joinedConversations.delete(conversationId);
-                    }
+                    // Channel cleanup for any joined client of this conversation
+                    // runs in the closeFn passed to sharedDispatcher.join() via
+                    // sharedDispatcher.close() → closeAllClients() →
+                    // dispatcher.close(); don't double-delete here.
                     return conversationManager.deleteConversation(
                         conversationId,
                     );

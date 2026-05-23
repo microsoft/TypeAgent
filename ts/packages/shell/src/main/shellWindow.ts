@@ -21,6 +21,7 @@ import {
 } from "./shellSettings.js";
 import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
+import type { QueueSnapshot } from "agent-dispatcher";
 import {
     BrowserViewManager,
     BrowserViewContext,
@@ -499,11 +500,16 @@ export class ShellWindow {
     /**
      * Notify the renderer that the active conversation has changed.
      */
-    public sendConversationChanged(conversationId: string, name: string): void {
+    public sendConversationChanged(
+        conversationId: string,
+        name: string,
+        queueSnapshot?: QueueSnapshot,
+    ): void {
         this.chatView.webContents.send(
             "conversation-changed",
             conversationId,
             name,
+            queueSnapshot,
         );
     }
 

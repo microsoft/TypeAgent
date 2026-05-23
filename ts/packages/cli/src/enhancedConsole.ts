@@ -28,7 +28,11 @@ import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
     PendingInteractionEntry,
+    QueuedRequest,
+    QueueCancelReason,
+    QueueSnapshot,
 } from "@typeagent/dispatcher-types";
+import { QueueStateMirror } from "@typeagent/dispatcher-types";
 import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
 import fs from "fs";
@@ -48,6 +52,7 @@ import {
     getSlashCompletions,
     getServerPort,
     getServerConnection,
+    getCliConnectionId,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 import {
@@ -242,6 +247,154 @@ let currentRequestId: string | undefined;
 let currentClientRequestId: string | undefined;
 let isProcessing = false;
 let lastCtrlCTime = 0;
+// Second ESC within this window triggers cancelAllInQueue; first ESC keeps its normal prompt-level meaning.
+let lastEscapeTime = 0;
+const DOUBLE_ESCAPE_WINDOW_MS = 1000;
+// Dispatcher ref shared with input handlers (SIGINT, ESC, execution key listener) outside the bind closure.
+const moduleDispatcherRef: { current?: Dispatcher } = {};
+
+/**
+ * Best-effort cancel of the currently running request. Prefers the server-known
+ * requestId from the queue snapshot; falls back to our locally-known requestId
+ * (post-setUserRequest), and finally the client-assigned id (pre-setUserRequest
+ * race window). Returns `true` if a cancel was dispatched.
+ *
+ * Errors are swallowed: cancellation is fire-and-forget; the authoritative UI
+ * update arrives via the `requestCancelled` broadcast.
+ */
+function tryCancelRunningHead(
+    dispatcher: Dispatcher | undefined = moduleDispatcherRef.current,
+): boolean {
+    if (!dispatcher) return false;
+    const running =
+        queueMirror.snapshot?.running?.requestId ?? currentRequestId;
+    if (running) {
+        try {
+            // cancelCommand returns Promise<CancelResult>; warn on rejection
+            // so a wedged dispatcher doesn't silently drop the user's Esc.
+            dispatcher.cancelCommand(running).catch((err) => {
+                console.warn(`cancelCommand(${running}) rejected:`, err);
+            });
+        } catch (err) {
+            // Sync throw — disconnected channel stub.
+            console.warn(`cancelCommand(${running}) threw:`, err);
+        }
+        return true;
+    }
+    if (isProcessing && currentClientRequestId) {
+        try {
+            // cancelCommandByClientId is sync (void).
+            dispatcher.cancelCommandByClientId(currentClientRequestId);
+        } catch (err) {
+            console.warn(
+                `cancelCommandByClientId(${currentClientRequestId}) threw:`,
+                err,
+            );
+        }
+        return true;
+    }
+    return false;
+}
+
+// Mirror of the server's per-conversation queue. UI side effects live in the event handlers below.
+const queueMirror = new QueueStateMirror();
+// Tracks recent submits from THIS CLI so requestStarted doesn't double-print; pruned per access.
+const RECENT_SUBMITTED_TTL_MS = 60_000;
+const recentlySubmittedRequestIds = new Map<string, number>();
+
+function pruneRecentSubmissions(): void {
+    if (recentlySubmittedRequestIds.size === 0) return;
+    const now = Date.now();
+    for (const [id, ts] of recentlySubmittedRequestIds) {
+        if (now - ts > RECENT_SUBMITTED_TTL_MS) {
+            recentlySubmittedRequestIds.delete(id);
+        }
+    }
+}
+
+function rememberSubmittedId(id: string): void {
+    pruneRecentSubmissions();
+    recentlySubmittedRequestIds.set(id, Date.now());
+}
+
+function consumeSubmittedId(id: string): boolean {
+    pruneRecentSubmissions();
+    return recentlySubmittedRequestIds.delete(id);
+}
+
+/** Reset the recently-submitted tracker; call after reconnect/conversation switch. */
+export function clearRecentSubmissions(): void {
+    recentlySubmittedRequestIds.clear();
+}
+
+/** Returns true if `entry` was submitted by THIS CLI instance. */
+function isOurEntry(entry: QueuedRequest): boolean {
+    const ourId = getCliConnectionId();
+    return ourId !== undefined && entry.originatorConnectionId === ourId;
+}
+
+/** Snapshot getter — used by /queue list, prompt rendering, and tests. */
+export function getCliQueueState(): QueueSnapshot | undefined {
+    return queueMirror.snapshot;
+}
+
+/** @internal Test-only accessors. Do NOT call from production code. */
+export function __testGetCurrentRequestId(): string | undefined {
+    return currentRequestId;
+}
+export function __testSetCurrentRequestId(id: string | undefined): void {
+    currentRequestId = id;
+}
+export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
+    return recentlySubmittedRequestIds;
+}
+
+/** Bootstrap CLI queue state from a snapshot, or pass `undefined` to clear. */
+export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
+    queueMirror.reset(snapshot);
+}
+
+/**
+ * Cancel every running + queued request via the dispatcher. Best-effort:
+ * exceptions are swallowed so one bad RPC can't strand siblings. The local
+ * snapshot is left alone — server `requestCancelled` events will reconcile it.
+ * `dispatcher` is passed explicitly so tests can supply a stub.
+ */
+export async function cancelAllInQueue(
+    dispatcher: Dispatcher | undefined,
+    snapshot: QueueSnapshot | undefined,
+): Promise<{ cancelled: number; running: number; queued: number }> {
+    if (!dispatcher || typeof dispatcher.cancelCommand !== "function") {
+        return { cancelled: 0, running: 0, queued: 0 };
+    }
+    const targets: { id: string; from: "running" | "queued" }[] = [];
+    if (snapshot?.running?.requestId) {
+        targets.push({ id: snapshot.running.requestId, from: "running" });
+    }
+    for (const e of snapshot?.queued ?? []) {
+        if (e.requestId) targets.push({ id: e.requestId, from: "queued" });
+    }
+    let cancelled = 0;
+    let runningCancelled = 0;
+    let queuedCancelled = 0;
+    await Promise.all(
+        targets.map(async (t) => {
+            try {
+                await dispatcher.cancelCommand(t.id);
+                cancelled++;
+                if (t.from === "running") runningCancelled++;
+                else queuedCancelled++;
+            } catch {
+                // best-effort — server may have already drained this id
+            }
+        }),
+    );
+    return {
+        cancelled,
+        running: runningCancelled,
+        queued: queuedCancelled,
+    };
+}
 
 // Grammar log file path
 const grammarLogPath = path.join(
@@ -853,6 +1006,28 @@ export function createEnhancedClientIO(
                     }
                     break;
 
+                case "commandComplete": {
+                    // Clear currentRequestId if the completed id matches so SIGINT doesn't target a stale id.
+                    const completedId =
+                        typeof requestId === "object" &&
+                        requestId !== null &&
+                        "requestId" in (requestId as any)
+                            ? (requestId as { requestId: string }).requestId
+                            : typeof requestId === "string"
+                              ? requestId
+                              : undefined;
+                    if (
+                        completedId !== undefined &&
+                        currentRequestId === completedId
+                    ) {
+                        currentRequestId = undefined;
+                    }
+                    if (completedId !== undefined) {
+                        consumeSubmittedId(completedId);
+                    }
+                    break;
+                }
+
                 default:
                 // ignored.
             }
@@ -1117,7 +1292,109 @@ export function createEnhancedClientIO(
             }
             throw new Error(`Action ${action} not supported`);
         },
+
+        // Server-side queue push events
+        requestQueued(entry: QueuedRequest, version: number): void {
+            if (!queueMirror.applyQueued(entry, version).admitted) return;
+            redrawPromptIfActive();
+        },
+        requestStarted(entry: QueuedRequest, version: number): void {
+            if (!queueMirror.applyStarted(entry, version).admitted) return;
+            // Suppress the marker if THIS CLI submitted the entry (otherwise we double-print).
+            const isOurs =
+                isOurEntry(entry) || consumeSubmittedId(entry.requestId);
+            redrawPromptIfActive();
+            if (isOurs) {
+                return;
+            }
+            writeQueueLine(
+                chalk.cyan("▶ running: ") +
+                    chalk.dim(truncateText(entry.text)),
+            );
+        },
+        requestCancelled(
+            requestId: string,
+            reason: QueueCancelReason,
+            version: number,
+        ): void {
+            const result = queueMirror.applyCancelled(requestId, version);
+            if (!result.admitted) return;
+            // Clear currentRequestId if it matches so SIGINT doesn't target a stale id.
+            if (currentRequestId === requestId) {
+                currentRequestId = undefined;
+            }
+            consumeSubmittedId(requestId);
+            redrawPromptIfActive();
+            if (result.cancelledText !== undefined) {
+                // Distinct rendering for server-stopping so users know the cancel wasn't theirs.
+                const label =
+                    reason === "server_stopping"
+                        ? chalk.red("✗ server stopping: ")
+                        : chalk.yellow("✗ cancelled: ");
+                writeQueueLine(
+                    label +
+                        chalk.dim(truncateText(result.cancelledText)) +
+                        chalk.dim(` (${reason})`),
+                );
+            }
+        },
+        queueStateChanged(snapshot: QueueSnapshot): void {
+            const prevBadge = computeBadgeState(queueMirror.snapshot);
+            if (!queueMirror.applyQueueStateChanged(snapshot).admitted) return;
+            const nextBadge = computeBadgeState(queueMirror.snapshot);
+            // Only repaint when the visible badge changed (avoids flicker on no-op snapshots).
+            if (prevBadge !== nextBadge) {
+                redrawPromptIfActive();
+            }
+        },
     };
+}
+
+/** Stable key for the visible badge state, used to detect meaningful changes. */
+function computeBadgeState(snap: QueueSnapshot | undefined): string {
+    if (!snap) return "none";
+    const queuedCount = snap.queued.length;
+    const runningOther =
+        snap.running &&
+        snap.running.requestId !== currentRequestId &&
+        !recentlySubmittedRequestIds.has(snap.running.requestId)
+            ? 1
+            : 0;
+    return `q${queuedCount}r${runningOther}p${snap.paused ? 1 : 0}`;
+}
+
+/** Redraw the active prompt; no-op when no interactive UI is active. */
+function redrawPromptIfActive(): void {
+    if (terminalLayout?.isActive && activePromptRenderer) {
+        activePromptRenderer.redraw();
+        return;
+    }
+    if (activeRl) {
+        activeRl.prompt(true);
+    }
+}
+
+/** Best-effort truncate for one-line markers. */
+function truncateText(text: string, max: number = 60): string {
+    const single = text.replace(/\s+/g, " ").trim();
+    return single.length > max ? single.slice(0, max - 1) + "…" : single;
+}
+
+/** Print a queue-related one-liner without disturbing readline state. */
+function writeQueueLine(text: string): void {
+    if (terminalLayout?.isActive) {
+        terminalLayout.writeContent(text);
+        activePromptRenderer?.redraw();
+        return;
+    }
+    if (activeRl) {
+        readline.cursorTo(process.stdout, 0);
+        readline.clearLine(process.stdout, 0);
+        process.stdout.write(text + "\n");
+        activeRl.prompt(true);
+        return;
+    }
+    process.stdout.write(text + "\n");
 }
 
 // Helper functions
@@ -1337,11 +1614,14 @@ async function questionWithCompletion(
                 }
             }
 
-            const promptText = chalk.cyanBright(message);
+            // Re-derive the live queue badge per render so it updates immediately on queue mutations.
+            const badge = formatQueueBadge();
+            const livePrompt = badge + message;
+            const promptText = chalk.cyanBright(livePrompt);
             const width = process.stdout.columns || 80;
 
-            const inputLineWidth =
-                getDisplayWidth(message) + getDisplayWidth(input);
+            const promptDisplayWidth = getDisplayWidth(livePrompt);
+            const inputLineWidth = promptDisplayWidth + getDisplayWidth(input);
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
@@ -1390,18 +1670,23 @@ async function questionWithCompletion(
 
             // Hint line
             let hint: string;
+            const queueSnap = queueMirror.snapshot;
+            const queueBusy =
+                queueSnap !== undefined &&
+                (queueSnap.running ? 1 : 0) + queueSnap.queued.length > 0;
+            const queueHint = queueBusy ? " · esc esc clear queue" : "";
             if (filteredCompletions.length > 0) {
-                hint = "↑↓ completions · tab accept · esc clear";
+                hint = "↑↓ completions · tab accept · esc clear" + queueHint;
             } else if (input.length > 0) {
-                hint = "↑↓ history · esc clear";
+                hint = "↑↓ history · esc clear" + queueHint;
             } else {
-                hint = "↑↓ history · /help commands";
+                hint = "↑↓ history · /help commands" + queueHint;
             }
             layout.drawFixed(inputRows + 2, "  " + chalk.dim(hint));
 
             // Position cursor in the input line
             const cursorAbsCol =
-                getDisplayWidth(message) +
+                promptDisplayWidth +
                 getDisplayWidth(input.substring(0, cursorPos));
             const cursorRow = Math.floor(cursorAbsCol / width);
             layout.moveCursorToFixed(1 + cursorRow, (cursorAbsCol % width) + 1);
@@ -1495,16 +1780,28 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
-                if (controller && filteredCompletions.length > 0) {
+                // Double-Escape within DOUBLE_ESCAPE_WINDOW_MS cancels all running + queued requests.
+                // The normal single-Escape action still runs so the prompt is left clean.
+                const now = Date.now();
+                const isDouble =
+                    now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
+                lastEscapeTime = isDouble ? 0 : now;
+                // Single-Escape priority: completions → input text → running command.
+                // The last branch restores the pre-queue legacy behavior where a
+                // bare Escape at an empty prompt cancels what's currently executing.
+                const hadCompletions =
+                    !!controller && filteredCompletions.length > 0;
+                const hadInput = input.length > 0;
+                if (hadCompletions) {
                     if (isSlashCommand(input)) {
                         // Slash completions are recomputed every render; use a
                         // flag to suppress them until the input changes.
                         slashCompletionsDismissed = true;
                     } else {
-                        controller.dismiss(input, "forward");
+                        controller!.dismiss(input, "forward");
                     }
-                } else {
-                    // Esc with no completions — clear input.
+                } else if (hadInput) {
+                    // Esc with text but no completions — clear input.
                     // Also hide the controller in case a fetch is in-flight
                     // that would otherwise resolve and show stale completions.
                     controller?.hide();
@@ -1512,6 +1809,35 @@ async function questionWithCompletion(
                     cursorPos = 0;
                     historyIndex = history.length;
                     slashCompletionsDismissed = false;
+                } else if (!isDouble) {
+                    // Empty prompt, no completions, single press — cancel the
+                    // currently running command if any. Double-Escape is handled
+                    // separately below and clears the whole queue.
+                    tryCancelRunningHead();
+                }
+                if (isDouble) {
+                    const snap = queueMirror.snapshot;
+                    const total =
+                        (snap?.running ? 1 : 0) + (snap?.queued.length ?? 0);
+                    if (total > 0) {
+                        // Fire-and-forget; errors are absorbed by cancelAllInQueue.
+                        void cancelAllInQueue(
+                            moduleDispatcherRef.current,
+                            snap,
+                        ).then((res) => {
+                            const parts: string[] = [];
+                            if (res.running > 0) parts.push("1 running");
+                            if (res.queued > 0)
+                                parts.push(`${res.queued} queued`);
+                            writeQueueLine(
+                                chalk.yellow(
+                                    `✗ Queue cleared: ${res.cancelled} cancelled (${parts.join(", ")})`,
+                                ),
+                            );
+                        });
+                    } else {
+                        writeQueueLine(chalk.dim("Queue already empty."));
+                    }
                 }
                 render();
                 return;
@@ -1864,6 +2190,8 @@ export async function withEnhancedConsoleClientIO(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
                 dispatcherRef.current = d;
+                // Mirror to module-level ref so out-of-closure handlers (double-Escape, SIGINT) can cancel.
+                moduleDispatcherRef.current = d;
             },
         );
     } finally {
@@ -1887,17 +2215,27 @@ function startExecutionKeyListener(
         return () => {};
     }
 
+    const tryCancelRunning = (): boolean => tryCancelRunningHead(dispatcher);
+
+    const printNoRunningHint = () => {
+        const hasQueued = (queueMirror.snapshot?.queued.length ?? 0) > 0;
+        if (hasQueued) {
+            writeQueueLine(
+                chalk.dim(
+                    "No request currently running. Use /queue cancel <id> to cancel queued requests.",
+                ),
+            );
+        }
+    };
+
     const onData = (data: Buffer | string) => {
         // stdin encoding may be set to utf8 by questionWithCompletion,
         // so data can be a string. Use charCodeAt for consistent handling.
         const code = typeof data === "string" ? data.charCodeAt(0) : data[0];
         if (data.length === 1 && code === 0x1b) {
             // Escape key — cancel current command
-            if (currentRequestId) {
-                dispatcher.cancelCommand(currentRequestId);
-            } else if (isProcessing && currentClientRequestId) {
-                // setUserRequest not yet received — cancel by client-assigned ID
-                dispatcher.cancelCommandByClientId(currentClientRequestId);
+            if (!tryCancelRunning()) {
+                printNoRunningHint();
             }
         } else if (data.length === 1 && code === 4) {
             // Ctrl+D — toggle debug panel expand/collapse
@@ -1916,10 +2254,8 @@ function startExecutionKeyListener(
                 process.exit(0);
             }
             lastCtrlCTime = now;
-            if (currentRequestId) {
-                dispatcher.cancelCommand(currentRequestId);
-            } else if (isProcessing && currentClientRequestId) {
-                dispatcher.cancelCommandByClientId(currentClientRequestId);
+            if (!tryCancelRunning()) {
+                printNoRunningHint();
             }
         }
     };
@@ -1951,6 +2287,12 @@ export async function processCommandsEnhanced<T>(
     dispatcherForCancel?: Dispatcher,
     isCompletionEnabled?: () => boolean,
 ) {
+    // Always resolve the dispatcher at call time so @conversation switch
+    // (which rebinds via bindDispatcher) doesn't leave us holding a closed
+    // channel from the previously joined conversation.
+    const getDispatcher = (): Dispatcher | undefined =>
+        moduleDispatcherRef.current ?? dispatcherForCancel;
+
     const fs = await import("node:fs");
     const historyFile = path.join(
         os.homedir(),
@@ -1977,6 +2319,27 @@ export async function processCommandsEnhanced<T>(
               terminal: true,
           });
     activeRl = rl;
+
+    // Queue-mode Ctrl+C handler: the non-blocking submit path bypasses raw-mode,
+    // so install a readline SIGINT handler that cancels the queue head.
+    // Double-press-to-exit is preserved.
+    if (rl && getDispatcher()?.submitCommand) {
+        rl.on("SIGINT", () => {
+            const now = Date.now();
+            if (now - lastCtrlCTime < 1000) {
+                process.exit(0);
+            }
+            lastCtrlCTime = now;
+            if (tryCancelRunningHead(getDispatcher())) {
+                return;
+            }
+            const hasQueued = (queueMirror.snapshot?.queued.length ?? 0) > 0;
+            const msg = hasQueued
+                ? "No request currently running. Use /queue cancel <id> to cancel queued requests."
+                : "Nothing running. Use /queue cancel <id> to cancel queued requests.";
+            writeQueueLine(chalk.dim(msg));
+        });
+    }
 
     const promptColor = chalk.cyanBright;
 
@@ -2055,6 +2418,77 @@ export async function processCommandsEnhanced<T>(
             const panel = getDebugPanel();
             panel?.reset();
 
+            // Non-blocking submit path: when the dispatcher exposes submitCommand,
+            // the call resolves on enqueue. Output/completion arrive via setDisplay,
+            // commandComplete, and queue lifecycle events.
+            const liveDispatcher = getDispatcher();
+            const submitCommand = liveDispatcher?.submitCommand;
+            if (typeof submitCommand === "function") {
+                isProcessing = true;
+                currentRequestId = undefined;
+                const clientRequestId = randomUUID();
+                currentClientRequestId = clientRequestId;
+                try {
+                    let result;
+                    try {
+                        result = await submitCommand.call(
+                            liveDispatcher,
+                            request,
+                            undefined,
+                            undefined,
+                            clientRequestId,
+                        );
+                    } catch (err) {
+                        console.log(chalk.red(`### ERROR: ${err}`));
+                        history.push(request);
+                        console.log("");
+                        continue;
+                    }
+                    // submitCommand returns a discriminated SubmitResult; branch on typed failures.
+                    if (result && result.ok === false) {
+                        if (result.error === "queue_full") {
+                            console.log(
+                                chalk.yellow(
+                                    `### Queue is full (${result.maxDepth}). Try again after some complete.`,
+                                ),
+                            );
+                        } else if (result.error === "server_stopping") {
+                            console.log(
+                                chalk.red(
+                                    "### Server is shutting down. Your request was not accepted.",
+                                ),
+                            );
+                        } else {
+                            console.log(
+                                chalk.red(
+                                    `### Request rejected: ${(result as any).error}`,
+                                ),
+                            );
+                        }
+                        history.push(request);
+                        console.log("");
+                        continue;
+                    }
+                    const entry = result?.ok ? result.entry : undefined;
+                    if (entry) {
+                        // Track so requestStarted doesn't double-print and badge doesn't double-count.
+                        rememberSubmittedId(entry.requestId);
+                        currentRequestId = entry.requestId;
+                    }
+                } finally {
+                    isProcessing = false;
+                    currentClientRequestId = undefined;
+                }
+                history.push(request);
+                console.log("");
+                fs.writeFileSync(
+                    historyFile,
+                    JSON.stringify({ commands: history }),
+                );
+                continue;
+            }
+
+            // Legacy blocking path (no queueing)
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner
@@ -2067,8 +2501,7 @@ export async function processCommandsEnhanced<T>(
             isProcessing = true;
             currentRequestId = undefined;
             currentClientRequestId = randomUUID();
-            const stopKeyListener =
-                startExecutionKeyListener(dispatcherForCancel);
+            const stopKeyListener = startExecutionKeyListener(getDispatcher());
             let result: any;
             try {
                 result = await processCommand(
@@ -2146,8 +2579,28 @@ function getNextInput(
 }
 
 /**
- * Get styled console prompt
- * Returns a clean prompt regardless of status text
+ * Live `(queue: N) ` prefix for the interactive prompt; empty when nothing to surface.
+ * Re-derived at render time so it stays in sync with the queue mirror between Enter presses.
+ * A `running` entry that matches `currentRequestId` or was recently submitted from THIS
+ * CLI is not counted — the spinner / "▶ running" marker already conveys it.
+ */
+export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
+    const s = snap ?? queueMirror.snapshot;
+    const queuedCount = s?.queued.length ?? 0;
+    const runningOther =
+        s?.running &&
+        s.running.requestId !== currentRequestId &&
+        !recentlySubmittedRequestIds.has(s.running.requestId)
+            ? 1
+            : 0;
+    const total = queuedCount + runningOther;
+    return total > 0 ? chalk.yellow(`(queue: ${total}) `) : "";
+}
+
+/**
+ * Get styled console prompt.
+ * Returns the *static* portion only; the live `(queue: N)` badge is prepended
+ * at render time by `questionWithCompletion` via `formatQueueBadge()`.
  */
 export function getEnhancedConsolePrompt(_text: string): string {
     return `${getVerboseIndicator()}❯ `;
