@@ -2136,7 +2136,9 @@ export class Emitter {
                     (lastNode.kind === "task" ||
                         lastNode.kind === "loop" ||
                         lastNode.kind === "fork" ||
-                        lastNode.kind === "forkMap") &&
+                        lastNode.kind === "forkMap" ||
+                        lastNode.kind === "branch" ||
+                        lastNode.kind === "workflowCall") &&
                     lastNode.bind
                         ? lastNode.bind
                         : undefined;
@@ -2232,7 +2234,9 @@ export class Emitter {
                 (lastNode.kind === "task" ||
                     lastNode.kind === "loop" ||
                     lastNode.kind === "fork" ||
-                    lastNode.kind === "forkMap") &&
+                    lastNode.kind === "forkMap" ||
+                    lastNode.kind === "branch" ||
+                    lastNode.kind === "workflowCall") &&
                 lastNode.bind
                     ? lastNode.bind
                     : undefined;

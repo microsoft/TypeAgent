@@ -246,10 +246,21 @@ function validateWorkflowBody(
  * - `inputSchema` and `outputSchema` match the referenced body.
  * - The call graph (workflow A calls workflow B) is acyclic.
  */
+
+/**
+ * Exhaustiveness helper. Passing an allegedly-`never` value here causes a
+ * TypeScript compile error, so any switch over `WorkflowNode` that forgets a
+ * case will be caught at build time rather than silently skipped at runtime.
+ */
+function assertNever(x: never): never {
+    throw new Error(`Unhandled WorkflowNode kind: ${(x as { kind: string }).kind}`);
+}
+
 function validateWorkflowCalls(
     ir: WorkflowIR,
     errors: ValidationError[],
 ): void {
+
     // First pass: per-call resolution + schema match.
     for (const [wfName, body] of Object.entries(ir.workflows)) {
         for (const [nodeId, node] of Object.entries(body.nodes)) {
@@ -286,95 +297,139 @@ function collectCallsInNode(
     ir: WorkflowIR,
     errors: ValidationError[],
 ): void {
-    if (node.kind === "workflowCall") {
-        const refName = node.workflowRef?.name;
-        if (typeof refName !== "string" || refName.length === 0) {
-            errors.push({
-                path: `${path}.workflowRef.name`,
-                message: `Missing or invalid workflow reference name.`,
-            });
-            return;
+    switch (node.kind) {
+        case "task":
+            // Leaf node - no nested workflow calls.
+            break;
+        case "workflowCall": {
+            const refName = node.workflowRef?.name;
+            if (typeof refName !== "string" || refName.length === 0) {
+                errors.push({
+                    path: `${path}.workflowRef.name`,
+                    message: `Missing or invalid workflow reference name.`,
+                });
+                break;
+            }
+            const source = node.workflowRef.source ?? "bundle";
+            if (source !== "bundle") {
+                errors.push({
+                    path: `${path}.workflowRef.source`,
+                    message: `Unsupported workflow reference source "${source}". Only "bundle" is supported in IR v1.`,
+                });
+                break;
+            }
+            const target = ir.workflows[refName];
+            if (!target) {
+                errors.push({
+                    path: `${path}.workflowRef.name`,
+                    message: `Workflow "${refName}" not found in workflows table.`,
+                });
+                break;
+            }
+            if (
+                canonicalStringify(node.inputSchema) !==
+                canonicalStringify(target.inputSchema)
+            ) {
+                errors.push({
+                    path: `${path}.inputSchema`,
+                    message: `Call inputSchema does not match referenced workflow "${refName}" inputSchema.`,
+                });
+            }
+            if (
+                canonicalStringify(node.outputSchema) !==
+                canonicalStringify(target.outputSchema)
+            ) {
+                errors.push({
+                    path: `${path}.outputSchema`,
+                    message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
+                });
+            }
+            break;
         }
-        const source = node.workflowRef.source ?? "bundle";
-        if (source !== "bundle") {
-            errors.push({
-                path: `${path}.workflowRef.source`,
-                message: `Unsupported workflow reference source "${source}". Only "bundle" is supported in IR v1.`,
-            });
-            return;
-        }
-        const target = ir.workflows[refName];
-        if (!target) {
-            errors.push({
-                path: `${path}.workflowRef.name`,
-                message: `Workflow "${refName}" not found in workflows table.`,
-            });
-            return;
-        }
-        if (
-            canonicalStringify(node.inputSchema) !==
-            canonicalStringify(target.inputSchema)
-        ) {
-            errors.push({
-                path: `${path}.inputSchema`,
-                message: `Call inputSchema does not match referenced workflow "${refName}" inputSchema.`,
-            });
-        }
-        if (
-            canonicalStringify(node.outputSchema) !==
-            canonicalStringify(target.outputSchema)
-        ) {
-            errors.push({
-                path: `${path}.outputSchema`,
-                message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
-            });
-        }
-        return;
-    }
-    if (node.kind === "loop" || node.kind === "forkMap") {
-        for (const [innerId, innerNode] of Object.entries(node.body.nodes)) {
-            collectCallsInNode(
-                innerNode,
-                `${path}.body.nodes.${innerId}`,
-                ir,
-                errors,
-            );
-        }
-    }
-    if (node.kind === "fork") {
-        for (const [branchName, branch] of Object.entries(node.branches)) {
-            for (const [innerId, innerNode] of Object.entries(
-                branch.scope.nodes,
-            )) {
+        case "loop":
+        case "forkMap":
+            for (const [innerId, innerNode] of Object.entries(node.body.nodes)) {
                 collectCallsInNode(
                     innerNode,
-                    `${path}.branches.${branchName}.scope.nodes.${innerId}`,
+                    `${path}.body.nodes.${innerId}`,
                     ir,
                     errors,
                 );
             }
+            break;
+        case "fork":
+            for (const [branchName, branch] of Object.entries(node.branches)) {
+                for (const [innerId, innerNode] of Object.entries(
+                    branch.scope.nodes,
+                )) {
+                    collectCallsInNode(
+                        innerNode,
+                        `${path}.branches.${branchName}.scope.nodes.${innerId}`,
+                        ir,
+                        errors,
+                    );
+                }
+            }
+            break;
+        case "branch": {
+            const arms: Array<[string, BranchArm]> = [
+                ...Object.entries(node.cases),
+                ...(node.default ? [["default", node.default] as [string, BranchArm]] : []),
+            ];
+            for (const [armKey, arm] of arms) {
+                for (const [innerId, innerNode] of Object.entries(arm.scope.nodes)) {
+                    collectCallsInNode(
+                        innerNode,
+                        `${path}.cases.${armKey}.scope.nodes.${innerId}`,
+                        ir,
+                        errors,
+                    );
+                }
+            }
+            break;
         }
+        default:
+            assertNever(node);
     }
 }
 
 function collectCalleesInNode(node: WorkflowNode, callees: Set<string>): void {
-    if (node.kind === "workflowCall") {
-        if (node.workflowRef?.name) {
-            callees.add(node.workflowRef.name);
-        }
-        return;
-    }
-    if (node.kind === "loop" || node.kind === "forkMap") {
-        for (const inner of Object.values(node.body.nodes)) {
-            collectCalleesInNode(inner, callees);
-        }
-    }
-    if (node.kind === "fork") {
-        for (const branch of Object.values(node.branches)) {
-            for (const inner of Object.values(branch.scope.nodes)) {
+    switch (node.kind) {
+        case "task":
+            // Leaf node - no nested workflow calls.
+            break;
+        case "workflowCall":
+            if (node.workflowRef?.name) {
+                callees.add(node.workflowRef.name);
+            }
+            break;
+        case "loop":
+        case "forkMap":
+            for (const inner of Object.values(node.body.nodes)) {
                 collectCalleesInNode(inner, callees);
             }
+            break;
+        case "fork":
+            for (const branch of Object.values(node.branches)) {
+                for (const inner of Object.values(branch.scope.nodes)) {
+                    collectCalleesInNode(inner, callees);
+                }
+            }
+            break;
+        case "branch": {
+            const arms = [
+                ...Object.values(node.cases),
+                ...(node.default ? [node.default] : []),
+            ];
+            for (const arm of arms) {
+                for (const inner of Object.values(arm.scope.nodes)) {
+                    collectCalleesInNode(inner, callees);
+                }
+            }
+            break;
         }
+        default:
+            assertNever(node);
     }
 }
 
@@ -448,15 +503,18 @@ function buildScopeCFG(
         const succs = new Set<string>();
         edges.set(id, succs);
 
-        if (node.kind === "task") {
-            if (node.next) succs.add(node.next);
-            if (node.onError) succs.add(node.onError);
-        } else if (node.kind === "branch") {
-            if (node.next) succs.add(node.next);
-            if (node.onError) succs.add(node.onError);
-        } else if (isBindableNode(node)) {
-            if (node.next) succs.add(node.next);
-            if (node.onError) succs.add(node.onError);
+        switch (node.kind) {
+            case "task":
+            case "branch":
+            case "loop":
+            case "fork":
+            case "forkMap":
+            case "workflowCall":
+                if (node.next) succs.add(node.next);
+                if (node.onError) succs.add(node.onError);
+                break;
+            default:
+                assertNever(node);
         }
     }
 
@@ -1076,81 +1134,94 @@ function validateScopeCFG(
         outputPrefix,
     );
 
-    // Recurse into loop body scopes
+    // Recurse into sub-scopes of container nodes.
     for (const [id, node] of Object.entries(nodes)) {
-        if (node.kind === "loop" && node.body.entry in node.body.nodes) {
-            const bodyPrefix = `${prefix}.${id}.body.nodes`;
+        switch (node.kind) {
+            case "task":
+            case "workflowCall":
+                // Leaf nodes - no sub-scopes to recurse into.
+                break;
+            case "loop":
+                if (node.body.entry in node.body.nodes) {
+                    const bodyPrefix = `${prefix}.${id}.body.nodes`;
 
-            // Pass 5: Scope closure
-            checkScopeClosure(node, id, bodyPrefix, prefix, nodes, errors);
+                    // Pass 5: Scope closure
+                    checkScopeClosure(node, id, bodyPrefix, prefix, nodes, errors);
 
-            // Pass 11: State soundness
-            checkStateSoundness(node, id, `${prefix}.${id}`, errors);
+                    // Pass 11: State soundness
+                    checkStateSoundness(node, id, `${prefix}.${id}`, errors);
 
-            validateScopeCFG(
-                node.body.nodes,
-                node.body.entry,
-                bodyPrefix,
-                errors,
-                node.body.output,
-                `${prefix}.${id}.body.output`,
-                !!node.onError, // skip body termination check when loop has onError
-            );
-        } else if (node.kind === "fork") {
-            for (const [bName, branch] of Object.entries(node.branches)) {
-                if (branch.scope.entry in branch.scope.nodes) {
-                    const branchPrefix = `${prefix}.${id}.branches.${bName}.scope.nodes`;
                     validateScopeCFG(
-                        branch.scope.nodes,
-                        branch.scope.entry,
-                        branchPrefix,
+                        node.body.nodes,
+                        node.body.entry,
+                        bodyPrefix,
                         errors,
-                        branch.scope.output,
-                        `${prefix}.${id}.branches.${bName}.scope.output`,
+                        node.body.output,
+                        `${prefix}.${id}.body.output`,
+                        !!node.onError, // skip body termination check when loop has onError
                     );
                 }
-            }
-        } else if (node.kind === "forkMap") {
-            if (node.body.entry in node.body.nodes) {
-                const bodyPrefix = `${prefix}.${id}.body.nodes`;
-                validateScopeCFG(
-                    node.body.nodes,
-                    node.body.entry,
-                    bodyPrefix,
-                    errors,
-                    node.body.output,
-                    `${prefix}.${id}.body.output`,
-                );
-            }
-        } else if (node.kind === "branch") {
-            // Recursively validate each branch arm sub-scope.
-            for (const [label, arm] of Object.entries(node.cases)) {
-                if (arm?.scope && arm.scope.entry in arm.scope.nodes) {
-                    const armPrefix = `${prefix}.${id}.cases.${label}.scope.nodes`;
+                break;
+            case "fork":
+                for (const [bName, branch] of Object.entries(node.branches)) {
+                    if (branch.scope.entry in branch.scope.nodes) {
+                        const branchPrefix = `${prefix}.${id}.branches.${bName}.scope.nodes`;
+                        validateScopeCFG(
+                            branch.scope.nodes,
+                            branch.scope.entry,
+                            branchPrefix,
+                            errors,
+                            branch.scope.output,
+                            `${prefix}.${id}.branches.${bName}.scope.output`,
+                        );
+                    }
+                }
+                break;
+            case "forkMap":
+                if (node.body.entry in node.body.nodes) {
+                    const bodyPrefix = `${prefix}.${id}.body.nodes`;
                     validateScopeCFG(
-                        arm.scope.nodes,
-                        arm.scope.entry,
+                        node.body.nodes,
+                        node.body.entry,
+                        bodyPrefix,
+                        errors,
+                        node.body.output,
+                        `${prefix}.${id}.body.output`,
+                    );
+                }
+                break;
+            case "branch":
+                // Recursively validate each branch arm sub-scope.
+                for (const [label, arm] of Object.entries(node.cases)) {
+                    if (arm?.scope && arm.scope.entry in arm.scope.nodes) {
+                        const armPrefix = `${prefix}.${id}.cases.${label}.scope.nodes`;
+                        validateScopeCFG(
+                            arm.scope.nodes,
+                            arm.scope.entry,
+                            armPrefix,
+                            errors,
+                            arm.scope.output,
+                            `${prefix}.${id}.cases.${label}.scope.output`,
+                        );
+                    }
+                }
+                if (
+                    node.default?.scope &&
+                    node.default.scope.entry in node.default.scope.nodes
+                ) {
+                    const armPrefix = `${prefix}.${id}.default.scope.nodes`;
+                    validateScopeCFG(
+                        node.default.scope.nodes,
+                        node.default.scope.entry,
                         armPrefix,
                         errors,
-                        arm.scope.output,
-                        `${prefix}.${id}.cases.${label}.scope.output`,
+                        node.default.scope.output,
+                        `${prefix}.${id}.default.scope.output`,
                     );
                 }
-            }
-            if (
-                node.default?.scope &&
-                node.default.scope.entry in node.default.scope.nodes
-            ) {
-                const armPrefix = `${prefix}.${id}.default.scope.nodes`;
-                validateScopeCFG(
-                    node.default.scope.nodes,
-                    node.default.scope.entry,
-                    armPrefix,
-                    errors,
-                    node.default.scope.output,
-                    `${prefix}.${id}.default.scope.output`,
-                );
-            }
+                break;
+            default:
+                assertNever(node);
         }
     }
 }
@@ -2611,79 +2682,114 @@ function validateTypeCompatibility(
             }
         }
 
-        // Recurse into loop bodies
-        if (node.kind === "loop" && node.body.entry in node.body.nodes) {
-            validateTypeCompatibility(
-                node.body.nodes,
-                `${path}.body.nodes`,
-                errors,
-                node.body.inputSchema,
-                node.state,
-                constants,
-                node.body.output,
-                `${path}.body.output`,
-                node.body.outputSchema,
-            );
+        // Recurse into sub-scopes of container nodes.
+        switch (node.kind) {
+            case "task":
+            case "workflowCall":
+                // Leaf nodes - no sub-scopes to recurse into.
+                break;
+            case "loop":
+                if (node.body.entry in node.body.nodes) {
+                    validateTypeCompatibility(
+                        node.body.nodes,
+                        `${path}.body.nodes`,
+                        errors,
+                        node.body.inputSchema,
+                        node.state,
+                        constants,
+                        node.body.output,
+                        `${path}.body.output`,
+                        node.body.outputSchema,
+                    );
 
-            // Check loop output template type vs loop outputSchema
-            const bodyBindings = buildBindingMap(node.body.nodes);
-            const bodyCtx: TypeResolutionContext = {
-                bindings: bodyBindings,
-                inputSchema: node.body.inputSchema,
-                stateVars: node.state,
-                constants,
-            };
-            if (node.body.output && node.body.outputSchema) {
-                const outputResolved = resolveTemplateType(
-                    node.body.output,
-                    bodyCtx,
-                );
-                if (outputResolved && !isTopSchema(node.body.outputSchema)) {
-                    if (
-                        !isStructuralSubtype(
-                            outputResolved,
-                            node.body.outputSchema,
-                        )
-                    ) {
-                        errors.push({
-                            path: `${path}.body.output`,
-                            message:
-                                `Loop output resolved type ` +
-                                `${formatSchemaType(outputResolved)} is not ` +
-                                `compatible with loop outputSchema ` +
-                                `${formatSchemaType(node.body.outputSchema)}.`,
-                        });
+                    // Check loop output template type vs loop outputSchema
+                    const bodyBindings = buildBindingMap(node.body.nodes);
+                    const bodyCtx: TypeResolutionContext = {
+                        bindings: bodyBindings,
+                        inputSchema: node.body.inputSchema,
+                        stateVars: node.state,
+                        constants,
+                    };
+                    if (node.body.output && node.body.outputSchema) {
+                        const outputResolved = resolveTemplateType(
+                            node.body.output,
+                            bodyCtx,
+                        );
+                        if (outputResolved && !isTopSchema(node.body.outputSchema)) {
+                            if (
+                                !isStructuralSubtype(
+                                    outputResolved,
+                                    node.body.outputSchema,
+                                )
+                            ) {
+                                errors.push({
+                                    path: `${path}.body.output`,
+                                    message:
+                                        `Loop output resolved type ` +
+                                        `${formatSchemaType(outputResolved)} is not ` +
+                                        `compatible with loop outputSchema ` +
+                                        `${formatSchemaType(node.body.outputSchema)}.`,
+                                });
+                            }
+                        }
                     }
                 }
-            }
-        }
-
-        // Recurse into fork branches
-        if (node.kind === "fork") {
-            for (const [bName, branch] of Object.entries(node.branches)) {
-                if (branch.scope.entry in branch.scope.nodes) {
+                break;
+            case "fork":
+                for (const [bName, branch] of Object.entries(node.branches)) {
+                    if (branch.scope.entry in branch.scope.nodes) {
+                        validateTypeCompatibility(
+                            branch.scope.nodes,
+                            `${path}.branches.${bName}.scope.nodes`,
+                            errors,
+                            scopeInputSchema,
+                            undefined,
+                            constants,
+                        );
+                    }
+                }
+                break;
+            case "forkMap":
+                if (node.body.entry in node.body.nodes) {
                     validateTypeCompatibility(
-                        branch.scope.nodes,
-                        `${path}.branches.${bName}.scope.nodes`,
+                        node.body.nodes,
+                        `${path}.body.nodes`,
                         errors,
                         scopeInputSchema,
                         undefined,
                         constants,
                     );
                 }
-            }
-        }
-
-        // Recurse into forkMap body
-        if (node.kind === "forkMap" && node.body.entry in node.body.nodes) {
-            validateTypeCompatibility(
-                node.body.nodes,
-                `${path}.body.nodes`,
-                errors,
-                scopeInputSchema,
-                undefined,
-                constants,
-            );
+                break;
+            case "branch":
+                for (const [label, arm] of Object.entries(node.cases)) {
+                    if (arm?.scope && arm.scope.entry in arm.scope.nodes) {
+                        validateTypeCompatibility(
+                            arm.scope.nodes,
+                            `${path}.cases.${label}.scope.nodes`,
+                            errors,
+                            scopeInputSchema,
+                            undefined,
+                            constants,
+                        );
+                    }
+                }
+                if (
+                    node.default?.scope &&
+                    node.default.scope.entry in node.default.scope.nodes
+                ) {
+                    validateTypeCompatibility(
+                        node.default.scope.nodes,
+                        `${path}.default.scope.nodes`,
+                        errors,
+                        scopeInputSchema,
+                        undefined,
+                        constants,
+                    );
+                }
+                break;
+            default:
+                assertNever(node);
         }
     }
 
@@ -2963,83 +3069,8 @@ function validateScopeTemplates(
 ): void {
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
-        if (node.kind === "task" || node.kind === "loop") {
-            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.inputs.${fieldName}`,
-                    errors,
-                );
-            }
-        }
-        if (node.kind === "branch") {
-            checkReservedTemplateKeys(
-                node.selector,
-                `${path}.selector`,
-                errors,
-            );
-            for (const [label, arm] of Object.entries(node.cases)) {
-                validateBranchArmTemplates(
-                    arm,
-                    `${path}.cases.${label}`,
-                    errors,
-                );
-            }
-            if (node.default !== undefined) {
-                validateBranchArmTemplates(
-                    node.default,
-                    `${path}.default`,
-                    errors,
-                );
-            }
-        }
-        if (node.kind === "loop") {
-            checkReservedTemplateKeys(
-                node.body.output,
-                `${path}.body.output`,
-                errors,
-            );
-            for (const [name, tmpl] of Object.entries(node.iterateState)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.iterateState.${name}`,
-                    errors,
-                );
-            }
-            validateScopeTemplates(
-                node.body.nodes,
-                `${path}.body.nodes`,
-                errors,
-            );
-        }
-        if (node.kind === "fork") {
-            for (const [bName, branch] of Object.entries(node.branches)) {
-                for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
-                    checkReservedTemplateKeys(
-                        tmpl,
-                        `${path}.branches.${bName}.inputs.${fieldName}`,
-                        errors,
-                    );
-                }
-                checkReservedTemplateKeys(
-                    branch.scope.output,
-                    `${path}.branches.${bName}.scope.output`,
-                    errors,
-                );
-                validateScopeTemplates(
-                    branch.scope.nodes,
-                    `${path}.branches.${bName}.scope.nodes`,
-                    errors,
-                );
-            }
-        }
-        if (node.kind === "forkMap") {
-            checkReservedTemplateKeys(
-                node.collection,
-                `${path}.collection`,
-                errors,
-            );
-            if (node.inputs) {
+        switch (node.kind) {
+            case "task":
                 for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
                     checkReservedTemplateKeys(
                         tmpl,
@@ -3047,17 +3078,112 @@ function validateScopeTemplates(
                         errors,
                     );
                 }
-            }
-            checkReservedTemplateKeys(
-                node.body.output,
-                `${path}.body.output`,
-                errors,
-            );
-            validateScopeTemplates(
-                node.body.nodes,
-                `${path}.body.nodes`,
-                errors,
-            );
+                break;
+            case "workflowCall":
+                for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.inputs.${fieldName}`,
+                        errors,
+                    );
+                }
+                break;
+            case "branch":
+                checkReservedTemplateKeys(
+                    node.selector,
+                    `${path}.selector`,
+                    errors,
+                );
+                for (const [label, arm] of Object.entries(node.cases)) {
+                    validateBranchArmTemplates(
+                        arm,
+                        `${path}.cases.${label}`,
+                        errors,
+                    );
+                }
+                if (node.default !== undefined) {
+                    validateBranchArmTemplates(
+                        node.default,
+                        `${path}.default`,
+                        errors,
+                    );
+                }
+                break;
+            case "loop":
+                for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.inputs.${fieldName}`,
+                        errors,
+                    );
+                }
+                checkReservedTemplateKeys(
+                    node.body.output,
+                    `${path}.body.output`,
+                    errors,
+                );
+                for (const [name, tmpl] of Object.entries(node.iterateState)) {
+                    checkReservedTemplateKeys(
+                        tmpl,
+                        `${path}.iterateState.${name}`,
+                        errors,
+                    );
+                }
+                validateScopeTemplates(
+                    node.body.nodes,
+                    `${path}.body.nodes`,
+                    errors,
+                );
+                break;
+            case "fork":
+                for (const [bName, branch] of Object.entries(node.branches)) {
+                    for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
+                        checkReservedTemplateKeys(
+                            tmpl,
+                            `${path}.branches.${bName}.inputs.${fieldName}`,
+                            errors,
+                        );
+                    }
+                    checkReservedTemplateKeys(
+                        branch.scope.output,
+                        `${path}.branches.${bName}.scope.output`,
+                        errors,
+                    );
+                    validateScopeTemplates(
+                        branch.scope.nodes,
+                        `${path}.branches.${bName}.scope.nodes`,
+                        errors,
+                    );
+                }
+                break;
+            case "forkMap":
+                checkReservedTemplateKeys(
+                    node.collection,
+                    `${path}.collection`,
+                    errors,
+                );
+                if (node.inputs) {
+                    for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                        checkReservedTemplateKeys(
+                            tmpl,
+                            `${path}.inputs.${fieldName}`,
+                            errors,
+                        );
+                    }
+                }
+                checkReservedTemplateKeys(
+                    node.body.output,
+                    `${path}.body.output`,
+                    errors,
+                );
+                validateScopeTemplates(
+                    node.body.nodes,
+                    `${path}.body.nodes`,
+                    errors,
+                );
+                break;
+            default:
+                assertNever(node);
         }
     }
 }

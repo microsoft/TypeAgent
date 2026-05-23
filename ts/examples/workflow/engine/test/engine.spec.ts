@@ -12,6 +12,7 @@
 import {
     WorkflowIR,
     WorkflowNode,
+    WorkflowCallNode,
     JSONSchema,
     ConstantDef,
     TaskDefinition,
@@ -8159,6 +8160,111 @@ describe("WorkflowEngine (IR v1)", () => {
                 expect(e.iteration).toBeDefined();
                 expect(typeof e.iteration).toBe("number");
             });
+        });
+    });
+
+    // ---- Defense-in-depth: runtime workflow call cycle detection ----
+
+    describe("defense-in-depth: runtime workflow call cycle detection", () => {
+        /** Minimal call node whose schemas match a body with inputSchema/outputSchema: {type:"object"}. */
+        function callNode(targetName: string, bind = "result"): WorkflowCallNode {
+            return {
+                kind: "workflowCall",
+                workflowRef: { name: targetName },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                inputs: {},
+                bind,
+            };
+        }
+
+        it("fails at runtime when a direct call cycle bypasses static validation", async () => {
+            // alpha -> beta -> alpha: the static check (validateWorkflowCalls)
+            // normally catches this, but skipValidation lets crafted IR through.
+            // defenseInDepth must then catch it in executeWorkflowCall.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callBeta",
+                        nodes: { callBeta: callNode("beta") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: callNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+            const result = await eng.run(ir, {
+                skipValidation: true,
+                defenseInDepth: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/[Rr]ecursive|cycle/i);
+        });
+
+        it("fails at runtime when a cycle is routed through a branch arm", async () => {
+            // alpha has a branch node whose arm calls beta; beta calls alpha.
+            // This exercises the wfCallStack check across nested sub-scopes.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "pick",
+                        nodes: {
+                            pick: {
+                                kind: "branch",
+                                selector: { $literal: true },
+                                selectorSchema: { type: "boolean" },
+                                cases: {
+                                    true: {
+                                        inputs: {},
+                                        scope: {
+                                            inputSchema: { type: "object" },
+                                            entry: "callBeta",
+                                            nodes: { callBeta: callNode("beta") },
+                                            output: { $from: "scope", name: "result" },
+                                            outputSchema: { type: "object" },
+                                        },
+                                    },
+                                },
+                                bind: "result",
+                                outputSchema: { type: "object" },
+                            },
+                        },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: callNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+            const result = await eng.run(ir, {
+                skipValidation: true,
+                defenseInDepth: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/[Rr]ecursive|cycle/i);
         });
     });
 });

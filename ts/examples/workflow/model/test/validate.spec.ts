@@ -14,6 +14,7 @@ import {
     Template,
     ConstantDef,
     WorkflowNode,
+    WorkflowCallNode,
     TaskDefinition,
     validateWorkflowIR,
     isNeverSchema,
@@ -4990,6 +4991,243 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
+        });
+    });
+
+    // ---- Workflow call graph validation ----
+
+    describe("workflow call graph validation", () => {
+        /** Minimal WorkflowCallNode whose inputSchema/outputSchema match the given body. */
+        function makeCallNode(
+            targetName: string,
+            overrides?: Partial<WorkflowCallNode>,
+        ): WorkflowCallNode {
+            return {
+                kind: "workflowCall",
+                workflowRef: { name: targetName },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                inputs: {},
+                bind: "result",
+                ...overrides,
+            };
+        }
+
+        /** Minimal workflow body that runs a single noop task. */
+        function makeHelperBody(): WorkflowBody {
+            return {
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "step",
+                nodes: {
+                    step: makeTaskNode({ bind: "out" }),
+                },
+                output: { $from: "scope", name: "out" },
+            };
+        }
+
+        it("accepts a valid two-workflow IR (entry calls helper)", () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "main",
+                workflows: {
+                    main: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callHelper",
+                        nodes: { callHelper: makeCallNode("helper") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    helper: makeHelperBody(),
+                },
+            };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects a direct workflow call cycle (alpha -> beta -> alpha)", () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callBeta",
+                        nodes: { callBeta: makeCallNode("beta") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: makeCallNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("cycle")),
+            ).toBe(true);
+        });
+
+        it("rejects a workflow call cycle routed through a branch arm (previously missed)", () => {
+            // alpha has a branch node whose arm contains a workflowCall to beta.
+            // beta calls alpha directly. Before the fix, collectCalleesInNode
+            // did not traverse into branch arms, so this cycle was invisible
+            // to the static check.
+            const callAlpha = makeCallNode("alpha");
+            const callBeta = makeCallNode("beta");
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "pick",
+                        nodes: {
+                            pick: {
+                                kind: "branch",
+                                selector: { $literal: true },
+                                selectorSchema: { type: "boolean" },
+                                cases: {
+                                    true: {
+                                        inputs: {},
+                                        scope: {
+                                            inputSchema: { type: "object" },
+                                            entry: "callBeta",
+                                            nodes: { callBeta },
+                                            output: { $from: "scope", name: "result" },
+                                            outputSchema: { type: "object" },
+                                        },
+                                    },
+                                },
+                                default: makeSimpleArm(),
+                                bind: "result",
+                                outputSchema: { type: "object" },
+                            },
+                        },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("cycle")),
+            ).toBe(true);
+        });
+
+        it("rejects reserved $-key in workflowCall inputs (previously missed by validateScopeTemplates)", () => {
+            // validateScopeTemplates previously only checked task/loop inputs;
+            // workflowCall.inputs was not checked for reserved $-keys.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "main",
+                workflows: {
+                    main: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callHelper",
+                        nodes: {
+                            callHelper: makeCallNode("helper", {
+                                inputs: { x: { $bad: "value" } as any },
+                            }),
+                        },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    helper: makeHelperBody(),
+                },
+            };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes('"$bad"')),
+            ).toBe(true);
+        });
+
+        it("rejects type mismatch inside a branch arm sub-scope (previously missed by validateTypeCompatibility)", () => {
+            // validateTypeCompatibility previously did not recurse into branch
+            // arm sub-scopes. A producer emitting string and a consumer
+            // expecting integer inside the arm was silently accepted.
+            const ir = makeMinimalIR({
+                entry: "pick",
+                nodes: {
+                    pick: {
+                        kind: "branch",
+                        selector: { $literal: true },
+                        selectorSchema: { type: "boolean" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "producer",
+                                    nodes: {
+                                        producer: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: {
+                                                    value: { type: "string" },
+                                                },
+                                            },
+                                            inputs: {},
+                                            next: "consumer",
+                                            bind: "data",
+                                        },
+                                        consumer: makeTaskNode({
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["x"],
+                                                properties: {
+                                                    x: { type: "integer" },
+                                                },
+                                            },
+                                            inputs: {
+                                                x: {
+                                                    $from: "scope",
+                                                    name: "data",
+                                                    path: ["value"],
+                                                } as any,
+                                            },
+                                            bind: "armOut",
+                                        }),
+                                    },
+                                    output: { $from: "scope", name: "armOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        default: makeSimpleArm(),
+                        bind: "result",
+                        outputSchema: { type: "object" },
+                    } as any,
+                },
+                output: { $from: "scope", name: "result" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("type mismatch")),
+            ).toBe(true);
         });
     });
 });

@@ -53,6 +53,13 @@ interface ScopeContext {
 interface RunCtx {
     /** The currently-executing IR's workflows table; consulted by sub-workflow dispatch. */
     workflows: Record<string, WorkflowBody>;
+    /**
+     * Immutable call stack for defense-in-depth cycle detection.
+     * Each `executeWorkflowCall` creates a new RunCtx with the callee
+     * appended, so concurrent fork branches each carry their own lineage
+     * without sharing mutable state.
+     */
+    wfCallStack: readonly string[];
 }
 
 // ---- Template resolution ----
@@ -402,7 +409,7 @@ export class WorkflowEngine {
         // `this` means a single engine instance can service multiple
         // concurrent `run()` calls without sub-workflow dispatch racing
         // across them.
-        const ctx: RunCtx = { workflows: ir.workflows };
+        const ctx: RunCtx = { workflows: ir.workflows, wfCallStack: [ir.entry] };
 
         // Validate workflow input against inputSchema.
         if (entryBody.inputSchema) {
@@ -1675,6 +1682,17 @@ export class WorkflowEngine {
             );
         }
 
+        // Defense-in-depth: static validator (validateWorkflowCalls) already
+        // proves the call graph is acyclic. This guards IR that bypasses
+        // static validation and would otherwise cause unbounded recursion.
+        if (this.defenseInDepth && ctx.wfCallStack.includes(calleeName)) {
+            throw new EngineError(
+                `Recursive workflow call detected at "${nodeId}": ${[...ctx.wfCallStack, calleeName].join(" -> ")} (workflow recursion is not supported)`,
+                "UnrecoverableError",
+                true,
+            );
+        }
+
         this.emit({
             type: "nodeStarted",
             runId,
@@ -1710,6 +1728,10 @@ export class WorkflowEngine {
             };
 
             const subScopePath = [...scopePath, nodeId, calleeName];
+            const subCtx: RunCtx = {
+                ...ctx,
+                wfCallStack: [...ctx.wfCallStack, calleeName],
+            };
 
             // Honor node.timeoutMs by composing a sub-signal that
             // aborts when the parent aborts OR when the sub-workflow
@@ -1746,7 +1768,7 @@ export class WorkflowEngine {
                     subScopePath,
                     runId,
                     subSignal,
-                    ctx,
+                    subCtx,
                     policy,
                     approve,
                     taskTimeoutMs,
