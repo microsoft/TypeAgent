@@ -101,10 +101,9 @@ export function compile(
         return { errors };
     }
 
-    // Pick the entry workflow. Phase 4 will rewire the emitter to take
-    // the full workflow list and emit a workflow table; until then we
-    // emit only the entry workflow so existing IR consumers keep
-    // working.
+    // Pick the entry workflow. The emitter takes the full workflow list
+    // and emits a workflow table keyed by name, with `entry` pointing
+    // to the selected entry workflow.
     const entry = selectEntry(workflows, options?.entry);
     if (!entry.ok) {
         errors.push({

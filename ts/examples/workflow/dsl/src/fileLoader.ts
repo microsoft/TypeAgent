@@ -180,7 +180,8 @@ export function loadModuleTree(
     // Phase 3 — per-file local-name maps. A local name resolves to a
     // declared (canonical) workflow name.
     //   - declared workflows: local === canonical
-    //   - imports: local = alias ?? import.name; canonical = mangled name from source file
+    //   - imports: local = alias ?? import.name; canonical = original name (entry
+    //     file) or mangled name (non-entry files, i.e. `__f{N}_{name}`)
     // Validate that imported names are present in the source file and
     // are marked `export`.
 
