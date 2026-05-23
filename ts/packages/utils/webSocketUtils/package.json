@@ -13,7 +13,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./originAllowlist": "./dist/originAllowlist.js"
   },
   "files": [
     "dist",

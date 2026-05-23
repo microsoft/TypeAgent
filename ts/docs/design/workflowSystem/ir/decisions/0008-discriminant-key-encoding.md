@@ -166,3 +166,16 @@ only computation surface" (P1 boundary). If that commitment is relaxed
 for expressions (0006 flips), string-only discriminants (0008) lose
 their rationale and should flip together. Revisit trigger row 11
 covers both.
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) reshapes
+branch arms into [`WorkflowScope`](../workflow-scope-proposal.md)s but
+leaves the discriminant-key contract from this decision unchanged:
+`selectorSchema` is still string-typed or enum-of-strings, `cases`
+keys are still string-encoded discriminant values, and non-string
+discriminants still require an explicit `bool.toLabel` (or similar)
+conversion. The arm-as-scope change is about what an arm targets, not
+about how the discriminant is encoded.

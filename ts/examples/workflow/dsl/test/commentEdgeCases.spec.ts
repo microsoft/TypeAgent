@@ -474,6 +474,7 @@ describe("constructed AST without endLine", () => {
                 {
                     kind: "ConstStatement",
                     name: "x",
+                    nameLoc: loc(),
                     value: {
                         kind: "StringLiteralExpr",
                         raw: "y",

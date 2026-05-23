@@ -160,6 +160,11 @@ export type AgentContextInvokeFunctions = {
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
     reloadAgentSchema: (param: { contextId: number }) => Promise<void>;
     notifyReadinessChanged: (param: { contextId: number }) => Promise<void>;
+    notifyClientCountChanged: (param: {
+        contextId: number;
+        role: string;
+        count: number;
+    }) => Promise<void>;
     popupQuestion: (param: {
         contextId: number;
         message: string;

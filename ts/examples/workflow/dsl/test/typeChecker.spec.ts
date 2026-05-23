@@ -606,4 +606,140 @@ describe("type checker", () => {
             workflow test(): unknown { throw "boom"; }
         `);
     });
+
+    // ---- G13: Structural type comparison for objects and arrays ----
+
+    test("object type mismatch in return position", () => {
+        expectError(
+            `workflow test(): { name: string } {
+                return test.exec(command: "ls");
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("object with missing required field in const annotation", () => {
+        expectError(
+            `workflow test(x: { a: string, b: number }): string {
+                const r: { a: string, b: number, c: boolean } = x;
+                return r.a;
+            }`,
+            "not assignable to type",
+        );
+    });
+
+    test("object type mismatch in ternary arms", () => {
+        expectError(
+            `workflow test(flag: boolean, x: { a: string }): { a: string } {
+                return flag ? x : test.exec(command: "b");
+            }`,
+            "same type",
+        );
+    });
+
+    test("array element type mismatch in return position", () => {
+        expectError(
+            `workflow test(items: string[]): number[] {
+                return items;
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("matching object types pass structural check", () => {
+        expectNoErrors(`
+            workflow test(): { stdout: string, exitCode: integer } {
+                return test.exec(command: "ls");
+            }
+        `);
+    });
+
+    test("structural subtype with extra fields is assignable to narrower type", () => {
+        expectNoErrors(`
+            workflow test(): { stdout: string } {
+                return test.exec(command: "ls");
+            }
+        `);
+    });
+
+    test("array element types match pass", () => {
+        expectNoErrors(`
+            workflow test(items: string[]): string[] {
+                return items;
+            }
+        `);
+    });
+
+    test("optional field absent in source is assignable", () => {
+        expectNoErrors(`
+            workflow test(x: { name: string }): { name: string, tag?: string } {
+                return x;
+            }
+        `);
+    });
+
+    test("optional field present in source with wrong type is not assignable", () => {
+        expectError(
+            `workflow test(x: { name: string, tag: number }): { name: string, tag?: string } {
+                return x;
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("ternary narrow then wide object arms errors regardless of order (then=narrow)", () => {
+        expectError(
+            `workflow test(flag: boolean, a: { x: string }, b: { x: string, y: number }): { x: string } {
+                return flag ? a : b;
+            }`,
+            "same type",
+        );
+    });
+
+    test("ternary narrow then wide object arms errors regardless of order (then=wide)", () => {
+        expectError(
+            `workflow test(flag: boolean, a: { x: string }, b: { x: string, y: number }): { x: string, y: number } {
+                return flag ? b : a;
+            }`,
+            "same type",
+        );
+    });
+
+    test("ternary with identical object types passes", () => {
+        expectNoErrors(`
+            workflow test(flag: boolean, a: { x: string }, b: { x: string }): { x: string } {
+                return flag ? a : b;
+            }
+        `);
+    });
+
+    test("ternary with parallel arms of different tuple lengths errors", () => {
+        expectError(
+            `workflow test(flag: boolean): string {
+                const r = flag
+                    ? parallel(() => { return "a"; }, () => { return 1; })
+                    : parallel(() => { return "a"; }, () => { return 1; }, () => { return true; });
+                const [a] = r;
+                return a;
+            }`,
+            "same type",
+        );
+    });
+
+    test("optional source field is not assignable to required target field", () => {
+        expectError(
+            `workflow test(x: { name?: string }): { name: string } {
+                return x;
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("required source field satisfies required target field", () => {
+        expectNoErrors(`
+            workflow test(x: { name: string }): { name: string } {
+                return x;
+            }
+        `);
+    });
 });

@@ -3,6 +3,57 @@
 Tracked items where the DSL spec (dsl-v0.1.md) describes features that are
 not yet fully wired end-to-end.
 
+## Recommended implementation sequence
+
+Address the gaps in dependency order, with correctness and validation before
+new surface area:
+
+1. **G16: Fix `throw` message propagation.** This is a direct user-visible
+   correctness issue in already-supported error semantics.
+2. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
+   into the full sub-scope contract before improving fork runtime behavior.
+3. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
+   structurally valid, align fork execution with the spec's failure and cleanup
+   semantics.
+4. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
+   surfaces real structural mismatches, switch error messages from the
+   collapsed `'object'` rendering to the existing `formatType` output so
+   users can see which fields differ.
+5. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
+   one-way before adding more type-system expressiveness.
+6. **G3: Add TypeScript-style named type aliases.** Once structural
+   assignability is sound, add named type declarations and a type environment.
+7. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
+   parsing and checking, and becomes more ergonomic once named aliases exist.
+8. **G18: Add union/literal types.** This is the broadest type-system expansion
+   and should come after type soundness and named types.
+9. **G1: Implement sub-workflow calls and compile-time inlining.** This is
+   strategically important, but touches compiler architecture and emitter
+   lowering, so it should follow the core correctness and type-system
+   foundations.
+10. **G11: Decide/document bind stripping for explicit user names.** This is
+    primarily debuggability and spec clarity.
+11. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+    AST honesty and visual-editor clarity, but current behavior works.
+12. **G12: Decide `list.append` naming/semantics.** This is naming/API
+    consistency with coordinated emitter, engine, and snapshot churn.
+13. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+    Decision 0010 removed `identity` / `noop` as load-bearing at branch
+    convergence, but the emitter still synthesizes them in several other
+    places. Classify each remaining usage as (a) reducible after 0010,
+    (b) forced by an IR shape that could be relaxed additively, or (c)
+    inherent to decision 0006 (no expressions). Pure audit; only
+    schedules follow-up work.
+14. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+    These patterns push against the visual-node discipline and should stay out
+    of scope until justified.
+
+Dependency spine:
+
+- `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
+- `G10 -> G3 -> G4 -> G18` builds type-system features on sound
+  assignability (G13 resolved the structural-comparison prerequisite).
+
 ## G1: Sub-workflow calls
 
 **Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
@@ -123,147 +174,6 @@ to a variable and pass it opaquely to another task.
    type checker support for resolving generic instantiations, and emitter
    support for threading the resolved type into the schema.
 
-## G5: `identity` is covering two distinct IR gaps
-
-**Context:** The current emitter uses builtin `identity` nodes in several
-places where the DSL produces a value but the IR only allows control flow
-to continue through executable node IDs. The principle question is not just
-"can we remove `identity`?" but which uses reflect a real missing IR
-concept versus a reasonable lowering to existing task semantics.
-
-**Current state:** `identity` is doing two different jobs:
-
-- **Literal materialization:** turning a literal/template value into a
-  node result so the workflow or a branch arm can continue through a real
-  node.
-- **Shared-bind normalization:** ensuring both sides of a split publish the
-  same bound name before converging.
-
-In current emitter/runtime terms, that means four concrete behaviors:
-
-1. **Literal branch arms normalize through `identity`.**
-   Branch targets in the IR are node IDs, not inline values. When a DSL
-   branch arm computes a literal/template value instead of calling a task,
-   the emitter wraps that value in an `identity` node, binds the common
-   result name there, and then converges through a merge node.
-
-2. **Literal-only workflows normalize through `identity`.**
-   A workflow that returns a literal and would otherwise emit no executable
-   nodes still gets a real entry node. The emitter inserts an `identity`
-   node and returns its `result` field rather than emitting a zero-node
-   workflow. This keeps the runtime model uniform: executable workflows
-   start at an entry node.
-
-3. **Branch-returning control flow normalizes through a shared bind.**
-   When both sides of an `if/else` or ternary produce a value, the emitter
-   does not rely on branch-local bind names matching by accident. Instead,
-   each side writes through an `identity` node to the same post-merge bind
-   name, which downstream consumers read after control flow converges.
-
-4. **`noop` and `identity` are part of the compiler/runtime contract.**
-   The current lowering depends on these builtins existing in the runtime.
-   `identity` materializes values into ordinary node outputs; `noop` serves
-   as the convergence point after split control flow. They are not just
-   incidental implementation details if the emitter continues to generate
-   them.
-
-These are related in the emitter, but they are not the same design problem.
-
-**Design-principles analysis:**
-
-1. **Keep `identity` as a lowering primitive.**
-
-   - Strong on minimization: no new IR concept is added.
-   - Clean under P1/P2/P4: the value still crosses a normal task boundary,
-     remains traceable, and preserves local contracts.
-   - Slightly weak under P3/P5: some nodes exist only as compiler shims,
-     so IR structure does not always correspond to meaningful computation.
-
-2. **Add a dedicated `ConstNode` for literal materialization.**
-
-   - Best small IR improvement for literal-only cases.
-   - Improves P3/P5 by making "this path yields a value" structurally
-     visible instead of disguising it as a generic task call.
-   - Compatible with P1/P2/P4 if it keeps explicit schemas, output, and
-     control flow.
-   - Does **not** solve shared-bind normalization; it only replaces the
-     literal-materialization subset of current `identity` usage.
-
-3. **Add explicit merge / phi semantics for shared-bind normalization.**
-   - Best fit for the normalization subset of `identity` usage.
-   - Potentially strong under P3/P4/P5 because branch convergence would
-     explicitly describe how a common post-branch name is produced.
-   - Expensive under the minimization discipline: this adds a real new IR
-     behavioral concept with validator and runtime implications.
-
-**Conclusion:**
-
-- Keeping `identity` is acceptable under the current principles because it
-  preserves the existing task-centered computation boundary and avoids new
-  IR concepts.
-- The current lowering should be treated as intentional
-  compiler/runtime contract, not as an accidental workaround:
-  - literal branch arms lower through `identity`
-  - literal-only workflows lower through an `identity` entry node
-  - branch-produced values lower through shared-bind normalization
-  - `noop` and `identity` must exist as runtime builtins if the emitter
-    continues to generate them
-- If the IR is refined later, the problem should be split rather than
-  solved with one broad mechanism:
-  1.  `ConstNode` is the clean candidate for literal materialization.
-  2.  Explicit merge / phi semantics are the clean candidate for shared-bind
-      normalization.
-
-**What needs to happen:**
-
-1. Decide whether the spec should explicitly document `identity` as an
-   accepted compiler/runtime lowering primitive for these cases. The
-   explicit lowering rules above should be carried into the main spec
-   docs or kept here as the durable reference.
-2. If a later cleanup is desired, evaluate `ConstNode` and merge / phi
-   support separately rather than treating all `identity` uses as one
-   problem.
-
-## G6: Validator does not handle branch-return convergence patterns
-
-**Context:** The IR validator's domination analysis rejects some
-emitter-produced workflows that execute correctly in the runner. Four
-DSL-integration tests and several hand-built engine tests bypass
-validation to preserve behavioral coverage.
-
-**Current state:** The validator has three binding-coverage strategies
-in `isBindingCoveredAtNode`:
-
-- (a) Direct dominator coverage
-- (b) Joint coverage across onError splits
-- (c) Split-point phi coverage for branch nodes where both arms bind
-  the same name
-
-Strategy (c) was added for ternary and short-circuit `&&`/`||` patterns
-and works for those. But the emitter's branch-return lowering produces
-prefixed nodes (e.g. `then_taskCall_3`, `else_taskCall_5`) that converge
-through a merge `noop`, and the current phi check does not trace through
-the prefix-based convergence pattern.
-
-**Patterns that fail validation:**
-
-1. if/else where both arms return (branch-return with shared-bind
-   normalization through prefixed nodes converging at merge noop)
-2. switch where all arms return (multi-arm shared-bind convergence)
-3. if/else with arithmetic (mixed binary-op + branch lowering)
-4. task call + binary op + ternary (mixed lowering with multiple splits)
-
-**What needs to happen:**
-
-1. Extend the validator's CFG traversal to recognize the prefix-based
-   convergence shape the emitter produces for branch-return patterns.
-   The fix belongs in the validator, not the emitter.
-2. Once the validator handles these patterns, remove `NO_VALIDATE` from
-   the four DSL-integration tests and `skipValidation` from their
-   corresponding engine runs.
-3. The hand-built engine tests that use `skipValidation` for
-   error-handling paths are a separate concern and can stay as-is.
-
 ## G7: Composition patterns outside current scope
 
 **Context:** The DSL parser and type checker intentionally do not support
@@ -297,27 +207,6 @@ nested calls would obscure the step-by-step execution model.
    (error if not). There are no union types. This was an intentional
    simplification: returns the consequent type, rejects mismatches at
    compile time.
-
-## G8: Comments not preserved in AST
-
-**Spec:** dsl-v0.1.md section 6 states "The AST preserves comments.
-Each node has an optional `leadingComments` array of `Comment { text, pos }`
-attached to the following AST node." It also claims round-trip fidelity
-between source and AST.
-
-**Status: Resolved.**
-
-- The lexer (`lexer.ts`) now collects `//` and `/* */` comments into a
-  `comments: LexComment[]` side channel returned alongside tokens. The
-  full comment lexeme (including delimiters) is preserved.
-- The parser (`parser.ts`) accepts the comments list and attaches any
-  comment whose offset precedes a statement's (or workflow's) first
-  token as a `leadingComments` entry on that AST node.
-- A new formatter (`formatter.ts`, exported as `format`) lowers a
-  `WorkflowDecl` back to DSL source and emits `leadingComments` in
-  attached positions, completing the round trip.
-- See `formatter-design.md` for design notes (e.g., the full-text
-  comment representation, trailing-comment handling).
 
 ## G9: Bare task calls wrapped as synthetic ConstStatement
 
@@ -434,63 +323,6 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
-
-## G13: `typeEq` skips structural comparison for objects and arrays
-
-**Context:** The type checker's `typeEq(target, source)` function is used
-for return type validation, const annotation checking, and ternary arm
-compatibility. It skips structural comparison for object and array kinds.
-
-**Current state:**
-
-- `typeEq` checks primitive kinds by name, handles `unknown`/`never`
-  correctly, and handles `integer`/`number` compatibility.
-- For objects and arrays it falls through to `return true` without
-  comparing fields or element types.
-- This means `{ a: string }` is considered compatible with
-  `{ x: number, y: number }` in all contexts where `typeEq` is called.
-- Affected call sites: return type vs declared type (line ~263), const
-  annotation vs inferred type (line ~308), ternary arm compatibility
-  (line ~549).
-
-**What needs to happen:**
-
-1. Add structural comparison for object types: check that all required
-   fields in the target exist in the source with compatible types.
-2. Add element-type comparison for array types.
-3. Consider splitting into two functions: `typeEq` for operator checks
-   (where the current loose behavior is fine) and `isAssignableTo` for
-   the structural contexts.
-4. Add tests for mismatched object types in return position and ternary
-   arms.
-
-## G14: Switch lowering always takes first case
-
-**Spec:** dsl-v0.1.md section 7.4. Switch emits a chain of
-condition-check nodes, each comparing the discriminant to the arm's
-value.
-
-**Current state:** The emitted IR always evaluates to the first case's
-body regardless of the discriminant's runtime value. Likely the
-branch condition for the compare.equals node is not wired to the
-actual discriminant input, or the branch edges (true/false) are
-reversed.
-
-**Reproduction:** Compile a switch with string cases, run with a value
-matching the second case. Output is always from the first case.
-
-## G15: Branch/ternary inside loop body fails at runtime
-
-**Spec:** dsl-v0.1.md sections 2.7, 3.2. Branches and ternary
-expressions should work inside map/filter/attempts bodies.
-
-**Current state:** A ternary expression inside a map body compiles
-without errors but fails at runtime. The branch condition evaluation
-inside a loop body scope does not resolve correctly, possibly due to
-scope nesting issues in $from reference resolution.
-
-**Reproduction:** `map(nums, (n) => { const r = n > 10 ? "big" : "small"; return r })`
-compiles but the engine fails to execute the workflow.
 
 ## G16: `throw` produces empty error message
 
@@ -655,3 +487,186 @@ model supports and what the DSL can actually produce.
 5. Decide and document the canonical retry-exhaustion semantics for
    `attempts(...)` (silent exit vs. explicit fail) and add a test that
    pins it down.
+
+## G20: Remaining `identity` / `noop` usage in the emitter
+
+**Context:** [Decision 0010](../ir/decisions/0010-finish-workflow-scope-unification.md)
+removed `identity` + shared-bind + `noop` as the load-bearing lowering
+for value-producing branches: with branch arms as `WorkflowScope`s,
+each arm's `output` is a normal reference and convergence does not
+need a carrier node. Resolved item G5 covered that specific pattern.
+
+The emitter still synthesizes `identity` and `noop` nodes in several
+other places. Whether each one is benign "DSL convenience" or evidence
+of a remaining IR friction is not yet decided.
+
+**Remaining categories** (snapshot of
+[emitter.ts](../../../examples/workflow/dsl/src/emitter.ts)):
+
+1. **Top-level / scope `output` materialization.** `output` must be a
+   `$from` reference; literal or computed return values get wrapped in
+   an `identity` node so they can be named. Affects `workflow.output`
+   for literal returns and several lowering paths (short-circuit RHS,
+   ternary literal consequents, etc.).
+2. **`makeNoopArm` placeholder.** A `WorkflowScope` requires `entry`,
+   `nodes`, and (in practice) something to reference from `output`.
+   The "missing else" of an `if` without `else`, and other defaulted
+   arms, emit a single `noop` whose bound output is the arm's value.
+3. **Loop "retry" arm body.** The `attempts(...)` lowering emits a
+   `noop` whose output (literal `true`) is the value `continueWhen`
+   reads. Same shape as item 2 specialized for loop termination.
+4. **Post-branch merge / continuation nodes.** Several lowering paths
+   still emit a trailing `noop` as a join point even though arms now
+   carry their own outputs. May be vestigial from the pre-0010 emitter.
+
+**Why this might point at an IR problem:**
+
+Each remaining usage is a place where the DSL has a _value_ but the
+IR rules ("every value is a node output" + `WorkflowScope` must
+declare `entry` / `nodes` / `output`, per
+[workflow-scope-proposal.md](../ir/workflow-scope-proposal.md)) force
+the emitter to invent a carrier node. The cost is real: synthetic IDs
+leak into IR (compare G9), execution traces include nodes the author
+never wrote, and node counts overstate the workflow's conceptual size.
+
+Three plausible end states, one per category:
+
+- **Reducible after 0010.** Category 4 (post-branch merge) may be
+  outright dead code now that branch arms have outputs. Removing it
+  costs nothing if true.
+- **Additive IR relaxation.** Categories 1, 2, and 3 could be
+  addressed by an additive IR change: allow `scope.output` (or
+  `WorkflowIR.output`) to be a literal-or-reference template rather
+  than strictly a reference, and treat "arm with no body" as a
+  syntactic shorthand. This trades one validator rule for a smaller
+  emitted IR. Needs an IR decision; the variance lens of
+  [revisit-triggers.md](../ir/revisit-triggers.md) applies (separate
+  concept vs. broadening an existing one).
+- **Inherent to decision 0006.** If the audit finds the remaining
+  carriers are the natural cost of "no expressions in the IR," then
+  G20 closes as "working as intended" and the row in
+  [revisit-triggers.md](../ir/revisit-triggers.md) for decision 0006
+  becomes the place to track if pressure grows.
+
+**What needs to happen:**
+
+1. Enumerate every remaining `identity` / `noop` emit site in
+   [emitter.ts](../../../examples/workflow/dsl/src/emitter.ts) and
+   tag each with its category above.
+2. For category 4, write the test that would fail if the node were
+   removed; if no such test exists, remove the node - if tests stay
+   green that confirms vestigial.
+3. For categories 1-3, draft the minimal IR relaxation that would
+   eliminate each, and decide per-category whether the relaxation is
+   worth the validator-rule cost or whether to accept the carrier
+   nodes as the cost of decision 0006.
+4. If any category triggers an IR relaxation, update
+   [revisit-triggers.md](../ir/revisit-triggers.md) and either
+   [ir-v0.1.md](../ir/ir-v0.1.md) or a new decision record.
+5. If all categories close as "working as intended," remove this gap.
+
+## G21: Inferred return type and typed lambda parameters
+
+**Status:** deferred - parser and type checker changes needed.
+
+**Problem 1 - inferred workflow return type:**
+The workflow declaration currently requires an explicit return type:
+
+```
+workflow summarize(repos: string[]): string { ... }
+```
+
+TypeScript allows omitting the annotation when the return type can be
+inferred from the body. The DSL type checker already infers the return
+type during `check()` (it computes `returnType` from `checkStatements`
+and validates it against the declared type). The parser and emitter
+would need changes to make the annotation optional and fall back to the
+inferred type when absent.
+
+**Problem 2 - typed lambda parameters:**
+Lambda parameters in `map`, `filter`, `parallelMap`, and
+`attempts.fallback` currently have no syntax for an explicit type
+annotation:
+
+```
+map(repos, (repo) => { ... })          // repo inferred as string
+```
+
+TypeScript allows writing `(repo: string) =>` to be explicit and get
+an error if the inferred type does not match. The DSL parser would need
+to accept an optional `: TypeExpr` after the param name in arrow
+expressions, and the type checker would need to validate the annotation
+against the inferred element type.
+
+**What needs to happen:**
+
+1. Update the parser to make the workflow return type annotation
+   optional (produce a sentinel `TypeExpr` such as `{ kind: "NamedType",
+name: "_infer" }`) and emit the inferred type in the emitter.
+2. Update the type checker to skip the return-type compatibility check
+   when the annotation is the sentinel, and instead use the inferred
+   type as the declared return type for downstream validation.
+3. Update the parser to accept `(param: TypeExpr) =>` in arrow
+   expressions, store the annotation on `MapNode`/`FilterNode`/etc.,
+   and have the type checker emit an error when the annotation does not
+   match the inferred element type.
+4. Add LSP hover and inlay-hint support that shows the inferred return
+   type next to the workflow name when the annotation is omitted.
+
+## G22: Type error messages collapse objects to `'object'`
+
+**Status:** UX gap surfaced by the G13 implementation. Pure diagnostic
+improvement; no semantic change to type checking.
+
+**Context:** When the type checker reports an assignability error, it
+formats both sides with `typeName(t)`. For object types this function
+returns the literal string `"object"`, discarding all field information.
+This makes object-vs-object mismatches indistinguishable to users.
+
+**Current state:**
+
+- `typeName` in `typeChecker.ts` returns `"object"` for any `ObjectTypeInfo`,
+  regardless of fields.
+- Arrays partially benefit from recursion (`string[]`) but their element
+  type collapses to `"object"` when it's an object.
+- Tuples also collapse to `"object"` for each object element.
+- A `formatType` function already exists in `typeChecker.ts` that produces
+  a full TypeScript-style rendering (e.g. `{ name: string, tag?: string }`,
+  `{ x: string }[]`), used today only for LSP hover text.
+- Affected diagnostics include (non-exhaustive):
+  - `Workflow return type 'object' is not assignable to declared type 'object'`
+  - `Type 'object' is not assignable to type 'object'` (const annotations)
+  - `Ternary arms must have the same type: 'object' vs 'object'`
+  - `Operator '===' requires same types on both sides: 'object' vs 'object'`
+- After G13 added structural object/array assignability checks, mismatches
+  between objects are now reported as errors, so the volume of
+  object-vs-object messages users see has grown.
+
+**Reproduction:**
+
+```
+workflow test(x: { name: string, tag: number }): { name: string, tag?: string } {
+    return x;
+}
+```
+
+Currently reports: `Workflow return type 'object' is not assignable to
+declared type 'object'`. Users cannot tell which field mismatches without
+manually walking both type expressions.
+
+**What needs to happen:**
+
+1. Switch the structural error messages (return-type, const-annotation,
+   ternary-arm, and `===`/`!==`) to use `formatType` instead of
+   `typeName`, or introduce a single shared diagnostic formatter.
+2. Decide whether `typeName` should be removed in favor of `formatType`,
+   or kept for short contexts (e.g. operator operand kind in
+   `must be numeric, got 'string'`). If kept, document the contract.
+3. Consider augmenting object-mismatch messages with the specific
+   offending field path (e.g. `field 'tag' has type 'number' but
+expected 'string'`), reusing the recursion already done inside
+   `isAssignableTo`. This may require threading an error-reason result
+   out of `isAssignableTo` instead of a bare boolean.
+4. Update existing type-checker tests whose substring assertions rely on
+   the collapsed `'object'` rendering, and add tests asserting the
+   richer field-level wording.

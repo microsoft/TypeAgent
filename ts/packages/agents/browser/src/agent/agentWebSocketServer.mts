@@ -40,6 +40,16 @@ interface SessionHandlers {
     getPreferredClientType?: () => "extension" | "electron" | undefined;
     onClientConnected?: (client: BrowserClient) => void;
     onClientDisconnected?: (client: BrowserClient) => void;
+    /**
+     * Fired after the {@link clients} map mutation completes for any
+     * connect / disconnect affecting this session, with the post-
+     * mutation total of tracked clients for the session. Used by the
+     * agent to push counts up through `SessionContext.notifyClientCountChanged`
+     * so `@system ports` can surface them. Off-by-one safe: the new
+     * count is computed AFTER the connect / disconnect is reflected in
+     * the map.
+     */
+    onClientCountChanged?: (count: number) => void;
     onWebAgentMessage?: (client: BrowserClient, data: any) => void;
     activeClientId: string | null;
 }
@@ -86,7 +96,14 @@ export class AgentWebSocketServer {
             const server = new WebSocketServer({
                 port,
                 verifyClient: (info, cb) => {
-                    const origin = info.origin || info.req.headers.origin;
+                    // `info.req.headers.origin` is `string | string[] |
+                    // undefined`; coerce arrays to the first element so
+                    // `isAllowedAgentOrigin` (which calls `startsWith` /
+                    // `new URL`) only ever sees a string.
+                    const rawOrigin = info.origin || info.req.headers.origin;
+                    const origin = Array.isArray(rawOrigin)
+                        ? rawOrigin[0]
+                        : rawOrigin;
                     if (isAllowedAgentOrigin(origin)) {
                         cb(true);
                     } else {
@@ -189,6 +206,12 @@ export class AgentWebSocketServer {
                 for (const client of preConnected.values()) {
                     handlers.onClientConnected(client);
                 }
+            }
+
+            // Push the initial count up now that the session knows
+            // about its pre-connected clients.
+            if (handlers.onClientCountChanged) {
+                handlers.onClientCountChanged(preConnected.size);
             }
         }
 
@@ -324,6 +347,11 @@ export class AgentWebSocketServer {
             session.onClientConnected(client);
         }
 
+        // Off-by-one safe: fired AFTER the sessionMap mutation above.
+        if (session?.onClientCountChanged) {
+            session.onClientCountChanged(sessionMap.size);
+        }
+
         ws.on("message", (message: string) => {
             client.lastActivity = new Date();
 
@@ -368,9 +396,16 @@ export class AgentWebSocketServer {
             }
 
             const sm = this.clients.get(client.sessionId);
+            let postCount = 0;
             if (sm) {
                 sm.delete(clientId);
+                postCount = sm.size;
                 if (sm.size === 0) this.clients.delete(client.sessionId);
+            }
+
+            // Off-by-one safe: fired AFTER the sessionMap delete.
+            if (s?.onClientCountChanged) {
+                s.onClientCountChanged(postCount);
             }
 
             if (s && s.activeClientId === clientId) {

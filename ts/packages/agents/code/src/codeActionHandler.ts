@@ -50,6 +50,13 @@ let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
 let sharedStartingPromise: Promise<CodeAgentWebSocketServer> | undefined;
 let sharedClosingPromise: Promise<void> | undefined;
 let sharedWebSocketRefCount = 0;
+// Sessions currently sharing the bound port. The shared WS server has
+// no per-session client tracking (code's WS protocol carries no session
+// id), so a single global count is fanned out to every active session
+// — each session's registrar entry surfaces the same global number via
+// `@system ports`. Sessions are added on first-schema-enable and
+// removed on last-schema-disable.
+const sharedActiveSessions = new Set<SessionContext<CodeActionContext>>();
 const sharedPendingCalls: Map<
     number,
     {
@@ -205,6 +212,21 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
             debug("Error parsing WebSocket message:", error);
         }
     };
+    // Fan out client-count updates to active sessions. To prevent the
+    // `@system ports` summing from double-counting (each session is
+    // registered to the SAME physical server), attribute the global
+    // count to a single "primary" session (the first one in insertion
+    // order) and report 0 from the rest. The SDK method swallows
+    // errors internally.
+    server.onClientCountChanged = (count: number) => {
+        const primary = sharedActiveSessions.values().next().value;
+        for (const sc of sharedActiveSessions) {
+            void sc.notifyClientCountChanged(
+                "default",
+                sc === primary ? count : 0,
+            );
+        }
+    };
 }
 
 // Start (or attach to an in-flight start of) the shared WebSocket server.
@@ -264,6 +286,19 @@ async function updateCodeContext(
                     server.port,
                 );
                 sharedWebSocketRefCount++;
+                sharedActiveSessions.add(context);
+                // Publish the current (global) count to the primary
+                // session (first in insertion order) and 0 to others
+                // so `@system ports` summing doesn't double-count. If
+                // this session is now becoming the primary (i.e. it's
+                // the first to enable), it gets the real count;
+                // otherwise it reports 0 and any future
+                // onClientCountChanged fanout will keep it at 0.
+                const primary = sharedActiveSessions.values().next().value;
+                void context.notifyClientCountChanged(
+                    "default",
+                    context === primary ? server.getConnectedCount() : 0,
+                );
             }
         } catch (e) {
             // Roll back the per-session schema bookkeeping so a subsequent
@@ -285,6 +320,9 @@ async function updateCodeContext(
             // released by the backstop.
             agentContext.portRegistration?.release();
             delete agentContext.portRegistration;
+            const wasPrimary =
+                sharedActiveSessions.values().next().value === context;
+            sharedActiveSessions.delete(context);
 
             sharedWebSocketRefCount = Math.max(0, sharedWebSocketRefCount - 1);
             if (sharedWebSocketRefCount === 0 && sharedWebSocketServer) {
@@ -297,6 +335,17 @@ async function updateCodeContext(
                     sharedClosingPromise = undefined;
                 });
                 await sharedClosingPromise;
+            } else if (wasPrimary && sharedWebSocketServer) {
+                // Primary session went away — transfer the (global) count
+                // to the new primary so `@system ports` keeps reporting
+                // the real number instead of 0.
+                const newPrimary = sharedActiveSessions.values().next().value;
+                if (newPrimary) {
+                    void newPrimary.notifyClientCountChanged(
+                        "default",
+                        sharedWebSocketServer.getConnectedCount(),
+                    );
+                }
             }
         }
     }

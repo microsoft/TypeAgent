@@ -442,6 +442,10 @@
           "name": "updatedBranches"
         }
       },
+      "continueWhen": {
+        "$from": "scope",
+        "name": "hasMore"
+      },
       "maxIterations": 50,
       "next": "joinBranchNames",
       "onError": "cleanupFromLoop",
@@ -1021,19 +1025,11 @@
             "bind": "hasMore"
           },
           "loopDecision": {
-            "kind": "branch",
-            "selector": {
-              "$from": "scope",
-              "name": "hasMore"
-            },
-            "selectorSchema": {
-              "type": "boolean"
-            },
-            "cases": {
-              "true": "@iterate",
-              "false": "@exit"
-            },
-            "default": "@exit"
+            "kind": "task",
+            "task": "noop",
+            "inputSchema": {},
+            "outputSchema": {},
+            "inputs": {}
           }
         },
         "output": {

@@ -170,6 +170,7 @@ export async function resolveURLWithHistory(
             indexes: async () => [],
             reloadAgentSchema: async () => {},
             notifyReadinessChanged: async () => {},
+            notifyClientCountChanged: async () => {},
         };
 
         // Use searchWebMemories with URL resolution optimized parameters

@@ -82,6 +82,8 @@ const BUILTIN_NAMES = new Set([
 interface ArrowPlaceholder {
     _isArrow: true;
     params: string[];
+    /** Source locations of each parameter token; parallel to `params`. */
+    paramLocs: SourceLocation[];
     body: Statement[];
     bodyInnerComments?: Comment[];
 }
@@ -90,6 +92,7 @@ export interface ParseError {
     message: string;
     line: number;
     col: number;
+    length: number;
 }
 
 /**
@@ -384,7 +387,12 @@ export class Parser {
 
     private error(msg: string): void {
         const t = this.peek();
-        this.errors.push({ message: msg, line: t.line, col: t.col });
+        this.errors.push({
+            message: msg,
+            line: t.line,
+            col: t.col,
+            length: t.value.length || 1,
+        });
     }
 
     /**
@@ -414,7 +422,7 @@ export class Parser {
                 tok.line,
                 tok.col + 1,
             );
-            this.errors.push({ message: e.message, line, col });
+            this.errors.push({ message: e.message, line, col, length: 1 });
         }
     }
 
@@ -577,22 +585,45 @@ export class Parser {
         innerComments: Comment[] | undefined;
     } {
         const stmts: Statement[] = [];
+        let prevEndLine: number | undefined = undefined;
         while (
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
-            const s = this.parseStatement();
-            if (s) stmts.push(s);
+            const s = this.parseStatement(prevEndLine);
+            if (s) {
+                stmts.push(s);
+                prevEndLine = s.endLine;
+            }
         }
         const innerComments = this.finalizeBlock(stmts);
         return { stmts, innerComments };
     }
 
-    private parseStatement(): Statement | undefined {
+    /**
+     * Parse a single statement, optionally detecting a blank line between
+     * the previous statement (whose last token was on `prevEndLine`) and
+     * this one. When `prevEndLine` is `undefined` (first statement in a
+     * block), blank-line detection is skipped so no blank line is injected
+     * at the top of a block.
+     */
+    private parseStatement(prevEndLine?: number): Statement | undefined {
         const leadingComments = this.takeLeadingComments();
+        // Detect blank line: if the gap between the previous statement's end
+        // line and the first line of this item (leading comment or token) is
+        // >= 2 there is at least one blank line in between.
+        let blankLineBefore = false;
+        if (prevEndLine !== undefined) {
+            const firstLine =
+                leadingComments !== undefined && leadingComments.length > 0
+                    ? leadingComments[0].pos.line
+                    : this.peek().line;
+            blankLineBefore = firstLine - prevEndLine >= 2;
+        }
         const stmt = this.parseStatementInner();
         if (stmt) {
             if (leadingComments) stmt.leadingComments = leadingComments;
+            if (blankLineBefore) stmt.blankLineBefore = true;
             const endLine = this.lastToken?.line;
             if (endLine !== undefined) {
                 stmt.endLine = endLine;
@@ -632,6 +663,7 @@ export class Parser {
                 return {
                     kind: "ConstStatement",
                     name: `__synthetic_${expr.loc.line}_${expr.loc.col}`,
+                    nameLoc: expr.loc,
                     value: expr,
                     loc: expr.loc,
                     isSynthetic: true,
@@ -655,6 +687,12 @@ export class Parser {
 
         const nameTok = this.expect(TokenKind.Identifier);
         const name = nameTok.value;
+        const nameLoc: SourceLocation = {
+            line: nameTok.line,
+            col: nameTok.col,
+            offset: nameTok.offset,
+            length: nameTok.value.length,
+        };
         // The `__synthetic_` prefix is reserved for the formatter's
         // bare-expression wrappers (see parseStatement on Identifier).
         // Reject user code that tries to shadow it so format -> parse
@@ -673,25 +711,47 @@ export class Parser {
         this.expect(TokenKind.Equals);
         const value = this.parseExpression();
         this.expectSemicolon();
-        return { kind: "ConstStatement", name, typeAnnotation, value, loc: l };
+        return {
+            kind: "ConstStatement",
+            name,
+            nameLoc,
+            typeAnnotation,
+            value,
+            loc: l,
+        };
     }
 
     private parseDestructuringConst(l: SourceLocation): DestructuringConst {
         this.expect(TokenKind.LBracket);
         const names: string[] = [];
+        const nameLocs: SourceLocation[] = [];
         if (this.peek().kind !== TokenKind.RBracket) {
-            names.push(this.expect(TokenKind.Identifier).value);
+            const t0 = this.expect(TokenKind.Identifier);
+            names.push(t0.value);
+            nameLocs.push({
+                line: t0.line,
+                col: t0.col,
+                offset: t0.offset,
+                length: t0.value.length,
+            });
             while (this.peek().kind === TokenKind.Comma) {
                 this.advance();
                 if (this.peek().kind === TokenKind.RBracket) break;
-                names.push(this.expect(TokenKind.Identifier).value);
+                const t = this.expect(TokenKind.Identifier);
+                names.push(t.value);
+                nameLocs.push({
+                    line: t.line,
+                    col: t.col,
+                    offset: t.offset,
+                    length: t.value.length,
+                });
             }
         }
         this.expect(TokenKind.RBracket);
         this.expect(TokenKind.Equals);
         const value = this.parseExpression();
         this.expectSemicolon();
-        return { kind: "DestructuringConst", names, value, loc: l };
+        return { kind: "DestructuringConst", names, nameLocs, value, loc: l };
     }
 
     private parseIfStmt(): IfStatement {
@@ -878,14 +938,18 @@ export class Parser {
     } {
         this.inSwitchDepth++;
         const stmts: Statement[] = [];
+        let prevEndLine: number | undefined = undefined;
         while (
             this.peek().kind !== TokenKind.Case &&
             this.peek().kind !== TokenKind.Default &&
             this.peek().kind !== TokenKind.RBrace &&
             this.peek().kind !== TokenKind.EOF
         ) {
-            const s = this.parseStatement();
-            if (s) stmts.push(s);
+            const s = this.parseStatement(prevEndLine);
+            if (s) {
+                stmts.push(s);
+                prevEndLine = s.endLine;
+            }
         }
         // For switch arms we differ from generic finalizeBlock: only
         // capture inline-trailing comments (same source line as the last
@@ -1203,7 +1267,7 @@ export class Parser {
             this.advance(); // )
             if (this.peek().kind === TokenKind.Arrow) {
                 this.advance(); // =>
-                return this.parseArrowBody([], l);
+                return this.parseArrowBody([], [], l);
             }
             // Not an arrow, backtrack (shouldn't normally happen)
             this.pos = savedPos;
@@ -1215,12 +1279,27 @@ export class Parser {
             const savedPos = this.pos;
             this.advance(); // (
             const params: string[] = [];
-            params.push(this.advance().value);
+            const paramLocs: SourceLocation[] = [];
+            const firstTok = this.advance();
+            params.push(firstTok.value);
+            paramLocs.push({
+                line: firstTok.line,
+                col: firstTok.col,
+                offset: firstTok.offset,
+                length: firstTok.value.length,
+            });
             let isArrow = true;
             while (this.peek().kind === TokenKind.Comma) {
                 this.advance();
                 if (this.peek().kind === TokenKind.Identifier) {
-                    params.push(this.advance().value);
+                    const tok = this.advance();
+                    params.push(tok.value);
+                    paramLocs.push({
+                        line: tok.line,
+                        col: tok.col,
+                        offset: tok.offset,
+                        length: tok.value.length,
+                    });
                 } else {
                     isArrow = false;
                     break;
@@ -1230,7 +1309,7 @@ export class Parser {
                 this.advance(); // )
                 if (this.peek().kind === TokenKind.Arrow) {
                     this.advance(); // =>
-                    return this.parseArrowBody(params, l);
+                    return this.parseArrowBody(params, paramLocs, l);
                 }
             }
             // Backtrack: not an arrow function, parse as parenthesized expr
@@ -1251,14 +1330,20 @@ export class Parser {
      */
     private parseArrowBody(
         params: string[],
-        _l: SourceLocation,
+        paramLocs: SourceLocation[],
+        _l: SourceLocation, // reserved: loc of arrow expression start (currently unused)
     ): ArrowPlaceholder {
         if (this.peek().kind === TokenKind.LBrace) {
             this.advance(); // {
             const { stmts: body, innerComments } =
                 this.parseStatementsCapturingInner();
             this.expect(TokenKind.RBrace);
-            const ph: ArrowPlaceholder = { _isArrow: true, params, body };
+            const ph: ArrowPlaceholder = {
+                _isArrow: true,
+                params,
+                paramLocs,
+                body,
+            };
             if (innerComments) ph.bodyInnerComments = innerComments;
             return ph;
         }
@@ -1267,6 +1352,7 @@ export class Parser {
         return {
             _isArrow: true,
             params,
+            paramLocs,
             body: [{ kind: "ReturnStatement", value: expr, loc: expr.loc }],
         };
     }
@@ -1285,10 +1371,25 @@ export class Parser {
 
         // Collect dotted segments
         const segments: string[] = [firstName];
+        const segmentLocs: SourceLocation[] = [
+            {
+                line: l.line,
+                col: l.col,
+                offset: l.offset,
+                length: firstName.length,
+            },
+        ];
         while (this.peek().kind === TokenKind.Dot) {
             this.advance(); // .
             if (this.peek().kind === TokenKind.Identifier) {
-                segments.push(this.advance().value);
+                const tok = this.advance();
+                segments.push(tok.value);
+                segmentLocs.push({
+                    line: tok.line,
+                    col: tok.col,
+                    offset: tok.offset,
+                    length: tok.value.length,
+                });
             } else {
                 this.error("Expected identifier after '.'");
                 break;
@@ -1310,7 +1411,7 @@ export class Parser {
         }
 
         // Otherwise it's a dotted name reference
-        return { kind: "DottedNameExpr", segments, loc: l };
+        return { kind: "DottedNameExpr", segments, segmentLocs, loc: l };
     }
 
     // ---- Built-in function parsing ----
@@ -1347,6 +1448,7 @@ export class Parser {
         let fallback:
             | {
                   param: string | undefined;
+                  paramLoc?: SourceLocation;
                   body: Statement[];
                   bodyInnerComments?: Comment[];
               }
@@ -1356,8 +1458,10 @@ export class Parser {
             if (this.peek().kind !== TokenKind.RParen) {
                 const fbArrow = this.parseArrowArg();
                 const fbParams = this.extractArrowParams(fbArrow);
+                const fbParamLocs = this.extractArrowParamLocs(fbArrow);
                 fallback = {
                     param: fbParams[0],
+                    paramLoc: fbParamLocs[0],
                     body: this.extractArrowBody(fbArrow),
                 };
                 const fbInner = this.extractArrowBodyInner(fbArrow);
@@ -1383,6 +1487,7 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
+        const paramLocs = this.extractArrowParamLocs(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
         const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
@@ -1390,6 +1495,7 @@ export class Parser {
             kind: "MapNode",
             collection,
             param: params[0] ?? "item",
+            paramLoc: paramLocs[0],
             body,
             loc: l,
         };
@@ -1403,6 +1509,7 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
+        const paramLocs = this.extractArrowParamLocs(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
         const bodyInner = this.extractArrowBodyInner(bodyArrow);
         this.expect(TokenKind.RParen);
@@ -1410,6 +1517,7 @@ export class Parser {
             kind: "FilterNode",
             collection,
             param: params[0] ?? "item",
+            paramLoc: paramLocs[0],
             body,
             loc: l,
         };
@@ -1466,6 +1574,7 @@ export class Parser {
         this.expect(TokenKind.Comma);
         const bodyArrow = this.parseArrowArg();
         const params = this.extractArrowParams(bodyArrow);
+        const paramLocs = this.extractArrowParamLocs(bodyArrow);
         const body = this.extractArrowBody(bodyArrow);
         const bodyInner = this.extractArrowBodyInner(bodyArrow);
 
@@ -1488,6 +1597,7 @@ export class Parser {
             kind: "ParallelMapNode",
             collection,
             param: params[0] ?? "item",
+            paramLoc: paramLocs[0],
             body,
             loc: l,
         };
@@ -1516,6 +1626,16 @@ export class Parser {
     private extractArrowParams(arg: Expr | ArrowPlaceholder): string[] {
         if (this.isArrow(arg)) {
             return arg.params;
+        }
+        return [];
+    }
+
+    /** Extract parameter source locations from a parsed arrow. */
+    private extractArrowParamLocs(
+        arg: Expr | ArrowPlaceholder,
+    ): SourceLocation[] {
+        if (this.isArrow(arg)) {
+            return arg.paramLocs;
         }
         return [];
     }

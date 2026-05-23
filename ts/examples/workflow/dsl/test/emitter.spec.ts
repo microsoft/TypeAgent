@@ -572,22 +572,21 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        expect(checkNode.default).toBe("@exit");
+        // Default arm is a BranchArm sub-scope (no-op).
+        expect(checkNode.default).toBeDefined();
 
-        const pickId = checkNode.cases["true"];
-        const pickNode = body.nodes[pickId] as TaskNode;
+        const trueArm = checkNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const pickNode = trueArm.scope.nodes[trueArm.scope.entry] as TaskNode;
         expect(pickNode.task).toBe("list.elementAt");
 
-        const stepNode = Object.values(body.nodes).find(
+        const stepNode = Object.values(trueArm.scope.nodes).find(
             (node): node is TaskNode =>
-                node.kind === "task" &&
-                node.task === "math.add" &&
-                node.next === "@iterate",
+                node.kind === "task" && node.task === "math.add",
         );
         expect(stepNode).toBeDefined();
     });
-
-    // ---- Filter built-in ----
 
     test("filter lowers to loop node with branch", () => {
         const ir = compileOk(`
@@ -625,23 +624,25 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        expect(checkNode.default).toBe("@exit");
+        // Default arm is a BranchArm sub-scope (no-op).
+        expect(checkNode.default).toBeDefined();
 
-        const pickId = checkNode.cases["true"];
-        const pickNode = body.nodes[pickId] as TaskNode;
+        const trueArm = checkNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const pickNode = trueArm.scope.nodes[trueArm.scope.entry] as TaskNode;
         expect(pickNode.task).toBe("list.elementAt");
 
-        const conditionalBranch = Object.values(body.nodes).find(
-            (node): node is BranchNode =>
-                node.kind === "branch" && node !== checkNode,
+        // Conditional filter branch lives inside the true arm scope.
+        const conditionalBranch = Object.values(trueArm.scope.nodes).find(
+            (node) => (node as { kind: string }).kind === "branch",
         );
         expect(conditionalBranch).toBeDefined();
 
-        const stepNode = Object.values(body.nodes).find(
+        const stepNode = Object.values(trueArm.scope.nodes).find(
             (node): node is TaskNode =>
-                node.kind === "task" &&
-                node.task === "math.add" &&
-                node.next === "@iterate",
+                (node as { kind: string }).kind === "task" &&
+                (node as TaskNode).task === "math.add",
         );
         expect(stepNode).toBeDefined();
     });
@@ -702,7 +703,7 @@ describe("Emitter", () => {
         expect(loopNode.state!.attempt.initial).toBe(0);
     });
 
-    test("attempts body: last task has next @exit", () => {
+    test("attempts body: last task chains to set_done (success path)", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
@@ -713,11 +714,12 @@ describe("Emitter", () => {
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
         const body = loopNode.body;
-        // Find the last node in the body's main chain (from entry)
         const entryNode = body.nodes[body.entry] as TaskNode;
         expect(entryNode).toBeDefined();
-        // The last body task should have next: "@exit"
-        expect(entryNode.next).toBe("@exit");
+        // Success path leads to attempts_done (binds _should_retry = false).
+        const doneNode = body.nodes[entryNode.next!] as TaskNode;
+        expect(doneNode.task).toBe("identity");
+        expect(doneNode.bind).toBe("_should_retry");
     });
 
     test("attempts body: task nodes have onError pointing to step_attempt", () => {
@@ -761,11 +763,16 @@ describe("Emitter", () => {
 
         const branchNode = body.nodes[checkNode.next!] as BranchNode;
         expect(branchNode.kind).toBe("branch");
-        expect(branchNode.default).toBe("@iterate");
+        // The default arm is the retry arm (a sub-scope).
+        expect(branchNode.default).toBeDefined();
 
-        // The true case should point to the exhaust node
-        const exhaustId = branchNode.cases["true"] as string;
-        const exhaustNode = body.nodes[exhaustId] as TaskNode;
+        // The true case is the exhausted arm whose entry is error.fail.
+        const exhaustArm = branchNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const exhaustNode = exhaustArm.scope.nodes[
+            exhaustArm.scope.entry
+        ] as TaskNode;
         expect(exhaustNode.task).toBe("error.fail");
     });
 
@@ -784,7 +791,7 @@ describe("Emitter", () => {
         // Walk the body's main chain from entry via next pointers
         const mainChain = new Set<string>();
         let nodeId: string | undefined = body.entry;
-        while (nodeId && nodeId !== "@exit" && nodeId !== "@iterate") {
+        while (nodeId) {
             mainChain.add(nodeId);
             const node: WorkflowNode = body.nodes[nodeId];
             nodeId =
@@ -925,8 +932,16 @@ describe("Emitter", () => {
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
         expect(branchNode.cases).toHaveProperty("a");
-        // Default should point to the default body, not the branch itself
-        expect(branchNode.default).toContain("default_");
+        // Default arm runs the fallback web.fetch.
+        expect(branchNode.default).toBeDefined();
+        const defaultArm = branchNode.default!;
+        const defaultEntryId = defaultArm.scope.entry;
+        expect(defaultEntryId).toMatch(/^r2|^default_/);
+        const defaultEntry = defaultArm.scope.nodes[defaultEntryId];
+        expect(defaultEntry.kind).toBe("task");
+        expect((defaultEntry as TaskNode).inputs.url).toBe(
+            "https://fallback.com",
+        );
     });
 
     // ---- Dotted-name with path ----
@@ -966,5 +981,83 @@ describe("Emitter", () => {
         // The parser doesn't support descriptions in the DSL syntax currently,
         // so we test the emitter directly with a manually constructed AST
         // (skip this test - covered by the parser)
+    });
+
+    // ---- BranchArm sub-scope structural assertions ----
+
+    // Both arms of an if/else that contain only a return statement
+    // must compile to a single-task noop arm whose output template
+    // points at the workflow input passed in via the arm's `inputs`.
+    test("if/else with return-only arms uses buildOutputOnlyArm shape", () => {
+        const ir = compileOk(`
+            workflow choose(x: boolean, a: string, b: string): string {
+                if (x) {
+                    return a;
+                } else {
+                    return b;
+                }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+
+        for (const armKey of ["true", "false"] as const) {
+            const arm = branchNode.cases[armKey];
+            expect(arm).toBeDefined();
+            const armNodes = Object.values(arm.scope.nodes);
+            // Single synthetic noop task in each arm.
+            expect(armNodes).toHaveLength(1);
+            const only = armNodes[0] as TaskNode;
+            expect(only.kind).toBe("task");
+            expect(only.task).toBe("noop");
+            // The outer input is hoisted into the arm's inputs and the
+            // scope output template reads from input.value, so neither arm
+            // ends up with a stray $from:input reference inside.
+            expect(Object.keys(arm.inputs).length).toBeGreaterThan(0);
+            const output = arm.scope.output as Record<string, unknown>;
+            expect(output.$from).toBe("input");
+        }
+    });
+
+    // emitFilter emits an inner `filter_check` branch that decides whether
+    // to append the current element. threadNext does not auto-link branch
+    // nodes, so the emitter wires `filter_check.next = step_i` manually.
+    // Without this wiring the loop body would not advance the counter.
+    test("filter inner branch is wired to the step counter", () => {
+        const ir = compileOk(`
+            workflow test(items: string[]): unknown {
+                return filter(items, (item) => {
+                    return item === "keep";
+                });
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+
+        // The body's outer iteration check (true arm = work).
+        const checkNode = Object.values(body.nodes).find(
+            (n) => n.kind === "branch",
+        ) as BranchNode | undefined;
+        expect(checkNode).toBeDefined();
+
+        // The inner filter branch sits in the work arm.
+        const workScope = (
+            checkNode!.cases["true"] as unknown as {
+                scope: { nodes: Record<string, WorkflowNode> };
+            }
+        ).scope;
+        const filterBranchEntry = Object.entries(workScope.nodes).find(
+            ([, n]) => n.kind === "branch",
+        );
+        expect(filterBranchEntry).toBeDefined();
+        const [, filterBranch] = filterBranchEntry!;
+        const fb = filterBranch as BranchNode;
+
+        // The branch must point at a step_i (math.add) task; without
+        // this wiring the loop body would not advance the counter.
+        expect(fb.next).toBeDefined();
+        const stepNode = workScope.nodes[fb.next!] as TaskNode;
+        expect(stepNode).toBeDefined();
+        expect(stepNode.kind).toBe("task");
+        expect(stepNode.task).toBe("math.add");
     });
 });
