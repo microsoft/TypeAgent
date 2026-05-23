@@ -42,13 +42,7 @@ import { iconTrash } from "../icon";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 
-/**
- * Window during which two Escape presses count as a "double-Escape"
- * gesture, mirroring the CLI's `DOUBLE_ESCAPE_WINDOW_MS`. Inside the
- * window a second Escape triggers `cancelAllQueuedAndRunning` (clear
- * the entire queue plus the running entry); outside the window each
- * press keeps its single-Escape semantics.
- */
+/** Window for the double-Escape "clear entire queue" gesture (mirrors the CLI). */
 const DOUBLE_ESCAPE_WINDOW_MS = 1000;
 
 // The canonical MessageGroup key is requestId.requestId — a UUID assigned by
@@ -91,35 +85,13 @@ export class ChatView {
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
 
-    /**
-     * Latest server-side queue snapshot. Updated by the four queue
-     * push events (requestQueued/Started/Cancelled/queueStateChanged)
-     * and bootstrapped from `JoinConversationResult.queueSnapshot` on
-     * (re)connect.
-     */
+    /** Latest server-side queue snapshot; bootstrapped on (re)connect. */
     private queueSnapshot: QueueSnapshot | undefined;
-    /**
-     * Highest queue version we've applied. Drops out-of-order push
-     * events whose version <= this value (F6 / R2P-H-1). Reset on
-     * (re)bootstrap via applyQueueSnapshot.
-     */
+    /** Drops out-of-order push events whose version is older. Reset by applyQueueSnapshot. */
     private lastAppliedQueueVersion = -1;
-    /**
-     * Queue status chips ("queued" / "running") whose MessageGroup
-     * hasn't been created yet — typically because the server's
-     * requestQueued push event raced ahead of our local pending
-     * MessageGroup promotion, or a peer client's request arrived
-     * before `addRemoteUserMessage`. Drained by
-     * `applyPendingQueueStatus` whenever an MG materializes.
-     */
+    /** Queue status chips deferred until their MessageGroup is created. */
     private pendingQueueStatus = new Map<string, "queued" | "running">();
-    /**
-     * Timestamp of the last bare-Escape press inside the chat view.
-     * A second Escape within `DOUBLE_ESCAPE_WINDOW_MS` triggers
-     * `cancelAllQueuedAndRunning` (the Shell counterpart to the CLI's
-     * double-Escape clear queue). Single Escape keeps its existing
-     * meaning of "cancel the active running request".
-     */
+    /** Timestamp of the last Escape press; powers the double-Escape gesture. */
     private lastEscapeTime = 0;
 
     public userGivenName: string = "";
@@ -178,13 +150,6 @@ export class ChatView {
         this._reconnectBanner.className = "chat-reconnect-banner";
         this._reconnectBanner.style.display = "none";
         this.topDiv.insertBefore(this._reconnectBanner, this.messageDiv);
-
-        // Per-bubble queue status: each user bubble grows a small
-        // "queued" / "running" chip via `MessageContainer.setQueueStatus`
-        // driven by the four queue push events below. The previous
-        // global "Queue: N" badge above the chat scroll region was
-        // removed — the chat history itself is the queue surface, so a
-        // separate header was redundant.
 
         // wire up messages from iframes so we can resize them
         window.onmessage = (e) => {
@@ -408,24 +373,14 @@ export class ChatView {
 
         this._dispatcher = dispatcher;
 
-        // Bootstrap the queue snapshot so the badge is correct
-        // immediately after (re)connect, even mid-queue. Optimization
-        // (Cluster E.4): when the caller threads in the snapshot from
-        // `JoinConversationResult.queueSnapshot` we apply it directly
-        // and skip the extra `getQueueSnapshot` RPC. Server omits the
-        // join snapshot when the queue is idle (E.2), so an undefined
-        // value here is the common case and the RPC fallback is only
-        // needed for older / non-queueing servers (where it's also a
-        // no-op). Best-effort throughout — queue UX is cosmetic.
+        // Bootstrap from the join snapshot when provided; otherwise fall back to RPC.
         if (initialQueueSnapshot !== undefined) {
             this.applyQueueSnapshot(initialQueueSnapshot);
         } else if (typeof dispatcher.getQueueSnapshot === "function") {
             dispatcher
                 .getQueueSnapshot()
                 .then((snap) => this.applyQueueSnapshot(snap))
-                .catch(() => {
-                    // best-effort
-                });
+                .catch(() => {});
         }
 
         this.chatInput.textarea.enable(true);
@@ -445,26 +400,20 @@ export class ChatView {
             this.showStopButton(false);
         };
 
-        // Escape key cancels during processing. A second Escape
-        // within DOUBLE_ESCAPE_WINDOW_MS additionally clears the
-        // entire queue (running + queued), mirroring the CLI's
-        // double-Escape gesture so both surfaces share one keystroke.
+        // Escape cancels the running request; a second Escape within
+        // DOUBLE_ESCAPE_WINDOW_MS clears the entire queue (mirrors the CLI).
         document.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
             const now = Date.now();
             const isDouble =
                 now - this.lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
             this.lastEscapeTime = now;
-            // Single-Escape: cancel the active running request (legacy
-            // behavior). Suppress when no running request — we still
-            // want to let the second Escape fire for queue clearing.
             if (this.activeRequestId) {
                 e.preventDefault();
                 this.cancelCommand();
             }
             if (isDouble) {
-                // Reset so a third Escape doesn't immediately re-trigger
-                // (the next double needs another fresh pair).
+                // Reset so a third Escape doesn't immediately re-trigger.
                 this.lastEscapeTime = 0;
                 e.preventDefault();
                 void this.cancelAllQueuedAndRunning();
@@ -508,16 +457,9 @@ export class ChatView {
     }
 
     /**
-     * Shell counterpart to the CLI's `cancelAllInQueue`: cancel every
-     * entry in the current queue snapshot (the running entry plus all
-     * queued entries). Triggered by double-Escape and any future
-     * Phase-2 "clear queue" affordance.
-     *
-     * Fires `dispatcher.cancelCommand` once per entry, swallowing
-     * per-id errors so a single dead RPC channel doesn't strand the
-     * other cancellations. The server broadcasts `requestCancelled`
-     * for each entry, which clears chips and the snapshot via the
-     * existing handlers — no local optimistic mutation here.
+     * Cancel every entry in the current queue (running + queued). Per-id
+     * errors are swallowed so one dead RPC doesn't strand the rest; the
+     * server's `requestCancelled` broadcasts drive the UI updates.
      */
     private async cancelAllQueuedAndRunning(): Promise<void> {
         const snap = this.queueSnapshot;
@@ -531,9 +473,7 @@ export class ChatView {
             ids.map(async (id) => {
                 try {
                     await Promise.resolve(dispatcher.cancelCommand(id));
-                } catch {
-                    // best-effort — sibling cancels still proceed.
-                }
+                } catch {}
             }),
         );
     }
@@ -739,9 +679,7 @@ export class ChatView {
                     // Stamp the canonical requestId on the group now that
                     // it's known — drives the feedback widget.
                     pending.setRequestId(requestId);
-                    // Apply any queue chip that was deferred while the MG
-                    // was still pending — e.g. requestQueued fired before
-                    // setUserRequest carried the server UUID.
+                    // Apply any queue chip deferred while the MG was pending.
                     this.applyPendingQueueStatus(id, pending);
                     return pending;
                 }
@@ -1032,8 +970,7 @@ export class ChatView {
         mg.setRequestId(requestId);
 
         this.idToMessageGroup.set(id, mg);
-        // Apply any deferred queue status — e.g. requestQueued for this
-        // remote peer's request arrived before addRemoteUserMessage.
+        // Apply any queue status deferred until the MG materialized.
         this.applyPendingQueueStatus(id, mg);
         this.updateScroll();
     }
@@ -1112,11 +1049,7 @@ export class ChatView {
         this.getMessageGroup(entry.requestId)?.applyFeedback(entry);
     }
 
-    // ===== Server-side queue (Phase 1) =====
-    // The Shell mirrors the server-side message queue purely as a
-    // visibility surface: a single badge near the reconnect banner
-    // shows the combined "running + queued" count. There is no
-    // cancel/reorder/edit UI in Phase 1 — those land in Phase 2.
+    // Server-side queue: drives per-bubble "queued"/"running" chips.
 
     /** Bootstrap from `JoinConversationResult.queueSnapshot`. */
     public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
@@ -1132,13 +1065,9 @@ export class ChatView {
     }
 
     /**
-     * Returns true if `version` is fresh (and updates the watermark);
-     * false when it's strictly older than the watermark. Same-version
-     * events ARE admitted — the server pairs fine-grained events
-     * (e.g. `requestStarted`) with an authoritative `queueStateChanged`
-     * at the same version, and the snapshot must overwrite the
-     * partial mutation. Older non-versioned events (undefined) are
-     * admitted unconditionally for forward compat.
+     * Admit `version` if not strictly older than the watermark. Same-version
+     * events are admitted so an authoritative `queueStateChanged` can overwrite
+     * a paired fine-grained event. Undefined versions are always admitted.
      */
     private admitVersion(version: number | undefined): boolean {
         if (typeof version !== "number") return true;
@@ -1163,12 +1092,6 @@ export class ChatView {
             (e) => e.requestId !== entry.requestId,
         );
         snap.running = { ...entry };
-        // Transition the chip to "running" so the bubble itself
-        // signals "this is what the server is currently working on".
-        // The chat-input stop button + spinner are global affordances;
-        // the chip is the per-bubble counterpart that matters when
-        // multiple bubbles are queued or when the running request was
-        // submitted from a peer client (no local spinner).
         this.tryApplyQueueStatusToGroup(entry, "running");
     }
 
@@ -1185,8 +1108,7 @@ export class ChatView {
         } else {
             snap.queued = snap.queued.filter((e) => e.requestId !== requestId);
         }
-        // Clear any stale chip on the matching bubble, plus any
-        // pending status that hadn't been applied yet.
+        // Clear any chip and pending status for the cancelled entry.
         this.pendingQueueStatus.delete(requestId);
         const mg = this.idToMessageGroup.get(requestId);
         if (mg) {
@@ -1197,18 +1119,13 @@ export class ChatView {
     public onQueueStateChanged(snapshot: QueueSnapshot): void {
         if (!this.admitVersion(snapshot.version)) return;
         const prev = this.queueSnapshot;
-        // Authoritative replacement.
         this.queueSnapshot = this.cloneSnapshot(snapshot);
         this.reconcileChipsToSnapshot(prev, snapshot);
     }
 
     /**
-     * Drive per-bubble chips off an authoritative snapshot.
-     * Stamps "running" / "queued" on entries the snapshot still has,
-     * clears chips on previously-live entries it no longer has, and
-     * sweeps any stale `pendingQueueStatus` whose entry vanished.
-     * Used by `applyQueueSnapshot` (bootstrap / reconnect) and
-     * `onQueueStateChanged` (normal completion).
+     * Drive chips off an authoritative snapshot: stamp live entries, clear
+     * chips on entries that have dropped out, and sweep stale pending entries.
      */
     private reconcileChipsToSnapshot(
         prev: QueueSnapshot | undefined,
@@ -1223,8 +1140,7 @@ export class ChatView {
             liveIds.add(entry.requestId);
             this.tryApplyQueueStatusToGroup(entry, "queued");
         }
-        // Clear chips on previously-live entries the new snapshot
-        // dropped — normal completion, drain on disconnect, etc.
+        // Clear chips on entries the new snapshot dropped.
         const prevIds = new Set<string>();
         if (prev?.running) prevIds.add(prev.running.requestId);
         for (const e of prev?.queued ?? []) prevIds.add(e.requestId);
@@ -1233,7 +1149,7 @@ export class ChatView {
             this.pendingQueueStatus.delete(id);
             this.idToMessageGroup.get(id)?.setQueueStatus(null);
         }
-        // Sweep any pending statuses whose entry is no longer live.
+        // Sweep pending statuses whose entry is no longer live.
         for (const id of Array.from(this.pendingQueueStatus.keys())) {
             if (!liveIds.has(id)) {
                 this.pendingQueueStatus.delete(id);
@@ -1263,13 +1179,8 @@ export class ChatView {
     }
 
     /**
-     * Try to apply a queue status chip to the MessageGroup matching
-     * `entry`. When the MessageGroup hasn't been created yet (e.g. the
-     * server's requestQueued event arrived before our local pending
-     * MG was promoted, or before `addRemoteUserMessage` ran for a
-     * peer's request), stash the desired status in `pendingQueueStatus`
-     * so it can be applied when the MG materializes via
-     * `applyPendingQueueStatus`.
+     * Apply a chip to the matching MessageGroup, or stash the status in
+     * `pendingQueueStatus` so it's applied when the MG materializes.
      */
     private tryApplyQueueStatusToGroup(
         entry: QueuedRequest,
@@ -1284,9 +1195,7 @@ export class ChatView {
             this.pendingQueueStatus.delete(entry.requestId);
             return;
         }
-        // Defer — addRemoteUserMessage / lazy promotion will apply
-        // this on creation. Storing `null` is pointless (no chip to
-        // clear on a non-existent MG), so just delete.
+        // Defer to MG creation; storing `null` would be a no-op.
         if (status === null) {
             this.pendingQueueStatus.delete(entry.requestId);
         } else {
@@ -1294,11 +1203,7 @@ export class ChatView {
         }
     }
 
-    /**
-     * Apply any deferred queue status for `requestId` to the now-live
-     * MessageGroup. Called from MG creation paths (lazy promotion in
-     * `getMessageGroup`, `addRemoteUserMessage`).
-     */
+    /** Apply any deferred queue status for `requestId` to the now-live MG. */
     private applyPendingQueueStatus(requestId: string, mg: MessageGroup): void {
         const status = this.pendingQueueStatus.get(requestId);
         if (status !== undefined) {

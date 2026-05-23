@@ -949,7 +949,7 @@ function registerClient(
         onUserHide: (entry) => {
             chatView.applyHide(entry);
         },
-        // ===== Server-side queue push events (Phase 1) =====
+        // Server-side queue push events.
         requestQueued: (entry, version) => {
             chatView.onRequestQueued(entry, version);
         },
@@ -1074,9 +1074,7 @@ function registerClient(
             _name: string,
             queueSnapshot?: QueueSnapshot,
         ): void {
-            // Conversation changed — no UI to update (dropdown removed),
-            // but the queue snapshot must be re-bootstrapped so the new
-            // conversation's version stream is admitted (F9 / R2P-H-1).
+            // Re-bootstrap the queue snapshot for the new conversation's version stream.
             chatView.applyQueueSnapshot(queueSnapshot);
         },
         markHistoryEntries(): void {

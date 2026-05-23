@@ -341,9 +341,7 @@ export default class Connect extends Command {
                 saveLastConversationId(activeConversationId);
             }
             bindDispatcher(activeDispatcher);
-            // Wire the slash-command dispatcher accessor and bootstrap
-            // the queue snapshot so /queue list and the prompt badge
-            // are correct from the first prompt.
+            // Wire slash-command dispatcher and bootstrap the queue snapshot for the first prompt.
             setQueueDispatcher(activeDispatcher);
             setCliConnectionId(conversation.connectionId);
             clearRecentSubmissions();

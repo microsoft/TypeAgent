@@ -306,16 +306,9 @@ export function createDispatcherFromContext(
         },
         supportsQueueing: false,
         async submitCommand(command, attachments, options, clientRequestId) {
-            // In-process / direct dispatcher fallback: there is no queue,
-            // so synthesize a single-entry "submitted then immediately
-            // started" view. SharedDispatcher overrides this with the
-            // real RequestQueue-backed implementation.
-            //
-            // Best-effort error handling: we cannot await execution
-            // here (submitCommand is ack-on-enqueue), so kick off the
-            // processCommand and surface any rejection via a
-            // synthesized commandComplete notify. Callers that need
-            // real queue semantics should check `supportsQueueing`.
+            // Direct-dispatcher fallback (no real queue): synthesize a queue entry,
+            // fire-and-forget processCommand, and surface rejections via a
+            // synthesized commandComplete notify. SharedDispatcher overrides this.
             const id = randomUUID();
             const entry: import("@typeagent/dispatcher-types").QueuedRequest = {
                 requestId: id,
@@ -323,20 +316,15 @@ export function createDispatcherFromContext(
                 text: command,
                 submittedAt: Date.now(),
                 state: "queued",
-                attempt: 1,
             };
             if (clientRequestId !== undefined) {
                 entry.clientRequestId = clientRequestId;
             }
-            // Always advertise an attachment count so consumers can
-            // branch uniformly (matches RequestQueue.publicCopy).
+            // Match RequestQueue.publicCopy: always advertise an attachment count.
             entry.attachmentCount = attachments?.length ?? 0;
             if (options !== undefined) {
                 entry.options = options;
             }
-            // Fire-and-forget the actual execution; surface errors via
-            // the ClientIO commandComplete notify so the caller is not
-            // left waiting silently.
             processCommand(
                 command,
                 context,
@@ -366,9 +354,7 @@ export function createDispatcherFromContext(
                         },
                         "system",
                     );
-                } catch {
-                    // best-effort
-                }
+                } catch {}
             });
             return { ok: true, entry };
         },
@@ -376,11 +362,8 @@ export function createDispatcherFromContext(
             return { running: null, queued: [], paused: false, version: 0 };
         },
         async interrupt(text, attachments, options, clientRequestId) {
-            // Direct-mode fallback: there is no running entry to
-            // cancel and no queue to prepend to, so the only sensible
-            // behavior is to just run the request — same as
-            // submitCommand. Callers that need real interrupt
-            // semantics MUST gate UX on `supportsQueueing`.
+            // Direct-mode fallback: no running entry to cancel and no queue to
+            // prepend to — just run the request. Gate UX on `supportsQueueing`.
             return this.submitCommand(
                 text,
                 attachments,
@@ -445,8 +428,7 @@ export function createDispatcherFromContext(
             return getAgentSchemas(context, agentName);
         },
         async cancelCommand(requestId: string) {
-            // Fallback: no queue; cancel via the AbortController if we
-            // have one for this requestId, else report not_found.
+            // Fallback: no queue; abort via AbortController or report not_found.
             const controller = context.activeRequests.get(requestId);
             if (controller) {
                 controller.abort();

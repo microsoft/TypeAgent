@@ -158,9 +158,8 @@ export interface ClientIO {
     // a bubble via the UI, or when @shell trash flush/restore runs.
     onUserHide?(entry: UserMessageHiddenEntry): void;
 
-    // ===== Message-queue push events (Phase 1) =====
-    // All optional, all fire-and-forget. Existing clients that do not
-    // implement them continue to work; they simply won't render queue UI.
+    // Message-queue push events. All optional/fire-and-forget; clients that
+    // don't implement them simply won't render queue UI.
 
     /** A new entry was appended to the queue tail. */
     requestQueued?(entry: QueuedRequest, version: number): void;
@@ -169,10 +168,9 @@ export interface ClientIO {
     requestStarted?(entry: QueuedRequest, version: number): void;
 
     /**
-     * A queued or running entry was cancelled. Cancellation of a
-     * running entry continues to surface through the existing
-     * AbortController + `commandComplete` notify path; this is a
-     * supplementary signal so clients can update queue UI eagerly.
+     * A queued or running entry was cancelled. Supplementary signal — running
+     * cancellations also surface through the AbortController + `commandComplete`
+     * path.
      */
     requestCancelled?(
         requestId: string,
@@ -181,10 +179,8 @@ export interface ClientIO {
     ): void;
 
     /**
-     * Coarse-grained snapshot fired after every queue transition.
-     * Clients that prefer not to track fine-grained events can simply
-     * re-render from this. The snapshot reflects the state AFTER the
-     * transition.
+     * Coarse-grained snapshot fired after every queue transition. Reflects
+     * the state AFTER the transition.
      */
     queueStateChanged?(snapshot: QueueSnapshot): void;
 }

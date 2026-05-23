@@ -22,9 +22,8 @@ export function createDispatcherRpcClient(
         get connectionId() {
             return connectionId;
         },
-        // RPC clients always go through SharedDispatcher (connected-mode
-        // only — the CLI/Shell never use the in-process fallback over RPC),
-        // so they always have a real queue.
+        // RPC clients always go through SharedDispatcher, so they always have
+        // a real queue.
         supportsQueueing: true,
         async processCommand(...args) {
             return rpc.invoke("processCommand", ...args);

@@ -437,10 +437,8 @@ export class MessageGroup {
     }
 
     /**
-     * Reflect the server-side queue state onto this group's user
-     * message bubble. `null` clears the chip — call this on
-     * cancellation, on completion, and on any terminal transition so
-     * stale "queued" / "running" chips don't linger.
+     * Reflect the server-side queue state onto the user bubble's chip.
+     * Pass `null` on cancellation/completion to clear it.
      */
     public setQueueStatus(status: "queued" | "running" | null) {
         this.userMessage.setQueueStatus(status);

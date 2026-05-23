@@ -246,51 +246,17 @@ let currentRequestId: string | undefined;
 let currentClientRequestId: string | undefined;
 let isProcessing = false;
 let lastCtrlCTime = 0;
-// Tracks the most recent Escape press for double-Escape detection.
-// Single-ESC keeps its existing prompt-level meaning (dismiss
-// completions / clear input). A second ESC within the window
-// triggers `cancelAllInQueue` — drains both the running entry and
-// every queued entry through the dispatcher. The window is short
-// enough that pressing ESC once now and again a moment later doesn't
-// accidentally nuke the queue.
+// Second ESC within this window triggers cancelAllInQueue; first ESC keeps its normal prompt-level meaning.
 let lastEscapeTime = 0;
 const DOUBLE_ESCAPE_WINDOW_MS = 1000;
-/**
- * Module-level dispatcher ref shared by every input handler that may
- * need to issue cancel RPCs: the SIGINT handler, the prompt's ESC
- * handler (questionWithCompletion), and the legacy execution key
- * listener. The actual write happens in the `bindDispatcher` callback
- * threaded through `runEnhancedConsole`. Reading is always safe —
- * undefined just means "not connected yet" and any cancel attempt is
- * skipped silently.
- */
+// Dispatcher ref shared with input handlers (SIGINT, ESC, execution key listener) outside the bind closure.
 const moduleDispatcherRef: { current?: Dispatcher } = {};
 
-// ===== Server-side queue state (Phase 1) =====
-// Latest snapshot pushed by the SharedDispatcher. Always reflects the
-// state AFTER the most recent transition. `undefined` means we are
-// either not connected through a queueing dispatcher (direct/local
-// mode) or no events have arrived yet.
+// Latest snapshot pushed by the SharedDispatcher; undefined when no queueing dispatcher is connected.
 let cliQueueState: QueueSnapshot | undefined;
-/**
- * Tracks the highest queue `version` we've applied. Push events whose
- * version <= this value are dropped — they're stale (delivered out of
- * order). Reset to the bootstrap snapshot's version on
- * (re)connect/conversation switch via `applyQueueSnapshot`. See
- * F6 / R2P-H-1.
- */
+// Watermark for queue event versions; events strictly older are dropped as stale reorders.
 let lastAppliedVersion = -1;
-// Map of requestIds we recently submitted from THIS CLI to the
-// timestamp of the submit. Replaces the prior Set so we can prune
-// entries older than the TTL on each access (F4 / R2-L-3); without
-// pruning, IDs accumulated forever and cancellation/disconnect could
-// strand them. Cleared on reconnect via `clearRecentSubmissions`.
-//
-// Note: lookups also exist as defense for the rare case where the
-// server pushed `requestStarted` BEFORE the submit RPC ack returned —
-// the primary defence is the originator-based `isOurEntry` check
-// below, which uses the per-connection id known from join time and is
-// therefore race-free.
+// Tracks recent submits from THIS CLI so requestStarted doesn't double-print; pruned per access.
 const RECENT_SUBMITTED_TTL_MS = 60_000;
 const recentlySubmittedRequestIds = new Map<string, number>();
 
@@ -314,11 +280,7 @@ function consumeSubmittedId(id: string): boolean {
     return recentlySubmittedRequestIds.delete(id);
 }
 
-/**
- * Reset the recently-submitted tracker. Call after reconnect /
- * conversation switch so stale ids from the previous session can't
- * suppress markers in the new one.
- */
+/** Reset the recently-submitted tracker; call after reconnect/conversation switch. */
 export function clearRecentSubmissions(): void {
     recentlySubmittedRequestIds.clear();
 }
@@ -334,12 +296,7 @@ export function getCliQueueState(): QueueSnapshot | undefined {
     return cliQueueState;
 }
 
-/**
- * Test-only accessors. Exposed so unit tests can verify the
- * Phase 1 cancel-target priority and "clear on completion"
- * lifecycle without spinning up a full readline harness. Do NOT
- * call from production code.
- */
+/** @internal Test-only accessors. Do NOT call from production code. */
 export function __testGetCurrentRequestId(): string | undefined {
     return currentRequestId;
 }
@@ -352,12 +309,8 @@ export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
 
 /**
  * Bootstrap the CLI's local queue state from a snapshot returned by
- * `joinConversation`. Safe to call repeatedly (each call replaces the
- * cached snapshot).
- *
- * Resets `lastAppliedVersion` so subsequent push events from the
- * server are admitted (F6 / R2P-H-1). Pass `undefined` to clear after
- * disconnect.
+ * `joinConversation`. Resets the version watermark so subsequent push
+ * events are admitted. Pass `undefined` to clear after disconnect.
  */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
     cliQueueState = snapshot;
@@ -368,21 +321,10 @@ export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
 }
 
 /**
- * Cancel every request the server knows about for this conversation —
- * both the running entry and every queued entry — through the bound
- * dispatcher. Returns the number of cancel RPCs we issued, plus a
- * formatted one-line summary the caller can print.
- *
- * Used by the double-Escape shortcut in `questionWithCompletion` and
- * exported for tests. Cancellation is best-effort: each
- * `cancelCommand` is fired independently, exceptions are swallowed so
- * one bad RPC can't strand siblings, and the local snapshot is left
- * alone — subsequent `requestCancelled` push events from the server
- * will update it through the normal flow.
- *
- * `dispatcher` is taken explicitly (rather than reading
- * `moduleDispatcherRef.current`) so tests can call this in isolation
- * with a stub dispatcher.
+ * Cancel every running + queued request via the dispatcher. Best-effort:
+ * exceptions are swallowed so one bad RPC can't strand siblings. The local
+ * snapshot is left alone — server `requestCancelled` events will reconcile it.
+ * `dispatcher` is passed explicitly so tests can supply a stub.
  */
 export async function cancelAllInQueue(
     dispatcher: Dispatcher | undefined,
@@ -421,20 +363,9 @@ export async function cancelAllInQueue(
 }
 
 /**
- * Admit a queue event by version. Returns true if the event is at
- * least as fresh as `lastAppliedVersion` (and updates the watermark),
- * false if it's strictly older (a stale reorder). Older /
- * non-versioned events (version === undefined) are admitted
- * unconditionally for backward compatibility.
- *
- * Uses strict `<` rather than `<=` (R5 review fix). The server emits
- * every fine-grained event (`requestQueued`, `requestStarted`,
- * `requestCancelled`) paired with a `queueStateChanged` snapshot at
- * the **same** version. Admitting same-version pairs lets the
- * authoritative snapshot reconcile any divergence the delta-patcher
- * might have introduced — applying both is idempotent because the
- * snapshot reflects state *after* the same transition the
- * fine-grained event described.
+ * Admit a queue event by version. Returns false if strictly older than the
+ * watermark (stale reorder). Uses strict `<` so paired same-version
+ * snapshots reconcile after each fine-grained event.
  */
 function admitVersion(version: number | undefined): boolean {
     if (typeof version !== "number") return true;
@@ -1054,11 +985,7 @@ export function createEnhancedClientIO(
                     break;
 
                 case "commandComplete": {
-                    // Phase 1: peer broadcast that a request finished.
-                    // We use it to clear `currentRequestId` if the
-                    // completed id matches, so a subsequent SIGINT
-                    // doesn't target a stale id. The completed id is
-                    // carried on the structured RequestId object.
+                    // Clear currentRequestId if the completed id matches so SIGINT doesn't target a stale id.
                     const completedId =
                         typeof requestId === "object" &&
                         requestId !== null &&
@@ -1344,7 +1271,7 @@ export function createEnhancedClientIO(
             throw new Error(`Action ${action} not supported`);
         },
 
-        // ===== Message-queue push events (Phase 1) =====
+        // Server-side queue push events
         requestQueued(entry: QueuedRequest, version: number): void {
             if (!admitVersion(version)) return;
             cliQueueState = applyEntryToSnapshot(
@@ -1361,18 +1288,7 @@ export function createEnhancedClientIO(
                 "started",
                 entry,
             );
-            // Suppress the marker for the request the user just
-            // submitted from THIS CLI — otherwise we double-print.
-            // Two signals (either is sufficient):
-            //   1. originatorConnectionId == our connection id
-            //      (authoritative; race-free since the connection id
-            //      is fixed from join time).
-            //   2. requestId is in `recentlySubmittedRequestIds`
-            //      (covers the post-await window).
-            // (A third "in submit window with unknown originator"
-            // signal existed historically but never fired because
-            // originatorConnectionId is always set on the server side
-            // — F3 / R2-M-1.)
+            // Suppress the marker if THIS CLI submitted the entry (otherwise we double-print).
             const isOurs =
                 isOurEntry(entry) || consumeSubmittedId(entry.requestId);
             redrawPromptIfActive();
@@ -1391,17 +1307,14 @@ export function createEnhancedClientIO(
         ): void {
             if (!admitVersion(version)) return;
             const cancelledText = removeFromSnapshot(cliQueueState, requestId);
-            // If the cancelled id matches what we believe is the
-            // currently-active request, clear that pointer so SIGINT
-            // doesn't target a stale id.
+            // Clear currentRequestId if it matches so SIGINT doesn't target a stale id.
             if (currentRequestId === requestId) {
                 currentRequestId = undefined;
             }
             consumeSubmittedId(requestId);
             redrawPromptIfActive();
             if (cancelledText !== undefined) {
-                // F7/F10: distinct rendering for server-stopping so the
-                // user knows the cancel wasn't theirs.
+                // Distinct rendering for server-stopping so users know the cancel wasn't theirs.
                 const label =
                     reason === "server_stopping"
                         ? chalk.red("✗ server stopping: ")
@@ -1415,8 +1328,7 @@ export function createEnhancedClientIO(
         },
         queueStateChanged(snapshot: QueueSnapshot): void {
             if (!admitVersion(snapshot.version)) return;
-            // Authoritative replacement — clone to insulate from server-side
-            // mutations.
+            // Authoritative replacement — clone to insulate from server-side mutations.
             const prevBadge = computeBadgeState(cliQueueState);
             cliQueueState = {
                 running: snapshot.running ? { ...snapshot.running } : null,
@@ -1425,9 +1337,7 @@ export function createEnhancedClientIO(
                 version: snapshot.version,
             };
             const nextBadge = computeBadgeState(cliQueueState);
-            // Only repaint when the visible badge changed — avoids
-            // flicker on no-op snapshots (same state echoed by the
-            // server after a non-visible transition).
+            // Only repaint when the visible badge changed (avoids flicker on no-op snapshots).
             if (prevBadge !== nextBadge) {
                 redrawPromptIfActive();
             }
@@ -1435,10 +1345,7 @@ export function createEnhancedClientIO(
     };
 }
 
-/**
- * Compute the visible state of the queue badge so we can detect
- * meaningful changes between snapshots. Returns a stable string key.
- */
+/** Stable key for the visible badge state, used to detect meaningful changes. */
 function computeBadgeState(snap: QueueSnapshot | undefined): string {
     if (!snap) return "none";
     const queuedCount = snap.queued.length;
@@ -1451,11 +1358,7 @@ function computeBadgeState(snap: QueueSnapshot | undefined): string {
     return `q${queuedCount}r${runningOther}p${snap.paused ? 1 : 0}`;
 }
 
-/**
- * Redraw the readline / TerminalLayout prompt so the badge content
- * reflects the latest cliQueueState. Safe to call at any time —
- * silently no-ops when no interactive UI is active.
- */
+/** Redraw the active prompt; no-op when no interactive UI is active. */
 function redrawPromptIfActive(): void {
     if (terminalLayout?.isActive && activePromptRenderer) {
         activePromptRenderer.redraw();
@@ -1490,11 +1393,9 @@ function writeQueueLine(text: string): void {
 }
 
 /**
- * Apply a single queued/started transition to the cached snapshot
- * locally. The authoritative source remains `queueStateChanged`; this
- * keeps the cache fresh between full snapshots so the prompt badge
- * updates as soon as the matching event arrives. Returns a new
- * snapshot object (never mutates the input).
+ * Apply a single queued/started transition to the cached snapshot.
+ * `queueStateChanged` remains authoritative; this keeps the badge fresh
+ * between full snapshots. Never mutates the input.
  */
 function applyEntryToSnapshot(
     snap: QueueSnapshot | undefined,
@@ -1520,7 +1421,7 @@ function applyEntryToSnapshot(
         }
         return base;
     }
-    // "started" — the entry left the queue head and is now running.
+    // "started" — entry left the queue head and is now running.
     base.queued = base.queued.filter((e) => e.requestId !== entry.requestId);
     base.running = { ...entry };
     return base;
@@ -1762,10 +1663,7 @@ async function questionWithCompletion(
                 }
             }
 
-            // Re-derive the live queue badge each render so the
-            // `(queue: N)` prefix updates immediately when the queue
-            // mutates (e.g. after a double-Escape clear) instead of
-            // waiting for the next Enter to rebuild the prompt.
+            // Re-derive the live queue badge per render so it updates immediately on queue mutations.
             const badge = formatQueueBadge();
             const livePrompt = badge + message;
             const promptText = chalk.cyanBright(livePrompt);
@@ -1931,13 +1829,8 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
-                // Double-Escape (within DOUBLE_ESCAPE_WINDOW_MS) cancels
-                // every running + queued request in the server-side
-                // queue. We still perform the normal single-Escape
-                // action (dismiss completions / clear input) so the
-                // prompt is left in a clean state. The summary is
-                // printed to the scroll region via writeQueueLine so
-                // it survives the prompt re-render below.
+                // Double-Escape within DOUBLE_ESCAPE_WINDOW_MS cancels all running + queued requests.
+                // The normal single-Escape action still runs so the prompt is left clean.
                 const now = Date.now();
                 const isDouble =
                     now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
@@ -1965,9 +1858,7 @@ async function questionWithCompletion(
                     const total =
                         (snap?.running ? 1 : 0) + (snap?.queued.length ?? 0);
                     if (total > 0) {
-                        // Fire-and-forget — cancellation is async but
-                        // the prompt should stay responsive. Errors
-                        // are absorbed by cancelAllInQueue itself.
+                        // Fire-and-forget; errors are absorbed by cancelAllInQueue.
                         void cancelAllInQueue(
                             moduleDispatcherRef.current,
                             snap,
@@ -2337,10 +2228,7 @@ export async function withEnhancedConsoleClientIO(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
                 dispatcherRef.current = d;
-                // Mirror to the module-level ref so input handlers
-                // outside this closure (e.g. questionWithCompletion's
-                // double-Escape) can issue cancel RPCs without
-                // threading the dispatcher through their signatures.
+                // Mirror to module-level ref so out-of-closure handlers (double-Escape, SIGINT) can cancel.
                 moduleDispatcherRef.current = d;
             },
         );
@@ -2375,9 +2263,7 @@ function startExecutionKeyListener(
             dispatcher.cancelCommandByClientId(currentClientRequestId);
             return true;
         }
-        // Phase 1: also honour a server-side `running` head we know
-        // about via push events even if no inline await exists in
-        // this CLI instance.
+        // Honour a server-side `running` head known via push events even without an inline await.
         const running = cliQueueState?.running;
         if (running) {
             dispatcher.cancelCommand(running.requestId);
@@ -2483,12 +2369,9 @@ export async function processCommandsEnhanced<T>(
           });
     activeRl = rl;
 
-    // ===== Queue-mode Ctrl+C handler (Phase 1) =====
-    // In the non-blocking submit path we never enter raw mode, so the
-    // legacy per-command key listener is bypassed. Install a readline
-    // SIGINT handler that cancels the running queue head when present
-    // and otherwise prints a hint. The original double-press-to-exit
-    // behavior is preserved.
+    // Queue-mode Ctrl+C handler: the non-blocking submit path bypasses raw-mode,
+    // so install a readline SIGINT handler that cancels the queue head.
+    // Double-press-to-exit is preserved.
     if (rl && dispatcherForCancel?.submitCommand) {
         rl.on("SIGINT", () => {
             const now = Date.now();
@@ -2496,19 +2379,13 @@ export async function processCommandsEnhanced<T>(
                 process.exit(0);
             }
             lastCtrlCTime = now;
-            // Priority: server snapshot's running id is authoritative
-            // (it reflects the queue head EVERYBODY agrees on);
-            // currentRequestId is the fallback for the brief window
-            // before the snapshot has been populated by push events.
+            // Snapshot's running id is authoritative; currentRequestId is the pre-snapshot fallback.
             const running =
                 cliQueueState?.running?.requestId ?? currentRequestId;
             if (running) {
                 dispatcherForCancel.cancelCommand(running);
                 return;
             }
-            // No running request — print the hint regardless of
-            // whether anything is queued, so the user gets feedback
-            // (silent no-op was the bug).
             const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
             const msg = hasQueued
                 ? "No request currently running. Use /queue cancel <id> to cancel queued requests."
@@ -2594,13 +2471,9 @@ export async function processCommandsEnhanced<T>(
             const panel = getDebugPanel();
             panel?.reset();
 
-            // ===== Non-blocking submit path (Phase 1) =====
-            // When the dispatcher exposes submitCommand the CLI uses
-            // ack-on-enqueue semantics: the call resolves as soon as
-            // the request hits the server-side queue, returning
-            // control to the prompt. Output and completion are
-            // observed via the existing setDisplay / commandComplete
-            // streams plus the new queue lifecycle events.
+            // Non-blocking submit path: when the dispatcher exposes submitCommand,
+            // the call resolves on enqueue. Output/completion arrive via setDisplay,
+            // commandComplete, and queue lifecycle events.
             const submitCommand = dispatcherForCancel?.submitCommand;
             if (typeof submitCommand === "function") {
                 isProcessing = true;
@@ -2623,10 +2496,7 @@ export async function processCommandsEnhanced<T>(
                         console.log("");
                         continue;
                     }
-                    // F5 (R2-H-1): submitCommand now returns a
-                    // discriminated SubmitResult. Branch on the typed
-                    // failure variants so users see specific messages
-                    // instead of "request submitted".
+                    // submitCommand returns a discriminated SubmitResult; branch on typed failures.
                     if (result && result.ok === false) {
                         if (result.error === "queue_full") {
                             console.log(
@@ -2653,8 +2523,7 @@ export async function processCommandsEnhanced<T>(
                     }
                     const entry = result?.ok ? result.entry : undefined;
                     if (entry) {
-                        // Track so requestStarted doesn't double-print
-                        // and the prompt badge doesn't double-count.
+                        // Track so requestStarted doesn't double-print and badge doesn't double-count.
                         rememberSubmittedId(entry.requestId);
                         currentRequestId = entry.requestId;
                     }
@@ -2671,7 +2540,7 @@ export async function processCommandsEnhanced<T>(
                 continue;
             }
 
-            // ===== Legacy blocking path (no queueing) =====
+            // Legacy blocking path (no queueing)
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner
@@ -2763,19 +2632,10 @@ function getNextInput(
 }
 
 /**
- * Returns the live "queue badge" prefix `(queue: N) ` used in the
- * interactive prompt. Empty string when nothing's worth surfacing.
- *
- * Pulled out of `getEnhancedConsolePrompt` so the prompt can be
- * re-derived at render time inside `questionWithCompletion` —
- * otherwise the badge text gets baked into the captured prompt
- * string once per question and stays stale until the next Enter
- * (e.g. after double-Escape clears the queue).
- *
- * The exclusion logic mirrors `computeBadgeState`: a "running" entry
- * that matches `currentRequestId` or was recently submitted from THIS
- * CLI is not counted, because the spinner / `▶ running` marker
- * already conveys it.
+ * Live `(queue: N) ` prefix for the interactive prompt; empty when nothing to surface.
+ * Re-derived at render time so it stays in sync with `cliQueueState` between Enter presses.
+ * A `running` entry that matches `currentRequestId` or was recently submitted from THIS
+ * CLI is not counted — the spinner / "▶ running" marker already conveys it.
  */
 export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
     const s = snap ?? cliQueueState;
@@ -2791,13 +2651,9 @@ export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
 }
 
 /**
- * Get styled console prompt
- * Returns a clean prompt regardless of status text.
- *
- * NOTE: this returns the *static* portion of the prompt only. The
- * live `(queue: N)` badge is prepended at render time by
- * `questionWithCompletion` via `formatQueueBadge()` so it stays in
- * sync with `cliQueueState` between Enter presses.
+ * Get styled console prompt.
+ * Returns the *static* portion only; the live `(queue: N)` badge is prepended
+ * at render time by `questionWithCompletion` via `formatQueueBadge()`.
  */
 export function getEnhancedConsolePrompt(_text: string): string {
     return `${getVerboseIndicator()}❯ `;

@@ -2,23 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Integration tests for RequestQueue + multi-client broadcast that
- * SharedDispatcher provides in production. We avoid spinning up a real
- * CommandHandlerContext: the queue's contract is observable purely
- * through (a) the inner-dispatcher resolver, (b) the broadcaster, and
- * (c) public snapshot / cancel APIs. The tests therefore drive the
- * queue directly while a small `MultiClientBus` reproduces
- * SharedDispatcher's "every push event reaches every connected
- * client" behavior.
- *
- * Covered:
- *   1. Cross-client FIFO ordering from interleaved submits.
- *   2. Cross-client cancel of a queued (not running) entry.
- *   3. Originator disconnect mid-queue does not stall the drain loop
- *      (per design §"Drain when all clients disconnect: YES").
- *   4. getSnapshot reflects state at each milestone.
- *   5. A late-joining client receives the current snapshot exactly as
- *      it would via JoinConversationResult.queueSnapshot.
+ * Integration tests for RequestQueue + multi-client broadcast. Drives the queue
+ * directly with a small `MultiClientBus` reproducing SharedDispatcher's
+ * "every push event reaches every connected client" behavior.
  */
 
 import type {
@@ -49,10 +35,8 @@ function makeRecorder(name: string): ClientRecorder {
 }
 
 /**
- * Mirrors the broadcaster wiring inside SharedDispatcher: a single bus
- * fans every event out to every currently-connected client. Clients
- * can come and go; once a client disconnects, it stops receiving events
- * (matches `clients.delete(connectionId)` in sharedDispatcher.ts).
+ * Mirrors SharedDispatcher's broadcaster: a single bus fans every event out
+ * to every connected client. Disconnected clients stop receiving events.
  */
 class MultiClientBus implements QueueBroadcaster {
     private readonly clients = new Map<string, ClientRecorder>();
@@ -332,15 +316,12 @@ describe("RequestQueue — multi-client integration", () => {
         expect(snap2.queued.map((e) => e.text)).toEqual(["a3"]);
     });
 
-    // ───── T6 ─────────────────────────────────────────────────────────
+    // T6
     it("concurrent submits from the same client preserve FIFO order", async () => {
         const { dispatcher, bus, queue } = setup();
         bus.connect("A");
 
-        // Promise.all of synchronous submits — queue.submit is sync,
-        // so the order is determined by the order of the array
-        // entries (call order). Use Promise.all to assert all five
-        // returned successfully.
+        // queue.submit is sync; Promise.all just asserts all returned.
         const entries = await Promise.all(
             [0, 1, 2, 3, 4].map((i) =>
                 Promise.resolve(
@@ -369,7 +350,7 @@ describe("RequestQueue — multi-client integration", () => {
         }
     });
 
-    // ───── T10 ────────────────────────────────────────────────────────
+    // T10
     it("attachments are redacted from broadcasts (only attachmentCount leaks)", async () => {
         const { dispatcher, bus, queue } = setup();
         const a = bus.connect("A");
@@ -398,21 +379,18 @@ describe("RequestQueue — multi-client integration", () => {
         dispatcher.calls[0].resolve({});
     });
 
-    // ───── T8 ─────────────────────────────────────────────────────────
+    // T8
     it("event ordering: requestQueued precedes requestStarted; requestCancelled precedes next requestStarted", async () => {
         const { dispatcher, bus, queue } = setup();
         const a = bus.connect("A");
 
-        // Submit three; cancel the middle one before drain advances to
-        // it. We expect the timeline (per client A's recorder):
-        //   queued(t0), queued(t1), queued(t2), started(t0),
-        //   cancelled(t1), started(t2)
+        // Submit three; cancel the middle before drain reaches it. Expected
+        // timeline: queued(t0,t1,t2), started(t0), cancelled(t1), started(t2).
         const t0 = queue.submit({ text: "t0", originatorConnectionId: "A" });
         const t1 = queue.submit({ text: "t1", originatorConnectionId: "A" });
         const t2 = queue.submit({ text: "t2", originatorConnectionId: "A" });
 
-        // Cancel t1 BEFORE drain reaches it. cancelQueued only works
-        // on tail entries — t1 is in the tail at this point.
+        // cancelQueued only works on tail entries.
         await flush();
         expect(queue.cancelQueued(t1.requestId, "user")).toBe(true);
 
@@ -433,18 +411,9 @@ describe("RequestQueue — multi-client integration", () => {
         expect(dispatcher.calls.length).toBe(2);
         expect(dispatcher.calls[1].command).toBe("t2");
 
-        // The cancelled event for t1 must precede the started event
-        // for t2. Build a unified timeline ordering:
-        //   - cancelled events: a.cancelled (in arrival order)
-        //   - started events:   a.started   (in arrival order)
-        // We assert the first occurrence of cancelled(t1) appears
-        // BEFORE the first occurrence of started(t2). Since the bus
-        // appends on each broadcast, comparing array indices across
-        // separate arrays isn't direct — assert via the order of
-        // queueStateChanged snapshots (`a.snapshots`) which interleave
-        // the two streams: the snapshot AFTER cancel shows tail
-        // length 1 (t2 only), the snapshot AFTER t2 starts shows
-        // running=t2 / tail=0.
+        // cancelled(t1) must precede started(t2). Assert via the order of
+        // queueStateChanged snapshots, which interleave both streams: snapshot
+        // after cancel has tail=[t2]; snapshot after t2 starts has running=t2.
         const cancelSnapIdx = a.snapshots.findIndex(
             (s) => s.queued.length === 1 && s.queued[0].text === "t2",
         );

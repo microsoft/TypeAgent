@@ -112,13 +112,7 @@ export class MessageContainer {
     private action?: TypeAgentAction | string[];
     private feedbackWidget?: FeedbackWidget;
     private trashButton?: HTMLButtonElement;
-    /**
-     * Small status chip shown above the message body for user
-     * bubbles, indicating queue state (`queued` or `running`). Created
-     * lazily by `setQueueStatus`; cleared when status returns to null.
-     * Only meaningful on `classNameSuffix === "user"` bubbles —
-     * setQueueStatus is a no-op otherwise.
-     */
+    /** Lazily-created "queued"/"running" chip; user bubbles only. */
     private queueStatusChip?: HTMLDivElement;
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
@@ -342,15 +336,8 @@ export class MessageContainer {
     }
 
     /**
-     * Per-bubble queue status chip — small "queued" / "running" pill
-     * rendered above the message body on user bubbles to surface where
-     * each message sits in the server-side queue. No-op on agent /
-     * status bubbles. Passing `null` removes the chip.
-     *
-     * The chip replaces the global "Queue: N running, M queued" badge
-     * that previously sat above the chat scroll region — per-bubble
-     * status is clearer when the queue is visible in the existing
-     * chat history.
+     * Render a "queued"/"running" chip above the message body. No-op on non-user
+     * bubbles. Pass `null` to remove the chip.
      */
     public setQueueStatus(status: "queued" | "running" | null): void {
         if (this.classNameSuffix !== "user") return;
@@ -364,17 +351,12 @@ export class MessageContainer {
         if (!this.queueStatusChip) {
             const chip = document.createElement("div");
             chip.className = "chat-queue-status-chip";
-            // Inline styles to avoid touching the global stylesheet
-            // for a small status pill (matches the prior badge's
-            // minimal-styling approach).
             chip.style.display = "inline-block";
             chip.style.padding = "1px 6px";
             chip.style.marginBottom = "2px";
             chip.style.fontSize = "11px";
             chip.style.borderRadius = "8px";
             chip.style.opacity = "0.85";
-            // messageBodyDiv is the wrapper around .chat-message-content;
-            // prepend so the chip sits above the bubble's text.
             this.messageBodyDiv.insertBefore(
                 chip,
                 this.messageBodyDiv.firstChild,

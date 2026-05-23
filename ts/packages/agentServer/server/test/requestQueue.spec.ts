@@ -339,13 +339,12 @@ describe("RequestQueue", () => {
         await b.completion;
     });
 
-    // ───── T9 ─────────────────────────────────────────────────────────
+    // T9
     it("submit beyond MAX_QUEUE_DEPTH throws QueueFullError", () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
 
-        // Fill queue to the cap. The first submit becomes head; the next
-        // 99 land in tail. Total in-flight depth = MAX_QUEUE_DEPTH.
+        // Fill to the cap: first becomes head, next 99 land in tail.
         for (let i = 0; i < MAX_QUEUE_DEPTH; i++) {
             queue.submit({ text: `t${i}`, originatorConnectionId: "c1" });
         }
@@ -354,16 +353,10 @@ describe("RequestQueue", () => {
         ).toThrow(QueueFullError);
     });
 
-    // ───── T1 ─────────────────────────────────────────────────────────
+    // T1
     it("cancelQueued racing against shift: entry never executes", async () => {
-        // Drive the inner dispatcher manually: when the head entry's
-        // processCommand is invoked, that proves the drain loop got
-        // past the cancel-skip check. We want to assert the OPPOSITE
-        // for the cancelled entry. The harness here cancels the second
-        // entry IMMEDIATELY after submit (synchronously, before the
-        // drain microtask runs the second iteration), then drives the
-        // first entry to completion and asserts the second never made
-        // it to processCommand.
+        // Cancel the second entry before the drain microtask reaches it,
+        // then drive the first to completion and assert the second never ran.
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
 
@@ -383,7 +376,7 @@ describe("RequestQueue", () => {
         expect((await b.completion)?.cancelled).toBe(true);
     });
 
-    // ───── T4 ─────────────────────────────────────────────────────────
+    // T4
     it("drainAndStop is idempotent across concurrent invocations", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
@@ -404,7 +397,7 @@ describe("RequestQueue", () => {
         await expect(queue.drainAndStop()).resolves.toBeUndefined();
     });
 
-    // ───── T5 ─────────────────────────────────────────────────────────
+    // T5
     it("cancelQueued of an already-completed requestId returns false (not_found)", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
@@ -422,10 +415,9 @@ describe("RequestQueue", () => {
         expect(queue.classifyCancel(e.requestId, "user")).toBe("not_found");
     });
 
-    // ───── T2 ─────────────────────────────────────────────────────────
+    // T2
     it("inner processCommand throwing synchronously does not stall the drain loop", async () => {
-        // Use a custom inner that throws synchronously on the first
-        // call, then behaves normally on subsequent calls.
+        // Custom inner throws sync on first call, then succeeds.
         let callCount = 0;
         const { events: _ev, broadcaster } = makeRecorder();
         const queue = new RequestQueue((ctx) => {
@@ -444,7 +436,7 @@ describe("RequestQueue", () => {
         expect(callCount).toBe(2);
     });
 
-    // ───── T3 ─────────────────────────────────────────────────────────
+    // T3
     it("a throwing broadcaster does not break internal state or subsequent broadcasts", async () => {
         const dispatcher = new ControllableDispatcher();
         const queuedSeen: string[] = [];
@@ -557,7 +549,7 @@ describe("RequestQueue", () => {
         ).toThrow(ServerStoppingError);
     });
 
-    // ----- interrupt() -----------------------------------------------------
+    // interrupt()
 
     it("interrupt with no running entry prepends and dispatches immediately", async () => {
         const dispatcher = new ControllableDispatcher();
@@ -717,7 +709,7 @@ describe("RequestQueue", () => {
         expect(tele!.data.queuedAhead).toBe(0);
     });
 
-    // ----- onAllClientsDisconnected / onClientReconnected -----------------
+    // onAllClientsDisconnected / onClientReconnected
 
     it("grace timer cancels queued entries with reason no_clients", async () => {
         jest.useFakeTimers();
@@ -858,9 +850,6 @@ describe("RequestQueue", () => {
         await a.completion;
     });
 
-    // R4 review fix: overlapping interactions must reference-count
-    // the `blockedOn` flag so a resolving sibling does not clear the
-    // wire-visible flag while another interaction is still pending.
     it("markBlocked ref-counts overlapping interactions", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue, events } = makeQueue(dispatcher);
@@ -906,14 +895,10 @@ describe("RequestQueue", () => {
         await a.completion;
     });
 
-    // R2 review fix + Round 2 update: cancelRunning broadcasts
-    // requestCancelled so other clients see the explicit cancel
-    // event, but DOES NOT broadcast a paired queueStateChanged
-    // (the head's state is still "running" at this point — a
-    // paired snapshot would carry stale running=<entry> and
-    // race-resurrect the cancelled entry on the client under
-    // strict-`<` admission). The authoritative snapshot is the
-    // drain-loop completion broadcast at version+1.
+    // cancelRunning broadcasts requestCancelled but NOT a paired snapshot:
+    // the head's state is still "running" so a paired snapshot would race-
+    // resurrect the cancelled entry under strict-`<` admission. Drain-loop
+    // completion at version+1 is the authoritative snapshot.
     it("cancelRunning broadcasts requestCancelled but not a paired snapshot", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue, events } = makeQueue(dispatcher);
@@ -937,7 +922,7 @@ describe("RequestQueue", () => {
         };
         expect(evt.requestId).toBe(a.requestId);
         expect(evt.reason).toBe("user");
-        // Round 2 review fix: no paired snapshot from cancelRunning.
+        // No paired snapshot from cancelRunning.
         expect(events.filter((e) => e.type === "snapshot").length).toBe(
             snapsBefore,
         );
@@ -958,10 +943,8 @@ describe("RequestQueue", () => {
         ).toBeGreaterThan(snapsBefore);
     });
 
-    // R2/R3 review fix: when cancelRunning records a reason and the
-    // inner command resolves cancelled, the entry's wire `error`
-    // field must carry "cancelled:<reason>" so consumers can render
-    // the cause (e.g. "cancelled: no clients connected").
+    // Reason captured by cancelRunning must surface as `cancelled:<reason>`
+    // on the wire `error` field so consumers can render the cause.
     it("cancelRunning reason is preserved on the wire as cancelled:<reason>", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
@@ -979,11 +962,8 @@ describe("RequestQueue", () => {
         expect(a.error).toBe("cancelled:no_clients");
     });
 
-    // R3 review fix companion: when the inner command throws an
-    // AbortError-shaped Error (the path the no-clients onExpiry
-    // takes via pendingInteractions.cancel), and cancelRunning has
-    // primed the reason, the drain loop must classify the entry as
-    // cancelled rather than failed.
+    // When the inner command throws AbortError after cancelRunning has primed
+    // a reason, the drain loop must classify the entry as cancelled, not failed.
     it("AbortError-shaped throw with primed cancelReason yields cancelled (not failed)", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
@@ -1004,13 +984,9 @@ describe("RequestQueue", () => {
         expect(a.error).toBe("cancelled:no_clients");
     });
 
-    // Regression: WebSocket RPC JSON-serializes `args: any[]`, and
-    // JSON.stringify maps trailing/omitted `undefined` array elements to
-    // `null`. SubmitInput.attachments / .options must therefore tolerate
-    // BOTH null and undefined on the receive side. Before the fix this
-    // crashed on `null.length` inside materialize() and every CLI request
-    // surfaced as `### ERROR: Cannot read properties of null (reading
-    // 'length')`.
+    // Regression: RPC JSON-serialization maps trailing/omitted `undefined`
+    // array elements to `null`. SubmitInput.attachments/.options must
+    // tolerate both null and undefined on the receive side.
     it("submit tolerates null attachments and null options (RPC wire shape)", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);

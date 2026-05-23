@@ -5,16 +5,11 @@
  * Tests for the CLI's Phase 1 server-side queue UX:
  *   - createEnhancedClientIO updates `cliQueueState` from push events.
  *   - `applyQueueSnapshot` bootstraps the cached state.
- *   - `/queue list` calls `dispatcher.getQueueSnapshot()` and prints
- *     a formatted listing.
- *   - `/queue cancel <id>` resolves a (≥4-char) prefix against the
- *     refreshed snapshot and calls `dispatcher.cancelCommand`.
- *   - `/queue cancel <unknown>` and ambiguous prefixes print a sensible
- *     error without invoking the dispatcher.
+ *   - `/queue list` formats the dispatcher snapshot.
+ *   - `/queue cancel <id>` resolves a (≥4-char) prefix and calls cancelCommand.
+ *   - Unknown/ambiguous prefixes print an error without invoking the dispatcher.
  *
- * Tests for raw-mode Ctrl+C handling are deferred — `startExecutionKeyListener`
- * is not a public export, and the rl-mode SIGINT handler is wired
- * inside `processCommandsEnhanced` which requires a full readline harness.
+ * Raw-mode Ctrl+C tests are deferred (require readline + raw stdin harness).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
@@ -39,7 +34,7 @@ import type {
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
 
-// ── stdout capture ───────────────────────────────────────────────────────────
+// stdout capture
 
 let stdoutOutput: string[];
 let realStdoutWrite: typeof process.stdout.write;
@@ -49,7 +44,6 @@ beforeEach(() => {
     stdoutOutput = [];
     realStdoutWrite = process.stdout.write.bind(process.stdout);
     realConsoleLog = console.log;
-    // Capture both raw stdout writes and console.log lines.
     process.stdout.write = ((chunk: any) => {
         stdoutOutput.push(typeof chunk === "string" ? chunk : String(chunk));
         return true;
@@ -57,7 +51,6 @@ beforeEach(() => {
     console.log = (...args: unknown[]) => {
         stdoutOutput.push(args.map((a) => String(a)).join(" ") + "\n");
     };
-    // Reset module-level state.
     applyQueueSnapshot(undefined);
     setQueueDispatcher(undefined);
     setCliConnectionId(undefined);
@@ -73,7 +66,7 @@ afterEach(() => {
     __testSetCurrentRequestId(undefined);
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function makeEntry(
     requestId: string,
@@ -87,7 +80,6 @@ function makeEntry(
         text,
         submittedAt: now,
         state,
-        attempt: 1,
         ...(state === "running" ? { startedAt: now } : {}),
     };
 }
@@ -102,7 +94,7 @@ function makeSnapshot(
 
 const captured = () => stdoutOutput.join("");
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+// Tests
 
 describe("CLI queue state — push events", () => {
     it("requestQueued / requestStarted / requestCancelled / queueStateChanged update cliQueueState", () => {
@@ -153,7 +145,7 @@ describe("CLI queue state — push events", () => {
     });
 });
 
-// ── /queue slash commands ────────────────────────────────────────────────────
+// /queue slash commands
 
 interface QueueCalls {
     getQueueSnapshot: number;
@@ -280,16 +272,14 @@ describe("/queue slash command", () => {
     });
 
     it("/queue list reports unavailability when no dispatcher is bound", async () => {
-        // setQueueDispatcher(undefined) was already done in beforeEach.
         await handleSlashCommand("/queue list", async () => {});
         expect(captured()).toMatch(/unavailable/i);
     });
 });
 
-// ── A.6 — cancel UX (race + clear-on-complete + priority) ───────────────────
+// CLI cancel UX
 
-describe("CLI cancel UX (A.6)", () => {
-    // ───── T11.1 ─────────────────────────────────────────────────────
+describe("CLI cancel UX", () => {
     it("requestStarted for an entry whose originator is THIS CLI does not print the running marker", () => {
         const ourConn = "conn-cli-self";
         setCliConnectionId(ourConn);
@@ -297,10 +287,7 @@ describe("CLI cancel UX (A.6)", () => {
             current: undefined,
         });
 
-        // Simulate the race: server pushes requestStarted for an entry
-        // we just submitted (originatorConnectionId matches us) BEFORE
-        // submitCommand has resolved. The originator-based check makes
-        // this race-free — no duplicate marker.
+        // Server pushes requestStarted for our just-submitted entry; originator check makes this race-free.
         const ours: QueuedRequest = {
             requestId: "11111111-aaaa-aaaa-aaaa-000000000001",
             originatorConnectionId: ourConn,
@@ -308,13 +295,11 @@ describe("CLI cancel UX (A.6)", () => {
             submittedAt: Date.now(),
             startedAt: Date.now(),
             state: "running",
-            attempt: 1,
         };
         clientIO.requestStarted!(ours, 1);
         expect(captured()).not.toContain("▶ running:");
 
-        // Sanity: a started event from a DIFFERENT originator DOES
-        // print the marker (our suppression logic is selective).
+        // Sanity: a started event from a different originator DOES print the marker.
         stdoutOutput.length = 0;
         const peer: QueuedRequest = {
             requestId: "22222222-bbbb-bbbb-bbbb-000000000002",
@@ -323,13 +308,11 @@ describe("CLI cancel UX (A.6)", () => {
             submittedAt: Date.now(),
             startedAt: Date.now(),
             state: "running",
-            attempt: 1,
         };
         clientIO.requestStarted!(peer, 2);
         expect(captured()).toContain("▶ running:");
     });
 
-    // ───── T11.2 ─────────────────────────────────────────────────────
     it("commandComplete notify clears currentRequestId when the completed id matches", () => {
         const clientIO = createEnhancedClientIO(undefined, {
             current: undefined,
@@ -339,7 +322,6 @@ describe("CLI cancel UX (A.6)", () => {
         __testSetCurrentRequestId(id);
         expect(__testGetCurrentRequestId()).toBe(id);
 
-        // Server fans out commandComplete with structured RequestId.
         clientIO.notify(
             { connectionId: "c1", requestId: id, clientRequestId: "x" },
             "commandComplete",
@@ -348,7 +330,7 @@ describe("CLI cancel UX (A.6)", () => {
         );
         expect(__testGetCurrentRequestId()).toBeUndefined();
 
-        // Mismatched id MUST NOT clear (defence against stray events).
+        // Mismatched id must not clear.
         const stale = "44444444-dddd-dddd-dddd-000000000004";
         __testSetCurrentRequestId(stale);
         clientIO.notify(
@@ -364,20 +346,10 @@ describe("CLI cancel UX (A.6)", () => {
         expect(__testGetCurrentRequestId()).toBe(stale);
     });
 
-    // ───── T11.3 ─────────────────────────────────────────────────────
     it("requestCancelled clears currentRequestId when the cancelled id matches", () => {
-        // T11.3 in the brief asks for a SIGINT priority assertion
-        // (snapshot.running.requestId beats currentRequestId).
-        // The SIGINT handler is wired inside processCommandsEnhanced
-        // and not reachable without spinning up readline + raw stdin
-        // — TODO: add a thin extracted helper for the SIGINT cancel
-        // target so it can be unit-tested directly.
-        //
-        // What we CAN cover here is the requestCancelled clearing
-        // path that the priority logic depends on: when the server
-        // notifies us that the running request was cancelled,
-        // currentRequestId must be cleared so the next SIGINT
-        // doesn't target a stale id.
+        // Verifies the requestCancelled clearing path that SIGINT priority depends on:
+        // when the server cancels the running request, currentRequestId must clear
+        // so the next SIGINT doesn't target a stale id.
         const clientIO = createEnhancedClientIO(undefined, {
             current: undefined,
         });
@@ -385,7 +357,7 @@ describe("CLI cancel UX (A.6)", () => {
         const runningId = "55555555-eeee-eeee-eeee-000000000005";
         const queuedId = "66666666-ffff-ffff-ffff-000000000006";
 
-        // Bootstrap a snapshot: running=R1, queued=[R2].
+        // Bootstrap: running=R1, queued=[R2].
         applyQueueSnapshot({
             running: {
                 requestId: runningId,
@@ -394,7 +366,6 @@ describe("CLI cancel UX (A.6)", () => {
                 submittedAt: Date.now(),
                 startedAt: Date.now(),
                 state: "running",
-                attempt: 1,
             },
             queued: [
                 {
@@ -403,7 +374,6 @@ describe("CLI cancel UX (A.6)", () => {
                     text: "R2",
                     submittedAt: Date.now(),
                     state: "queued",
-                    attempt: 1,
                 },
             ],
             paused: false,
@@ -414,25 +384,18 @@ describe("CLI cancel UX (A.6)", () => {
         // Simulate the running request being cancelled server-side.
         clientIO.requestCancelled!(runningId, "user", 1);
 
-        // currentRequestId must be cleared so SIGINT doesn't target a
-        // stale id; the snapshot's running entry is also gone.
         expect(__testGetCurrentRequestId()).toBeUndefined();
         expect(getCliQueueState()?.running).toBeNull();
     });
 
-    // ───── A.7 ─────────────────────────────────────────────────────
     it("queueStateChanged updates the badge content (prompt would be redrawn)", () => {
-        // We cannot directly observe the readline redraw here (no
-        // active rl in the test harness), but the redraw is gated on
-        // `computeBadgeState` differing between snapshots. We assert
-        // that the visible badge — produced by the same logic the
-        // prompt uses — reflects the latest snapshot. Confirms the
-        // queueStateChanged handler clones AND swaps state correctly.
+        // We can't observe the redraw directly (no active rl in the test harness),
+        // but `formatQueueBadge` shares the visibility logic gating the redraw.
         const clientIO = createEnhancedClientIO(undefined, {
             current: undefined,
         });
 
-        // First snapshot: 1 running, 0 queued (peer's request).
+        // Snapshot 1: 1 running, 0 queued.
         const snap1: QueueSnapshot = {
             running: makeEntry(
                 "77777777-aaaa-aaaa-aaaa-000000000007",
@@ -445,14 +408,12 @@ describe("CLI cancel UX (A.6)", () => {
         };
         clientIO.queueStateChanged!(snap1);
         const prompt1 = getEnhancedConsolePrompt("");
-        // `getEnhancedConsolePrompt` returns the static base only; the
-        // live `(queue: N)` badge is prepended at render time by
-        // `questionWithCompletion` via `formatQueueBadge()`.
+        // `getEnhancedConsolePrompt` is the static base; live badge is added by `formatQueueBadge()`.
         const badge1 = formatQueueBadge();
         expect(prompt1).not.toContain("queue:");
         expect(badge1).toContain("queue: 1");
 
-        // Second snapshot: 1 running + 2 queued.
+        // Snapshot 2: 1 running + 2 queued.
         const snap2: QueueSnapshot = {
             running: makeEntry(
                 "77777777-aaaa-aaaa-aaaa-000000000007",
@@ -472,7 +433,7 @@ describe("CLI cancel UX (A.6)", () => {
         expect(prompt2).not.toContain("queue:");
         expect(badge2).toContain("queue: 3");
 
-        // Third snapshot: idle. Badge gone.
+        // Snapshot 3: idle. Badge gone.
         clientIO.queueStateChanged!({
             running: null,
             queued: [],
@@ -486,28 +447,27 @@ describe("CLI cancel UX (A.6)", () => {
     });
 });
 
-// ── F6: stale-version event admission ────────────────────────────────────
-describe("CLI queue version watermark (F6)", () => {
+// Stale-version event admission
+describe("CLI queue version watermark", () => {
     it("ignores push events whose version is strictly older than the last applied version", () => {
         const clientIO = createEnhancedClientIO(undefined, {
             current: undefined,
         });
 
-        // Apply a snapshot at version 10. Anything strictly older must be dropped.
+        // Apply snapshot at version 10.
         const initial = makeSnapshot(null, [], 10);
         applyQueueSnapshot(initial);
         expect(getCliQueueState()?.version).toBe(10);
 
-        // Stale requestQueued (version 5) — must be ignored.
+        // Stale (version 5) is ignored.
         const stale = makeEntry(
             "11111111-aaaa-aaaa-aaaa-000000000001",
             "stale",
         );
         clientIO.requestQueued!(stale, 5);
-        // State unchanged: still no queued entries.
         expect(getCliQueueState()?.queued).toEqual([]);
 
-        // Fresh event (version 11) is admitted.
+        // Fresh (version 11) is admitted.
         const fresh = makeEntry(
             "22222222-bbbb-bbbb-bbbb-000000000002",
             "fresh",
@@ -518,13 +478,9 @@ describe("CLI queue version watermark (F6)", () => {
         ]);
     });
 
-    // R5 review fix: the server emits each fine-grained event paired
-    // with a queueStateChanged snapshot at the **same** version. The
-    // watermark uses strict `<` (rather than `<=`) so the snapshot
-    // can still reconcile the state when both arrive in order —
-    // applying both is idempotent because the snapshot reflects state
-    // *after* the same transition the fine-grained event described.
-    it("admits push events at the SAME version (R5 — paired event + snapshot)", () => {
+    // Server pairs each fine-grained event with a same-version queueStateChanged snapshot;
+    // strict `<` admits both so the snapshot reconciles state idempotently.
+    it("admits push events at the SAME version (paired event + snapshot)", () => {
         const clientIO = createEnhancedClientIO(undefined, {
             current: undefined,
         });
@@ -544,16 +500,7 @@ describe("CLI queue version watermark (F6)", () => {
         ]);
     });
 
-    // Round 2 review fix: cancelRunning on the server intentionally
-    // does NOT emit a paired queueStateChanged. At the moment of
-    // cancel the head's wire-visible `state` is still `"running"`,
-    // so a paired snapshot would race-resurrect the cancelled entry
-    // on the client under strict-`<` admission. The drain-loop
-    // completion broadcast at the next version is the authoritative
-    // snapshot. This test simulates what would happen if a paired
-    // same-version snapshot DID arrive and locks in the expectation
-    // that the client should reconcile cleanly when the next
-    // (drain-completion) snapshot arrives at version + 1.
+    // Verifies that requestCancelled + a later drain-completion snapshot reconcile cleanly.
     it("requestCancelled then drain-completion snapshot reconciles cleanly", () => {
         const clientIO = createEnhancedClientIO(undefined, {
             current: undefined,
@@ -565,20 +512,19 @@ describe("CLI queue version watermark (F6)", () => {
         applyQueueSnapshot(makeSnapshot(running, [], 5));
         expect(getCliQueueState()?.running?.requestId).toBe(rid);
 
-        // requestCancelled at version 6 — client removes the entry.
+        // requestCancelled at version 6.
         clientIO.requestCancelled!(rid, "user", 6);
         expect(getCliQueueState()?.running).toBeNull();
 
-        // Drain-loop completion snapshot at version 7 — running=null,
-        // confirming the cancel.
+        // Drain-completion snapshot at version 7 confirms cancel.
         clientIO.queueStateChanged!(makeSnapshot(null, [], 7));
         expect(getCliQueueState()?.running).toBeNull();
         expect(getCliQueueState()?.version).toBe(7);
     });
 });
 
-// ── F11: /queue list truncates very long queues ────────────────────────
-describe("/queue list truncation (F11)", () => {
+// /queue list truncation
+describe("/queue list truncation", () => {
     it("truncates queued list past 10 entries with a footer hint", async () => {
         const queued: QueuedRequest[] = [];
         for (let i = 0; i < 25; i++) {
@@ -596,15 +542,14 @@ describe("/queue list truncation (F11)", () => {
         await handleSlashCommand("/queue list", async () => {});
         const out = captured();
 
-        // Visible: first 10 tasks (task-0 .. task-9).
+        // Visible: tasks 0..9.
         for (let i = 0; i < 10; i++) {
             expect(out).toContain(`task-${i}`);
         }
-        // Hidden: tasks 10..24 must NOT be present.
+        // Hidden: tasks 10..24.
         for (let i = 10; i < 25; i++) {
             expect(out).not.toContain(`task-${i}`);
         }
-        // Footer indicates 15 hidden entries with cancel hint.
         expect(out).toContain("and 15 more queued");
         expect(out).toContain("/queue cancel");
     });
@@ -633,7 +578,7 @@ describe("/queue list truncation (F11)", () => {
     });
 });
 
-// ── Double-Escape helper: cancelAllInQueue ─────────────────────────────
+// cancelAllInQueue (double-Escape clear queue)
 describe("cancelAllInQueue (double-Escape clear queue)", () => {
     it("cancels the running entry plus every queued entry exactly once", async () => {
         const running = makeEntry(
@@ -699,7 +644,7 @@ describe("cancelAllInQueue (double-Escape clear queue)", () => {
         const result = await cancelAllInQueue(dispatcher, snap);
 
         expect(seen).toHaveLength(3);
-        // 2 succeeded (running + q2); q1 threw and was absorbed.
+        // running + q2 succeeded; q1 threw and was absorbed.
         expect(result.cancelled).toBe(2);
         expect(result.running).toBe(1);
         expect(result.queued).toBe(1);

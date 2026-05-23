@@ -164,16 +164,10 @@ export interface Dispatcher {
     readonly connectionId: ConnectionId | undefined;
 
     /**
-     * Capability flag — `true` when this dispatcher is backed by a
-     * real server-side message queue (i.e. `submitCommand` provides
-     * meaningful FIFO + cross-client broadcast semantics). `false` or
-     * `undefined` for the in-process / direct dispatcher fallback,
-     * which executes synchronously and offers no queueing guarantees.
-     *
-     * Clients that want to gate UX on real queue support (e.g. show a
-     * `(queue: N)` badge) should check this rather than testing for
-     * the presence of `submitCommand`, which is always defined for
-     * type-completeness even in the fallback.
+     * `true` when this dispatcher is backed by a real server-side message queue
+     * (FIFO + cross-client broadcast). `false`/`undefined` for the in-process
+     * fallback. Clients should gate queue UX on this rather than on the
+     * presence of `submitCommand` (which is always defined).
      */
     readonly supportsQueueing?: boolean;
 
@@ -194,28 +188,16 @@ export interface Dispatcher {
     ): Promise<CommandResult | undefined>;
 
     /**
-     * Submit a request for queued execution.
+     * Submit a request for queued execution. Resolves once the request is
+     * accepted onto the server-side queue. Completion is observed via
+     * ClientIO push events (`requestStarted`, `queueStateChanged`, etc.) and
+     * the existing `commandComplete` notify.
      *
-     * Unlike `processCommand`, this resolves as soon as the request
-     * has been accepted onto the server-side message queue, returning
-     * a discriminated `SubmitResult`. Completion is observed via
-     * ClientIO push events (`requestStarted`, `queueStateChanged`, the
-     * existing `setDisplay`/`notify` flow, and ultimately the
-     * `commandComplete` notify already broadcast by SharedDispatcher).
-     *
-     * The `SubmitResult` discriminator carries `queue_full` /
-     * `server_stopping` as data rather than thrown errors because the
-     * RPC layer strips error subclass identity — see `SubmitResult`
-     * for the rationale.
-     *
-     * Implementations that do not own a queue (direct in-process
-     * dispatcher mode, indicated by `supportsQueueing !== true`) fall
-     * back to invoking `processCommand` and synthesizing a single-
-     * entry `{ ok: true, entry }` result — failures from the
-     * underlying execution are surfaced to the originator via a
-     * `commandComplete` notify with the error attached. Callers that
-     * need true FIFO + cross-client broadcast semantics MUST check
-     * `supportsQueueing`.
+     * Failure modes (`queue_full`, `server_stopping`) are returned as data,
+     * not thrown — see `SubmitResult`. Implementations without a queue
+     * (`supportsQueueing !== true`) fall back to `processCommand` and
+     * synthesize `{ ok: true, entry }`; callers needing real FIFO semantics
+     * MUST check `supportsQueueing`.
      */
     submitCommand(
         command: string,
@@ -225,34 +207,23 @@ export interface Dispatcher {
     ): Promise<SubmitResult>;
 
     /**
-     * Snapshot of the server-side queue. Cheap, in-memory. Returns an
-     * empty snapshot for dispatchers without a queue.
+     * Snapshot of the server-side queue. Cheap, in-memory. Empty snapshot for
+     * dispatchers without a queue.
      */
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
     /**
-     * Steering primitive — cancel the currently-running request (if
-     * any) and immediately enqueue `text` at the head of the queue so
-     * it runs *next*, ahead of anything already queued. Returns a
-     * `SubmitResult` describing the new entry (or the standard queue-
-     * full / server-stopping failure modes).
+     * Cancel the currently-running request (if any) and enqueue `text` at the
+     * head of the queue so it runs next. The cancel-then-prepend pair is
+     * atomic within the server's critical section so a racing `submitCommand`
+     * cannot steal the head slot — this is why `interrupt` exists as a server
+     * RPC rather than client-side composition.
      *
-     * Atomicity: the cancel-then-prepend pair is performed inside
-     * the server-side queue's critical section so a racing
-     * `submitCommand` from another client cannot land between them
-     * and steal the head slot. This is the whole reason `interrupt`
-     * exists as a server RPC rather than client-side composition of
-     * `cancelCommand` + `submitCommand` — see messageSteering.md §4.5.
+     * Pre-existing queued entries are preserved (just shifted back). Side
+     * effects from the cancelled running request are NOT rolled back.
      *
-     * The rest of the queue is preserved: pre-existing queued
-     * entries stay queued, just behind the interrupting one. Side
-     * effects from the cancelled running request are NOT rolled back
-     * (same semantics as `cancelCommand`).
-     *
-     * Implementations without a queue (`supportsQueueing !== true`)
-     * SHOULD reject with `SubmitResult.error = "server_stopping"`
-     * or an analogous failure; callers MUST gate interrupt UX on
-     * `supportsQueueing`.
+     * Implementations without a queue SHOULD return a failure result; callers
+     * MUST gate interrupt UX on `supportsQueueing`.
      */
     interrupt(
         text: string,
@@ -348,15 +319,12 @@ export interface Dispatcher {
     /**
      * Cancel an in-flight or queued command.
      *
-     * The returned `CancelResult` distinguishes whether the entry was
-     * cancelled while still queued (no work ran), while running (the
-     * AbortController was triggered and `processCommand` will resolve
-     * with `{ cancelled: true }` at the next checkpoint), or whether
-     * the requestId was unknown (`not_found`). Phase 1 implementations
-     * never report `already_completed` — see `CancelResult`.
+     * The returned `CancelResult` indicates whether the entry was cancelled
+     * while queued (no work ran), while running (the AbortController was
+     * triggered; `processCommand` resolves with `{ cancelled: true }` at the
+     * next checkpoint), or whether the requestId was unknown.
      *
-     * Fire-and-forget callers may ignore the returned promise; it
-     * never rejects under normal operation.
+     * Never rejects under normal operation.
      *
      * @param requestId the requestId string of the command to cancel
      * @returns a `CancelResult` describing what the server did

@@ -4,17 +4,10 @@
 import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 
 /**
- * Coalesces `queueStateChanged` snapshot broadcasts: at most one
- * snapshot per `windowMs` window goes out on the wire, and the
- * **last** snapshot in that window is the one delivered. Used to
- * keep event volume bounded under bursty submits without losing
- * visibility into the final state.
- *
- * The `version` watermark on each snapshot means clients can safely
- * ignore stale broadcasts even if they slip through; this coalescer
- * exists for bandwidth and CPU, not correctness.
- *
- * See messageQueueing.md §8.2.
+ * Coalesces `queueStateChanged` broadcasts: at most one snapshot per `windowMs`,
+ * with the last snapshot in the window delivered. Keeps event volume bounded
+ * under bursty submits. Version-stamped snapshots make this safe for bandwidth
+ * (not correctness — stale broadcasts can be ignored client-side).
  */
 export interface SnapshotCoalescer {
     /** Schedule (or replace) the next snapshot to broadcast. */

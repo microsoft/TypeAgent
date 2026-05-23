@@ -26,11 +26,8 @@ export type JoinConversationResult = {
      * Sent on join so reconnecting clients can resume showing prompts.
      */
     pendingInteractions?: PendingInteractionRequest[];
-    /**
-     * Snapshot of the server-side message queue at join time. Omitted
-     * when the conversation has no queue activity (empty + idle).
-     * Older clients that don't understand the field simply ignore it.
-     */
+    /** Server-side queue snapshot at join time. Omitted when idle/empty;
+     *  older clients ignore the field. */
     queueSnapshot?: QueueSnapshot;
 };
 

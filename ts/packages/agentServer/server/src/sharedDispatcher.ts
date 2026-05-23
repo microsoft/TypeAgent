@@ -66,9 +66,8 @@ export async function createSharedDispatcher(
         proposeAction: 10 * 60 * 1000,
     };
 
-    // Grace period before the request queue cancels its contents
-    // after the last client disconnects. Tunable per-test via
-    // `__testSetNoClientsGraceMs`. See messageQueueing.md §11.4.
+    // Grace period before the queue cancels its contents after the last client
+    // disconnects. Tunable per-test via `__testSetNoClientsGraceMs`.
     let noClientsGraceMs = 30 * 1000;
 
     // Returns the number of clients the message was sent to.
@@ -164,9 +163,8 @@ export async function createSharedDispatcher(
         },
 
         // ===== Async deferred pattern for blocking interactions =====
-        // Instead of blocking via callback(), we create a deferred promise
-        // and broadcast the request to all clients. The first client to
-        // respond via respondToInteraction resolves the promise.
+        // Create a deferred promise and broadcast to all clients; the first
+        // client to respondToInteraction resolves it.
 
         question: async (requestId, message, choices, defaultId?, source?) => {
             const interactionId = randomUUID();
@@ -193,9 +191,8 @@ export async function createSharedDispatcher(
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
-            // Mark the running entry as blocked on the interaction so
-            // the queue snapshot reflects it (used by the no-clients
-            // grace timer in §11.4 and by client-side UX badges).
+            // Mark the running entry blocked so the queue snapshot and
+            // no-clients grace timer can react.
             const rid = requestId?.requestId;
             if (rid !== undefined) requestQueue.markBlocked(rid, "interaction");
             try {
@@ -223,9 +220,8 @@ export async function createSharedDispatcher(
                 `proposeAction created: ${interactionId} source="${source}"`,
             );
 
-            // Log and queue unconditionally so the interaction survives in
-            // the DisplayLog and is included in JoinSessionResult.pendingInteractions
-            // on the next join.
+            // Log + queue unconditionally so the interaction survives in
+            // DisplayLog and is included in JoinSessionResult on next join.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
@@ -285,9 +281,8 @@ export async function createSharedDispatcher(
                 clientIO.takeAction(requestId, ...args),
             ),
         onUserFeedback: (entry) => {
-            // Fan out the rating change to every connected client (including
-            // the originator — the dispatcher relies on the broadcast for its
-            // own local UI update too).
+            // Fan out to every connected client (including the originator —
+            // dispatcher relies on the broadcast for its own local UI update).
             broadcast("onUserFeedback", entry.requestId, (cio) =>
                 cio.onUserFeedback?.(entry),
             );
@@ -303,11 +298,10 @@ export async function createSharedDispatcher(
         clientIO,
     });
 
-    // Intercept the three display methods on the shared clientIO so that all
-    // display traffic is mirrored into the DisplayLog for later replay.
-    // We patch context.clientIO (which IS the broadcast `clientIO` object above)
-    // rather than the local variable so any future reference through context also
-    // sees the patched version.
+    // Intercept display methods on the shared clientIO to mirror display
+    // traffic into the DisplayLog for later replay. Patches context.clientIO
+    // (which IS the broadcast `clientIO` above) so future references through
+    // context also see the patched version.
     {
         const log = context.displayLog;
         const orig = context.clientIO;
@@ -322,10 +316,7 @@ export async function createSharedDispatcher(
         const origSetDisplay = orig.setDisplay.bind(orig);
         orig.setDisplay = (message) => {
             origSetDisplay(message);
-            // Toast and inline kinds are ephemeral (visual notifications, not
-            // chat history). Skip logging so they don't replay on reconnect —
-            // matches notify's default-not-persisted behavior. Bubble (or
-            // absent kind = a normal request response) always logs.
+            // Skip ephemeral toast/inline kinds so they don't replay on reconnect.
             if (message.kind !== "toast" && message.kind !== "inline") {
                 log.logSetDisplay(message);
                 log.saveQueued();
@@ -335,13 +326,9 @@ export async function createSharedDispatcher(
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
-            // Skip ephemeral output:
-            //   - toast/inline kinds (visual-only notifications)
-            //   - mode === "temporary" (transient status indicators like
-            //     "Executing action ...", reasoning's "Thinking..." stream).
-            // Persisting either causes replayed bubbles on reconnect,
-            // DisplayLog growth proportional to streaming tokens, and
-            // apparent "duplicate" bubbles next to the real reply.
+            // Skip ephemeral output: toast/inline kinds and mode === "temporary"
+            // (transient status like "Thinking..."). Persisting causes replayed
+            // duplicate bubbles and DisplayLog bloat proportional to stream tokens.
             if (
                 message.kind !== "toast" &&
                 message.kind !== "inline" &&
@@ -366,9 +353,7 @@ export async function createSharedDispatcher(
         };
 
         // Notifications are ephemeral by default — only log when the producer
-        // explicitly opts in via options.persist. Agents (e.g. OS-notification
-        // forwarding) that should never enter durable history MUST leave the
-        // flag unset.
+        // explicitly opts in via options.persist.
         const origNotify = orig.notify.bind(orig) as (
             ...args: Parameters<ClientIO["notify"]>
         ) => void;
@@ -390,11 +375,10 @@ export async function createSharedDispatcher(
 
     const dispatchers = new Map<string, Dispatcher>();
     /**
-     * Per-connection inner processCommand functions (wrapped for
-     * displayLog + commandComplete broadcast, but NOT wrapped for
-     * queue submission — these run UNDER the queue's drain loop).
-     * SharedDispatcher's queue executes via this map; falling back to
-     * the bare dispatcher if the originator has disconnected.
+     * Per-connection inner processCommand functions (wrapped for displayLog +
+     * commandComplete broadcast, but NOT for queue submission — these run
+     * UNDER the queue's drain loop). The queue executes via this map, falling
+     * back to the bare dispatcher if the originator has disconnected.
      */
     const innerProcessCommands = new Map<
         string,
@@ -407,18 +391,14 @@ export async function createSharedDispatcher(
         ) => Promise<any>
     >();
 
-    // Bare per-connection dispatcher used by the queue's drain loop when
-    // the originator has disconnected — bypasses the per-connection
-    // wrappers (DisplayLog commandComplete, etc.) but still produces
+    // Bare per-connection dispatcher used by the drain loop when the originator
+    // has disconnected. Bypasses per-connection wrappers but still produces
     // setUserRequest/setDisplay broadcasts to remaining clients.
     const bareDispatcher = createDispatcherFromContext(context, undefined);
 
-    // Coalesce `queueStateChanged` broadcasts: only the **last**
-    // snapshot per `SNAPSHOT_COALESCE_MS` window goes out on the
-    // wire. Fine-grained lifecycle events (queued/started/cancelled)
-    // stay immediate. Bounded event volume under bursty submits +
-    // version-stamped snapshots = stale broadcasts are safe to drop.
-    // See messageQueueing.md §8.2.
+    // Coalesce `queueStateChanged`: only the last snapshot per window goes on
+    // the wire. Fine-grained lifecycle events stay immediate. Version stamps
+    // make dropped stale snapshots safe.
     const SNAPSHOT_COALESCE_MS = 100;
     const snapshotCoalescer = createSnapshotCoalescer((snapshot) => {
         broadcast("queueStateChanged", undefined, (cio) =>
@@ -429,18 +409,12 @@ export async function createSharedDispatcher(
         snapshotCoalescer.schedule(snapshot);
     const flushPendingSnapshot = (): void => snapshotCoalescer.flush();
 
-    // ===== Message queue (Phase 1) =====
-    // One queue per conversation. Replaces implicit serialization-via-
-    // commandLock with an explicit FIFO that broadcasts lifecycle
-    // events to every connected client.
-    //
-    // The drain loop calls the originator's wrapped inner processCommand
-    // (display logging + commandComplete broadcast) so attribution stays
-    // correct when the originator is still connected. If they
-    // disconnected, fall back to a bare-dispatcher path that ALSO logs
-    // the result and broadcasts commandComplete to remaining clients —
-    // F8 / R2P-H-2: peers must see completion regardless of originator
-    // presence.
+    // Per-conversation message queue. Replaces implicit serialization-via-
+    // commandLock with an explicit FIFO that broadcasts lifecycle events.
+    // The drain loop calls the originator's wrapped inner processCommand so
+    // attribution stays correct; if the originator disconnected, falls back
+    // to a bare-dispatcher path that ALSO logs results and broadcasts
+    // commandComplete to remaining clients.
     const requestQueue = new RequestQueue(
         async (ctx: QueueExecutionContext) => {
             const inner = innerProcessCommands.get(ctx.originatorConnectionId);
@@ -453,12 +427,9 @@ export async function createSharedDispatcher(
                     ctx.requestId,
                 );
             }
-            // ── Originator disconnected fallback (F8) ──
-            // Run via the bare dispatcher, then synthesize the
-            // displayLog command-result entry AND broadcast
-            // commandComplete to every still-connected client. Without
-            // this peers never see completion for entries whose
-            // originator left mid-queue.
+            // Originator-disconnected fallback: run via bareDispatcher, then
+            // synthesize the displayLog command-result entry and broadcast
+            // commandComplete so peers see completion.
             const result = await bareDispatcher.processCommand(
                 ctx.text,
                 ctx.clientRequestId,
@@ -481,8 +452,6 @@ export async function createSharedDispatcher(
                 // best-effort
             }
             try {
-                // Originator is gone; broadcast helper iterates only
-                // live clients, so duplication isn't a concern.
                 broadcast("commandComplete", undefined, (cio) => {
                     cio.notify(
                         {
@@ -533,23 +502,17 @@ export async function createSharedDispatcher(
             closeFn: () => void,
             options?: DispatcherConnectOptions,
         ): Dispatcher {
-            // TODO: Support a stable clientId in DispatcherConnectOptions so that a
-            // reconnecting client can reclaim its old connectionId (or have pending
-            // interactions retargeted to its new one).  Currently connectionId is
-            // ephemeral: each join() mints a fresh value, so askYesNo/proposeAction
-            // interactions created before a disconnect are permanently unroutable to
-            // the reconnected client because requestId.connectionId no longer matches
-            // and getPendingInteractions() filters them out.  See
-            // docs/async-clientio-design.md §Open Questions for the full design note.
+            // TODO: Support a stable clientId so a reconnecting client can
+            // reclaim its old connectionId. Currently connectionId is ephemeral,
+            // so interactions created before disconnect are unroutable after
+            // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
                 clientIO,
                 filter: options?.filter ?? false,
             });
-            // First client (re)joining after a period of no clients —
-            // clear any pending grace timer so the queue keeps
-            // running. See messageQueueing.md §11.4.
+            // First (re)joining client — clear any pending grace timer.
             if (wasEmpty) {
                 requestQueue.onClientReconnected();
             }
@@ -566,36 +529,22 @@ export async function createSharedDispatcher(
                     innerProcessCommands.delete(connectionId);
                     unregisterClient(connectionId);
                     requestQueue.onClientDisconnect(connectionId);
-                    // Last client disconnected — start the 30s grace
-                    // timer. On expiry the queue cancels its tail
-                    // with reason "no_clients"; the onExpiry callback
-                    // additionally cancels a running entry that is
-                    // blocked on a clientIO interaction (the entry
-                    // would otherwise stall forever waiting for a
-                    // response from a non-existent client). See
-                    // messageQueueing.md §11.4.
+                    // Last client gone — start grace timer. On expiry the queue
+                    // cancels its tail; the onExpiry callback additionally cancels
+                    // a running entry blocked on a clientIO interaction (which
+                    // would otherwise stall forever).
                     if (clients.size === 0) {
                         requestQueue.onAllClientsDisconnected(
                             noClientsGraceMs,
                             (head) => {
                                 if (head?.blockedOn !== "interaction") return;
                                 const rid = head.requestId;
-                                // R2 review fix: broadcast
-                                // requestCancelled(no_clients) for
-                                // the running entry so any reconnecting
-                                // client sees the explicit cancel.
-                                // Also primes entry.cancelReason so
-                                // the drain loop preserves the reason
-                                // when the awaiting agent rejects.
+                                // Broadcast cancel + prime cancelReason so the
+                                // drain loop preserves the reason on rejection.
                                 requestQueue.cancelRunning(rid, "no_clients");
-                                // R3 review fix: pendingInteractions
-                                // rejects awaited promises with the
-                                // Error we pass; command.ts only
-                                // classifies `e.name === "AbortError"`
-                                // as cancelled, so name the Error
-                                // accordingly. Otherwise the agent's
-                                // throw would surface as `failed`
-                                // instead of `cancelled:no_clients`.
+                                // command.ts only classifies AbortError-named
+                                // errors as cancelled; name it accordingly so
+                                // the wire state reads cancelled:no_clients.
                                 const abortErr = new Error(
                                     "Cancelled by server: no clients connected",
                                 );
@@ -617,9 +566,8 @@ export async function createSharedDispatcher(
                                         `no_clients: failed to cancel pending interactions: ${e}`,
                                     );
                                 }
-                                // Also abort the controller so any
-                                // non-interaction await in the same
-                                // command tears down.
+                                // Also abort the controller so any non-interaction
+                                // await in the same command tears down.
                                 try {
                                     bareDispatcher.cancelCommand(rid);
                                 } catch (e) {
@@ -656,10 +604,8 @@ export async function createSharedDispatcher(
                 shared.cancelInteraction(interactionId);
             };
 
-            // Wrap processCommand so each completed request logs a
-            // command-result entry into the DisplayLog (carrying its
-            // metrics). This lets history replay re-render timing data
-            // exactly the way live commandComplete does.
+            // Wrap processCommand so each completed request logs a command-result
+            // entry into DisplayLog, letting history replay render timing data.
             const origProcessCommand =
                 dispatcher.processCommand.bind(dispatcher);
             const innerWrapped = async (
@@ -691,22 +637,17 @@ export async function createSharedDispatcher(
                     // best effort
                 }
                 try {
-                    // Notify peer panels (other clients sharing this
-                    // session) that the command finished so they can
-                    // clear lingering temporary status messages and
-                    // apply timing metrics. We deliberately skip the
-                    // originator: it already gets the result back via
-                    // the resolved processCommand RPC promise, and a
-                    // duplicate notify would run completion twice (in
-                    // the VS Code webview that produces a stray
-                    // "⚠ Cancelled" bubble after the first pass cleared
-                    // the request mapping).
+                    // Notify peer panels (other clients sharing this session)
+                    // so they can clear lingering temporary status messages and
+                    // apply timing metrics. Skip the originator: it already
+                    // gets the result via its resolved processCommand RPC, and
+                    // a duplicate notify would run completion twice (causing a
+                    // stray "⚠ Cancelled" bubble in the VS Code webview).
                     let sent = 0;
                     for (const [peerId, peerRecord] of clients) {
                         if (peerId === connectionId) continue;
                         if (peerRecord.filter && peerId !== connectionId) {
-                            // Filtered clients only receive their own
-                            // events; don't leak peer completions.
+                            // Filtered clients only receive their own events.
                             continue;
                         }
                         try {
@@ -735,22 +676,15 @@ export async function createSharedDispatcher(
                 }
                 return result;
             };
-            // Register the inner-wrapped function so the message queue's
-            // drain loop can invoke it directly without re-entering the
-            // public processCommand wrapper (which would re-queue).
+            // Register the wrapped function so the queue's drain loop invokes
+            // it directly without re-entering the public processCommand wrapper
+            // (which would re-queue).
             innerProcessCommands.set(connectionId, innerWrapped);
 
-            // ===== Message-queue integration (Phase 1) =====
-            // Replace the public processCommand with one that submits to
-            // the queue and awaits completion. Direct callers continue
-            // to get Promise<CommandResult> semantics. The queue's drain
-            // loop invokes `innerWrapped` directly via the registry
-            // above, so there is no need (or way) to bypass the queue
-            // by passing a `requestId` to processCommand.
-            //
-            // CommandHandlerContext.commandLock remains as
-            // defense-in-depth — the RequestQueue already serializes
-            // commands at this layer.
+            // Replace the public processCommand with one that submits to the
+            // queue and awaits completion. The drain loop invokes innerWrapped
+            // directly via the registry above. CommandHandlerContext.commandLock
+            // remains as defense-in-depth.
             dispatcher.processCommand = async (
                 command: any,
                 clientRequestId?: any,
@@ -767,17 +701,13 @@ export async function createSharedDispatcher(
                     submitInput.options = processOptions;
                 if (clientRequestId !== undefined)
                     submitInput.clientRequestId = clientRequestId;
-                // submit() may throw QueueFullError or
-                // ServerStoppingError. Let the typed errors propagate
-                // so in-process callers can branch; the discriminated
-                // SubmitResult on submitCommand handles the cross-RPC
-                // case.
+                // Typed errors propagate so in-process callers can branch;
+                // submitCommand's discriminated SubmitResult handles RPC.
                 const entry = requestQueue.submit(submitInput);
                 return entry.completion;
             };
 
-            // Mark this dispatcher as queue-backed so clients can gate
-            // queue-aware UX on the capability flag.
+            // Capability flag so clients can gate queue-aware UX.
             Object.defineProperty(dispatcher, "supportsQueueing", {
                 value: true,
                 enumerable: true,
@@ -799,10 +729,8 @@ export async function createSharedDispatcher(
                 if (options != null) submitInput.options = options;
                 if (clientRequestId !== undefined)
                     submitInput.clientRequestId = clientRequestId;
-                // F5/F7 (R2-H-1, R2P-M-3): convert typed errors into
-                // discriminated result variants so cross-RPC clients
-                // receive structured failure information instead of a
-                // flattened generic Error.
+                // Convert typed errors into discriminated SubmitResult variants
+                // so cross-RPC clients receive structured failure information.
                 let entry;
                 try {
                     entry = requestQueue.submit(submitInput);
@@ -819,46 +747,34 @@ export async function createSharedDispatcher(
                     }
                     throw e;
                 }
-                // R1 review fix: the ack-only submit path returns the
-                // entry without ever awaiting `entry.completion`. The
-                // drain loop rejects that promise on execution failure
-                // (or via abandonForShutdown), which would otherwise
-                // surface as an unhandledRejection and potentially
-                // terminate the Node process. Attach a passive catch
-                // that logs at debug level. Other awaiters (e.g. the
-                // legacy `processCommand` wrapper) still see their own
-                // rejection — `.catch` chains independently.
+                // Ack-only submit never awaits entry.completion; attach a
+                // passive catch so a drain-loop rejection (or abandon-for-
+                // shutdown) doesn't surface as unhandledRejection. Other
+                // awaiters' `.catch` chains remain independent.
                 void entry.completion.catch((e) => {
                     debugCommand(
                         `submit:completion-error rid=${entry.requestId} ${e instanceof Error ? e.message : String(e)}`,
                     );
                 });
-                // Don't await completion — submitCommand returns as
-                // soon as the entry is queued. Build a wire-safe copy
-                // (no raw attachments — see B.1 redaction rule).
+                // Don't await; submitCommand returns once queued. Build a
+                // wire-safe copy (no raw attachments).
                 const out: QueuedRequest = {
                     requestId: entry.requestId,
                     originatorConnectionId: entry.originatorConnectionId,
                     text: entry.text,
                     submittedAt: entry.submittedAt,
                     state: entry.state,
-                    attempt: entry.attempt,
                 };
                 if (entry.clientRequestId !== undefined)
                     out.clientRequestId = entry.clientRequestId;
-                // F2 (R2-L-2): always advertise attachmentCount so
-                // submit-response and snapshot/broadcast copies stay
-                // consistent (zero when there are none).
+                // Always advertise attachmentCount so submit-response and
+                // snapshot/broadcast copies stay consistent (0 if none).
                 out.attachmentCount = entry.attachmentCount ?? 0;
                 if (entry.options !== undefined) out.options = entry.options;
                 if (entry.startedAt !== undefined)
                     out.startedAt = entry.startedAt;
                 if (entry.finishedAt !== undefined)
                     out.finishedAt = entry.finishedAt;
-                if (entry.schemaHint !== undefined)
-                    out.schemaHint = entry.schemaHint;
-                if (entry.activityHint !== undefined)
-                    out.activityHint = entry.activityHint;
                 if (entry.error !== undefined) out.error = entry.error;
                 return { ok: true, entry: out };
             };
@@ -867,11 +783,9 @@ export async function createSharedDispatcher(
                 return requestQueue.getSnapshot();
             };
 
-            // Hook cancellation: classify the requestId against the
-            // queue (queued / running / not_found) and route the
-            // running case through the existing AbortController path.
-            // Returns a typed CancelResult so clients can render an
-            // honest message instead of a generic "cancel requested".
+            // Cancel hook: classify the requestId, route the running case
+            // through the existing AbortController path, and return a typed
+            // CancelResult so clients can render an honest message.
             const origCancelCommand = dispatcher.cancelCommand.bind(dispatcher);
             dispatcher.cancelCommand = async (
                 rid: string,
@@ -881,15 +795,10 @@ export async function createSharedDispatcher(
                     return { kind: "cancelled_queued", requestId: rid };
                 }
                 if (kind === "running") {
-                    // R2 review fix: broadcast requestCancelled for
-                    // the running entry so other clients see the
-                    // explicit cancel event (not just an eventual
-                    // queueStateChanged when the drain loop finishes).
-                    // Idempotent: a second cancelRunning is a no-op.
+                    // Broadcast immediately so other clients see the cancel
+                    // before the drain loop finishes. Idempotent.
                     requestQueue.cancelRunning(rid, "user");
-                    // Fire the AbortController via the original
-                    // dispatcher.cancelCommand. Note: original is
-                    // sync void; we ignore its return.
+                    // Fire the AbortController via the original cancelCommand.
                     try {
                         await Promise.resolve(origCancelCommand(rid));
                     } catch {
@@ -897,18 +806,13 @@ export async function createSharedDispatcher(
                     }
                     return { kind: "cancelled_running", requestId: rid };
                 }
-                // Phase 1 does not track completion history — report
-                // not_found rather than already_completed.
+                // Phase 1 does not track completion history.
                 return { kind: "not_found", requestId: rid };
             };
 
-            // Steering: cancel-current-and-replace. Atomicity is
-            // guaranteed by the single-threaded JS event loop — the
-            // prepend and the cancel both run synchronously before
-            // any other client's submit can land. The two steps are
-            // safe in either order because new submits always `push`
-            // (tail end), so they cannot race ahead of an unshifted
-            // interrupt. See messageSteering.md §4.5.
+            // Steering: cancel-current-and-replace. Atomic by virtue of the
+            // single-threaded JS event loop; safe in either order because new
+            // submits always push to the tail.
             dispatcher.interrupt = async (
                 command,
                 attachments,
@@ -939,45 +843,37 @@ export async function createSharedDispatcher(
                     }
                     throw e;
                 }
-                // R1 review fix (mirror of submitCommand) — interrupt
-                // is also an ack-only RPC. See submitCommand comment
-                // above for the rationale.
+                // Ack-only RPC; mirror submitCommand's passive completion catch.
                 void entry.completion.catch((e) => {
                     debugCommand(
                         `interrupt:completion-error rid=${entry.requestId} ${e instanceof Error ? e.message : String(e)}`,
                     );
                 });
-                // Cancel the previously-running entry, if any. Use the
-                // snapshot captured *after* the unshift so we never
-                // accidentally cancel the interrupting entry itself
-                // (it is still in tail, not running).
+                // Cancel the previously-running entry, if any. Use the snapshot
+                // captured *after* the unshift so we don't cancel the interrupting
+                // entry itself (still in tail, not running).
                 const snap = requestQueue.getSnapshot();
                 if (
                     snap.running !== null &&
                     snap.running.requestId !== entry.requestId
                 ) {
-                    // R2 review fix: broadcast requestCancelled for
-                    // the interrupted entry so other clients see the
-                    // explicit cancel event. Use reason "user" —
-                    // interrupt is a user-initiated cancel of the
-                    // previously-running request.
+                    // Broadcast immediately so other clients see the cancel.
                     requestQueue.cancelRunning(snap.running.requestId, "user");
                     try {
                         await Promise.resolve(
                             origCancelCommand(snap.running.requestId),
                         );
                     } catch {
-                        // best-effort; the prepend has already taken effect
+                        // best-effort; prepend has already taken effect
                     }
                 }
-                // Build a wire-safe copy (same shape as submitCommand).
+                // Wire-safe copy (same shape as submitCommand).
                 const out: QueuedRequest = {
                     requestId: entry.requestId,
                     originatorConnectionId: entry.originatorConnectionId,
                     text: entry.text,
                     submittedAt: entry.submittedAt,
                     state: entry.state,
-                    attempt: entry.attempt,
                 };
                 if (entry.clientRequestId !== undefined)
                     out.clientRequestId = entry.clientRequestId;
@@ -987,10 +883,6 @@ export async function createSharedDispatcher(
                     out.startedAt = entry.startedAt;
                 if (entry.finishedAt !== undefined)
                     out.finishedAt = entry.finishedAt;
-                if (entry.schemaHint !== undefined)
-                    out.schemaHint = entry.schemaHint;
-                if (entry.activityHint !== undefined)
-                    out.activityHint = entry.activityHint;
                 if (entry.error !== undefined) out.error = entry.error;
                 return { ok: true, entry: out };
             };
@@ -1066,11 +958,9 @@ export async function createSharedDispatcher(
             message: string,
             excludeConnectionId?: string,
         ): void {
-            // "system" is a reserved requestId sentinel used to identify
-            // server-broadcast messages (e.g. client join/leave notifications).
-            // It can never collide with a real UUID from randomUUID().
-            // The renderer (chatView.ts) checks for this sentinel to auto-create
-            // a notification MessageGroup — keep these two values in sync.
+            // "system" is a reserved requestId sentinel for server-broadcast
+            // messages. The renderer (chatView.ts) checks for it to auto-create
+            // a notification MessageGroup — keep these in sync.
             const agentMessage = {
                 message: {
                     type: "text" as const,
@@ -1096,10 +986,9 @@ export async function createSharedDispatcher(
         async leave(connectionId: string) {
             const dispatcher = dispatchers.get(connectionId);
             if (dispatcher) {
-                // Remove from clients synchronously so clientCount reflects the
-                // post-leave state before any async close work completes.
-                // The close callback also calls clients.delete, but that is
-                // idempotent so the double-delete is harmless.
+                // Remove synchronously so clientCount reflects post-leave state
+                // before any async close work completes. The close callback
+                // also calls clients.delete; the double-delete is idempotent.
                 clients.delete(connectionId);
                 await dispatcher.close();
             }
@@ -1112,19 +1001,16 @@ export async function createSharedDispatcher(
             await Promise.all(promises);
         },
         async close() {
-            // Cancel all pending interactions
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
-            // Drain the message queue so any in-flight or queued
-            // entry settles before we tear down the dispatcher.
+            // Drain so in-flight/queued entries settle before teardown.
             try {
                 await requestQueue.drainAndStop();
             } catch {
                 // best-effort
             }
-            // Flush any pending coalesced snapshot so the final state
-            // is observed by clients before they get disconnected.
+            // Flush coalesced snapshot so the final state is observed.
             flushPendingSnapshot();
             await this.closeAllClients();
             await closeCommandHandlerContext(context);

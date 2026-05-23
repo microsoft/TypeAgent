@@ -88,18 +88,10 @@ export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
     name: string;
-    /**
-     * The connectionId assigned to this client by the server.  Useful for
-     * UI affordances (e.g. labelling the user's own queued requests
-     * `(you)` versus another client's requests).
-     */
+    /** Server-assigned connectionId for this client (e.g. to label own queued requests). */
     connectionId: string;
-    /**
-     * Snapshot of the per-conversation message queue at the moment of
-     * join. Phase 1 use: bootstrap CLI / Shell queue badges so they
-     * are correct even when joining mid-queue. May be omitted when the
-     * server does not provide a snapshot (older builds).
-     */
+    /** Server-side queue snapshot at join time, so clients can render correct
+     *  queue state when joining mid-queue. Omitted by older servers. */
     queueSnapshot?: JoinConversationResult["queueSnapshot"];
 };
 

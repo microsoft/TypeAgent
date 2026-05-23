@@ -1,10 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 1 of the server-side message queue lives in @typeagent/dispatcher-types
-// so the Dispatcher and ClientIO interfaces can reference it. Re-export the
-// wire-level shapes here so clients depending only on the agent-server
-// protocol package can import them from a single place.
+// Re-export queue wire types from @typeagent/dispatcher-types so clients depending
+// only on the agent-server protocol package can import them from one place.
 
 export type {
     QueueRequestState,
@@ -15,4 +13,7 @@ export type {
     SubmitResult,
     CancelResult,
 } from "@typeagent/dispatcher-types";
-export { QueueFullError, ServerStoppingError } from "@typeagent/dispatcher-types";
+export {
+    QueueFullError,
+    ServerStoppingError,
+} from "@typeagent/dispatcher-types";

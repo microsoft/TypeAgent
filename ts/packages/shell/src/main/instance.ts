@@ -201,9 +201,7 @@ async function initializeDispatcher(
         let connection: AgentServerConnection | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
-        // F9 (R2-M-3): bootstrap snapshot returned from joinConversation
-        // (remote mode only; standalone in-process mode does not produce
-        // a join snapshot — chatView falls back to getQueueSnapshot RPC).
+        // Bootstrap snapshot from joinConversation (remote mode only).
         let initialQueueSnapshot: QueueSnapshot | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
@@ -916,8 +914,7 @@ export function initializeInstance(
         });
 
         // Notify the renderer process that the dispatcher is initialized
-        // (standalone path: no queue snapshot — chatView falls back to
-        // getQueueSnapshot RPC if available).
+        // (standalone path: no queue snapshot).
         chatView.webContents.send("dispatcher-initialized", undefined);
 
         // Give focus to the chat view once initialization is done.

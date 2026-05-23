@@ -104,10 +104,7 @@ function handleVerbose(args: string): void {
     }
 }
 
-// Late-binding dispatcher accessor used by /queue commands.
-// The CLI bootstrap (commands/connect.ts) sets this after a successful
-// joinConversation so /queue list and /queue cancel can invoke
-// getQueueSnapshot()/cancelCommand() on the live dispatcher.
+// Late-binding dispatcher accessor for /queue commands; set by connect.ts after joinConversation.
 let queueDispatcher: Dispatcher | undefined;
 
 export function setQueueDispatcher(d: Dispatcher | undefined): void {
@@ -134,8 +131,7 @@ function truncateForList(s: string, max = 50): string {
     return single.length > max ? single.slice(0, max - 1) + "…" : single;
 }
 
-// Connection id of the local CLI client — set by connect.ts after join.
-// Used to render `(you)` vs `(client-XXXX)` ownership labels in /queue list.
+// Local CLI connection id, set by connect.ts after join; used to render `(you)` in /queue list.
 let cliConnectionId: string | undefined;
 
 export function setCliConnectionId(id: string | undefined): void {
@@ -155,7 +151,7 @@ function ownerLabel(originatorConnectionId: string | undefined): string {
     ) {
         return chalk.dim(" (you)");
     }
-    // Hash for stable short label without exposing raw connection id.
+    // Hash to a short stable label without exposing the raw connection id.
     let h = 0;
     for (let i = 0; i < originatorConnectionId.length; i++) {
         h = (h * 31 + originatorConnectionId.charCodeAt(i)) | 0;
@@ -182,12 +178,7 @@ function formatQueueSnapshot(snap: QueueSnapshot): string {
     if (snap.queued.length === 0) {
         lines.push(`  ${chalk.dim("(no queued requests)")}`);
     } else {
-        // F11 (R2-L-2): cap output for very long queues. Show the
-        // first 10 entries plus a footer with the count of suppressed
-        // entries so users aren't drowned in scrollback. The threshold
-        // (>10) is chosen so that a queue of exactly 10 still prints
-        // every entry — only when there's at least one entry we'd
-        // omit do we truncate.
+        // Cap output at 10 entries with a footer for the rest.
         const QUEUE_LIST_DISPLAY_LIMIT = 10;
         const total = snap.queued.length;
         const visible =
@@ -216,9 +207,8 @@ function formatQueueSnapshot(snap: QueueSnapshot): string {
 }
 
 /**
- * Resolve a (possibly short) requestId prefix against the current
- * snapshot. Returns the full requestId when exactly one match, or an
- * error message otherwise.
+ * Resolve a (possibly short) requestId prefix against the snapshot.
+ * Returns the full requestId on a unique match, or an error message.
  */
 function resolveRequestIdPrefix(
     prefix: string,
@@ -469,10 +459,7 @@ const slashCommands: SlashCommand[] = [
             }
             if (sub === "interrupt") {
                 const rawArgs = args.trim();
-                // Strip the leading "interrupt" token (and any
-                // surrounding whitespace) to recover the verbatim
-                // text. Avoid split/rejoin which would collapse
-                // multi-spaces inside the user's text.
+                // Strip leading "interrupt" token; avoid split/rejoin which collapses inner whitespace.
                 const text = rawArgs.replace(/^interrupt\s+/i, "").trim();
                 if (!text) {
                     console.log(chalk.yellow("Usage: /queue interrupt <text>"));

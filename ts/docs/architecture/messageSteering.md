@@ -23,7 +23,7 @@
 
 This doc is shorter than the queueing companion. The fastest path:
 
-1. **§1** — what "steering" means and what it's *not*.
+1. **§1** — what "steering" means and what it's _not_.
 2. **§2** — background: the existing primitives steering builds on
    (`cancelCommand`, `respondToInteraction`). Skip if you've read
    the queueing doc carefully.
@@ -41,19 +41,19 @@ This doc is shorter than the queueing companion. The fastest path:
 state changes. That's `messageQueueing.md`.
 
 **Steering** is the set of operations a user (or any connected
-client) can perform to *change what's in or about to be in the
-queue* beyond the basic "submit and wait." The five steering ops in
+client) can perform to _change what's in or about to be in the
+queue_ beyond the basic "submit and wait." The five steering ops in
 this design are:
 
-| Op | One-line gloss |
-|---|---|
-| `cancelCommand(requestId)` | Stop this request (queued or running). |
-| `editQueued(requestId, patch)` | Change the text of a queued entry. |
-| `pauseQueue()` / `resumeQueue()` | Stop / restart the drain loop. |
-| `interrupt(text)` | Cancel the running entry and immediately run *this* next. |
-| `respondToInteraction(id, value)` / `cancelInteraction(id)` | Answer (or abort) a pending `clientIO.question()`. |
+| Op                                                          | One-line gloss                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------- |
+| `cancelCommand(requestId)`                                  | Stop this request (queued or running).                    |
+| `editQueued(requestId, patch)`                              | Change the text of a queued entry.                        |
+| `pauseQueue()` / `resumeQueue()`                            | Stop / restart the drain loop.                            |
+| `interrupt(text)`                                           | Cancel the running entry and immediately run _this_ next. |
+| `respondToInteraction(id, value)` / `cancelInteraction(id)` | Answer (or abort) a pending `clientIO.question()`.        |
 
-### What steering is *not*
+### What steering is _not_
 
 - **Not a new cancellation mechanism.** Cancel is still
   `cancelCommand` end-to-end, same `AbortController` plumbing as
@@ -74,11 +74,11 @@ rationale.
 
 ### 2.1 Existing cancellation
 
-| API | Where | What it does |
-|---|---|---|
-| `Dispatcher.cancelCommand(requestId)` | `packages/dispatcher/dispatcher/src/dispatcher.ts` | Fires the request's `AbortController`. Works **even before the request acquires `commandLock`** (the abort controller is created at request entry). |
-| `Dispatcher.cancelCommandByClientId(clientRequestId)` | same | Same, addressed by the opaque client-supplied id. |
-| `SharedDispatcher.cancelCommand` wrapper | `packages/agentServer/server/src/sharedDispatcher.ts` | Server-side wrapper that broadcasts a cancellation event to all connected clients. |
+| API                                                   | Where                                                 | What it does                                                                                                                                        |
+| ----------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dispatcher.cancelCommand(requestId)`                 | `packages/dispatcher/dispatcher/src/dispatcher.ts`    | Fires the request's `AbortController`. Works **even before the request acquires `commandLock`** (the abort controller is created at request entry). |
+| `Dispatcher.cancelCommandByClientId(clientRequestId)` | same                                                  | Same, addressed by the opaque client-supplied id.                                                                                                   |
+| `SharedDispatcher.cancelCommand` wrapper              | `packages/agentServer/server/src/sharedDispatcher.ts` | Server-side wrapper that broadcasts a cancellation event to all connected clients.                                                                  |
 
 The `AbortController`-before-lock pattern is the key enabler: it
 means a queued entry that hasn't yet acquired `commandLock` (because
@@ -87,12 +87,12 @@ remove it from the tail and signal abort to anything that's listening.
 
 ### 2.2 Existing pending-interaction handling
 
-| API | Where | What it does |
-|---|---|---|
-| `clientIO.question(prompt)` | called by agent code | Pauses the running entry; broadcasts the prompt to all connected clients. |
-| `Dispatcher.respondToInteraction(id, value)` | dispatcher | Resumes the paused request with `value` as the resolution. |
-| `Dispatcher.cancelInteraction(id)` | dispatcher | Rejects the pending Promise. Agent code receives an error and typically fails the request. |
-| `PendingInteractionManager` | `sharedDispatcher.ts` | Keeps interactions alive across client disconnect/reconnect (10-minute timeout). |
+| API                                          | Where                 | What it does                                                                               |
+| -------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
+| `clientIO.question(prompt)`                  | called by agent code  | Pauses the running entry; broadcasts the prompt to all connected clients.                  |
+| `Dispatcher.respondToInteraction(id, value)` | dispatcher            | Resumes the paused request with `value` as the resolution.                                 |
+| `Dispatcher.cancelInteraction(id)`           | dispatcher            | Rejects the pending Promise. Agent code receives an error and typically fails the request. |
+| `PendingInteractionManager`                  | `sharedDispatcher.ts` | Keeps interactions alive across client disconnect/reconnect (10-minute timeout).           |
 
 Steering layers a couple of new push events on top of these, but no
 new mechanics — same plumbing, just made visible through the queue.
@@ -101,14 +101,14 @@ new mechanics — same plumbing, just made visible through the queue.
 
 ## 3. Operations at a glance
 
-| Op | RPC | Built from | Adds vs today |
-|---|---|---|---|
-| Cancel queued or running | `cancelCommand(requestId)` | Existing `AbortController` + queue tail removal | Tail removal on `queued` entries; `requestCancelled` broadcast |
-| Edit queued | `editQueued(requestId, patch)` | New | Tail-array mutation; rejects when `state !== "queued"` |
-| Pause / Resume | `pauseQueue()` / `resumeQueue()` | New | Sets `paused` flag on `RequestQueue`; gates the drain loop |
-| Interrupt | `interrupt(text, …)` | `cancelCommand` + tail prepend | **Atomic** sequencing under the queue's critical section |
-| Respond to interaction | `respondToInteraction(id, value)` | Existing | New broadcast event so other clients see the interaction was answered |
-| Cancel interaction | `cancelInteraction(id)` | Existing | Same |
+| Op                       | RPC                               | Built from                                      | Adds vs today                                                         |
+| ------------------------ | --------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------- |
+| Cancel queued or running | `cancelCommand(requestId)`        | Existing `AbortController` + queue tail removal | Tail removal on `queued` entries; `requestCancelled` broadcast        |
+| Edit queued              | `editQueued(requestId, patch)`    | New                                             | Tail-array mutation; rejects when `state !== "queued"`                |
+| Pause / Resume           | `pauseQueue()` / `resumeQueue()`  | New                                             | Sets `paused` flag on `RequestQueue`; gates the drain loop            |
+| Interrupt                | `interrupt(text, …)`              | `cancelCommand` + tail prepend                  | **Atomic** sequencing under the queue's critical section              |
+| Respond to interaction   | `respondToInteraction(id, value)` | Existing                                        | New broadcast event so other clients see the interaction was answered |
+| Cancel interaction       | `cancelInteraction(id)`           | Existing                                        | Same                                                                  |
 
 ---
 
@@ -234,10 +234,10 @@ When a running entry calls `clientIO.question()`, the head transitions
 to `state: "running"` with `blockedOn: "interaction"` (queueing doc
 §6.2, §10). Two ops resolve it:
 
-| Op | Effect |
-|---|---|
-| `respondToInteraction(id, value)` | Resumes the paused request with `value`. Entry continues toward `succeeded`/`failed`. |
-| `cancelInteraction(id)` | Rejects the pending Promise. Agent code receives an error and typically fails the request. |
+| Op                                | Effect                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `respondToInteraction(id, value)` | Resumes the paused request with `value`. Entry continues toward `succeeded`/`failed`.      |
+| `cancelInteraction(id)`           | Rejects the pending Promise. Agent code receives an error and typically fails the request. |
 
 Both broadcast a small event (`interactionResponded` /
 `interactionCancelled`) so other connected clients can dismiss any
@@ -256,7 +256,7 @@ These were in earlier drafts and were dropped during review.
 - **`reorderQueued(requestId, newIndex)`** — dropped. A user who
   wants to move an entry should `cancelCommand(entry.requestId)` +
   resubmit at the desired time, or use `interrupt` if they want it
-  to run *next*. Two existing primitives cover the use case; a
+  to run _next_. Two existing primitives cover the use case; a
   dedicated reorder primitive added state-machine surface (and edit
   semantics: does a reordered entry preserve its edit history? what
   about its `submittedAt`?) for marginal benefit.
@@ -274,6 +274,55 @@ These were in earlier drafts and were dropped during review.
   composing N cancels in a row. Until then, the wipe-and-replace is
   user-composed (cancel each + submit) and should feel deliberate.
 
+### 4.8 Wire reference (steering RPCs and events)
+
+The core queueing wire (`submitCommand`, `getQueueSnapshot`,
+`cancelCommand`, `requestQueued` / `requestStarted` /
+`requestCancelled` / `queueStateChanged`) is declared in
+[`messageQueueing.md`](./messageQueueing.md) §8. Steering layers
+these additions on top:
+
+```ts
+// Dispatcher interface additions (steering)
+interface Dispatcher {
+  editQueued(requestId: string, patch: EditPatch): Promise<void>;
+  pauseQueue(): Promise<void>;
+  resumeQueue(): Promise<void>;
+
+  /**
+   * Cancel-current-and-replace, atomically. Returns the same
+   * discriminated-union shape as `submitCommand` (see queueing doc
+   * §6.5) so `queue_full` / `server_stopping` failures travel as
+   * data, not as thrown errors whose subclass identity gets erased
+   * by the RPC layer.
+   */
+  interrupt(
+    text: string,
+    attachments?: string[],
+    options?: ProcessCommandOptions,
+    clientRequestId?: unknown,
+  ): Promise<SubmitResult>;
+}
+
+// ClientIO push events (steering)
+interface ClientIO {
+  requestEdited?(entry: QueuedRequest, oldText: string, version: number): void;
+  queuePaused?(snapshot: QueueSnapshot): void;
+  queueResumed?(snapshot: QueueSnapshot): void;
+  interactionResponded?(interactionId: string, version: number): void;
+  interactionCancelled?(interactionId: string, version: number): void;
+}
+```
+
+All steering events carry the queue's monotonic `version` and follow
+the same watermark / coalescing rules as the queueing events — see
+queueing doc §5.5 and §8.2.
+
+`packages/agentServer/protocol/src/protocol.ts` additions for
+steering: outbound RPCs `editQueued`, `pauseQueue`, `resumeQueue`,
+`interrupt`; push events `requestEdited`, `queuePaused`,
+`queueResumed`, `interactionResponded`, `interactionCancelled`.
+
 ---
 
 ## 5. Ownership and multi-client semantics
@@ -288,15 +337,15 @@ the Shell can edit, cancel, pause, etc., without restriction.
 
 ### 5.1 Multi-client steering matrix
 
-| Action | From originating client | From other connected client | While client is disconnected |
-|---|---|---|---|
-| Submit | OK | OK | N/A |
-| Cancel queued | OK | OK | N/A |
-| Cancel running | OK | OK | N/A |
-| Edit queued | OK | OK (last writer wins) | N/A |
-| Pause / Resume | OK | OK | N/A |
-| Interrupt | OK | OK | N/A |
-| Respond to interaction | OK (existing race) | OK (existing race) | N/A |
+| Action                 | From originating client | From other connected client | While client is disconnected |
+| ---------------------- | ----------------------- | --------------------------- | ---------------------------- |
+| Submit                 | OK                      | OK                          | N/A                          |
+| Cancel queued          | OK                      | OK                          | N/A                          |
+| Cancel running         | OK                      | OK                          | N/A                          |
+| Edit queued            | OK                      | OK (last writer wins)       | N/A                          |
+| Pause / Resume         | OK                      | OK                          | N/A                          |
+| Interrupt              | OK                      | OK                          | N/A                          |
+| Respond to interaction | OK (existing race)      | OK (existing race)          | N/A                          |
 
 ### 5.2 Edit-edit race
 
@@ -336,14 +385,14 @@ Both paths are clean. Document, don't engineer around.
 Slash commands are local to the CLI (no dispatcher involvement) and
 issue RPCs to the agent-server.
 
-| Command | What it calls | Notes |
-|---|---|---|
-| `/queue list` | `getQueueSnapshot()` | Prints running + queued with indices, submit time, and text snippet. |
-| `/queue cancel N` | `cancelCommand(queue[N].requestId)` | Cancel by queue position. Also accepts the requestId directly. |
-| `/queue edit N <text>` | `editQueued(queue[N].requestId, { text })` | Errors with a clear message if entry has already started running. |
-| `/queue pause` | `pauseQueue()` | |
-| `/queue resume` | `resumeQueue()` | Re-prompts the user if `pauseReason === "no-clients"` ("Queue auto-paused while you were away. Resume?"). |
-| `/queue interrupt <text>` | `interrupt(text)` | Or shorthand `/interrupt <text>` (alias). |
+| Command                   | What it calls                              | Notes                                                                                                     |
+| ------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `/queue list`             | `getQueueSnapshot()`                       | Prints running + queued with indices, submit time, and text snippet.                                      |
+| `/queue cancel N`         | `cancelCommand(queue[N].requestId)`        | Cancel by queue position. Also accepts the requestId directly.                                            |
+| `/queue edit N <text>`    | `editQueued(queue[N].requestId, { text })` | Errors with a clear message if entry has already started running.                                         |
+| `/queue pause`            | `pauseQueue()`                             |                                                                                                           |
+| `/queue resume`           | `resumeQueue()`                            | Re-prompts the user if `pauseReason === "no-clients"` ("Queue auto-paused while you were away. Resume?"). |
+| `/queue interrupt <text>` | `interrupt(text)`                          | Or shorthand `/interrupt <text>` (alias).                                                                 |
 
 Prompt indicator (live-updated via `queueStateChanged`):
 
@@ -394,7 +443,27 @@ shows users frequently composing many cancels in a row, we add
 
 ## 7. Multi-client steering test scenarios
 
-(Complements the per-op test list in queueing doc §14.)
+(Complements the queueing test list in
+[`messageQueueing.md`](./messageQueueing.md) §13.)
+
+### 7.1 Per-op steering tests
+
+- **Edit-while-running rejection.** Submit; let it start; attempt
+  `editQueued(running.requestId)`; assert `QueueStateError` (§4.3).
+- **Edit queued + drain.** Submit A, B; edit B; let A complete;
+  assert B runs with the edited text; assert `requestEdited` event
+  carries both new and old text.
+- **Pause + submit + resume.** Pause; submit two entries; assert
+  neither dispatches; resume; assert both run in order (§4.4).
+- **Paused submit accumulates.** Pause; submit three entries; assert
+  all land in the tail and none dispatch; resume; assert FIFO order.
+- **Interrupt cancels current and prepends new.** Submit slow
+  request; interrupt; assert original `cancelled`, new entry runs as
+  next head, rest of queue preserved behind it (§4.5).
+- **Interrupt over empty queue.** Interrupt with no running entry;
+  assert it behaves as a normal `submitCommand`.
+
+### 7.2 Multi-client steering races
 
 - **Edit-edit race.** Two clients call `editQueued` on the same
   entry within a tight loop; assert both `requestEdited` events
