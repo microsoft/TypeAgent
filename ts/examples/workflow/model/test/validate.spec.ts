@@ -207,7 +207,7 @@ describe("validateWorkflowIR", () => {
 
     it("rejects wrong kind", () => {
         const ir = makeMinimalIR();
-        (ir as unknown as Record<string, unknown>).kind = "not-a-workflow";
+        Object.assign(ir, { kind: "not-a-workflow" });
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(false);
     });
@@ -1495,9 +1495,10 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
                         onError: "handler",
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                     handler: {
                         kind: "branch",
                         selectorSchema: { type: "boolean" },
@@ -1713,8 +1714,9 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                 },
                 entry: "producer",
                 output: null,
@@ -1841,7 +1843,8 @@ describe("validateWorkflowIR", () => {
                                         },
                                     },
                                     maxIterations: 5,
-                                } as unknown as LoopNode,
+                                    continueWhen: { $literal: false },
+                                } as LoopNode,
                             },
                             output: null,
                             outputSchema: { type: "null" },
@@ -1849,8 +1852,9 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                 },
                 entry: "producer",
                 output: null,
@@ -2122,9 +2126,10 @@ describe("validateWorkflowIR", () => {
                             i: { $from: "state", name: "i" },
                             // missing "j"
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
                         bind: "out",
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2177,9 +2182,10 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
                         bind: "out",
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2226,9 +2232,10 @@ describe("validateWorkflowIR", () => {
                             i: { $from: "state", name: "i" },
                             phantom: { $from: "state", name: "phantom" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
                         bind: "out",
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2284,9 +2291,10 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             count: { $from: "state", name: "count" },
                         },
+                        continueWhen: { $literal: false },
                         maxIterations: 10,
                         bind: "out",
-                    } as unknown as LoopNode,
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -3699,7 +3707,7 @@ describe("validateWorkflowIR", () => {
     describe("version validation", () => {
         it("rejects IR with wrong version", () => {
             const ir = makeMinimalIR();
-            (ir as unknown as Record<string, unknown>).version = "2";
+            Object.assign(ir, { version: "2" });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(result.errors.some((e) => e.message.includes('"1"'))).toBe(
@@ -3709,7 +3717,7 @@ describe("validateWorkflowIR", () => {
 
         it("rejects IR with missing version", () => {
             const ir = makeMinimalIR();
-            delete (ir as unknown as Record<string, unknown>).version;
+            delete (ir as Partial<WorkflowIR>).version;
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
         });
@@ -3727,7 +3735,7 @@ describe("validateWorkflowIR", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: makeTaskNode({
-                        inputs: { x: { $foo: "bar" } as unknown as Template },
+                        inputs: { x: { $foo: "bar" } },
                         bind: "out",
                     }),
                 },
@@ -3743,7 +3751,11 @@ describe("validateWorkflowIR", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: makeTaskNode({
-                        inputs: { outer: { inner: { $magic: 1 } as unknown as Template } },
+                        inputs: {
+                            outer: {
+                                inner: { $magic: 1 },
+                            },
+                        },
                         bind: "out",
                     }),
                 },
@@ -3786,7 +3798,7 @@ describe("validateWorkflowIR", () => {
 
         it("rejects unknown $-prefixed key in workflow output template", () => {
             const ir = makeMinimalIR({
-                output: { $bad: "value" } as unknown as Template,
+                output: { $bad: "value" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
@@ -3824,7 +3836,9 @@ describe("validateWorkflowIR", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                inputs: { bad: { $weirdA: 1 } as unknown as Template },
+                                inputs: {
+                                    bad: { $weirdA: 1 },
+                                },
                                 scope: {
                                     inputSchema: {},
                                     entry: "a_step",
