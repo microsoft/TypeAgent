@@ -948,6 +948,10 @@ export class ChatView {
 
     addRemoteUserMessage(requestId: RequestId, command: string) {
         const id = requestId.requestId;
+        // LOAD-BEARING IDEMPOTENCE: callers in `getOrMaterializeRemoteMessageGroup`
+        // (queue events) and `main.ts/setUserRequest` (processing start) both fire
+        // for the same remote requestId; the `idToMessageGroup.has(id)` guard is
+        // what prevents duplicate bubbles. Do not remove without replacing.
         if (!id || this.idToMessageGroup.has(id)) {
             return;
         }
@@ -1262,18 +1266,22 @@ export class ChatView {
     }
 
     /**
-     * Cancel a single queued entry from the per-bubble X button. Errors are
-     * swallowed; the server's `requestCancelled` broadcast updates the chip.
+     * Cancel a single queued entry from the per-bubble X button. The
+     * authoritative UI update arrives via the server's `requestCancelled`
+     * broadcast; rejection here means the cancel never reached the server.
      */
     private cancelQueuedById(requestId: string): void {
         const dispatcher = this._dispatcher;
         if (!dispatcher) return;
         try {
-            void Promise.resolve(dispatcher.cancelCommand(requestId)).catch(
-                () => {},
-            );
-        } catch {
-            // Channel gone; nothing to cancel.
+            // cancelCommand returns Promise<CancelResult>; warn on rejection
+            // so a wedged dispatcher doesn't silently drop the user's click.
+            dispatcher.cancelCommand(requestId).catch((err) => {
+                console.warn(`cancelQueuedById(${requestId}) rejected:`, err);
+            });
+        } catch (err) {
+            // Sync throw — disconnected channel stub.
+            console.warn(`cancelQueuedById(${requestId}) threw:`, err);
         }
     }
 

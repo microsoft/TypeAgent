@@ -50,6 +50,11 @@ export class MessageGroup {
     // the feedback widget is attached only after this is set.
     private _requestId: RequestId | undefined;
     private _currentFeedback: UserFeedbackEntry | null = null;
+    // LOAD-BEARING IDEMPOTENCE: `notifyCancelled` is invoked from two
+    // independent paths — `requestCompleted({cancelled:true})` for local-origin
+    // groups and `ChatView.onRequestCancelled` for remote-origin groups (and
+    // both fire for locally-originated requests). This flag prevents
+    // double-painting "⚠ Cancelled". Do not remove without rewiring both paths.
     private cancelledRendered = false;
 
     public get requestId(): RequestId | undefined {

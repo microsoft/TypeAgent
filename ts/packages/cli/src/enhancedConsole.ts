@@ -268,10 +268,14 @@ function tryCancelRunningHead(
     const running = cliQueueState?.running?.requestId ?? currentRequestId;
     if (running) {
         try {
-            // cancelCommand returns Promise<CancelResult>; swallow rejections.
-            dispatcher.cancelCommand(running).catch(() => {});
-        } catch {
-            // Channel gone (sync throw on disconnected stub); nothing to cancel.
+            // cancelCommand returns Promise<CancelResult>; warn on rejection
+            // so a wedged dispatcher doesn't silently drop the user's Esc.
+            dispatcher.cancelCommand(running).catch((err) => {
+                console.warn(`cancelCommand(${running}) rejected:`, err);
+            });
+        } catch (err) {
+            // Sync throw — disconnected channel stub.
+            console.warn(`cancelCommand(${running}) threw:`, err);
         }
         return true;
     }
@@ -279,15 +283,20 @@ function tryCancelRunningHead(
         try {
             // cancelCommandByClientId is sync (void).
             dispatcher.cancelCommandByClientId(currentClientRequestId);
-        } catch {
-            // Channel gone; nothing to cancel.
+        } catch (err) {
+            console.warn(
+                `cancelCommandByClientId(${currentClientRequestId}) threw:`,
+                err,
+            );
         }
         return true;
     }
     return false;
 }
 
-// Latest snapshot pushed by the SharedDispatcher; undefined when no queueing dispatcher is connected.
+// Latest snapshot pushed by the Dispatcher's QueueBroadcaster (fanned out via
+// SharedDispatcher's ClientIO wrapper); undefined when no queueing dispatcher
+// is connected.
 let cliQueueState: QueueSnapshot | undefined;
 // Watermark for queue event versions; events strictly older are dropped as stale reorders.
 let lastAppliedVersion = -1;
