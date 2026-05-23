@@ -32,6 +32,7 @@ import type {
     QueueCancelReason,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
+import { QueueStateMirror } from "@typeagent/dispatcher-types";
 import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
 import fs from "fs";
@@ -265,7 +266,8 @@ function tryCancelRunningHead(
     dispatcher: Dispatcher | undefined = moduleDispatcherRef.current,
 ): boolean {
     if (!dispatcher) return false;
-    const running = cliQueueState?.running?.requestId ?? currentRequestId;
+    const running =
+        queueMirror.snapshot?.running?.requestId ?? currentRequestId;
     if (running) {
         try {
             // cancelCommand returns Promise<CancelResult>; warn on rejection
@@ -294,12 +296,10 @@ function tryCancelRunningHead(
     return false;
 }
 
-// Latest snapshot pushed by the Dispatcher's QueueBroadcaster (fanned out via
-// SharedDispatcher's ClientIO wrapper); undefined when no queueing dispatcher
-// is connected.
-let cliQueueState: QueueSnapshot | undefined;
-// Watermark for queue event versions; events strictly older are dropped as stale reorders.
-let lastAppliedVersion = -1;
+// Mirror of the server's per-conversation queue, owned by this CLI process.
+// Holds the snapshot + monotonic version watermark + admission policy; pure
+// data — UI side effects live in the event handlers below.
+const queueMirror = new QueueStateMirror();
 // Tracks recent submits from THIS CLI so requestStarted doesn't double-print; pruned per access.
 const RECENT_SUBMITTED_TTL_MS = 60_000;
 const recentlySubmittedRequestIds = new Map<string, number>();
@@ -335,9 +335,9 @@ function isOurEntry(entry: QueuedRequest): boolean {
     return ourId !== undefined && entry.originatorConnectionId === ourId;
 }
 
-/** Snapshot getter — used by /queue list and tests. */
+/** Snapshot getter — used by /queue list, prompt rendering, and tests. */
 export function getCliQueueState(): QueueSnapshot | undefined {
-    return cliQueueState;
+    return queueMirror.snapshot;
 }
 
 /** @internal Test-only accessors. Do NOT call from production code. */
@@ -357,11 +357,7 @@ export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
  * events are admitted. Pass `undefined` to clear after disconnect.
  */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
-    cliQueueState = snapshot;
-    lastAppliedVersion =
-        snapshot && typeof snapshot.version === "number"
-            ? snapshot.version
-            : -1;
+    queueMirror.reset(snapshot);
 }
 
 /**
@@ -404,18 +400,6 @@ export async function cancelAllInQueue(
         running: runningCancelled,
         queued: queuedCancelled,
     };
-}
-
-/**
- * Admit a queue event by version. Returns false if strictly older than the
- * watermark (stale reorder). Uses strict `<` so paired same-version
- * snapshots reconcile after each fine-grained event.
- */
-function admitVersion(version: number | undefined): boolean {
-    if (typeof version !== "number") return true;
-    if (version < lastAppliedVersion) return false;
-    lastAppliedVersion = version;
-    return true;
 }
 
 // Grammar log file path
@@ -1317,21 +1301,11 @@ export function createEnhancedClientIO(
 
         // Server-side queue push events
         requestQueued(entry: QueuedRequest, version: number): void {
-            if (!admitVersion(version)) return;
-            cliQueueState = applyEntryToSnapshot(
-                cliQueueState,
-                "queued",
-                entry,
-            );
+            if (!queueMirror.applyQueued(entry, version).admitted) return;
             redrawPromptIfActive();
         },
         requestStarted(entry: QueuedRequest, version: number): void {
-            if (!admitVersion(version)) return;
-            cliQueueState = applyEntryToSnapshot(
-                cliQueueState,
-                "started",
-                entry,
-            );
+            if (!queueMirror.applyStarted(entry, version).admitted) return;
             // Suppress the marker if THIS CLI submitted the entry (otherwise we double-print).
             const isOurs =
                 isOurEntry(entry) || consumeSubmittedId(entry.requestId);
@@ -1349,15 +1323,15 @@ export function createEnhancedClientIO(
             reason: QueueCancelReason,
             version: number,
         ): void {
-            if (!admitVersion(version)) return;
-            const cancelledText = removeFromSnapshot(cliQueueState, requestId);
+            const result = queueMirror.applyCancelled(requestId, version);
+            if (!result.admitted) return;
             // Clear currentRequestId if it matches so SIGINT doesn't target a stale id.
             if (currentRequestId === requestId) {
                 currentRequestId = undefined;
             }
             consumeSubmittedId(requestId);
             redrawPromptIfActive();
-            if (cancelledText !== undefined) {
+            if (result.cancelledText !== undefined) {
                 // Distinct rendering for server-stopping so users know the cancel wasn't theirs.
                 const label =
                     reason === "server_stopping"
@@ -1365,22 +1339,15 @@ export function createEnhancedClientIO(
                         : chalk.yellow("✗ cancelled: ");
                 writeQueueLine(
                     label +
-                        chalk.dim(truncateText(cancelledText)) +
+                        chalk.dim(truncateText(result.cancelledText)) +
                         chalk.dim(` (${reason})`),
                 );
             }
         },
         queueStateChanged(snapshot: QueueSnapshot): void {
-            if (!admitVersion(snapshot.version)) return;
-            // Authoritative replacement — clone to insulate from server-side mutations.
-            const prevBadge = computeBadgeState(cliQueueState);
-            cliQueueState = {
-                running: snapshot.running ? { ...snapshot.running } : null,
-                queued: snapshot.queued.map((e) => ({ ...e })),
-                paused: snapshot.paused,
-                version: snapshot.version,
-            };
-            const nextBadge = computeBadgeState(cliQueueState);
+            const prevBadge = computeBadgeState(queueMirror.snapshot);
+            if (!queueMirror.applyQueueStateChanged(snapshot).admitted) return;
+            const nextBadge = computeBadgeState(queueMirror.snapshot);
             // Only repaint when the visible badge changed (avoids flicker on no-op snapshots).
             if (prevBadge !== nextBadge) {
                 redrawPromptIfActive();
@@ -1434,60 +1401,6 @@ function writeQueueLine(text: string): void {
         return;
     }
     process.stdout.write(text + "\n");
-}
-
-/**
- * Apply a single queued/started transition to the cached snapshot.
- * `queueStateChanged` remains authoritative; this keeps the badge fresh
- * between full snapshots. Never mutates the input.
- */
-function applyEntryToSnapshot(
-    snap: QueueSnapshot | undefined,
-    kind: "queued" | "started",
-    entry: QueuedRequest,
-): QueueSnapshot {
-    const base: QueueSnapshot = snap
-        ? {
-              running: snap.running ? { ...snap.running } : null,
-              queued: snap.queued.map((e) => ({ ...e })),
-              paused: snap.paused,
-              version: snap.version,
-          }
-        : {
-              running: null,
-              queued: [],
-              paused: false,
-              version: lastAppliedVersion,
-          };
-    if (kind === "queued") {
-        if (!base.queued.some((e) => e.requestId === entry.requestId)) {
-            base.queued.push({ ...entry });
-        }
-        return base;
-    }
-    // "started" — entry left the queue head and is now running.
-    base.queued = base.queued.filter((e) => e.requestId !== entry.requestId);
-    base.running = { ...entry };
-    return base;
-}
-
-/** Remove an entry from the cached snapshot; returns its text if found. */
-function removeFromSnapshot(
-    snap: QueueSnapshot | undefined,
-    requestId: string,
-): string | undefined {
-    if (!snap) return undefined;
-    if (snap.running?.requestId === requestId) {
-        const t = snap.running.text;
-        snap.running = null;
-        return t;
-    }
-    const idx = snap.queued.findIndex((e) => e.requestId === requestId);
-    if (idx >= 0) {
-        const [removed] = snap.queued.splice(idx, 1);
-        return removed.text;
-    }
-    return undefined;
 }
 
 // Helper functions
@@ -1763,10 +1676,10 @@ async function questionWithCompletion(
 
             // Hint line
             let hint: string;
+            const queueSnap = queueMirror.snapshot;
             const queueBusy =
-                cliQueueState !== undefined &&
-                (cliQueueState.running ? 1 : 0) + cliQueueState.queued.length >
-                    0;
+                queueSnap !== undefined &&
+                (queueSnap.running ? 1 : 0) + queueSnap.queued.length > 0;
             const queueHint = queueBusy ? " · esc esc clear queue" : "";
             if (filteredCompletions.length > 0) {
                 hint = "↑↓ completions · tab accept · esc clear" + queueHint;
@@ -1909,7 +1822,7 @@ async function questionWithCompletion(
                     tryCancelRunningHead();
                 }
                 if (isDouble) {
-                    const snap = cliQueueState;
+                    const snap = queueMirror.snapshot;
                     const total =
                         (snap?.running ? 1 : 0) + (snap?.queued.length ?? 0);
                     if (total > 0) {
@@ -2311,7 +2224,7 @@ function startExecutionKeyListener(
     const tryCancelRunning = (): boolean => tryCancelRunningHead(dispatcher);
 
     const printNoRunningHint = () => {
-        const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
+        const hasQueued = (queueMirror.snapshot?.queued.length ?? 0) > 0;
         if (hasQueued) {
             writeQueueLine(
                 chalk.dim(
@@ -2426,7 +2339,7 @@ export async function processCommandsEnhanced<T>(
             if (tryCancelRunningHead(getDispatcher())) {
                 return;
             }
-            const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
+            const hasQueued = (queueMirror.snapshot?.queued.length ?? 0) > 0;
             const msg = hasQueued
                 ? "No request currently running. Use /queue cancel <id> to cancel queued requests."
                 : "Nothing running. Use /queue cancel <id> to cancel queued requests.";
@@ -2673,12 +2586,12 @@ function getNextInput(
 
 /**
  * Live `(queue: N) ` prefix for the interactive prompt; empty when nothing to surface.
- * Re-derived at render time so it stays in sync with `cliQueueState` between Enter presses.
+ * Re-derived at render time so it stays in sync with the queue mirror between Enter presses.
  * A `running` entry that matches `currentRequestId` or was recently submitted from THIS
  * CLI is not counted — the spinner / "▶ running" marker already conveys it.
  */
 export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
-    const s = snap ?? cliQueueState;
+    const s = snap ?? queueMirror.snapshot;
     const queuedCount = s?.queued.length ?? 0;
     const runningOther =
         s?.running &&

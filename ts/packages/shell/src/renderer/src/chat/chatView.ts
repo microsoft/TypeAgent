@@ -27,6 +27,11 @@ import {
     UserFeedbackEntry,
     UserMessageHiddenEntry,
 } from "agent-dispatcher";
+// QueueStateMirror is a class (value, not just a type), so we import it from
+// the pure types package directly. Importing it via `agent-dispatcher` would
+// force vite to pull `agent-dispatcher`'s server-only transitive deps
+// (telemetry, node:fs, ...) into the renderer bundle.
+import { QueueStateMirror } from "@typeagent/dispatcher-types";
 
 import { PartialCompletion } from "../partial";
 import { ChoicePanel, InputChoice } from "../choicePanel";
@@ -85,10 +90,13 @@ export class ChatView {
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
 
-    /** Latest server-side queue snapshot; bootstrapped on (re)connect. */
-    private queueSnapshot: QueueSnapshot | undefined;
-    /** Drops out-of-order push events whose version is older. Reset by applyQueueSnapshot. */
-    private lastAppliedQueueVersion = -1;
+    /**
+     * Mirror of the server's per-conversation queue. Owns the snapshot,
+     * monotonic version watermark, and stale-event admission policy. UI
+     * side effects (chip stamping, MG materialization) live in the event
+     * handlers below.
+     */
+    private queueMirror = new QueueStateMirror();
     /** Queue status chips deferred until their MessageGroup is created. */
     private pendingQueueStatus = new Map<string, "queued" | "running">();
     /** Timestamp of the last Escape press; powers the double-Escape gesture. */
@@ -462,7 +470,7 @@ export class ChatView {
      * server's `requestCancelled` broadcasts drive the UI updates.
      */
     private async cancelAllQueuedAndRunning(): Promise<void> {
-        const snap = this.queueSnapshot;
+        const snap = this.queueMirror.snapshot;
         const dispatcher = this._dispatcher;
         if (!dispatcher || !snap) return;
         const ids: string[] = [];
@@ -1058,58 +1066,28 @@ export class ChatView {
 
     /** Bootstrap from `JoinConversationResult.queueSnapshot`. */
     public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
-        const prev = this.queueSnapshot;
-        this.queueSnapshot = snapshot
-            ? this.cloneSnapshot(snapshot)
-            : undefined;
-        this.lastAppliedQueueVersion =
-            snapshot && typeof snapshot.version === "number"
-                ? snapshot.version
-                : -1;
+        const prev = this.queueMirror.snapshot;
+        this.queueMirror.reset(snapshot);
         this.reconcileChipsToSnapshot(prev, snapshot);
     }
 
-    /**
-     * Admit `version` if not strictly older than the watermark. Same-version
-     * events are admitted so an authoritative `queueStateChanged` can overwrite
-     * a paired fine-grained event. Undefined versions are always admitted.
-     */
-    private admitVersion(version: number | undefined): boolean {
-        if (typeof version !== "number") return true;
-        if (version < this.lastAppliedQueueVersion) return false;
-        this.lastAppliedQueueVersion = version;
-        return true;
-    }
-
     public onRequestQueued(entry: QueuedRequest, version: number): void {
-        if (!this.admitVersion(version)) return;
-        const snap = this.ensureSnapshot();
-        if (!snap.queued.some((e) => e.requestId === entry.requestId)) {
-            snap.queued.push({ ...entry });
-        }
+        if (!this.queueMirror.applyQueued(entry, version).admitted) return;
         this.tryApplyQueueStatusToGroup(entry, "queued");
     }
 
     public onRequestStarted(entry: QueuedRequest, version: number): void {
-        if (!this.admitVersion(version)) return;
-        const snap = this.ensureSnapshot();
-        snap.queued = snap.queued.filter(
-            (e) => e.requestId !== entry.requestId,
-        );
-        // The previous running entry (if any and not this one) just completed —
-        // its `queueStateChanged(running:null)` broadcast was collapsed by the
-        // coalescer with this start. Clear its chip explicitly; otherwise the
-        // intermediate item stays stuck on "running" forever (only the first
-        // and last items in a multi-item queue get cleared via the trailing
-        // running:null snapshot).
-        const prevRunning = snap.running;
-        if (prevRunning && prevRunning.requestId !== entry.requestId) {
-            this.pendingQueueStatus.delete(prevRunning.requestId);
-            this.idToMessageGroup
-                .get(prevRunning.requestId)
-                ?.setQueueStatus(null);
+        const result = this.queueMirror.applyStarted(entry, version);
+        if (!result.admitted) return;
+        // The coalescer often collapses the previously-running entry's
+        // `queueStateChanged(running:null)` with this start event into a
+        // single emit. Clear the prior chip explicitly; otherwise the
+        // intermediate item stays stuck on "running" forever.
+        if (result.previousRunning) {
+            const prevId = result.previousRunning.requestId;
+            this.pendingQueueStatus.delete(prevId);
+            this.idToMessageGroup.get(prevId)?.setQueueStatus(null);
         }
-        snap.running = { ...entry };
         this.tryApplyQueueStatusToGroup(entry, "running");
     }
 
@@ -1118,14 +1096,8 @@ export class ChatView {
         _reason: QueueCancelReason,
         version: number,
     ): void {
-        if (!this.admitVersion(version)) return;
-        const snap = this.queueSnapshot;
-        if (!snap) return;
-        if (snap.running?.requestId === requestId) {
-            snap.running = null;
-        } else {
-            snap.queued = snap.queued.filter((e) => e.requestId !== requestId);
-        }
+        if (!this.queueMirror.applyCancelled(requestId, version).admitted)
+            return;
         // Clear any chip and pending status for the cancelled entry.
         this.pendingQueueStatus.delete(requestId);
         const mg = this.idToMessageGroup.get(requestId);
@@ -1141,10 +1113,9 @@ export class ChatView {
     }
 
     public onQueueStateChanged(snapshot: QueueSnapshot): void {
-        if (!this.admitVersion(snapshot.version)) return;
-        const prev = this.queueSnapshot;
-        this.queueSnapshot = this.cloneSnapshot(snapshot);
-        this.reconcileChipsToSnapshot(prev, snapshot);
+        const result = this.queueMirror.applyQueueStateChanged(snapshot);
+        if (!result.admitted) return;
+        this.reconcileChipsToSnapshot(result.previous, snapshot);
     }
 
     /**
@@ -1179,27 +1150,6 @@ export class ChatView {
                 this.pendingQueueStatus.delete(id);
             }
         }
-    }
-
-    private cloneSnapshot(snap: QueueSnapshot): QueueSnapshot {
-        return {
-            running: snap.running ? { ...snap.running } : null,
-            queued: snap.queued.map((e) => ({ ...e })),
-            paused: snap.paused,
-            version: snap.version,
-        };
-    }
-
-    private ensureSnapshot(): QueueSnapshot {
-        if (!this.queueSnapshot) {
-            this.queueSnapshot = {
-                running: null,
-                queued: [],
-                paused: false,
-                version: this.lastAppliedQueueVersion,
-            };
-        }
-        return this.queueSnapshot;
     }
 
     /**
