@@ -1126,6 +1126,12 @@ export class ChatView {
         const mg = this.idToMessageGroup.get(requestId);
         if (mg) {
             mg.setQueueStatus(null);
+            // For remote-origin bubbles there is no commandResult promise to
+            // resolve, so this is the only signal that lets us render the
+            // "⚠ Cancelled" affordance. notifyCancelled is idempotent, so
+            // local-origin bubbles whose requestCompleted already fired are
+            // unaffected.
+            mg.notifyCancelled();
         }
     }
 
@@ -1194,15 +1200,34 @@ export class ChatView {
     /**
      * Apply a chip to the matching MessageGroup, or stash the status in
      * `pendingQueueStatus` so it's applied when the MG materializes.
+     *
+     * Remote-originator entries (submitted from another client like the CLI)
+     * have no local MessageGroup yet — `setUserRequest` for them isn't
+     * broadcast until the entry actually starts processing. We materialize a
+     * remote user bubble eagerly from the entry text so peer clients see
+     * "queued" / "running" bubbles in real time instead of after the fact.
      */
     private tryApplyQueueStatusToGroup(
         entry: QueuedRequest,
         status: "queued" | "running" | null,
     ): void {
-        const mg = this.getMessageGroup({
+        const requestId: RequestId = {
             requestId: entry.requestId,
             clientRequestId: entry.clientRequestId,
-        });
+        };
+        let mg = this.idToMessageGroup.get(entry.requestId);
+        if (
+            !mg &&
+            status !== null &&
+            entry.text &&
+            !this.isLocalRequest(requestId)
+        ) {
+            this.addRemoteUserMessage(requestId, entry.text);
+            mg = this.idToMessageGroup.get(entry.requestId);
+        }
+        if (!mg) {
+            mg = this.getMessageGroup(requestId);
+        }
         const onCancel =
             status === "queued"
                 ? () => this.cancelQueuedById(entry.requestId)

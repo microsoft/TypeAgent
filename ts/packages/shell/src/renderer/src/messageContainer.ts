@@ -399,9 +399,18 @@ export class MessageContainer {
                 btn.style.color = "inherit";
                 btn.style.cursor = "pointer";
                 btn.style.lineHeight = "0";
+                btn.style.overflow = "hidden";
                 const x = iconX();
-                x.setAttribute("width", "6");
-                x.setAttribute("height", "6");
+                // iconX returns an <i> wrapper; size the inner <svg> directly.
+                x.style.display = "inline-flex";
+                x.style.width = "8px";
+                x.style.height = "8px";
+                const svg = x.querySelector("svg");
+                if (svg) {
+                    svg.setAttribute("width", "8");
+                    svg.setAttribute("height", "8");
+                    (svg as SVGElement).style.display = "block";
+                }
                 btn.appendChild(x);
                 btn.addEventListener("click", (e) => {
                     e.preventDefault();

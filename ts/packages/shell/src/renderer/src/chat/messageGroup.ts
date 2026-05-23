@@ -47,6 +47,7 @@ export class MessageGroup {
     // the feedback widget is attached only after this is set.
     private _requestId: RequestId | undefined;
     private _currentFeedback: UserFeedbackEntry | null = null;
+    private cancelledRendered = false;
 
     public get requestId(): RequestId | undefined {
         return this._requestId;
@@ -210,16 +211,7 @@ export class MessageGroup {
     private requestCompleted(result: CommandResult | undefined) {
         this.updateMetrics(result?.metrics);
         if (result?.cancelled) {
-            const lastAgentMessage = this.getLastAgentMessage();
-            if (lastAgentMessage !== undefined) {
-                lastAgentMessage.setMessage("⚠  Cancelled", "shell", "block");
-                this.chatView.updateScroll();
-            } else {
-                this.addStatusMessage(
-                    { message: "⚠  Cancelled", source: "shell" },
-                    false,
-                );
-            }
+            this.notifyCancelled();
         } else if (
             this.statusMessage === undefined &&
             this.agentMessages.length === 0
@@ -446,6 +438,27 @@ export class MessageGroup {
         onCancel?: () => void,
     ) {
         this.userMessage.setQueueStatus(status, onCancel);
+    }
+
+    /**
+     * Render the "⚠ Cancelled" affordance for this group. Idempotent: safe to
+     * call from both the local `requestCompleted({cancelled:true})` path and the
+     * remote `requestCancelled` broadcast (which is the only signal for groups
+     * that didn't originate locally, since they have no completion promise).
+     */
+    public notifyCancelled() {
+        if (this.cancelledRendered) return;
+        this.cancelledRendered = true;
+        const lastAgentMessage = this.getLastAgentMessage();
+        if (lastAgentMessage !== undefined) {
+            lastAgentMessage.setMessage("⚠  Cancelled", "shell", "block");
+            this.chatView.updateScroll();
+        } else {
+            this.addStatusMessage(
+                { message: "⚠  Cancelled", source: "shell" },
+                false,
+            );
+        }
     }
 
     public notifyExplained(data: NotifyExplainedData) {
