@@ -80,5 +80,17 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         onUserHide(...args): void {
             return rpc.send("onUserHide", ...args);
         },
+        requestQueued(...args): void {
+            return rpc.send("requestQueued", ...args);
+        },
+        requestStarted(...args): void {
+            return rpc.send("requestStarted", ...args);
+        },
+        requestCancelled(...args): void {
+            return rpc.send("requestCancelled", ...args);
+        },
+        queueStateChanged(...args): void {
+            return rpc.send("queueStateChanged", ...args);
+        },
     };
 }

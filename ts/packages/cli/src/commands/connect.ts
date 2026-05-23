@@ -9,11 +9,15 @@ import {
     processCommandsEnhanced,
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
+    applyQueueSnapshot,
+    clearRecentSubmissions,
 } from "../enhancedConsole.js";
 import {
     setConversationCommandContext,
     setServerPort,
     setServerConnection,
+    setQueueDispatcher,
+    setCliConnectionId,
 } from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
@@ -337,6 +341,11 @@ export default class Connect extends Command {
                 saveLastConversationId(activeConversationId);
             }
             bindDispatcher(activeDispatcher);
+            // Wire slash-command dispatcher and bootstrap the queue snapshot for the first prompt.
+            setQueueDispatcher(activeDispatcher);
+            setCliConnectionId(conversation.connectionId);
+            clearRecentSubmissions();
+            applyQueueSnapshot(conversation.queueSnapshot);
             await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
             // Set up ConversationCommandContext for @conversation commands.
@@ -365,6 +374,10 @@ export default class Connect extends Command {
                         activeConversationId = newConversation.conversationId;
                         activeName = newConversation.name;
                         bindDispatcher(activeDispatcher);
+                        setQueueDispatcher(activeDispatcher);
+                        setCliConnectionId(newConversation.connectionId);
+                        clearRecentSubmissions();
+                        applyQueueSnapshot(newConversation.queueSnapshot);
                         if (!isEphemeral) {
                             saveLastConversationId(activeConversationId);
                         }
@@ -414,7 +427,13 @@ export default class Connect extends Command {
                     },
                     activeDispatcher,
                     undefined,
-                    createCompletionController(activeDispatcher),
+                    createCompletionController({
+                        getCommandCompletion: (input, direction) =>
+                            activeDispatcher.getCommandCompletion(
+                                input,
+                                direction,
+                            ),
+                    }),
                     activeDispatcher,
                     () => loadUserSettings().ui.autoComplete,
                 );

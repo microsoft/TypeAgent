@@ -36,6 +36,7 @@ import {
     ClientIO,
     Dispatcher,
     PendingInteractionResponse,
+    QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
 import { swapContent } from "./setContent";
@@ -948,12 +949,28 @@ function registerClient(
         onUserHide: (entry) => {
             chatView.applyHide(entry);
         },
+        // Server-side queue push events.
+        requestQueued: (entry, version) => {
+            chatView.onRequestQueued(entry, version);
+        },
+        requestStarted: (entry, version) => {
+            chatView.onRequestStarted(entry, version);
+        },
+        requestCancelled: (requestId, reason, version) => {
+            chatView.onRequestCancelled(requestId, reason, version);
+        },
+        queueStateChanged: (snapshot) => {
+            chatView.onQueueStateChanged(snapshot);
+        },
     };
 
     const client: Client = {
         clientIO,
-        async dispatcherInitialized(d: Dispatcher): Promise<void> {
-            chatView.initializeDispatcher(d);
+        async dispatcherInitialized(
+            d: Dispatcher,
+            initialQueueSnapshot?: QueueSnapshot,
+        ): Promise<void> {
+            chatView.initializeDispatcher(d, initialQueueSnapshot);
             await chatHistoryReady;
 
             // Signal that the dispatcher is fully initialised.
@@ -1052,8 +1069,13 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
-        conversationChanged(_conversationId: string, _name: string): void {
-            // Conversation changed — no UI to update (dropdown removed)
+        conversationChanged(
+            _conversationId: string,
+            _name: string,
+            queueSnapshot?: QueueSnapshot,
+        ): void {
+            // Re-bootstrap the queue snapshot for the new conversation's version stream.
+            chatView.applyQueueSnapshot(queueSnapshot);
         },
         markHistoryEntries(): void {
             for (const child of chatView.getScrollContainer().children) {

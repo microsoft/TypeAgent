@@ -88,6 +88,11 @@ export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
     name: string;
+    /** Server-assigned connectionId for this client (e.g. to label own queued requests). */
+    connectionId: string;
+    /** Server-side queue snapshot at join time, so clients can render correct
+     *  queue state when joining mid-queue. Omitted by older servers. */
+    queueSnapshot?: JoinConversationResult["queueSnapshot"];
 };
 
 export type AgentServerConnection = {
@@ -188,6 +193,8 @@ export async function connectAgentServer(
                     dispatcher,
                     conversationId,
                     name: result.name,
+                    connectionId: result.connectionId,
+                    queueSnapshot: result.queueSnapshot,
                 };
             },
 

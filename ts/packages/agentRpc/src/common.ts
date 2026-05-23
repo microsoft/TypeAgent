@@ -192,15 +192,15 @@ export function createChannelProvider(
         return channelAdapter.channel;
     }
 
-    function deleteChannel(name: string) {
-        debug(`deleteChannel ${name}`);
-        const channel = channelAdapters.get(name);
+    function deleteChannel(channelName: string) {
+        debug(`deleteChannel ${channelName}`);
+        const channel = channelAdapters.get(channelName);
         if (channel) {
-            channelAdapters.delete(name);
+            channelAdapters.delete(channelName);
             channel.notifyDisconnected();
-            debug(`deleteChannel ${name} - deleted`);
+            debug(`deleteChannel ${channelName} - deleted`);
         } else {
-            debug(`deleteChannel ${name} - already deleted, ignoring`);
+            debug(`deleteChannel ${channelName} - already deleted, ignoring`);
         }
     }
     return {
