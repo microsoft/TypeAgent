@@ -14,17 +14,10 @@ import {
     RequestId,
 } from "agent-dispatcher";
 import type {
-    CancelResult,
     PendingInteractionRequest,
     PendingInteractionResponse,
     QueueCancelReason,
-    QueuedRequest,
     QueueSnapshot,
-    SubmitResult,
-} from "@typeagent/dispatcher-types";
-import {
-    QueueFullError,
-    ServerStoppingError,
 } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
@@ -32,8 +25,6 @@ import {
     createDispatcherFromContext,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
-import { RequestQueue, type QueueExecutionContext } from "./requestQueue.js";
-import { createSnapshotCoalescer } from "./snapshotCoalescer.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -75,12 +66,19 @@ export async function createSharedDispatcher(
         name: string,
         requestId: RequestId | undefined,
         fn: (clientIO: ClientIO) => void,
+        options?: { skipOriginator?: boolean },
     ): number => {
         let count = 0;
         for (const [connectionId, clientRecord] of clients) {
             if (
                 clientRecord.filter &&
                 requestId?.connectionId !== connectionId
+            ) {
+                continue;
+            }
+            if (
+                options?.skipOriginator === true &&
+                requestId?.connectionId === connectionId
             ) {
                 continue;
             }
@@ -194,14 +192,15 @@ export async function createSharedDispatcher(
             // Mark the running entry blocked so the queue snapshot and
             // no-clients grace timer can react.
             const rid = requestId?.requestId;
-            if (rid !== undefined) requestQueue.markBlocked(rid, "interaction");
+            if (rid !== undefined)
+                context.requestQueue.markBlocked(rid, "interaction");
             try {
                 return await pendingInteractions.create<number>(
                     request,
                     INTERACTION_TIMEOUT_MS.question,
                 );
             } finally {
-                if (rid !== undefined) requestQueue.markUnblocked(rid);
+                if (rid !== undefined) context.requestQueue.markUnblocked(rid);
             }
         },
 
@@ -230,22 +229,48 @@ export async function createSharedDispatcher(
             );
 
             const rid = requestId?.requestId;
-            if (rid !== undefined) requestQueue.markBlocked(rid, "interaction");
+            if (rid !== undefined)
+                context.requestQueue.markBlocked(rid, "interaction");
             try {
                 return await pendingInteractions.create<unknown>(
                     request,
                     INTERACTION_TIMEOUT_MS.proposeAction,
                 );
             } finally {
-                if (rid !== undefined) requestQueue.markUnblocked(rid);
+                if (rid !== undefined) context.requestQueue.markUnblocked(rid);
             }
         },
 
         notify: (notificationId, ...args) => {
+            const event = args[0] as unknown;
             broadcast(
                 "notify",
                 typeof notificationId === "string" ? undefined : notificationId,
                 (clientIO) => clientIO.notify(notificationId, ...args),
+                // Originator gets commandComplete via processCommand RPC return;
+                // sending it again causes double-completion in some clients
+                // (e.g. vscode-shell).
+                { skipOriginator: event === "commandComplete" },
+            );
+        },
+        requestQueued: (entry, version) => {
+            broadcast("requestQueued", undefined, (cio) =>
+                cio.requestQueued?.(entry, version),
+            );
+        },
+        requestStarted: (entry, version) => {
+            broadcast("requestStarted", undefined, (cio) =>
+                cio.requestStarted?.(entry, version),
+            );
+        },
+        requestCancelled: (requestId, reason, version) => {
+            broadcast("requestCancelled", undefined, (cio) =>
+                cio.requestCancelled?.(requestId, reason, version),
+            );
+        },
+        queueStateChanged: (snapshot) => {
+            broadcast("queueStateChanged", undefined, (cio) =>
+                cio.queueStateChanged?.(snapshot),
             );
         },
         openLocalView: async (requestId, ...args) =>
@@ -374,122 +399,18 @@ export async function createSharedDispatcher(
     }
 
     const dispatchers = new Map<string, Dispatcher>();
-    /**
-     * Per-connection inner processCommand functions (wrapped for displayLog +
-     * commandComplete broadcast, but NOT for queue submission — these run
-     * UNDER the queue's drain loop). The queue executes via this map, falling
-     * back to the bare dispatcher if the originator has disconnected.
-     */
-    const innerProcessCommands = new Map<
-        string,
-        (
-            command: string,
-            clientRequestId: unknown,
-            attachments: string[] | undefined,
-            options: any,
-            requestId: string,
-        ) => Promise<any>
-    >();
 
-    // Bare per-connection dispatcher used by the drain loop when the originator
-    // has disconnected. Bypasses per-connection wrappers but still produces
-    // setUserRequest/setDisplay broadcasts to remaining clients.
-    const bareDispatcher = createDispatcherFromContext(context, undefined);
+    // No-clients grace timer: when the last client disconnects, give a brief
+    // window for reconnect before cancelling in-flight/queued entries that
+    // would otherwise stall forever (e.g. blocked on a clientIO interaction).
+    let noClientsGraceTimer: NodeJS.Timeout | undefined;
+    const cancelNoClientsGraceTimer = () => {
+        if (noClientsGraceTimer !== undefined) {
+            clearTimeout(noClientsGraceTimer);
+            noClientsGraceTimer = undefined;
+        }
+    };
 
-    // Coalesce `queueStateChanged`: only the last snapshot per window goes on
-    // the wire. Fine-grained lifecycle events stay immediate. Version stamps
-    // make dropped stale snapshots safe.
-    const SNAPSHOT_COALESCE_MS = 100;
-    const snapshotCoalescer = createSnapshotCoalescer((snapshot) => {
-        broadcast("queueStateChanged", undefined, (cio) =>
-            cio.queueStateChanged?.(snapshot),
-        );
-    }, SNAPSHOT_COALESCE_MS);
-    const emitSnapshot = (snapshot: QueueSnapshot): void =>
-        snapshotCoalescer.schedule(snapshot);
-    const flushPendingSnapshot = (): void => snapshotCoalescer.flush();
-
-    // Per-conversation message queue. Replaces implicit serialization-via-
-    // commandLock with an explicit FIFO that broadcasts lifecycle events.
-    // The drain loop calls the originator's wrapped inner processCommand so
-    // attribution stays correct; if the originator disconnected, falls back
-    // to a bare-dispatcher path that ALSO logs results and broadcasts
-    // commandComplete to remaining clients.
-    const requestQueue = new RequestQueue(
-        async (ctx: QueueExecutionContext) => {
-            const inner = innerProcessCommands.get(ctx.originatorConnectionId);
-            if (inner !== undefined) {
-                return inner(
-                    ctx.text,
-                    ctx.clientRequestId,
-                    ctx.attachments,
-                    ctx.options,
-                    ctx.requestId,
-                );
-            }
-            // Originator-disconnected fallback: run via bareDispatcher, then
-            // synthesize the displayLog command-result entry and broadcast
-            // commandComplete so peers see completion.
-            const result = await bareDispatcher.processCommand(
-                ctx.text,
-                ctx.clientRequestId,
-                ctx.attachments,
-                ctx.options,
-                ctx.requestId,
-            );
-            try {
-                context.displayLog.logCommandResult(
-                    {
-                        connectionId: ctx.originatorConnectionId,
-                        requestId: ctx.requestId,
-                        clientRequestId: ctx.clientRequestId,
-                    },
-                    result?.metrics,
-                    result?.tokenUsage,
-                );
-                context.displayLog.saveQueued();
-            } catch {
-                // best-effort
-            }
-            try {
-                broadcast("commandComplete", undefined, (cio) => {
-                    cio.notify(
-                        {
-                            connectionId: ctx.originatorConnectionId,
-                            requestId: ctx.requestId,
-                            clientRequestId: ctx.clientRequestId,
-                        },
-                        "commandComplete",
-                        { result: result ?? null },
-                        "system",
-                    );
-                });
-            } catch (e) {
-                debugCommand(`commandComplete (orphan) broadcast failed: ${e}`);
-            }
-            return result;
-        },
-        {
-            requestQueued: (entry, version) => {
-                broadcast("requestQueued", undefined, (cio) =>
-                    cio.requestQueued?.(entry, version),
-                );
-            },
-            requestStarted: (entry, version) => {
-                broadcast("requestStarted", undefined, (cio) =>
-                    cio.requestStarted?.(entry, version),
-                );
-            },
-            requestCancelled: (requestId, reason, version) => {
-                broadcast("requestCancelled", undefined, (cio) =>
-                    cio.requestCancelled?.(requestId, reason, version),
-                );
-            },
-            queueStateChanged: (snapshot) => {
-                emitSnapshot(snapshot);
-            },
-        },
-    );
     const shared: SharedDispatcher = {
         get clientCount() {
             return clients.size;
@@ -514,7 +435,7 @@ export async function createSharedDispatcher(
             });
             // First (re)joining client — clear any pending grace timer.
             if (wasEmpty) {
-                requestQueue.onClientReconnected();
+                cancelNoClientsGraceTimer();
             }
             // Register client type for per-request routing
             if (options?.clientType) {
@@ -526,25 +447,28 @@ export async function createSharedDispatcher(
                 async () => {
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
-                    innerProcessCommands.delete(connectionId);
                     unregisterClient(connectionId);
-                    requestQueue.onClientDisconnect(connectionId);
-                    // Last client gone — start grace timer. On expiry the queue
-                    // cancels its tail; the onExpiry callback additionally cancels
-                    // a running entry blocked on a clientIO interaction (which
-                    // would otherwise stall forever).
+                    // Last client gone — start grace timer. On expiry cancel
+                    // queued entries and any running entry blocked on a
+                    // clientIO interaction (which would otherwise stall
+                    // forever waiting for a non-existent client).
                     if (clients.size === 0) {
-                        requestQueue.onAllClientsDisconnected(
-                            noClientsGraceMs,
-                            (head) => {
-                                if (head?.blockedOn !== "interaction") return;
+                        cancelNoClientsGraceTimer();
+                        noClientsGraceTimer = setTimeout(() => {
+                            noClientsGraceTimer = undefined;
+                            const snap = context.requestQueue.getSnapshot();
+                            for (const queued of snap.queued) {
+                                context.requestQueue.cancelQueued(
+                                    queued.requestId,
+                                    "no_clients",
+                                );
+                            }
+                            const head = snap.running;
+                            if (head && head.blockedOn === "interaction") {
                                 const rid = head.requestId;
-                                // Broadcast cancel + prime cancelReason so the
-                                // drain loop preserves the reason on rejection.
-                                requestQueue.cancelRunning(rid, "no_clients");
-                                // command.ts only classifies AbortError-named
-                                // errors as cancelled; name it accordingly so
-                                // the wire state reads cancelled:no_clients.
+                                // Cancel pending interactions for this rid so
+                                // the awaiting deferred rejects with AbortError
+                                // (which command.ts classifies as cancelled).
                                 const abortErr = new Error(
                                     "Cancelled by server: no clients connected",
                                 );
@@ -566,17 +490,16 @@ export async function createSharedDispatcher(
                                         `no_clients: failed to cancel pending interactions: ${e}`,
                                     );
                                 }
-                                // Also abort the controller so any non-interaction
-                                // await in the same command tears down.
-                                try {
-                                    bareDispatcher.cancelCommand(rid);
-                                } catch (e) {
-                                    debugCommand(
-                                        `no_clients: cancelCommand(${rid}) failed: ${e}`,
-                                    );
-                                }
-                            },
-                        );
+                                context.requestQueue.cancelRunning(
+                                    rid,
+                                    "no_clients",
+                                );
+                                const controller =
+                                    context.activeRequests.get(rid);
+                                controller?.abort();
+                            }
+                        }, noClientsGraceMs);
+                        noClientsGraceTimer.unref?.();
                     }
 
                     closeFn();
@@ -602,289 +525,6 @@ export async function createSharedDispatcher(
                 interactionId: string,
             ): void => {
                 shared.cancelInteraction(interactionId);
-            };
-
-            // Wrap processCommand so each completed request logs a command-result
-            // entry into DisplayLog, letting history replay render timing data.
-            const origProcessCommand =
-                dispatcher.processCommand.bind(dispatcher);
-            const innerWrapped = async (
-                command: string,
-                clientRequestId: unknown,
-                attachments: string[] | undefined,
-                processOptions: any,
-                requestId: string,
-            ) => {
-                const result = await origProcessCommand(
-                    command,
-                    clientRequestId,
-                    attachments,
-                    processOptions,
-                    requestId,
-                );
-                try {
-                    context.displayLog.logCommandResult(
-                        {
-                            connectionId,
-                            requestId,
-                            clientRequestId,
-                        },
-                        result?.metrics,
-                        result?.tokenUsage,
-                    );
-                    context.displayLog.saveQueued();
-                } catch {
-                    // best effort
-                }
-                try {
-                    // Notify peer panels (other clients sharing this session)
-                    // so they can clear lingering temporary status messages and
-                    // apply timing metrics. Skip the originator: it already
-                    // gets the result via its resolved processCommand RPC, and
-                    // a duplicate notify would run completion twice (causing a
-                    // stray "⚠ Cancelled" bubble in the VS Code webview).
-                    let sent = 0;
-                    for (const [peerId, peerRecord] of clients) {
-                        if (peerId === connectionId) continue;
-                        if (peerRecord.filter && peerId !== connectionId) {
-                            // Filtered clients only receive their own events.
-                            continue;
-                        }
-                        try {
-                            peerRecord.clientIO.notify(
-                                {
-                                    connectionId,
-                                    requestId,
-                                    clientRequestId,
-                                },
-                                "commandComplete",
-                                { result: result ?? null },
-                                "system",
-                            );
-                            sent++;
-                        } catch (e) {
-                            debugClientIOError(
-                                `commandComplete notify failed for ${peerId}: ${e}`,
-                            );
-                        }
-                    }
-                    debugCommand(
-                        `commandComplete broadcast: connectionId=${connectionId} requestId=${requestId} clientRequestId=${clientRequestId} sent=${sent} clients=${clients.size}`,
-                    );
-                } catch (e) {
-                    debugCommand(`commandComplete broadcast failed: ${e}`);
-                }
-                return result;
-            };
-            // Register the wrapped function so the queue's drain loop invokes
-            // it directly without re-entering the public processCommand wrapper
-            // (which would re-queue).
-            innerProcessCommands.set(connectionId, innerWrapped);
-
-            // Replace the public processCommand with one that submits to the
-            // queue and awaits completion. The drain loop invokes innerWrapped
-            // directly via the registry above. CommandHandlerContext.commandLock
-            // remains as defense-in-depth.
-            dispatcher.processCommand = async (
-                command: any,
-                clientRequestId?: any,
-                attachments?: any,
-                processOptions?: any,
-                _requestId?: any,
-            ) => {
-                const submitInput: any = {
-                    text: command,
-                    originatorConnectionId: connectionId,
-                };
-                if (attachments != null) submitInput.attachments = attachments;
-                if (processOptions != null)
-                    submitInput.options = processOptions;
-                if (clientRequestId !== undefined)
-                    submitInput.clientRequestId = clientRequestId;
-                // Typed errors propagate so in-process callers can branch;
-                // submitCommand's discriminated SubmitResult handles RPC.
-                const entry = requestQueue.submit(submitInput);
-                return entry.completion;
-            };
-
-            // Capability flag so clients can gate queue-aware UX.
-            Object.defineProperty(dispatcher, "supportsQueueing", {
-                value: true,
-                enumerable: true,
-                configurable: false,
-                writable: false,
-            });
-
-            dispatcher.submitCommand = async (
-                command,
-                attachments,
-                options,
-                clientRequestId,
-            ): Promise<SubmitResult> => {
-                const submitInput: any = {
-                    text: command,
-                    originatorConnectionId: connectionId,
-                };
-                if (attachments != null) submitInput.attachments = attachments;
-                if (options != null) submitInput.options = options;
-                if (clientRequestId !== undefined)
-                    submitInput.clientRequestId = clientRequestId;
-                // Convert typed errors into discriminated SubmitResult variants
-                // so cross-RPC clients receive structured failure information.
-                let entry;
-                try {
-                    entry = requestQueue.submit(submitInput);
-                } catch (e) {
-                    if (e instanceof QueueFullError) {
-                        return {
-                            ok: false,
-                            error: "queue_full",
-                            maxDepth: e.maxDepth,
-                        };
-                    }
-                    if (e instanceof ServerStoppingError) {
-                        return { ok: false, error: "server_stopping" };
-                    }
-                    throw e;
-                }
-                // Ack-only submit never awaits entry.completion; attach a
-                // passive catch so a drain-loop rejection (or abandon-for-
-                // shutdown) doesn't surface as unhandledRejection. Other
-                // awaiters' `.catch` chains remain independent.
-                void entry.completion.catch((e) => {
-                    debugCommand(
-                        `submit:completion-error rid=${entry.requestId} ${e instanceof Error ? e.message : String(e)}`,
-                    );
-                });
-                // Don't await; submitCommand returns once queued. Build a
-                // wire-safe copy (no raw attachments).
-                const out: QueuedRequest = {
-                    requestId: entry.requestId,
-                    originatorConnectionId: entry.originatorConnectionId,
-                    text: entry.text,
-                    submittedAt: entry.submittedAt,
-                    state: entry.state,
-                };
-                if (entry.clientRequestId !== undefined)
-                    out.clientRequestId = entry.clientRequestId;
-                // Always advertise attachmentCount so submit-response and
-                // snapshot/broadcast copies stay consistent (0 if none).
-                out.attachmentCount = entry.attachmentCount ?? 0;
-                if (entry.options !== undefined) out.options = entry.options;
-                if (entry.startedAt !== undefined)
-                    out.startedAt = entry.startedAt;
-                if (entry.finishedAt !== undefined)
-                    out.finishedAt = entry.finishedAt;
-                if (entry.error !== undefined) out.error = entry.error;
-                return { ok: true, entry: out };
-            };
-
-            dispatcher.getQueueSnapshot = async () => {
-                return requestQueue.getSnapshot();
-            };
-
-            // Cancel hook: classify the requestId, route the running case
-            // through the existing AbortController path, and return a typed
-            // CancelResult so clients can render an honest message.
-            const origCancelCommand = dispatcher.cancelCommand.bind(dispatcher);
-            dispatcher.cancelCommand = async (
-                rid: string,
-            ): Promise<CancelResult> => {
-                const kind = requestQueue.classifyCancel(rid, "user");
-                if (kind === "queued") {
-                    return { kind: "cancelled_queued", requestId: rid };
-                }
-                if (kind === "running") {
-                    // Broadcast immediately so other clients see the cancel
-                    // before the drain loop finishes. Idempotent.
-                    requestQueue.cancelRunning(rid, "user");
-                    // Fire the AbortController via the original cancelCommand.
-                    try {
-                        await Promise.resolve(origCancelCommand(rid));
-                    } catch {
-                        // best effort
-                    }
-                    return { kind: "cancelled_running", requestId: rid };
-                }
-                // Phase 1 does not track completion history.
-                return { kind: "not_found", requestId: rid };
-            };
-
-            // Steering: cancel-current-and-replace. Atomic by virtue of the
-            // single-threaded JS event loop; safe in either order because new
-            // submits always push to the tail.
-            dispatcher.interrupt = async (
-                command,
-                attachments,
-                options,
-                clientRequestId,
-            ): Promise<SubmitResult> => {
-                const submitInput: any = {
-                    text: command,
-                    originatorConnectionId: connectionId,
-                };
-                if (attachments != null) submitInput.attachments = attachments;
-                if (options != null) submitInput.options = options;
-                if (clientRequestId !== undefined)
-                    submitInput.clientRequestId = clientRequestId;
-                let entry;
-                try {
-                    entry = requestQueue.interrupt(submitInput);
-                } catch (e) {
-                    if (e instanceof QueueFullError) {
-                        return {
-                            ok: false,
-                            error: "queue_full",
-                            maxDepth: e.maxDepth,
-                        };
-                    }
-                    if (e instanceof ServerStoppingError) {
-                        return { ok: false, error: "server_stopping" };
-                    }
-                    throw e;
-                }
-                // Ack-only RPC; mirror submitCommand's passive completion catch.
-                void entry.completion.catch((e) => {
-                    debugCommand(
-                        `interrupt:completion-error rid=${entry.requestId} ${e instanceof Error ? e.message : String(e)}`,
-                    );
-                });
-                // Cancel the previously-running entry, if any. Use the snapshot
-                // captured *after* the unshift so we don't cancel the interrupting
-                // entry itself (still in tail, not running).
-                const snap = requestQueue.getSnapshot();
-                if (
-                    snap.running !== null &&
-                    snap.running.requestId !== entry.requestId
-                ) {
-                    // Broadcast immediately so other clients see the cancel.
-                    requestQueue.cancelRunning(snap.running.requestId, "user");
-                    try {
-                        await Promise.resolve(
-                            origCancelCommand(snap.running.requestId),
-                        );
-                    } catch {
-                        // best-effort; prepend has already taken effect
-                    }
-                }
-                // Wire-safe copy (same shape as submitCommand).
-                const out: QueuedRequest = {
-                    requestId: entry.requestId,
-                    originatorConnectionId: entry.originatorConnectionId,
-                    text: entry.text,
-                    submittedAt: entry.submittedAt,
-                    state: entry.state,
-                };
-                if (entry.clientRequestId !== undefined)
-                    out.clientRequestId = entry.clientRequestId;
-                out.attachmentCount = entry.attachmentCount ?? 0;
-                if (entry.options !== undefined) out.options = entry.options;
-                if (entry.startedAt !== undefined)
-                    out.startedAt = entry.startedAt;
-                if (entry.finishedAt !== undefined)
-                    out.finishedAt = entry.finishedAt;
-                if (entry.error !== undefined) out.error = entry.error;
-                return { ok: true, entry: out };
             };
 
             return dispatcher;
@@ -1001,28 +641,22 @@ export async function createSharedDispatcher(
             await Promise.all(promises);
         },
         async close() {
+            cancelNoClientsGraceTimer();
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
-            // Drain so in-flight/queued entries settle before teardown.
-            try {
-                await requestQueue.drainAndStop();
-            } catch {
-                // best-effort
-            }
-            // Flush coalesced snapshot so the final state is observed.
-            flushPendingSnapshot();
             await this.closeAllClients();
+            // closeCommandHandlerContext drains the queue before tearing down.
             await closeCommandHandlerContext(context);
         },
         getQueueSnapshot(): QueueSnapshot {
-            return requestQueue.getSnapshot();
+            return context.requestQueue.getSnapshot();
         },
         isQueueIdle(): boolean {
-            return requestQueue.isIdle();
+            return context.requestQueue.isIdle();
         },
         cancelQueued(requestId: string, reason: QueueCancelReason): boolean {
-            return requestQueue.cancelQueued(requestId, reason);
+            return context.requestQueue.cancelQueued(requestId, reason);
         },
         __testSetNoClientsGraceMs(ms: number): void {
             noClientsGraceMs = ms;

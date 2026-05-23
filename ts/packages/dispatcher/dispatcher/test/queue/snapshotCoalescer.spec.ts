@@ -3,7 +3,7 @@
 
 import { jest } from "@jest/globals";
 import type { QueueSnapshot } from "@typeagent/dispatcher-types";
-import { createSnapshotCoalescer } from "../src/snapshotCoalescer.js";
+import { createSnapshotCoalescer } from "../../src/queue/snapshotCoalescer.js";
 
 const snap = (version: number): QueueSnapshot => ({
     running: null,

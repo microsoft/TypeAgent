@@ -164,14 +164,6 @@ export interface Dispatcher {
     readonly connectionId: ConnectionId | undefined;
 
     /**
-     * `true` when this dispatcher is backed by a real server-side message queue
-     * (FIFO + cross-client broadcast). `false`/`undefined` for the in-process
-     * fallback. Clients should gate queue UX on this rather than on the
-     * presence of `submitCommand` (which is always defined).
-     */
-    readonly supportsQueueing?: boolean;
-
-    /**
      * Process a single user request.
      *
      * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
@@ -194,10 +186,7 @@ export interface Dispatcher {
      * the existing `commandComplete` notify.
      *
      * Failure modes (`queue_full`, `server_stopping`) are returned as data,
-     * not thrown — see `SubmitResult`. Implementations without a queue
-     * (`supportsQueueing !== true`) fall back to `processCommand` and
-     * synthesize `{ ok: true, entry }`; callers needing real FIFO semantics
-     * MUST check `supportsQueueing`.
+     * not thrown — see `SubmitResult`.
      */
     submitCommand(
         command: string,
@@ -207,8 +196,7 @@ export interface Dispatcher {
     ): Promise<SubmitResult>;
 
     /**
-     * Snapshot of the server-side queue. Cheap, in-memory. Empty snapshot for
-     * dispatchers without a queue.
+     * Snapshot of the server-side queue. Cheap, in-memory.
      */
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
@@ -221,9 +209,6 @@ export interface Dispatcher {
      *
      * Pre-existing queued entries are preserved (just shifted back). Side
      * effects from the cancelled running request are NOT rolled back.
-     *
-     * Implementations without a queue SHOULD return a failure result; callers
-     * MUST gate interrupt UX on `supportsQueueing`.
      */
     interrupt(
         text: string,

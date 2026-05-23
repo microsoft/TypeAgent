@@ -21,6 +21,12 @@ import {
 import type {
     DisplayLogEntry,
     PendingInteractionResponse,
+    QueuedRequest,
+    CancelResult,
+} from "@typeagent/dispatcher-types";
+import {
+    QueueFullError,
+    ServerStoppingError,
 } from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
@@ -281,6 +287,43 @@ export function createDispatcherFromContext(
     connectionId?: ConnectionId,
     closeFn?: () => Promise<void>,
 ): Dispatcher {
+    const submitInput = (
+        command: string,
+        clientRequestId: unknown,
+        attachments: string[] | undefined,
+        options: any,
+        requestId?: string,
+    ) => {
+        const input: any = {
+            text: command,
+            originatorConnectionId: connectionId ?? "",
+        };
+        if (clientRequestId !== undefined)
+            input.clientRequestId = clientRequestId;
+        if (attachments != null) input.attachments = attachments;
+        if (options != null) input.options = options;
+        if (requestId !== undefined) input.requestId = requestId;
+        return input;
+    };
+
+    const wireCopy = (entry: any): QueuedRequest => {
+        const out: QueuedRequest = {
+            requestId: entry.requestId,
+            originatorConnectionId: entry.originatorConnectionId,
+            text: entry.text,
+            submittedAt: entry.submittedAt,
+            state: entry.state,
+        };
+        if (entry.clientRequestId !== undefined)
+            out.clientRequestId = entry.clientRequestId;
+        out.attachmentCount = entry.attachmentCount ?? 0;
+        if (entry.options !== undefined) out.options = entry.options;
+        if (entry.startedAt !== undefined) out.startedAt = entry.startedAt;
+        if (entry.finishedAt !== undefined) out.finishedAt = entry.finishedAt;
+        if (entry.error !== undefined) out.error = entry.error;
+        return out;
+    };
+
     const dispatcher: Dispatcher = {
         get connectionId() {
             return connectionId;
@@ -292,84 +335,85 @@ export function createDispatcherFromContext(
             options,
             requestId,
         ) {
-            return processCommand(
-                command,
-                context,
-                {
-                    connectionId,
-                    requestId: requestId ?? randomUUID(),
+            const entry = context.requestQueue.submit(
+                submitInput(
+                    command,
                     clientRequestId,
-                },
-                attachments,
-                options,
+                    attachments,
+                    options,
+                    requestId,
+                ),
             );
+            return entry.completion;
         },
-        supportsQueueing: false,
         async submitCommand(command, attachments, options, clientRequestId) {
-            // Direct-dispatcher fallback (no real queue): synthesize a queue entry,
-            // fire-and-forget processCommand, and surface rejections via a
-            // synthesized commandComplete notify. SharedDispatcher overrides this.
-            const id = randomUUID();
-            const entry: import("@typeagent/dispatcher-types").QueuedRequest = {
-                requestId: id,
-                originatorConnectionId: connectionId ?? "",
-                text: command,
-                submittedAt: Date.now(),
-                state: "queued",
-            };
-            if (clientRequestId !== undefined) {
-                entry.clientRequestId = clientRequestId;
+            let entry;
+            try {
+                entry = context.requestQueue.submit(
+                    submitInput(command, clientRequestId, attachments, options),
+                );
+            } catch (e) {
+                if (e instanceof QueueFullError) {
+                    return {
+                        ok: false,
+                        error: "queue_full",
+                        maxDepth: e.maxDepth,
+                    };
+                }
+                if (e instanceof ServerStoppingError) {
+                    return { ok: false, error: "server_stopping" };
+                }
+                throw e;
             }
-            // Match RequestQueue.publicCopy: always advertise an attachment count.
-            entry.attachmentCount = attachments?.length ?? 0;
-            if (options !== undefined) {
-                entry.options = options;
-            }
-            processCommand(
-                command,
-                context,
-                {
-                    connectionId,
-                    requestId: id,
-                    clientRequestId,
-                },
-                attachments,
-                options,
-            ).catch((err: unknown) => {
-                try {
-                    context.clientIO.notify(
-                        {
-                            connectionId,
-                            requestId: id,
-                            clientRequestId,
-                        },
-                        "commandComplete",
-                        {
-                            result: {
-                                lastError:
-                                    err instanceof Error
-                                        ? err.message
-                                        : String(err),
-                            },
-                        },
-                        "system",
-                    );
-                } catch {}
+            void entry.completion.catch(() => {
+                // Ack-only callers don't await; swallow rejections so the
+                // drain loop's rejection (or shutdown abandon) doesn't surface
+                // as unhandledRejection. Other awaiters keep their own catch.
             });
-            return { ok: true, entry };
+            return { ok: true, entry: wireCopy(entry) };
         },
         async getQueueSnapshot() {
-            return { running: null, queued: [], paused: false, version: 0 };
+            return context.requestQueue.getSnapshot();
         },
-        async interrupt(text, attachments, options, clientRequestId) {
-            // Direct-mode fallback: no running entry to cancel and no queue to
-            // prepend to — just run the request. Gate UX on `supportsQueueing`.
-            return this.submitCommand(
-                text,
-                attachments,
-                options,
-                clientRequestId,
-            );
+        async interrupt(command, attachments, options, clientRequestId) {
+            let entry;
+            try {
+                entry = context.requestQueue.interrupt(
+                    submitInput(command, clientRequestId, attachments, options),
+                );
+            } catch (e) {
+                if (e instanceof QueueFullError) {
+                    return {
+                        ok: false,
+                        error: "queue_full",
+                        maxDepth: e.maxDepth,
+                    };
+                }
+                if (e instanceof ServerStoppingError) {
+                    return { ok: false, error: "server_stopping" };
+                }
+                throw e;
+            }
+            void entry.completion.catch(() => {
+                // ack-only; see submitCommand
+            });
+            // Cancel any previously-running entry, using the snapshot taken
+            // *after* the unshift so we don't cancel the interrupting entry.
+            const snap = context.requestQueue.getSnapshot();
+            if (
+                snap.running !== null &&
+                snap.running.requestId !== entry.requestId
+            ) {
+                context.requestQueue.cancelRunning(
+                    snap.running.requestId,
+                    "user",
+                );
+                const controller = context.activeRequests.get(
+                    snap.running.requestId,
+                );
+                controller?.abort();
+            }
+            return { ok: true, entry: wireCopy(entry) };
         },
         getCommandCompletion(prefix, direction) {
             return getCommandCompletion(prefix, direction, context);
@@ -427,20 +471,41 @@ export function createDispatcherFromContext(
         async getAgentSchemas(agentName?: string) {
             return getAgentSchemas(context, agentName);
         },
-        async cancelCommand(requestId: string) {
-            // Fallback: no queue; abort via AbortController or report not_found.
-            const controller = context.activeRequests.get(requestId);
-            if (controller) {
-                controller.abort();
-                return { kind: "cancelled_running" as const, requestId };
+        async cancelCommand(requestId: string): Promise<CancelResult> {
+            const kind = context.requestQueue.classifyCancel(requestId, "user");
+            if (kind === "queued") {
+                return { kind: "cancelled_queued", requestId };
             }
-            return { kind: "not_found" as const, requestId };
+            if (kind === "running") {
+                context.requestQueue.cancelRunning(requestId, "user");
+                const controller = context.activeRequests.get(requestId);
+                controller?.abort();
+                return { kind: "cancelled_running", requestId };
+            }
+            return { kind: "not_found", requestId };
         },
         cancelCommandByClientId(clientRequestId: unknown) {
             const controller =
                 context.activeRequestsByClientId.get(clientRequestId);
             if (controller) {
                 controller.abort();
+                return;
+            }
+            // Entry may still be sitting in the queue (no AbortController yet).
+            // Walk the snapshot to find a matching clientRequestId and cancel
+            // it via the queue. Check the running head too — it's normally
+            // already in activeRequestsByClientId, but cover the race anyway.
+            const snap = context.requestQueue.getSnapshot();
+            const running = snap.running;
+            if (running && running.clientRequestId === clientRequestId) {
+                context.requestQueue.cancelRunning(running.requestId, "user");
+                return;
+            }
+            for (const entry of snap.queued) {
+                if (entry.clientRequestId === clientRequestId) {
+                    context.requestQueue.cancelQueued(entry.requestId, "user");
+                    return;
+                }
             }
         },
         async recordUserHide(

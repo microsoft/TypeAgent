@@ -17,7 +17,7 @@ import {
 
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:requestQueue");
-const debugInternal = registerDebug("agent-server:requestQueue");
+const debugInternal = registerDebug("agent-dispatcher:requestQueue");
 
 /** Hard cap on running + queued entries; submits beyond this throw QueueFullError. */
 export const MAX_QUEUE_DEPTH = 100;
@@ -26,8 +26,9 @@ export const MAX_QUEUE_DEPTH = 100;
 export const SHUTDOWN_DRAIN_DEADLINE_MS = 30_000;
 
 /**
- * Push channel for fanning out queue lifecycle events to all connected clients.
- * Each event carries the queue's monotonic `version` so clients can drop stale events.
+ * Push channel for lifecycle events. The Dispatcher wires this to its host's
+ * `ClientIO`; multi-client fan-out is the wrapper's job (see SharedDispatcher).
+ * Each event carries the queue's monotonic `version`.
  */
 export interface QueueBroadcaster {
     requestQueued(entry: QueuedRequest, version: number): void;
@@ -40,18 +41,15 @@ export interface QueueBroadcaster {
     queueStateChanged(snapshot: QueueSnapshot): void;
 }
 
-// Security: any connected client may submit/cancel/observe any entry in the
-// shared conversation. Socket reachability is the only access boundary in Phase 1.
-
 /** Optional telemetry sink. */
 export interface QueueLogger {
     logEvent(name: string, data: unknown): void;
 }
 
 /**
- * Inner-dispatcher invocation surface used by the drain loop. Passing a function
- * (not a Dispatcher) prevents accidental re-entry into the queuing wrapper.
- * Receives raw attachments; broadcast redaction happens elsewhere.
+ * Drain-loop invocation surface. Passing a function (not a Dispatcher) prevents
+ * accidental re-entry into the queuing wrapper. Receives raw attachments;
+ * broadcast redaction happens elsewhere.
  */
 export interface QueueExecutionContext {
     requestId: string;
@@ -69,10 +67,11 @@ export type InnerProcessCommand = (
 export interface QueueSubmitInput {
     text: string;
     originatorConnectionId: string;
-    /** Raw attachments; stripped from broadcast copies via `publicCopy`. */
     attachments?: string[];
     options?: ProcessCommandOptions;
     clientRequestId?: unknown;
+    /** Optional caller-supplied id. Defaults to a fresh UUID when omitted. */
+    requestId?: string;
 }
 
 /**
@@ -99,9 +98,9 @@ interface InternalEntry extends QueuedRequest {
 }
 
 /**
- * Server-side per-conversation request queue. Replaces implicit
- * serialization-via-`commandLock` with an explicit, observable FIFO pipeline.
- * See `messageQueueing.md` for the broader design.
+ * Per-conversation request queue owned by the Dispatcher. Replaces implicit
+ * serialization-via-`commandLock` with an explicit FIFO pipeline. See
+ * `docs/architecture/messageQueueing.md` for the broader design.
  */
 export class RequestQueue {
     private readonly tail: InternalEntry[] = [];
@@ -157,7 +156,6 @@ export class RequestQueue {
         return this.enqueue(input, "head");
     }
 
-    /** Shared body of {@link submit} and {@link interrupt}; differs only in tail vs head insert. */
     private enqueue(
         input: QueueSubmitInput,
         position: "head" | "tail",
@@ -182,7 +180,6 @@ export class RequestQueue {
             this.tail.push(entry);
         }
         const version = ++this.snapshotVersion;
-        // Broadcasts are isolated; one client throwing must not stall internal state.
         this.safeBroadcast("requestQueued", () =>
             this.broadcast.requestQueued(this.publicCopy(entry), version),
         );
@@ -221,7 +218,6 @@ export class RequestQueue {
         entry.state = "cancelled";
         entry.finishedAt = Date.now();
         entry.error = `cancelled:${reason}`;
-        // Settle BEFORE broadcasts so internal state stays consistent if broadcast throws.
         entry.settled = true;
         try {
             entry.resolveCompletion({ cancelled: true });
@@ -246,8 +242,8 @@ export class RequestQueue {
     }
 
     /**
-     * @internal Classify a cancel: `"queued"` if a queued entry was removed,
-     * `"running"` if the requestId matches the head (caller owns the AbortController),
+     * Classify a cancel: `"queued"` if a queued entry was removed, `"running"`
+     * if the requestId matches the head (caller owns the AbortController),
      * `"not_found"` otherwise.
      */
     classifyCancel(
@@ -268,7 +264,7 @@ export class RequestQueue {
         return {
             running: this.head ? this.publicCopy(this.head) : null,
             queued: this.tail.map((e) => this.publicCopy(e)),
-            paused: false, // pause is Phase 2
+            paused: false,
             version: this.snapshotVersion,
         };
     }
@@ -279,78 +275,16 @@ export class RequestQueue {
     }
 
     /**
-     * Notify the queue that a client disconnected. Phase 1 does NOT drain or
-     * cancel on per-connection disconnect — the user may reconnect from another
-     * client. Use {@link onAllClientsDisconnected} for last-client semantics.
-     */
-    onClientDisconnect(_connectionId: string): void {
-        // Intentionally empty in Phase 1.
-    }
-
-    /** Grace-timer state for the last-client-disconnect path. */
-    private graceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    /**
-     * Called when the connected-client count drops to zero. Starts a single-shot
-     * grace timer; on expiry, cancels all queued entries with reason `"no_clients"`
-     * and invokes `onExpiry` so the caller can act on a running entry (e.g. one
-     * blocked on a clientIO interaction). Idempotent; pair with {@link onClientReconnected}.
-     */
-    onAllClientsDisconnected(
-        graceMs: number,
-        onExpiry?: (head: QueuedRequest | null) => void,
-    ): void {
-        if (this.graceTimer !== null) return;
-        if (this.stopped) return;
-        const fire = () => {
-            this.graceTimer = null;
-            // Snapshot first; cancelQueued mutates `tail` in place.
-            const toCancel = this.tail.map((e) => e.requestId);
-            for (const rid of toCancel) {
-                this.cancelQueued(rid, "no_clients");
-            }
-            const snap = this.getSnapshot();
-            try {
-                onExpiry?.(snap.running);
-            } catch {
-                // best-effort
-            }
-            this.log("requestQueue:graceExpired", {
-                cancelledQueued: toCancel.length,
-                runningStillPresent: snap.running !== null,
-                runningBlockedOn: snap.running?.blockedOn,
-            });
-        };
-        this.graceTimer = setTimeout(fire, graceMs);
-        this.graceTimer.unref?.();
-        this.log("requestQueue:graceStarted", { graceMs });
-    }
-
-    /** Cancel a pending grace timer when the first client reconnects. */
-    onClientReconnected(): void {
-        if (this.graceTimer === null) return;
-        clearTimeout(this.graceTimer);
-        this.graceTimer = null;
-        this.log("requestQueue:graceCleared", {});
-    }
-
-    /** @internal Test-only: whether a grace timer is currently armed. */
-    public __testHasGraceTimer(): boolean {
-        return this.graceTimer !== null;
-    }
-
-    /**
      * Mark the running entry as blocked on an external dependency (currently only
-     * `"interaction"`). Uses a reference count to handle overlapping interactions;
-     * broadcasts only on the `0 → 1` transition. Pair with {@link markUnblocked}.
+     * `"interaction"`). Reference-counted so overlapping interactions are handled
+     * correctly; broadcasts only on the `0 → 1` transition. Pair with {@link markUnblocked}.
      */
     markBlocked(requestId: string, reason: "interaction"): void {
         if (this.head === null || this.head.requestId !== requestId) return;
         void reason;
         this.head.blockedOnDepth += 1;
         if (this.head.blockedOnDepth !== 1) return;
-        const version = ++this.snapshotVersion;
-        void version;
+        ++this.snapshotVersion;
         this.safeBroadcast("queueStateChanged", () =>
             this.broadcast.queueStateChanged(this.getSnapshot()),
         );
@@ -365,8 +299,7 @@ export class RequestQueue {
         if (this.head.blockedOnDepth <= 0) return;
         this.head.blockedOnDepth -= 1;
         if (this.head.blockedOnDepth !== 0) return;
-        const version = ++this.snapshotVersion;
-        void version;
+        ++this.snapshotVersion;
         this.safeBroadcast("queueStateChanged", () =>
             this.broadcast.queueStateChanged(this.getSnapshot()),
         );
@@ -440,7 +373,6 @@ export class RequestQueue {
                           finish();
                       }, deadlineMs)
                     : undefined;
-            // Allow Node to exit if the deadline timer is the last live handle.
             timer?.unref?.();
         });
         return this.drainAndStopPromise;
@@ -489,7 +421,7 @@ export class RequestQueue {
     // ---------- internals ----------
 
     private materialize(input: QueueSubmitInput): InternalEntry {
-        const requestId = randomUUID();
+        const requestId = input.requestId ?? randomUUID();
         let resolveCompletion!: (r: CommandResult | undefined) => void;
         let rejectCompletion!: (err: unknown) => void;
         const completion = new Promise<CommandResult | undefined>(
@@ -513,8 +445,8 @@ export class RequestQueue {
         if (input.clientRequestId !== undefined) {
             entry.clientRequestId = input.clientRequestId;
         }
-        // NOTE: `!= null` is intentional — RPC JSON-serializes `args: any[]`
-        // and turns trailing `undefined` array slots into `null` on the wire.
+        // `!= null` is intentional — RPC JSON-serializes args and turns trailing
+        // `undefined` slots into `null` on the wire.
         if (input.attachments != null) {
             entry.attachments = input.attachments;
             entry.attachmentCount = input.attachments.length;
@@ -586,11 +518,8 @@ export class RequestQueue {
             while (this.tail.length > 0) {
                 if (this.abandoned) break;
                 const entry = this.tail.shift()!;
-                // Either flag indicates a cancel that raced the shift — skip.
                 if (entry.settled || this.cancelInFlight.has(entry.requestId)) {
                     this.cancelInFlight.delete(entry.requestId);
-                    // Completion already resolved in cancelQueued; just
-                    // re-broadcast the snapshot so observers see the advance.
                     this.safeBroadcast("queueStateChanged", () =>
                         this.broadcast.queueStateChanged(this.getSnapshot()),
                     );
@@ -632,8 +561,6 @@ export class RequestQueue {
                     result = await this.innerProcessCommand(ctx);
                     if (result?.cancelled) {
                         entry.state = "cancelled";
-                        // Preserve cancelRunning's reason; fall back to "user"
-                        // when the inner controller fired outside the queue's hook.
                         if (entry.error === undefined) {
                             entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
                         }
@@ -642,8 +569,6 @@ export class RequestQueue {
                     }
                 } catch (e) {
                     error = e;
-                    // If the head was cancelled and the throw looks like an
-                    // abort, classify as cancelled so wire state matches intent.
                     const isAbort =
                         e instanceof Error && e.name === "AbortError";
                     if (entry.cancelReason !== undefined && isAbort) {
@@ -651,8 +576,6 @@ export class RequestQueue {
                         if (entry.error === undefined) {
                             entry.error = `cancelled:${entry.cancelReason}`;
                         }
-                        // Resolve (not reject) so awaiters see the same shape
-                        // as the result?.cancelled path.
                         error = undefined;
                         result = { cancelled: true };
                     } else {
@@ -662,7 +585,6 @@ export class RequestQueue {
                     }
                 }
                 entry.finishedAt = Date.now();
-                // If the shutdown deadline already settled this entry, skip.
                 if (entry.settled) {
                     this.head = null;
                     continue;

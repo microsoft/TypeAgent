@@ -14,7 +14,10 @@ import type {
     QueuedRequest,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
-import { RequestQueue, QueueBroadcaster } from "../src/requestQueue.js";
+import {
+    RequestQueue,
+    QueueBroadcaster,
+} from "../../src/queue/requestQueue.js";
 
 interface ClientRecorder {
     name: string;
@@ -236,8 +239,9 @@ describe("RequestQueue — multi-client integration", () => {
         await flush();
         expect(dispatcher.calls.length).toBe(1);
 
-        // Disconnect A. Per design, this does NOT cancel A's queued items.
-        queue.onClientDisconnect("A");
+        // Per design, dropping an originator does NOT cancel that originator's
+        // queued items. The queue itself doesn't track clients — that policy
+        // lives in SharedDispatcher (no-clients grace timer).
         bus.disconnect("A");
 
         // Drain a1, then a2 must still execute.

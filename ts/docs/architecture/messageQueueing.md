@@ -699,13 +699,6 @@ interface Dispatcher {
     // ===== New (queueing) =====
 
     /**
-     * Capability flag — always `true` once this design ships. Kept as
-     * an optional flag so older clients still talking to a pre-queue
-     * Dispatcher build degrade gracefully to `processCommand`.
-     */
-    readonly supportsQueueing?: boolean;
-
-    /**
      * Ack-on-enqueue submit. Resolves as soon as the entry is in the
      * queue (NOT when it finishes). Returns a discriminated result so
      * cross-process clients can branch on `queue_full` / `server_stopping`

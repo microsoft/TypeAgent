@@ -32,7 +32,7 @@
     "start": "node --disable-warning=DEP0190 dist/server.js",
     "stop": "node dist/stop.js",
     "test": "npm run test:local",
-    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\" --passWithNoTests",
     "tsc": "tsc -b"
   },
   "dependencies": {

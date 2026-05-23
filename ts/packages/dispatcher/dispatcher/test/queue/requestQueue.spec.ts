@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { jest } from "@jest/globals";
 import type {
     CommandResult,
     Dispatcher,
@@ -18,7 +17,7 @@ import {
     RequestQueue,
     MAX_QUEUE_DEPTH,
     QueueBroadcaster,
-} from "../src/requestQueue.js";
+} from "../../src/queue/requestQueue.js";
 
 type RecordedEvent =
     | { type: "queued"; entry: QueuedRequest; version: number }
@@ -318,25 +317,6 @@ describe("RequestQueue", () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
         await expect(queue.drainAndStop()).resolves.toBeUndefined();
-    });
-
-    it("client disconnect does not affect the drain loop", async () => {
-        const dispatcher = new ControllableDispatcher();
-        const { queue } = makeQueue(dispatcher);
-
-        const a = queue.submit({ text: "a", originatorConnectionId: "c1" });
-        const b = queue.submit({ text: "b", originatorConnectionId: "c1" });
-
-        await flush();
-        // Simulate originator disconnect.
-        queue.onClientDisconnect("c1");
-
-        dispatcher.calls[0].resolve({});
-        await a.completion;
-        await flush();
-        expect(dispatcher.calls.length).toBe(2);
-        dispatcher.calls[1].resolve({});
-        await b.completion;
     });
 
     // T9
@@ -709,124 +689,10 @@ describe("RequestQueue", () => {
         expect(tele!.data.queuedAhead).toBe(0);
     });
 
-    // onAllClientsDisconnected / onClientReconnected
-
-    it("grace timer cancels queued entries with reason no_clients", async () => {
-        jest.useFakeTimers();
-        try {
-            const dispatcher = new ControllableDispatcher();
-            const { queue, events } = makeQueue(dispatcher);
-
-            const a = queue.submit({ text: "a", originatorConnectionId: "c1" });
-            const b = queue.submit({ text: "b", originatorConnectionId: "c1" });
-            const c = queue.submit({ text: "c", originatorConnectionId: "c1" });
-            // Drain to start a.
-            await Promise.resolve();
-            await Promise.resolve();
-            await Promise.resolve();
-            expect(queue.getSnapshot().running?.text).toBe("a");
-
-            queue.onAllClientsDisconnected(1000);
-            expect(queue.__testHasGraceTimer()).toBe(true);
-
-            // Fire grace timer.
-            jest.advanceTimersByTime(1000);
-            expect(queue.__testHasGraceTimer()).toBe(false);
-
-            // a is still running; b, c cancelled.
-            const snap = queue.getSnapshot();
-            expect(snap.running?.text).toBe("a");
-            expect(snap.queued).toEqual([]);
-
-            const cancellations = events.filter(
-                (e) => e.type === "cancelled",
-            ) as any[];
-            expect(cancellations.map((e) => e.reason)).toEqual([
-                "no_clients",
-                "no_clients",
-            ]);
-
-            // Finish a to drain the in-flight side.
-            dispatcher.calls[0].resolve({});
-            await a.completion;
-            const bRes = await b.completion;
-            const cRes = await c.completion;
-            expect(bRes?.cancelled).toBe(true);
-            expect(cRes?.cancelled).toBe(true);
-        } finally {
-            jest.useRealTimers();
-        }
-    });
-
-    it("client reconnect before grace expires clears the timer", () => {
-        jest.useFakeTimers();
-        try {
-            const dispatcher = new ControllableDispatcher();
-            const { queue } = makeQueue(dispatcher);
-            queue.submit({ text: "a", originatorConnectionId: "c1" });
-
-            queue.onAllClientsDisconnected(1000);
-            expect(queue.__testHasGraceTimer()).toBe(true);
-
-            // Reconnect halfway through.
-            jest.advanceTimersByTime(500);
-            queue.onClientReconnected();
-            expect(queue.__testHasGraceTimer()).toBe(false);
-
-            // No cancellations even after the original deadline would
-            // have expired.
-            jest.advanceTimersByTime(2000);
-            expect(queue.__testHasGraceTimer()).toBe(false);
-        } finally {
-            jest.useRealTimers();
-        }
-    });
-
-    it("grace timer invokes onExpiry callback with running snapshot", async () => {
-        jest.useFakeTimers();
-        try {
-            const dispatcher = new ControllableDispatcher();
-            const { queue } = makeQueue(dispatcher);
-            const a = queue.submit({
-                text: "a",
-                originatorConnectionId: "c1",
-            });
-            await Promise.resolve();
-            await Promise.resolve();
-            await Promise.resolve();
-
-            let called = false;
-            let received: any = undefined;
-            queue.onAllClientsDisconnected(500, (head) => {
-                called = true;
-                received = head;
-            });
-            jest.advanceTimersByTime(500);
-            expect(called).toBe(true);
-            expect(received?.text).toBe("a");
-
-            dispatcher.calls[0].resolve({});
-            await a.completion;
-        } finally {
-            jest.useRealTimers();
-        }
-    });
-
-    it("onAllClientsDisconnected is idempotent (no overlapping timers)", () => {
-        jest.useFakeTimers();
-        try {
-            const dispatcher = new ControllableDispatcher();
-            const { queue } = makeQueue(dispatcher);
-            queue.onAllClientsDisconnected(1000);
-            queue.onAllClientsDisconnected(1000);
-            queue.onAllClientsDisconnected(1000);
-            expect(queue.__testHasGraceTimer()).toBe(true);
-            queue.onClientReconnected();
-            expect(queue.__testHasGraceTimer()).toBe(false);
-        } finally {
-            jest.useRealTimers();
-        }
-    });
+    // onAllClientsDisconnected / onClientReconnected — these methods were
+    // removed when the queue moved into Dispatcher. The no-clients grace
+    // timer now lives in SharedDispatcher; its integration test is in
+    // packages/agentServer/server/test/queueIntegration.spec.ts.
 
     it("markBlocked / markUnblocked round-trips on snapshot", async () => {
         const dispatcher = new ControllableDispatcher();
