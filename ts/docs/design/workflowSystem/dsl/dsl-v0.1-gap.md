@@ -45,7 +45,7 @@ new surface area:
     of scope until justified.
 
 G1 (sub-workflow calls and cross-file composition) is now resolved; see its
-section below for the landed surface. G24-G27 capture follow-up design
+section below for the landed surface. G24-G28 capture follow-up design
 questions raised during the G1 implementation that have not yet been
 scheduled.
 
@@ -794,3 +794,62 @@ schema for registry-style resolution) but it is not used by the bundler today.
 
 **Raised during:** G1 workflow composition implementation (building the
 cross-file bundler and name mangling strategy).
+
+## G28: `maxConcurrency` only accepts literal integers
+
+**Spec/intent:** `parallel(...)` and `parallelMap(...)` accept an options
+object with a `maxConcurrency` field that caps in-flight branches /
+iterations. The AST already types `maxConcurrency` as an arbitrary `Expr`
+(see `ParallelNode.maxConcurrency` and `ParallelMapNode.maxConcurrency` in
+`ast.ts`), and the type checker only requires it to be numeric, so the
+surface syntax accepts any numeric expression.
+
+**The gap:** The emitter's `constExprToValue` only handles literal
+expressions (`StringLiteralExpr`, `NumberLiteralExpr`, `BooleanLiteralExpr`,
+`NullLiteralExpr`, `ArrayLiteralExpr`, `ObjectLiteralExpr`). Anything else
+
+- a parameter reference, a const reference, an arithmetic expression, a
+  task call, a workflow call - is rejected at emit time with
+  `"Expression must be a literal value"`. That diagnostic is also generic
+  (it points at "literal value" without naming the option), so the failure
+  mode for a user who writes `{ maxConcurrency: n }` where `n` is a workflow
+  param is unhelpful.
+
+This also means the static recursion check's descent into `maxConcurrency`
+(`walkExpr` in `typeChecker.ts`) is defense-in-depth only: any cycle
+routed through `maxConcurrency` is independently rejected by the emitter
+with the literal-only error before the recursion diagnostic could matter
+at runtime.
+
+**Desired behavior:** `maxConcurrency` should accept any expression whose
+runtime value is an integer ≥ 1 (the same constraint
+`validateWorkflowIR` already enforces on the literal form). Concretely:
+
+- A workflow param (`workflow run(parallelism: integer) { ... parallel(..., { maxConcurrency: parallelism }) }`).
+- A `const` binding (`const N = computeParallelism(); ... { maxConcurrency: N }`).
+- An arithmetic expression over the above.
+- The result of a task or sub-workflow call returning an integer.
+
+**Required changes:**
+
+- IR: extend `ForkNode.maxConcurrency` / `ForkMapNode.maxConcurrency`
+  from `number | undefined` to accept either a literal integer or a
+  reference / template that resolves to one at run time (mirroring how
+  other dynamic numeric fields are represented).
+- Emitter: instead of `constExprToValue`, emit `maxConcurrency` through
+  the standard expression-lowering path used for other numeric values
+  (binding references via `Template`, generating intermediate bind
+  nodes as needed for complex sub-expressions).
+- Engine: resolve the IR field to an integer at fork/forkMap entry,
+  validate `>= 1`, and surface a clear runtime error if the resolved
+  value is non-integer, non-positive, or otherwise invalid.
+- Validator (`validate.ts`): relax the literal-integer requirement to
+  accept the new dynamic forms and validate them structurally; keep the
+  `>= 1` and integer constraints for the literal case.
+- Type checker: keep the existing numeric requirement; once the engine
+  can validate the runtime value, the type checker does not need a
+  separate integer check (the existing `isNumeric` check is sufficient).
+- Tests: add an end-to-end DSL → IR → engine test for each accepted
+  shape (param ref, const, arithmetic, task call) and a runtime test
+  that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
+  fork entry with a useful error pointing at the option name.

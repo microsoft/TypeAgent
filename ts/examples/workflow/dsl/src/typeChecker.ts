@@ -1461,10 +1461,12 @@ function walkExpr(e: Expr, out: CallEdge[]): void {
             return;
         case "ParallelNode":
             for (const br of e.bodies) collectWorkflowCalls(br.body, out);
+            if (e.maxConcurrency) walkExpr(e.maxConcurrency, out);
             return;
         case "ParallelMapNode":
             walkExpr(e.collection, out);
             collectWorkflowCalls(e.body, out);
+            if (e.maxConcurrency) walkExpr(e.maxConcurrency, out);
             return;
     }
 }

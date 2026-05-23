@@ -388,7 +388,7 @@ export class WorkflowEngine {
         const entryBody = ir.workflows[ir.entry];
         if (!entryBody) {
             return {
-                runId: "",
+                runId,
                 success: false,
                 error: {
                     message: `Entry workflow "${ir.entry}" not found in workflows table.`,

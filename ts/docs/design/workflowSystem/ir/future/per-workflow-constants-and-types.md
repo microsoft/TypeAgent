@@ -24,12 +24,12 @@ every constant/type. There is no notion of "private to workflow X" or
 - **D. Artifact-level store + per-body visibility list.** Single store;
   each body declares which names it can reference.
 
-| | Encapsulation | Sharing | IR diff | Template-resolver diff | Author-facing |
-|---|---|---|---|---|---|
-| A | none | implicit, all | none | none | one global table |
-| B | strong | none (or import-like sugar) | per-body table | "which body am I in?" lookup | per-workflow declaration |
-| C | optional | implicit shared + private | both tables + precedence | precedence rule | private vs shared keyword |
-| D | enumerated | implicit | visibility list per body | filtered lookup | visibility set per workflow |
+|     | Encapsulation | Sharing                     | IR diff                  | Template-resolver diff       | Author-facing               |
+| --- | ------------- | --------------------------- | ------------------------ | ---------------------------- | --------------------------- |
+| A   | none          | implicit, all               | none                     | none                         | one global table            |
+| B   | strong        | none (or import-like sugar) | per-body table           | "which body am I in?" lookup | per-workflow declaration    |
+| C   | optional      | implicit shared + private   | both tables + precedence | precedence rule              | private vs shared keyword   |
+| D   | enumerated    | implicit                    | visibility list per body | filtered lookup              | visibility set per workflow |
 
 ## Why consider this
 

@@ -27,9 +27,7 @@
     "d5-code-review-prep": {
       "inputSchema": {
         "type": "object",
-        "required": [
-          "repoPath"
-        ],
+        "required": ["repoPath"],
         "properties": {
           "repoPath": {
             "type": "string",
@@ -43,9 +41,7 @@
       },
       "outputSchema": {
         "type": "object",
-        "required": [
-          "guide"
-        ],
+        "required": ["guide"],
         "properties": {
           "guide": {
             "type": "string"
@@ -59,9 +55,7 @@
           "task": "shell.exec",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "command"
-            ],
+            "required": ["command"],
             "properties": {
               "command": {
                 "type": "string"
@@ -79,11 +73,7 @@
           },
           "outputSchema": {
             "type": "object",
-            "required": [
-              "stdout",
-              "stderr",
-              "exitCode"
-            ],
+            "required": ["stdout", "stderr", "exitCode"],
             "properties": {
               "stdout": {
                 "type": "string"
@@ -98,11 +88,7 @@
           },
           "inputs": {
             "command": "git",
-            "args": [
-              "diff",
-              "--name-only",
-              "main..HEAD"
-            ],
+            "args": ["diff", "--name-only", "main..HEAD"],
             "cwd": {
               "$from": "input",
               "name": "repoPath"
@@ -116,10 +102,7 @@
           "task": "string.split",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "text",
-              "delimiter"
-            ],
+            "required": ["text", "delimiter"],
             "properties": {
               "text": {
                 "type": "string"
@@ -139,9 +122,7 @@
             "text": {
               "$from": "scope",
               "name": "fileListResult",
-              "path": [
-                "stdout"
-              ]
+              "path": ["stdout"]
             },
             "delimiter": "\n"
           },
@@ -190,10 +171,7 @@
           "body": {
             "inputSchema": {
               "type": "object",
-              "required": [
-                "files",
-                "repoPath"
-              ],
+              "required": ["files", "repoPath"],
               "properties": {
                 "files": {
                   "type": "array",
@@ -213,10 +191,7 @@
                 "task": "list.elementAt",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "list",
-                    "index"
-                  ],
+                  "required": ["list", "index"],
                   "properties": {
                     "list": {
                       "type": "array"
@@ -247,9 +222,7 @@
                 "task": "shell.exec",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "command"
-                  ],
+                  "required": ["command"],
                   "properties": {
                     "command": {
                       "type": "string"
@@ -267,11 +240,7 @@
                 },
                 "outputSchema": {
                   "type": "object",
-                  "required": [
-                    "stdout",
-                    "stderr",
-                    "exitCode"
-                  ],
+                  "required": ["stdout", "stderr", "exitCode"],
                   "properties": {
                     "stdout": {
                       "type": "string"
@@ -308,10 +277,7 @@
                 "task": "text.template",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "template",
-                    "vars"
-                  ],
+                  "required": ["template", "vars"],
                   "properties": {
                     "template": {
                       "type": "string"
@@ -338,9 +304,7 @@
                     "diff": {
                       "$from": "scope",
                       "name": "fileDiff",
-                      "path": [
-                        "stdout"
-                      ]
+                      "path": ["stdout"]
                     }
                   }
                 },
@@ -352,9 +316,7 @@
                 "task": "llm.generate",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "prompt"
-                  ],
+                  "required": ["prompt"],
                   "properties": {
                     "prompt": {
                       "type": "string"
@@ -378,10 +340,7 @@
                 "task": "text.template",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "template",
-                    "vars"
-                  ],
+                  "required": ["template", "vars"],
                   "properties": {
                     "template": {
                       "type": "string"
@@ -415,10 +374,7 @@
                 "task": "list.append",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "list",
-                    "item"
-                  ],
+                  "required": ["list", "item"],
                   "properties": {
                     "list": {
                       "type": "array"
@@ -447,10 +403,7 @@
                 "task": "math.add",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "left",
-                    "right"
-                  ],
+                  "required": ["left", "right"],
                   "properties": {
                     "left": {
                       "type": "number"
@@ -478,9 +431,7 @@
                 "task": "list.length",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "list"
-                  ],
+                  "required": ["list"],
                   "properties": {
                     "list": {
                       "type": "array"
@@ -504,10 +455,7 @@
                 "task": "compare.lessThan",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "left",
-                    "right"
-                  ],
+                  "required": ["left", "right"],
                   "properties": {
                     "left": {
                       "type": "number"
@@ -554,10 +502,7 @@
           "task": "string.join",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "list",
-              "delimiter"
-            ],
+            "required": ["list", "delimiter"],
             "properties": {
               "list": {
                 "type": "array",
@@ -588,10 +533,7 @@
           "task": "text.template",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "template",
-              "vars"
-            ],
+            "required": ["template", "vars"],
             "properties": {
               "template": {
                 "type": "string"

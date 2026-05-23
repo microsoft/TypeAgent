@@ -905,6 +905,42 @@ describe("type checker", () => {
                 "Recursive workflow call",
             );
         });
+
+        test("recursion detected through parallel maxConcurrency", () => {
+            // maxConcurrency accepts an arbitrary numeric expression,
+            // including a WorkflowCallExpr. The static recursion check
+            // must descend into that expression too.
+            expectError(
+                `
+                workflow pick(): number { const r = self(); return r; }
+                workflow self(): number {
+                    const t = parallel(
+                        () => { return 1; },
+                        { maxConcurrency: pick() }
+                    );
+                    const [x] = t;
+                    return x;
+                }
+            `,
+                "Recursive workflow call",
+            );
+        });
+
+        test("recursion detected through parallelMap maxConcurrency", () => {
+            expectError(
+                `
+                workflow pick(): number { const r = self([1]); return r; }
+                workflow self(items: number[]): number[] {
+                    return parallelMap(
+                        items,
+                        (i) => { return i; },
+                        { maxConcurrency: pick() }
+                    );
+                }
+            `,
+                "Recursive workflow call",
+            );
+        });
     });
 
     // ---- Phase 3: compiler entry selection ----

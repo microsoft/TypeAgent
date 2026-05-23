@@ -327,12 +327,18 @@ function createNodeResolver(workspaceRoot: string): FileResolver {
             const resolved = path.resolve(dir, spec);
             // Follow symlinks before the containment check so a
             // symlink inside the workspace cannot smuggle in a file
-            // that lives outside it.
+            // that lives outside it. When the file exists, return
+            // the realpath so BFS dedup in loadModuleTree treats two
+            // specifiers that resolve to the same underlying file as
+            // the same module.
             let realPath: string;
+            let realPathResolved: boolean;
             try {
                 realPath = fs.realpathSync(resolved);
+                realPathResolved = true;
             } catch {
                 realPath = resolved;
+                realPathResolved = false;
             }
             const rel = path.relative(root, realPath);
             if (rel.startsWith("..") || path.isAbsolute(rel)) {
@@ -340,7 +346,7 @@ function createNodeResolver(workspaceRoot: string): FileResolver {
                     `Import resolves outside workspace root (${root}): ${spec}`,
                 );
             }
-            return resolved;
+            return realPathResolved ? realPath : resolved;
         },
         read(absPath) {
             return fs.readFileSync(absPath, "utf8");

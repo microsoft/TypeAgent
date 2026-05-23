@@ -23,7 +23,14 @@
  *    checker).
  */
 
-import { Module, WorkflowDecl, ImportDecl, Statement, Expr, TaskArg } from "./ast.js";
+import {
+    Module,
+    WorkflowDecl,
+    ImportDecl,
+    Statement,
+    Expr,
+    TaskArg,
+} from "./ast.js";
 import { lex } from "./lexer.js";
 import { Parser } from "./parser.js";
 
@@ -62,6 +69,14 @@ export interface LoadResult {
     /** The entry file's modules.workflows (used to pick the entry). */
     entryWorkflows: WorkflowDecl[];
     errors: LoadError[];
+    /*
+     * Note: `loadModuleTree` mutates the parsed AST in place before
+     * returning (mangling non-entry workflow names and rewriting
+     * WorkflowCallExpr targets through each file's local-name map).
+     * Callers must not reuse the `Module`s referenced by `modules`
+     * for a second compilation; the names and call targets they
+     * observe are post-rewrite.
+     */
 }
 
 /**
@@ -207,9 +222,7 @@ export function loadModuleTree(
         }
         for (const imp of module.imports) {
             const sourcePath = importResolutions.get(imp);
-            const sourceMod = sourcePath
-                ? loaded.get(sourcePath)
-                : undefined;
+            const sourceMod = sourcePath ? loaded.get(sourcePath) : undefined;
             if (!sourceMod) {
                 // Should not happen if BFS succeeded; defensive.
                 errors.push({
