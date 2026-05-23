@@ -643,9 +643,9 @@ describe("validateWorkflowIR", () => {
                     kind: "branch",
                     selector: { $from: "input", name: "x" },
                     selectorSchema: { type: "object" },
-                    cases: { a: "start" },
-                    default: "start",
-                } as any,
+                    cases: { a: makeSimpleArm() },
+                    default: makeSimpleArm("dflt"),
+                } as BranchNode,
             },
         });
         const result = validateWorkflowIR(ir);
@@ -664,9 +664,9 @@ describe("validateWorkflowIR", () => {
                     kind: "branch",
                     selector: { $from: "input", name: "x" },
                     selectorSchema: { type: "array" },
-                    cases: { a: "start" },
-                    default: "start",
-                } as any,
+                    cases: { a: makeSimpleArm() },
+                    default: makeSimpleArm("dflt"),
+                } as BranchNode,
             },
         });
         const result = validateWorkflowIR(ir);
@@ -685,9 +685,9 @@ describe("validateWorkflowIR", () => {
                     kind: "branch",
                     selector: null,
                     selectorSchema: { type: "null" },
-                    cases: { null: "start" },
-                    default: "start",
-                } as any,
+                    cases: { null: makeSimpleArm() },
+                    default: makeSimpleArm("dflt"),
+                } as BranchNode,
             },
         });
         const result = validateWorkflowIR(ir);
