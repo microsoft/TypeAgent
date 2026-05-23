@@ -207,7 +207,7 @@ describe("validateWorkflowIR", () => {
 
     it("rejects wrong kind", () => {
         const ir = makeMinimalIR();
-        (ir as any).kind = "not-a-workflow";
+        (ir as unknown as Record<string, unknown>).kind = "not-a-workflow";
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(false);
     });
@@ -406,7 +406,7 @@ describe("validateWorkflowIR", () => {
                     state: {},
                     iterateState: {},
                     // continueWhen intentionally omitted
-                } as any,
+                } as unknown as LoopNode,
             },
             output: null,
             outputSchema: { type: "null" },
@@ -1497,7 +1497,7 @@ describe("validateWorkflowIR", () => {
                         },
                         maxIterations: 10,
                         onError: "handler",
-                    } as any,
+                    } as unknown as LoopNode,
                     handler: {
                         kind: "branch",
                         selectorSchema: { type: "boolean" },
@@ -1555,7 +1555,7 @@ describe("validateWorkflowIR", () => {
                         continueWhen: false,
                         maxIterations: 1,
                         onError: "end",
-                    } as any,
+                    } as LoopNode,
                     end: makeTaskNode({ bind: "end" }),
                 },
             });
@@ -1705,7 +1705,6 @@ describe("validateWorkflowIR", () => {
                                             name: "outerResult",
                                         },
                                     },
-                                    next: "@iterate",
                                 },
                             },
                             output: null,
@@ -1715,7 +1714,7 @@ describe("validateWorkflowIR", () => {
                             i: { $from: "state", name: "i" },
                         },
                         maxIterations: 10,
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 entry: "producer",
                 output: null,
@@ -1768,7 +1767,7 @@ describe("validateWorkflowIR", () => {
                         continueWhen: { $literal: false },
                         maxIterations: 10,
                         bind: "out",
-                    } as any,
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -1830,7 +1829,6 @@ describe("validateWorkflowIR", () => {
                                                         name: "grandparentData",
                                                     },
                                                 },
-                                                next: "@iterate",
                                             },
                                         },
                                         output: null,
@@ -1843,8 +1841,7 @@ describe("validateWorkflowIR", () => {
                                         },
                                     },
                                     maxIterations: 5,
-                                    next: "@iterate",
-                                } as any,
+                                } as unknown as LoopNode,
                             },
                             output: null,
                             outputSchema: { type: "null" },
@@ -1853,7 +1850,7 @@ describe("validateWorkflowIR", () => {
                             i: { $from: "state", name: "i" },
                         },
                         maxIterations: 10,
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 entry: "producer",
                 output: null,
@@ -2116,7 +2113,6 @@ describe("validateWorkflowIR", () => {
                                     inputSchema: { type: "object" },
                                     outputSchema: { type: "object" },
                                     inputs: {},
-                                    next: "@iterate",
                                 },
                             },
                             output: null,
@@ -2128,7 +2124,7 @@ describe("validateWorkflowIR", () => {
                         },
                         maxIterations: 10,
                         bind: "out",
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2173,7 +2169,6 @@ describe("validateWorkflowIR", () => {
                                             name: "nonexistent",
                                         },
                                     },
-                                    next: "@iterate",
                                 },
                             },
                             output: null,
@@ -2184,7 +2179,7 @@ describe("validateWorkflowIR", () => {
                         },
                         maxIterations: 10,
                         bind: "out",
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2222,7 +2217,6 @@ describe("validateWorkflowIR", () => {
                                     inputSchema: { type: "object" },
                                     outputSchema: { type: "object" },
                                     inputs: {},
-                                    next: "@iterate",
                                 },
                             },
                             output: null,
@@ -2234,7 +2228,7 @@ describe("validateWorkflowIR", () => {
                         },
                         maxIterations: 10,
                         bind: "out",
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2282,7 +2276,6 @@ describe("validateWorkflowIR", () => {
                                             name: "count",
                                         },
                                     },
-                                    next: "@iterate",
                                 },
                             },
                             output: null,
@@ -2293,7 +2286,7 @@ describe("validateWorkflowIR", () => {
                         },
                         maxIterations: 10,
                         bind: "out",
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -2661,7 +2654,10 @@ describe("validateWorkflowIR", () => {
                             type: "string",
                             enum: ["yes", "no"],
                         },
-                        cases: { yes: makeSimpleArm("yesStep"), maybe: makeSimpleArm("maybeStep") },
+                        cases: {
+                            yes: makeSimpleArm("yesStep"),
+                            maybe: makeSimpleArm("maybeStep"),
+                        },
                         default: makeSimpleArm("dfltStep"),
                     } as BranchNode,
                     end: {
@@ -3101,7 +3097,6 @@ describe("validateWorkflowIR", () => {
                                         },
                                     },
                                     inputs: {},
-                                    next: "@exit",
                                     bind: "stepOut",
                                 },
                             },
@@ -3115,9 +3110,10 @@ describe("validateWorkflowIR", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" },
                         },
+                        continueWhen: false,
                         maxIterations: 5,
                         bind: "out",
-                    } as any,
+                    } as LoopNode,
                 },
                 outputSchema: { type: "integer" },
             });
@@ -3703,7 +3699,7 @@ describe("validateWorkflowIR", () => {
     describe("version validation", () => {
         it("rejects IR with wrong version", () => {
             const ir = makeMinimalIR();
-            (ir as any).version = "2";
+            (ir as unknown as Record<string, unknown>).version = "2";
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(result.errors.some((e) => e.message.includes('"1"'))).toBe(
@@ -3713,7 +3709,7 @@ describe("validateWorkflowIR", () => {
 
         it("rejects IR with missing version", () => {
             const ir = makeMinimalIR();
-            delete (ir as any).version;
+            delete (ir as unknown as Record<string, unknown>).version;
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
         });
@@ -3731,7 +3727,7 @@ describe("validateWorkflowIR", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: makeTaskNode({
-                        inputs: { x: { $foo: "bar" } as any },
+                        inputs: { x: { $foo: "bar" } as unknown as Template },
                         bind: "out",
                     }),
                 },
@@ -3747,7 +3743,7 @@ describe("validateWorkflowIR", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: makeTaskNode({
-                        inputs: { outer: { inner: { $magic: 1 } as any } },
+                        inputs: { outer: { inner: { $magic: 1 } as unknown as Template } },
                         bind: "out",
                     }),
                 },
@@ -3790,7 +3786,7 @@ describe("validateWorkflowIR", () => {
 
         it("rejects unknown $-prefixed key in workflow output template", () => {
             const ir = makeMinimalIR({
-                output: { $bad: "value" } as any,
+                output: { $bad: "value" } as unknown as Template,
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
@@ -3801,7 +3797,7 @@ describe("validateWorkflowIR", () => {
 
         it("rejects unknown $-prefixed key in branch arm inputs", () => {
             const arm = makeSimpleArm("armStep");
-            (arm.inputs as any).bad = { $weird: 1 };
+            (arm.inputs as Record<string, unknown>).bad = { $weird: 1 };
             const ir = makeMinimalIR({
                 nodes: {
                     start: {
@@ -3810,7 +3806,7 @@ describe("validateWorkflowIR", () => {
                         selectorSchema: { type: "boolean" },
                         cases: { true: arm },
                         default: makeSimpleArm("defStep"),
-                    } as any,
+                    } as BranchNode,
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -3828,7 +3824,7 @@ describe("validateWorkflowIR", () => {
                         kind: "fork",
                         branches: {
                             a: {
-                                inputs: { bad: { $weirdA: 1 } } as any,
+                                inputs: { bad: { $weirdA: 1 } as unknown as Template },
                                 scope: {
                                     inputSchema: {},
                                     entry: "a_step",
@@ -3860,7 +3856,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         bind: "out",
-                    } as any,
+                    } as ForkNode,
                 },
                 output: { $from: "scope", name: "out" },
             });
@@ -3886,7 +3882,7 @@ describe("validateWorkflowIR", () => {
                                     nodes: {
                                         a_step: makeTaskNode({ bind: "aOut" }),
                                     },
-                                    output: { $weirdOut: 1 } as any,
+                                    output: { $weirdOut: 1 },
                                     outputSchema: { type: "object" },
                                 },
                             },
@@ -3911,7 +3907,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         bind: "out",
-                    } as any,
+                    } as ForkNode,
                 },
                 output: { $from: "scope", name: "out" },
             });
@@ -3928,7 +3924,7 @@ describe("validateWorkflowIR", () => {
                 nodes: {
                     forkMap_0: {
                         kind: "forkMap",
-                        collection: { $weirdColl: 1 } as any,
+                        collection: { $weirdColl: 1 },
                         collectionSchema: {
                             type: "array",
                             items: { type: "string" },
@@ -3948,7 +3944,7 @@ describe("validateWorkflowIR", () => {
                             items: { type: "object" },
                         },
                         bind: "out",
-                    } as any,
+                    } as ForkMapNode,
                 },
                 output: { $from: "scope", name: "out" },
             });
@@ -3971,7 +3967,7 @@ describe("validateWorkflowIR", () => {
                             items: { type: "string" },
                         },
                         elementParam: "item",
-                        inputs: { bad: { $weirdInputs: 1 } } as any,
+                        inputs: { bad: { $weirdInputs: 1 } },
                         body: {
                             inputSchema: {},
                             entry: "body_step",
@@ -3986,7 +3982,7 @@ describe("validateWorkflowIR", () => {
                             items: { type: "object" },
                         },
                         bind: "out",
-                    } as any,
+                    } as ForkMapNode,
                 },
                 inputSchema: {
                     type: "object",
@@ -4022,7 +4018,7 @@ describe("validateWorkflowIR", () => {
                             nodes: {
                                 body_step: makeTaskNode({ bind: "stepOut" }),
                             },
-                            output: { $weirdBodyOut: 1 } as any,
+                            output: { $weirdBodyOut: 1 },
                             outputSchema: { type: "object" },
                         },
                         outputSchema: {
@@ -4030,7 +4026,7 @@ describe("validateWorkflowIR", () => {
                             items: { type: "object" },
                         },
                         bind: "out",
-                    } as any,
+                    } as ForkMapNode,
                 },
                 inputSchema: {
                     type: "object",
@@ -4755,8 +4751,8 @@ describe("validateWorkflowIR", () => {
                         continueWhen: {
                             $from: "scope",
                             name: "doesNotExist",
-                        } as any,
-                    } as any,
+                        },
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -4786,8 +4782,8 @@ describe("validateWorkflowIR", () => {
                         continueWhen: {
                             $from: "state",
                             name: "noSuchVar",
-                        } as any,
-                    } as any,
+                        },
+                    } as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -4814,7 +4810,7 @@ describe("validateWorkflowIR", () => {
                         },
                         state: {},
                         iterateState: {},
-                    } as any,
+                    } as unknown as LoopNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -4859,7 +4855,7 @@ describe("validateWorkflowIR", () => {
                                                 x: {
                                                     $from: "state",
                                                     name: "counter",
-                                                } as any,
+                                                },
                                             },
                                         },
                                     },
@@ -4878,7 +4874,7 @@ describe("validateWorkflowIR", () => {
                                 outputSchema: { type: "null" },
                             },
                         },
-                    } as any,
+                    } as BranchNode,
                 },
                 output: null,
                 outputSchema: { type: "null" },
@@ -4908,13 +4904,13 @@ describe("validateWorkflowIR", () => {
                         state: {
                             counter: {
                                 schema: { type: "integer" },
-                                initial: 0 as any,
+                                initial: 0,
                             },
                         },
                         iterateState: {
-                            counter: { $from: "state", name: "counter" } as any,
+                            counter: { $from: "state", name: "counter" },
                         },
-                        continueWhen: false as any,
+                        continueWhen: false,
                         body: {
                             inputSchema: { type: "object" },
                             entry: "branch",
@@ -4930,7 +4926,7 @@ describe("validateWorkflowIR", () => {
                                                 counter: {
                                                     $from: "state",
                                                     name: "counter",
-                                                } as any,
+                                                },
                                             },
                                             scope: {
                                                 inputSchema: {
@@ -4962,7 +4958,7 @@ describe("validateWorkflowIR", () => {
                                                             counter: {
                                                                 $from: "input",
                                                                 name: "counter",
-                                                            } as any,
+                                                            },
                                                         },
                                                     },
                                                 },
@@ -4981,12 +4977,12 @@ describe("validateWorkflowIR", () => {
                                             outputSchema: { type: "null" },
                                         },
                                     },
-                                } as any,
+                                } as BranchNode,
                             },
                             output: null,
                             outputSchema: { type: "null" },
                         },
-                    } as any,
+                    } as LoopNode,
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
@@ -5148,7 +5144,7 @@ describe("validateWorkflowIR", () => {
                         entry: "callHelper",
                         nodes: {
                             callHelper: makeCallNode("helper", {
-                                inputs: { x: { $bad: "value" } as any },
+                                inputs: { x: { $bad: "value" } },
                             }),
                         },
                         output: { $from: "scope", name: "result" },
@@ -5209,7 +5205,7 @@ describe("validateWorkflowIR", () => {
                                                     $from: "scope",
                                                     name: "data",
                                                     path: ["value"],
-                                                } as any,
+                                                },
                                             },
                                             bind: "armOut",
                                         }),
@@ -5222,7 +5218,7 @@ describe("validateWorkflowIR", () => {
                         default: makeSimpleArm(),
                         bind: "result",
                         outputSchema: { type: "object" },
-                    } as any,
+                    } as BranchNode,
                 },
                 output: { $from: "scope", name: "result" },
             });
