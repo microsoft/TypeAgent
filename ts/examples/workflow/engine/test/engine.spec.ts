@@ -18,6 +18,7 @@ import {
     TaskDefinition,
     TaskPolicy,
     Template,
+    validateWorkflowIR,
 } from "workflow-model";
 import {
     TaskRegistry,
@@ -45,8 +46,15 @@ import {
     mathRound,
     mathCeil,
     errorFail,
+    httpGet,
 } from "../src/index.js";
-import { readFileSync, unlinkSync, existsSync } from "node:fs";
+import {
+    readFileSync,
+    writeFileSync,
+    realpathSync,
+    unlinkSync,
+    existsSync,
+} from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -2627,8 +2635,6 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("static validator detects invalid scope path reference", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
             // Node "consumer" references $from: "scope", name: "data",
             // path: ["nonexistent"] - but the producer's outputSchema
             // has no such property.
@@ -2692,8 +2698,6 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("static validator passes valid scope path reference", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
             const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "goodRef",
@@ -2749,8 +2753,6 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("static validator detects invalid path in loop iterateState", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
             const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badLoopState",
@@ -3264,7 +3266,6 @@ describe("WorkflowEngine (IR v1)", () => {
                 tmpdir(),
                 `workflow-pathtest-${Date.now()}.txt`,
             );
-            const { writeFileSync } = await import("node:fs");
             writeFileSync(testPath, "safe-content", "utf8");
 
             try {
@@ -4525,7 +4526,6 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(true);
             const stdout = (result.output as any).stdout.trim();
             // realpath to handle symlinks like /tmp -> /private/tmp
-            const { realpathSync } = await import("node:fs");
             expect(stdout).toBe(realpathSync(tmpdir()));
         });
 
@@ -4868,8 +4868,6 @@ describe("WorkflowEngine (IR v1)", () => {
             // Use a mock that simulates a streaming response.
             // The real http.get code streams and checks byte count.
             // We test via the builtinTasks import directly.
-            const { httpGet } = await import("../src/builtinTasks.js");
-
             // Mock a global fetch that returns a large streaming body
             const originalFetch = globalThis.fetch;
             const largeBody = "X".repeat(200);
@@ -5144,8 +5142,6 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("static schema type checking", () => {
         it("detects type mismatch (producer: string, consumer: integer)", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
             const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "typeMismatch",
