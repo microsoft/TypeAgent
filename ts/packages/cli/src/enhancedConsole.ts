@@ -296,9 +296,7 @@ function tryCancelRunningHead(
     return false;
 }
 
-// Mirror of the server's per-conversation queue, owned by this CLI process.
-// Holds the snapshot + monotonic version watermark + admission policy; pure
-// data — UI side effects live in the event handlers below.
+// Mirror of the server's per-conversation queue. UI side effects live in the event handlers below.
 const queueMirror = new QueueStateMirror();
 // Tracks recent submits from THIS CLI so requestStarted doesn't double-print; pruned per access.
 const RECENT_SUBMITTED_TTL_MS = 60_000;
@@ -351,11 +349,7 @@ export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
     return recentlySubmittedRequestIds;
 }
 
-/**
- * Bootstrap the CLI's local queue state from a snapshot returned by
- * `joinConversation`. Resets the version watermark so subsequent push
- * events are admitted. Pass `undefined` to clear after disconnect.
- */
+/** Bootstrap CLI queue state from a snapshot, or pass `undefined` to clear. */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
     queueMirror.reset(snapshot);
 }

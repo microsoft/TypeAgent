@@ -4,23 +4,10 @@
 import type { QueuedRequest, QueueSnapshot } from "./queue.js";
 
 /**
- * Client-side mirror of the server's per-conversation queue. Owns the
- * snapshot field, the monotonic version watermark, and the policy that drops
- * stale push events from out-of-order delivery. Pure data: no I/O, no DOM,
- * no console — callers wire returned values to their own UI affordances.
- *
- * Lifecycle:
- *   1. `reset(snapshot)` on bootstrap (e.g. `JoinConversationResult.queueSnapshot`)
- *      or after disconnect (`reset(undefined)`).
- *   2. `applyQueued` / `applyStarted` / `applyCancelled` on fine-grained push
- *      events; each returns `admitted` and any data the caller needs for UI
- *      side effects (e.g. the previously-running entry, the cancelled text).
- *   3. `applyQueueStateChanged` on the authoritative coalesced snapshot; the
- *      `previous` field lets callers diff to clear stale UI.
- *
- * Admission policy: strict `<` against the watermark. Equal versions are
- * admitted so a paired same-version `queueStateChanged` reconciles after each
- * fine-grained event.
+ * Client-side mirror of the server's per-conversation queue. Pure data —
+ * callers wire returned values to their own UI. Admission policy: strict
+ * `<` against the version watermark, so a paired same-version snapshot
+ * still reconciles after each fine-grained event.
  */
 export class QueueStateMirror {
     private _snapshot: QueueSnapshot | undefined;
@@ -34,10 +21,7 @@ export class QueueStateMirror {
         return this._lastAppliedVersion;
     }
 
-    /**
-     * Bootstrap from an authoritative snapshot, or clear after disconnect.
-     * Resets the version watermark so subsequent push events are admitted.
-     */
+    /** Bootstrap from a snapshot, or clear after disconnect. */
     public reset(snapshot: QueueSnapshot | undefined): void {
         this._snapshot = snapshot ? cloneQueueSnapshot(snapshot) : undefined;
         this._lastAppliedVersion =
@@ -67,10 +51,8 @@ export class QueueStateMirror {
         snap.queued = snap.queued.filter(
             (e) => e.requestId !== entry.requestId,
         );
-        // Coalescer note: the trailing `running:null` snapshot for the
-        // previously-running entry is often merged with this `started`
-        // broadcast. Surface the prior entry so callers can clear its UI;
-        // otherwise intermediate items would stay stuck on "running".
+        // Surface prior running entry so callers can clear its UI: the coalescer
+        // often merges the previous `running:null` snapshot into this started event.
         const prevRunning =
             snap.running && snap.running.requestId !== entry.requestId
                 ? snap.running
@@ -109,12 +91,8 @@ export class QueueStateMirror {
         return { admitted: true, previous };
     }
 
-    /**
-     * Admit `version` if not strictly older than the watermark. Same-version
-     * events are admitted so an authoritative `queueStateChanged` can overwrite
-     * a paired fine-grained event. Undefined versions are always admitted
-     * (defensive: some legacy paths may omit a version).
-     */
+    // Equal versions are admitted so an authoritative `queueStateChanged` can
+    // overwrite a paired fine-grained event. Undefined versions always admitted.
     private admitVersion(version: number | undefined): boolean {
         if (typeof version !== "number") return true;
         if (version < this._lastAppliedVersion) return false;
@@ -136,41 +114,25 @@ export class QueueStateMirror {
 }
 
 export interface ApplyResult {
-    /** True if the event passed the version watermark and was applied. */
     admitted: boolean;
 }
 
 export interface ApplyStartedResult extends ApplyResult {
-    /**
-     * When admitted: the entry that was running before this transition (if
-     * different). Surface for callers to clear stale UI; the coalescer often
-     * merges the prior entry's `running:null` snapshot with this event.
-     */
+    /** Prior running entry, when different from the new one (for UI cleanup). */
     previousRunning?: QueuedRequest | undefined;
 }
 
 export interface ApplyCancelledResult extends ApplyResult {
-    /**
-     * When admitted and the cancelled entry was found in the snapshot: its
-     * raw text. Used by clients that print a "cancelled: <text>" affordance.
-     */
+    /** Raw text of the cancelled entry, if it was in the snapshot. */
     cancelledText?: string | undefined;
 }
 
 export interface ApplyQueueStateChangedResult extends ApplyResult {
-    /**
-     * When admitted: the snapshot in effect immediately before the swap
-     * (already a clone — safe to retain). Used to diff for UI cleanup.
-     */
+    /** Snapshot in effect before the swap (cloned — safe to retain). */
     previous?: QueueSnapshot | undefined;
 }
 
-/**
- * Deep-clone a `QueueSnapshot` so the caller can mutate freely without
- * aliasing the server's broadcast copy. Includes `pauseReason` (which the
- * legacy per-client clones in `ChatView`/`enhancedConsole` dropped — picking
- * it up here is additive and strictly more correct).
- */
+/** Deep-clone a `QueueSnapshot` so callers can mutate freely. */
 export function cloneQueueSnapshot(snap: QueueSnapshot): QueueSnapshot {
     const cloned: QueueSnapshot = {
         running: snap.running ? { ...snap.running } : null,
@@ -178,8 +140,6 @@ export function cloneQueueSnapshot(snap: QueueSnapshot): QueueSnapshot {
         paused: snap.paused,
         version: snap.version,
     };
-    // `pauseReason` is optional under exactOptionalPropertyTypes; only attach
-    // when present so we don't widen the property to `undefined`.
     if (snap.pauseReason !== undefined) {
         cloned.pauseReason = snap.pauseReason;
     }

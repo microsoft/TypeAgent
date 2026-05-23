@@ -27,10 +27,8 @@ import {
     UserFeedbackEntry,
     UserMessageHiddenEntry,
 } from "agent-dispatcher";
-// QueueStateMirror is a class (value, not just a type), so we import it from
-// the pure types package directly. Importing it via `agent-dispatcher` would
-// force vite to pull `agent-dispatcher`'s server-only transitive deps
-// (telemetry, node:fs, ...) into the renderer bundle.
+// QueueStateMirror is a value import; route through the pure types pkg so vite
+// doesn't bundle agent-dispatcher's server-only deps (telemetry, node:fs, ...).
 import { QueueStateMirror } from "@typeagent/dispatcher-types";
 
 import { PartialCompletion } from "../partial";
@@ -90,12 +88,7 @@ export class ChatView {
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
 
-    /**
-     * Mirror of the server's per-conversation queue. Owns the snapshot,
-     * monotonic version watermark, and stale-event admission policy. UI
-     * side effects (chip stamping, MG materialization) live in the event
-     * handlers below.
-     */
+    /** Mirror of the server's per-conversation queue. UI side effects live in handlers below. */
     private queueMirror = new QueueStateMirror();
     /** Queue status chips deferred until their MessageGroup is created. */
     private pendingQueueStatus = new Map<string, "queued" | "running">();
@@ -464,11 +457,8 @@ export class ChatView {
         }
     }
 
-    /**
-     * Cancel every entry in the current queue (running + queued). Per-id
-     * errors are swallowed so one dead RPC doesn't strand the rest; the
-     * server's `requestCancelled` broadcasts drive the UI updates.
-     */
+    // Best-effort: per-id RPC errors are swallowed so one dead call doesn't
+    // strand the rest. Server `requestCancelled` broadcasts drive the UI.
     private async cancelAllQueuedAndRunning(): Promise<void> {
         const snap = this.queueMirror.snapshot;
         const dispatcher = this._dispatcher;
@@ -1064,7 +1054,6 @@ export class ChatView {
 
     // Server-side queue: drives per-bubble "queued"/"running" chips.
 
-    /** Bootstrap from `JoinConversationResult.queueSnapshot`. */
     public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
         const prev = this.queueMirror.snapshot;
         this.queueMirror.reset(snapshot);
@@ -1079,10 +1068,6 @@ export class ChatView {
     public onRequestStarted(entry: QueuedRequest, version: number): void {
         const result = this.queueMirror.applyStarted(entry, version);
         if (!result.admitted) return;
-        // The coalescer often collapses the previously-running entry's
-        // `queueStateChanged(running:null)` with this start event into a
-        // single emit. Clear the prior chip explicitly; otherwise the
-        // intermediate item stays stuck on "running" forever.
         if (result.previousRunning) {
             const prevId = result.previousRunning.requestId;
             this.pendingQueueStatus.delete(prevId);
@@ -1098,16 +1083,13 @@ export class ChatView {
     ): void {
         if (!this.queueMirror.applyCancelled(requestId, version).admitted)
             return;
-        // Clear any chip and pending status for the cancelled entry.
         this.pendingQueueStatus.delete(requestId);
         const mg = this.idToMessageGroup.get(requestId);
         if (mg) {
             mg.setQueueStatus(null);
-            // For remote-origin bubbles there is no commandResult promise to
-            // resolve, so this is the only signal that lets us render the
-            // "⚠ Cancelled" affordance. notifyCancelled is idempotent, so
-            // local-origin bubbles whose requestCompleted already fired are
-            // unaffected.
+            // Remote-origin bubbles have no commandResult promise, so this is
+            // the only signal that renders the "⚠ Cancelled" affordance.
+            // notifyCancelled is idempotent — local-origin bubbles unaffected.
             mg.notifyCancelled();
         }
     }
@@ -1118,10 +1100,7 @@ export class ChatView {
         this.reconcileChipsToSnapshot(result.previous, snapshot);
     }
 
-    /**
-     * Drive chips off an authoritative snapshot: stamp live entries, clear
-     * chips on entries that have dropped out, and sweep stale pending entries.
-     */
+    /** Stamp/clear chips to match an authoritative snapshot; sweep stale pending entries. */
     private reconcileChipsToSnapshot(
         prev: QueueSnapshot | undefined,
         next: QueueSnapshot | undefined,
