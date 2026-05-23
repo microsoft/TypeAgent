@@ -409,7 +409,10 @@ export class WorkflowEngine {
         // `this` means a single engine instance can service multiple
         // concurrent `run()` calls without sub-workflow dispatch racing
         // across them.
-        const ctx: RunCtx = { workflows: ir.workflows, wfCallStack: [ir.entry] };
+        const ctx: RunCtx = {
+            workflows: ir.workflows,
+            wfCallStack: [ir.entry],
+        };
 
         // Validate workflow input against inputSchema.
         if (entryBody.inputSchema) {

@@ -253,14 +253,15 @@ function validateWorkflowBody(
  * case will be caught at build time rather than silently skipped at runtime.
  */
 function assertNever(x: never): never {
-    throw new Error(`Unhandled WorkflowNode kind: ${(x as { kind: string }).kind}`);
+    throw new Error(
+        `Unhandled WorkflowNode kind: ${(x as { kind: string }).kind}`,
+    );
 }
 
 function validateWorkflowCalls(
     ir: WorkflowIR,
     errors: ValidationError[],
 ): void {
-
     // First pass: per-call resolution + schema match.
     for (const [wfName, body] of Object.entries(ir.workflows)) {
         for (const [nodeId, node] of Object.entries(body.nodes)) {
@@ -348,7 +349,9 @@ function collectCallsInNode(
         }
         case "loop":
         case "forkMap":
-            for (const [innerId, innerNode] of Object.entries(node.body.nodes)) {
+            for (const [innerId, innerNode] of Object.entries(
+                node.body.nodes,
+            )) {
                 collectCallsInNode(
                     innerNode,
                     `${path}.body.nodes.${innerId}`,
@@ -374,10 +377,14 @@ function collectCallsInNode(
         case "branch": {
             const arms: Array<[string, BranchArm]> = [
                 ...Object.entries(node.cases),
-                ...(node.default ? [["default", node.default] as [string, BranchArm]] : []),
+                ...(node.default
+                    ? [["default", node.default] as [string, BranchArm]]
+                    : []),
             ];
             for (const [armKey, arm] of arms) {
-                for (const [innerId, innerNode] of Object.entries(arm.scope.nodes)) {
+                for (const [innerId, innerNode] of Object.entries(
+                    arm.scope.nodes,
+                )) {
                     collectCallsInNode(
                         innerNode,
                         `${path}.cases.${armKey}.scope.nodes.${innerId}`,
@@ -1146,7 +1153,14 @@ function validateScopeCFG(
                     const bodyPrefix = `${prefix}.${id}.body.nodes`;
 
                     // Pass 5: Scope closure
-                    checkScopeClosure(node, id, bodyPrefix, prefix, nodes, errors);
+                    checkScopeClosure(
+                        node,
+                        id,
+                        bodyPrefix,
+                        prefix,
+                        nodes,
+                        errors,
+                    );
 
                     // Pass 11: State soundness
                     checkStateSoundness(node, id, `${prefix}.${id}`, errors);
@@ -2715,7 +2729,10 @@ function validateTypeCompatibility(
                             node.body.output,
                             bodyCtx,
                         );
-                        if (outputResolved && !isTopSchema(node.body.outputSchema)) {
+                        if (
+                            outputResolved &&
+                            !isTopSchema(node.body.outputSchema)
+                        ) {
                             if (
                                 !isStructuralSubtype(
                                     outputResolved,
@@ -3137,7 +3154,9 @@ function validateScopeTemplates(
                 break;
             case "fork":
                 for (const [bName, branch] of Object.entries(node.branches)) {
-                    for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
+                    for (const [fieldName, tmpl] of Object.entries(
+                        branch.inputs,
+                    )) {
                         checkReservedTemplateKeys(
                             tmpl,
                             `${path}.branches.${bName}.inputs.${fieldName}`,
@@ -3163,7 +3182,9 @@ function validateScopeTemplates(
                     errors,
                 );
                 if (node.inputs) {
-                    for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                    for (const [fieldName, tmpl] of Object.entries(
+                        node.inputs,
+                    )) {
                         checkReservedTemplateKeys(
                             tmpl,
                             `${path}.inputs.${fieldName}`,

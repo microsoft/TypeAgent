@@ -5070,9 +5070,9 @@ describe("validateWorkflowIR", () => {
             };
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some((e) => e.message.includes("cycle")),
-            ).toBe(true);
+            expect(result.errors.some((e) => e.message.includes("cycle"))).toBe(
+                true,
+            );
         });
 
         it("rejects a workflow call cycle routed through a branch arm (previously missed)", () => {
@@ -5103,7 +5103,10 @@ describe("validateWorkflowIR", () => {
                                             inputSchema: { type: "object" },
                                             entry: "callBeta",
                                             nodes: { callBeta },
-                                            output: { $from: "scope", name: "result" },
+                                            output: {
+                                                $from: "scope",
+                                                name: "result",
+                                            },
                                             outputSchema: { type: "object" },
                                         },
                                     },
@@ -5126,9 +5129,9 @@ describe("validateWorkflowIR", () => {
             };
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some((e) => e.message.includes("cycle")),
-            ).toBe(true);
+            expect(result.errors.some((e) => e.message.includes("cycle"))).toBe(
+                true,
+            );
         });
 
         it("rejects reserved $-key in workflowCall inputs (previously missed by validateScopeTemplates)", () => {

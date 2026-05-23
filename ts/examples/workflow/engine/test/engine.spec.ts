@@ -8167,7 +8167,10 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("defense-in-depth: runtime workflow call cycle detection", () => {
         /** Minimal call node whose schemas match a body with inputSchema/outputSchema: {type:"object"}. */
-        function callNode(targetName: string, bind = "result"): WorkflowCallNode {
+        function callNode(
+            targetName: string,
+            bind = "result",
+        ): WorkflowCallNode {
             return {
                 kind: "workflowCall",
                 workflowRef: { name: targetName },
@@ -8236,8 +8239,13 @@ describe("WorkflowEngine (IR v1)", () => {
                                         scope: {
                                             inputSchema: { type: "object" },
                                             entry: "callBeta",
-                                            nodes: { callBeta: callNode("beta") },
-                                            output: { $from: "scope", name: "result" },
+                                            nodes: {
+                                                callBeta: callNode("beta"),
+                                            },
+                                            output: {
+                                                $from: "scope",
+                                                name: "result",
+                                            },
                                             outputSchema: { type: "object" },
                                         },
                                     },
