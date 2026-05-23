@@ -31,6 +31,9 @@ function stampRequestIdOn(div: HTMLElement, requestId: RequestId) {
     }
 }
 
+const CANCELLED_MESSAGE = "⚠  Cancelled";
+const CANCELLED_SOURCE = "shell";
+
 export class MessageGroup {
     public metricsDiv?: {
         mainMetricsDiv: HTMLDivElement;
@@ -451,11 +454,15 @@ export class MessageGroup {
         this.cancelledRendered = true;
         const lastAgentMessage = this.getLastAgentMessage();
         if (lastAgentMessage !== undefined) {
-            lastAgentMessage.setMessage("⚠  Cancelled", "shell", "block");
+            lastAgentMessage.setMessage(
+                CANCELLED_MESSAGE,
+                CANCELLED_SOURCE,
+                "block",
+            );
             this.chatView.updateScroll();
         } else {
             this.addStatusMessage(
-                { message: "⚠  Cancelled", source: "shell" },
+                { message: CANCELLED_MESSAGE, source: CANCELLED_SOURCE },
                 false,
             );
         }

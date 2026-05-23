@@ -252,6 +252,41 @@ const DOUBLE_ESCAPE_WINDOW_MS = 1000;
 // Dispatcher ref shared with input handlers (SIGINT, ESC, execution key listener) outside the bind closure.
 const moduleDispatcherRef: { current?: Dispatcher } = {};
 
+/**
+ * Best-effort cancel of the currently running request. Prefers the server-known
+ * requestId from the queue snapshot; falls back to our locally-known requestId
+ * (post-setUserRequest), and finally the client-assigned id (pre-setUserRequest
+ * race window). Returns `true` if a cancel was dispatched.
+ *
+ * Errors are swallowed: cancellation is fire-and-forget; the authoritative UI
+ * update arrives via the `requestCancelled` broadcast.
+ */
+function tryCancelRunningHead(
+    dispatcher: Dispatcher | undefined = moduleDispatcherRef.current,
+): boolean {
+    if (!dispatcher) return false;
+    const running = cliQueueState?.running?.requestId ?? currentRequestId;
+    if (running) {
+        try {
+            // cancelCommand returns Promise<CancelResult>; swallow rejections.
+            dispatcher.cancelCommand(running).catch(() => {});
+        } catch {
+            // Channel gone (sync throw on disconnected stub); nothing to cancel.
+        }
+        return true;
+    }
+    if (isProcessing && currentClientRequestId) {
+        try {
+            // cancelCommandByClientId is sync (void).
+            dispatcher.cancelCommandByClientId(currentClientRequestId);
+        } catch {
+            // Channel gone; nothing to cancel.
+        }
+        return true;
+    }
+    return false;
+}
+
 // Latest snapshot pushed by the SharedDispatcher; undefined when no queueing dispatcher is connected.
 let cliQueueState: QueueSnapshot | undefined;
 // Watermark for queue event versions; events strictly older are dropped as stale reorders.
@@ -1862,18 +1897,7 @@ async function questionWithCompletion(
                     // Empty prompt, no completions, single press — cancel the
                     // currently running command if any. Double-Escape is handled
                     // separately below and clears the whole queue.
-                    const d = moduleDispatcherRef.current;
-                    const running =
-                        cliQueueState?.running?.requestId ?? currentRequestId;
-                    if (running && d) {
-                        try {
-                            void Promise.resolve(
-                                d.cancelCommand(running),
-                            ).catch(() => {});
-                        } catch {
-                            // Channel gone; nothing to cancel.
-                        }
-                    }
+                    tryCancelRunningHead();
                 }
                 if (isDouble) {
                     const snap = cliQueueState;
@@ -2275,24 +2299,7 @@ function startExecutionKeyListener(
         return () => {};
     }
 
-    const tryCancelRunning = (): boolean => {
-        if (currentRequestId) {
-            dispatcher.cancelCommand(currentRequestId);
-            return true;
-        }
-        if (isProcessing && currentClientRequestId) {
-            // setUserRequest not yet received — cancel by client-assigned ID
-            dispatcher.cancelCommandByClientId(currentClientRequestId);
-            return true;
-        }
-        // Honour a server-side `running` head known via push events even without an inline await.
-        const running = cliQueueState?.running;
-        if (running) {
-            dispatcher.cancelCommand(running.requestId);
-            return true;
-        }
-        return false;
-    };
+    const tryCancelRunning = (): boolean => tryCancelRunningHead(dispatcher);
 
     const printNoRunningHint = () => {
         const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;
@@ -2407,12 +2414,7 @@ export async function processCommandsEnhanced<T>(
                 process.exit(0);
             }
             lastCtrlCTime = now;
-            const d = getDispatcher();
-            // Snapshot's running id is authoritative; currentRequestId is the pre-snapshot fallback.
-            const running =
-                cliQueueState?.running?.requestId ?? currentRequestId;
-            if (running && d) {
-                d.cancelCommand(running);
+            if (tryCancelRunningHead(getDispatcher())) {
                 return;
             }
             const hasQueued = (cliQueueState?.queued.length ?? 0) > 0;

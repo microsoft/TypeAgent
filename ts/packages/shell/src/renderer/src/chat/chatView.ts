@@ -768,6 +768,7 @@ export class ChatView {
         this.idToMessageGroup.clear();
         this.pendingLocalGroups.clear();
         this.clientMessageGroups.clear();
+        this.pendingQueueStatus.clear();
         this.commandBackStackIndex = -1;
         this.commandBackStack = [];
     }
@@ -1200,34 +1201,12 @@ export class ChatView {
     /**
      * Apply a chip to the matching MessageGroup, or stash the status in
      * `pendingQueueStatus` so it's applied when the MG materializes.
-     *
-     * Remote-originator entries (submitted from another client like the CLI)
-     * have no local MessageGroup yet — `setUserRequest` for them isn't
-     * broadcast until the entry actually starts processing. We materialize a
-     * remote user bubble eagerly from the entry text so peer clients see
-     * "queued" / "running" bubbles in real time instead of after the fact.
      */
     private tryApplyQueueStatusToGroup(
         entry: QueuedRequest,
         status: "queued" | "running" | null,
     ): void {
-        const requestId: RequestId = {
-            requestId: entry.requestId,
-            clientRequestId: entry.clientRequestId,
-        };
-        let mg = this.idToMessageGroup.get(entry.requestId);
-        if (
-            !mg &&
-            status !== null &&
-            entry.text &&
-            !this.isLocalRequest(requestId)
-        ) {
-            this.addRemoteUserMessage(requestId, entry.text);
-            mg = this.idToMessageGroup.get(entry.requestId);
-        }
-        if (!mg) {
-            mg = this.getMessageGroup(requestId);
-        }
+        const mg = this.getOrMaterializeRemoteMessageGroup(entry);
         const onCancel =
             status === "queued"
                 ? () => this.cancelQueuedById(entry.requestId)
@@ -1242,6 +1221,31 @@ export class ChatView {
         } else {
             this.pendingQueueStatus.set(entry.requestId, status);
         }
+    }
+
+    /**
+     * Resolve the MessageGroup for a queue entry, materializing a remote-origin
+     * user bubble eagerly from the entry text if needed. Remote entries' bubbles
+     * would otherwise only appear on `setUserRequest` (which doesn't fire until
+     * processing begins), so peer clients would never see queued/running chips.
+     */
+    private getOrMaterializeRemoteMessageGroup(
+        entry: QueuedRequest,
+    ): MessageGroup | undefined {
+        const existing = this.idToMessageGroup.get(entry.requestId);
+        if (existing) return existing;
+        const requestId: RequestId = {
+            requestId: entry.requestId,
+            clientRequestId: entry.clientRequestId,
+        };
+        if (entry.text && !this.isLocalRequest(requestId)) {
+            this.addRemoteUserMessage(requestId, entry.text);
+            const created = this.idToMessageGroup.get(entry.requestId);
+            if (created) return created;
+        }
+        // Falls through for local entries (lazy-promoted in getMessageGroup)
+        // and remote entries without text (rare, but possible during replay).
+        return this.getMessageGroup(requestId);
     }
 
     /** Apply any deferred queue status for `requestId` to the now-live MG. */

@@ -387,31 +387,21 @@ export class MessageContainer {
                 btn.className = "chat-queue-cancel-button";
                 btn.title = "Cancel this queued request";
                 btn.setAttribute("aria-label", "Cancel queued request");
+                // A bare "×" glyph sized by `font-size: 0.7em` scales with the
+                // chip's own font, avoids loading an SVG icon for a single
+                // character, and keeps the button height roughly 2/3 of the
+                // chip text. Using inline-flex for vertical centering.
+                btn.textContent = "×";
                 btn.style.display = "inline-flex";
                 btn.style.alignItems = "center";
                 btn.style.justifyContent = "center";
-                btn.style.width = "8px";
-                btn.style.height = "8px";
                 btn.style.padding = "0";
                 btn.style.border = "none";
-                btn.style.borderRadius = "50%";
                 btn.style.background = "transparent";
                 btn.style.color = "inherit";
                 btn.style.cursor = "pointer";
-                btn.style.lineHeight = "0";
-                btn.style.overflow = "hidden";
-                const x = iconX();
-                // iconX returns an <i> wrapper; size the inner <svg> directly.
-                x.style.display = "inline-flex";
-                x.style.width = "8px";
-                x.style.height = "8px";
-                const svg = x.querySelector("svg");
-                if (svg) {
-                    svg.setAttribute("width", "8");
-                    svg.setAttribute("height", "8");
-                    (svg as SVGElement).style.display = "block";
-                }
-                btn.appendChild(x);
+                btn.style.fontSize = "0.7em";
+                btn.style.lineHeight = "1";
                 btn.addEventListener("click", (e) => {
                     e.preventDefault();
                     e.stopPropagation();
