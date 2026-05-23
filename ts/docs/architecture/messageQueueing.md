@@ -30,8 +30,8 @@ forthcoming steering doc).
 one-screen before/after. §4 – §8 are the meat: layering, data model,
 state machine, wire protocol. §9 – §12 cover interactions with
 existing dispatcher state (activity context, batch mode, pending
-interactions, reconnect, multi-client). §13 – §14 are testing and
-references.
+interactions, reconnect, multi-client). §13 is testing, §14 is future
+work (tracked follow-ups), §15 is references.
 
 Steering operations (`editQueued`, `pauseQueue` / `resumeQueue`,
 `interrupt`, the CLI slash-command UX) are intentionally out of
@@ -124,51 +124,70 @@ _block on the lock_; clients see this as "the agent is busy."
 ## 3. The change on one screen
 
 ```
-BEFORE                                       AFTER
-──────                                       ─────
+BEFORE                                AFTER
+──────                                ─────
 
-client.processCommand("foo")                 client.submitCommand("foo")
-        │                                            │
-        ▼                                            ▼
-SharedDispatcher.processCommand              SharedDispatcher.submitCommand    (1)
-        │                                            │
-        ▼                                            ▼
-Dispatcher.processCommand                    Dispatcher.submitCommand          (2)
-        │                                            │
-        ▼                                            ▼
-commandLock (serializes here)                RequestQueue.submit               (3)
-        │                                            │
-        ▼                                            ▼
-agent.executeAction                          tail.push(entry); drain()
-                                                     │
-                                                     ▼
-                                             drain loop (inside Dispatcher):
-                                                head = tail.shift()
-                                                emits requestStarted via ClientIO
-                                                processCommand(head, …)        (4)
-                                                     │
-                                                     ▼
-                                             commandLock — no contention
-                                                     │
-                                                     ▼
-                                             agent.executeAction
+processCommand                        processCommand     submitCommand
+                                      (await-complete)   (ack-on-enqueue)
+       │                                     │                  │
+       ▼                                     └────────┬─────────┘
+SharedDispatcher                                      │  (1)
+       │                                              ▼
+       ▼                                       RequestQueue.submit
+Dispatcher.processCommand                             │
+       │                                              ▼
+       ▼                                       tail.push(entry); drain()    (2)
+commandLock (serializes here)                         │
+       │                                              ▼
+       ▼                                       drain loop (inside Dispatcher):
+agent.executeAction                              head = tail.shift()
+                                                 emits requestStarted via ClientIO
+                                                 processCommand(head, …)    (3)
+                                                      │
+                                                      ▼
+                                              commandLock — no contention
+                                                      │
+                                                      ▼
+                                              agent.executeAction
 ```
 
-(1) Thin wrapper; the `ClientIO` wrapper fans queue lifecycle events
+(1) `processCommand` and `submitCommand` are sibling first-class
+`Dispatcher` entries — both internally call `requestQueue.submit(...)`.
+They differ only in the return contract:
+
+- **`processCommand`** returns `Promise<CommandResult | undefined>` and
+  resolves when the request **finishes** (await-completion). Throws on
+  `queue_full` / `server_stopping`. **Used by Shell main + renderer and
+  every scripted CLI command path** (~14 callsites).
+
+- **`submitCommand`** returns `Promise<SubmitResult>` and resolves when
+  the request is **accepted onto the queue** (ack-on-enqueue), with
+  typed failure modes returned as data. **Used only by the CLI
+  interactive REPL** so the prompt becomes responsive immediately;
+  completion is observed via the `commandComplete` ClientIO push event.
+
+`SharedDispatcher` wraps the host `ClientIO` so queue lifecycle events
 (`requestQueued`, `requestStarted`, `requestCancelled`,
-`queueStateChanged`) out to every connected client.
-(2) Returns immediately once the entry is on the queue (ack-on-enqueue).
-(3) Emits `requestQueued` through `ClientIO` at this point.
-(4) Original `processCommand` body, unchanged. `commandLock` is kept as
-defense-in-depth (see §5.3); the drain loop guarantees no contention.
+`queueStateChanged`) fan out to every connected client. It is **not** on
+the execution path.
+
+(2) Emits `requestQueued` through `ClientIO` at this point.
+
+(3) Original `processCommand` pipeline body (the in-dispatcher command
+runner, distinct from the `Dispatcher.processCommand` entry method).
+`commandLock` is kept as defense-in-depth (see §5.3); the drain loop
+guarantees no contention.
 
 The queue lives **inside `Dispatcher`**, so direct callers (Shell, Web,
 tests) get the same submit-then-drain semantics as agent-server-mediated
-clients. `SharedDispatcher` adds nothing to the execution path — it only
-wraps the host `ClientIO` so lifecycle events reach every connected
-client. The wire-level `processCommand` RPC is preserved (server-side it
-is `submitCommand` + await-completion), keeping legacy fire-and-await
-callers working unchanged.
+clients regardless of which entry point they use. `SharedDispatcher`
+adds nothing to the execution path — it only wraps the host `ClientIO`
+so lifecycle events reach every connected client.
+
+> **Wart.** The dual-entry shape is recognized debt — both methods
+> ultimately call `requestQueue.submit(...)` and differ only in how they
+> return. See §14.1 for the planned unification into a single `submit()`
+> that carries both an ack and the completion promise.
 
 ---
 
@@ -752,9 +771,14 @@ For agent-server-mediated clients,
   `queueStateChanged` — emitted by `Dispatcher` via `ClientIO`, fanned
   out by `SharedDispatcher`'s existing wrapper.
 
-`processCommand` RPC is **kept** for backward compatibility; the
-server implements it as `submitCommand` + await-completion-event.
-Legacy MCP-style "fire and await" callers continue to work unchanged.
+`processCommand` RPC is **kept** and remains a sibling first-class
+entry alongside `submitCommand`: both Dispatcher methods are
+implemented independently and both call `requestQueue.submit(...)`
+internally. Legacy fire-and-await callers (Shell, ~13 scripted CLI
+commands) continue to use `processCommand` unchanged; ack-on-enqueue
+callers (today only the CLI interactive REPL) opt into `submitCommand`.
+See §3 for the convergence diagram and §14.1 for the planned
+unification follow-up.
 
 Direct hosts (Shell, Web) call the same `Dispatcher` methods over
 their own RPC channel (e.g. Electron IPC for Shell) — the same wire
@@ -1137,7 +1161,82 @@ event. See the deprecated docs for the earlier draft that had both.
 
 ---
 
-## 14. References
+## 14. Future work
+
+### 14.1 Unify `processCommand` and `submitCommand` into one entry
+
+**Status:** tracked as a follow-up after this branch lands.
+
+Today the Dispatcher exposes two sibling entry points that both call
+`requestQueue.submit(...)` and differ only in their return contract:
+
+| Entry            | Returns                                       | Failure delivery                                | Used by                                               |
+| ---------------- | --------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| `processCommand` | `Promise<CommandResult \| undefined>`         | Throws `QueueFullError` / `ServerStoppingError` | Shell main + renderer, ~13 scripted CLI command paths |
+| `submitCommand`  | `Promise<SubmitResult>` (discriminated union) | Typed `{ok:false, error}`                       | CLI interactive REPL only (ack-on-enqueue, no await)  |
+
+The duplication is real cognitive overhead — every code-review of the
+dispatcher trips on it. Unification is feasible without losing
+semantics by collapsing both into a single `submit()` that returns a
+discriminated result carrying **both** the ack and the completion
+promise:
+
+```ts
+type SubmitResult =
+    | {
+          ok: true;
+          entry: QueuedRequest;
+          completion: Promise<CommandResult | undefined>;
+      }
+    | { ok: false; error: "queue_full"; maxDepth: number }
+    | { ok: false; error: "server_stopping" };
+
+submit(
+    text: string,
+    attachments?: string[],
+    options?: ProcessCommandOptions,
+    clientRequestId?: unknown,
+): Promise<SubmitResult>;
+```
+
+- **In-process** (local dispatcher, tests): the server returns
+  `entry.completion` directly.
+- **Across RPC**: the server returns only `{ok, entry}` over the wire
+  (as today); the RPC client wrapper attaches
+  `completion: waitForCommandComplete(entry.requestId)` — a promise
+  resolved by the existing `commandComplete` ClientIO push event via a
+  one-shot correlation map. No new server-side wire RPC required.
+
+**Caller migration shape:**
+
+- Await-completion callers (today's `processCommand` users):
+  ```ts
+  const r = await dispatcher.submit(text, ...);
+  if (!r.ok) throw new Error(r.error);
+  return r.completion;
+  ```
+- Ack-on-enqueue callers (today's `submitCommand` users): no change —
+  the existing `if (!r.ok) ...; trackId(r.entry)` shape applies directly.
+
+**Migration cost:**
+
+- ~14 callsites: mechanical 1→3 line change each.
+- ~30 LOC completion-correlation helper in
+  `packages/dispatcher/rpc/src/dispatcherClient.ts` + tests.
+- Delete `Dispatcher.processCommand` (method + RPC pass-through +
+  `dispatcherServer.ts` handler).
+- Rename `submitCommand` → `submit` (or keep the name).
+- Update the CLI REPL to drop its
+  `typeof submitCommand === "function"` feature-detect fallback.
+
+**Why not in this branch:** scope. The Phase 1 mechanism (queue
+ownership, drain loop, fan-out, reconnect snapshot, cancel surface,
+client mirrors) is already broad; the unification deserves its own PR
+with its own review.
+
+---
+
+## 15. References
 
 - [`_deprecated/messageQueueing-original.md`](./_deprecated/messageQueueing-original.md)
   — the original client-side design; preserved for the §4
