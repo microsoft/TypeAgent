@@ -89,6 +89,12 @@ export function getParsed(doc: TextDocument): ParsedDocument {
         const parser = new Parser(tokens, comments);
         const { module } = parser.parseModule();
         const decls = module.workflows;
+        // Build per-workflow symbol tables. Workflows are independent scopes:
+        // a binding in one workflow does not resolve references in another, so
+        // the resolver is run separately for each declaration. The per-workflow
+        // tables are stored on ParsedWorkflow.symbols for cursor-local features
+        // (go-to-def, rename) that use findWorkflowAt; the flat entry.symbols
+        // below is a position-keyed concatenation for document-wide lookups.
         for (const decl of decls) {
             const symbols = buildSymbolTable(decl);
             entry.workflows.push({ decl, symbols });
