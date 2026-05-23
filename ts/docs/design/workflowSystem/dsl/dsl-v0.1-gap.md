@@ -89,7 +89,6 @@ target via the IR's `workflows` table.
 **References:**
 
 - Design: [`workflow-composition.md`](./workflow-composition.md)
-- Plan: [`workflow-composition-impl-plan.md`](./workflow-composition-impl-plan.md)
 - IR additions folded into [`../ir/ir-v0.2.md`](../ir/ir-v0.2.md)
   (no version bump).
 

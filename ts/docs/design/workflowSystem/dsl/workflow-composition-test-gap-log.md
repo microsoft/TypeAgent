@@ -1,9 +1,11 @@
-# Workflow composition — test gap log
+# Workflow composition: test gap log
 
-Per impl plan §4, this file captures test gaps that were identified
-during the per-phase gap analyses and **not** filled, with reason and
-(where relevant) a pointer to the future doc or phase that would
-address them. Filled gaps are tracked by the test diff itself.
+This file captures test gaps that were identified during gap analysis
+for the workflow-composition feature (design:
+[`workflow-composition.md`](./workflow-composition.md)) and **not**
+filled, with reason and (where relevant) a pointer to the future doc
+that would address them. Filled gaps are tracked by the test diff
+itself.
 
 ## Phase 3 — Type checker
 
