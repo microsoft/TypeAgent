@@ -18,7 +18,7 @@
 > live in [`_deprecated/`](./_deprecated/) for historical context.
 
 **Status:** Draft — decisions captured from review walkthrough.
-**Last Updated:** 2026-05-22.
+**Last Updated:** 2026-05-22 (added §8.5 client compatibility).
 
 ---
 
@@ -844,6 +844,53 @@ clients that don't read it degrade gracefully (they just don't render
 queue state on reconnect). No hard compat gate.
 
 > **`REVIEW 12.2` — resolved:** additive field, graceful degradation.
+
+### 8.5 Client compatibility — what existing `processCommand` callers get for free
+
+The queue lives inside `Dispatcher` itself, and the legacy
+`processCommand(text, ...)` entry point is implemented as
+`requestQueue.submit(...)` + await `entry.completion`. **Every caller
+of `processCommand` is automatically queued**, with no API changes.
+
+This means the following non-Shell/non-CLI clients all inherit FIFO
+ordering, single-in-flight execution, and per-request cancellation
+the moment the Dispatcher upgrade lands — no client-side work
+required:
+
+| Client / caller                                             | Path                        | Free with queueing             |
+| ----------------------------------------------------------- | --------------------------- | ------------------------------ |
+| `vscode-shell/agentServerBridge.ts`                         | `dispatcher.processCommand` | ordering, cancel, backpressure |
+| `api/webDispatcher.ts` (web/mobile)                         | `dispatcher.processCommand` | ordering, cancel, backpressure |
+| `copilot-plugin/mcp/server.ts`                              | `dispatcher.processCommand` | ordering, cancel, backpressure |
+| `commandExecutor/commandServer.ts`                          | `dispatcher.processCommand` | ordering, cancel, backpressure |
+| `uriHandler/src/index.ts`                                   | `dispatcher.processCommand` | ordering, cancel, backpressure |
+| Benchmarks (`taskflow`, `powershell`, `browser`)            | `dispatcher.processCommand` | ordering, cancel               |
+| Agent recursive callers (`onboarding/testing`, `replay`, …) | `dispatcher.processCommand` | ordering, cancel               |
+
+#### What's free vs. what's opt-in
+
+| Capability                                            | Mechanism                                                    | Free for `processCommand` callers? |
+| ----------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------- |
+| FIFO across overlapping submits                       | `requestQueue.submit` inside `Dispatcher.processCommand`     | ✅                                 |
+| Single in-flight per Dispatcher                       | `RequestQueue` drain loop                                    | ✅                                 |
+| Cancel a specific request by id                       | `dispatcher.cancelCommand(rid)`                              | ✅                                 |
+| Queue-full backpressure (rejected promise)            | `QueueFullError` thrown from submit                          | ✅                                 |
+| Ack-only submit (don't await completion)              | `dispatcher.submitCommand(...)`                              | ✋ opt-in (new API)                |
+| Inspect queue contents / depth                        | `dispatcher.getQueueSnapshot()`                              | ✋ opt-in (new API)                |
+| Jump-the-line                                         | `dispatcher.interrupt(...)` (steering)                       | ✋ opt-in (new API)                |
+| Per-request UI affordances ("queued"/"running" chips) | `ClientIO.requestQueued / requestStarted / requestCancelled` | ✋ opt-in (implement push events)  |
+| Authoritative re-render                               | `ClientIO.queueStateChanged`                                 | ✋ opt-in (implement push event)   |
+| Multi-client snapshot on (re)connect                  | `JoinConversationResult.queueSnapshot`                       | ✋ opt-in (read additive field)    |
+
+**Upshot.** A client only needs to touch its codebase if it wants to
+_surface_ queue state to the user (chips, badge, queue list, cancel
+buttons) or use the new ack-only / interrupt / snapshot APIs. The
+underlying queuing semantics — including ordering and cancellation —
+are transparent to every existing `processCommand` caller.
+
+> **`REVIEW 8.5` / `client-compat` — resolved:** queueing is
+> transparent at the `processCommand` boundary; UI / steering features
+> are opt-in.
 
 ---
 

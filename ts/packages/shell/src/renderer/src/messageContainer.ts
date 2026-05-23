@@ -337,9 +337,14 @@ export class MessageContainer {
 
     /**
      * Render a "queued"/"running" chip above the message body. No-op on non-user
-     * bubbles. Pass `null` to remove the chip.
+     * bubbles. Pass `null` to remove the chip. When `status === "queued"` and
+     * `onCancel` is provided, a small X button is rendered inside the chip and
+     * invokes `onCancel()` on click.
      */
-    public setQueueStatus(status: "queued" | "running" | null): void {
+    public setQueueStatus(
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ): void {
         if (this.classNameSuffix !== "user") return;
         if (status === null) {
             if (this.queueStatusChip) {
@@ -351,10 +356,15 @@ export class MessageContainer {
         if (!this.queueStatusChip) {
             const chip = document.createElement("div");
             chip.className = "chat-queue-status-chip";
-            chip.style.display = "inline-block";
+            chip.style.display = "inline-flex";
+            chip.style.alignItems = "center";
+            chip.style.gap = "4px";
             chip.style.padding = "1px 6px";
+            chip.style.marginLeft = "4px";
+            chip.style.marginTop = "4px";
             chip.style.marginBottom = "2px";
             chip.style.fontSize = "11px";
+            chip.style.lineHeight = "1";
             chip.style.borderRadius = "8px";
             chip.style.opacity = "0.85";
             this.messageBodyDiv.insertBefore(
@@ -363,14 +373,46 @@ export class MessageContainer {
             );
             this.queueStatusChip = chip;
         }
+        const chip = this.queueStatusChip;
+        chip.replaceChildren();
+        const label = document.createElement("span");
+        label.textContent = status;
+        chip.appendChild(label);
         if (status === "queued") {
-            this.queueStatusChip.textContent = "queued";
-            this.queueStatusChip.style.background = "rgba(255, 200, 0, 0.18)";
-            this.queueStatusChip.style.color = "rgba(120, 80, 0, 0.95)";
+            chip.style.background = "rgba(255, 200, 0, 0.18)";
+            chip.style.color = "rgba(120, 80, 0, 0.95)";
+            if (onCancel) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "chat-queue-cancel-button";
+                btn.title = "Cancel this queued request";
+                btn.setAttribute("aria-label", "Cancel queued request");
+                btn.style.display = "inline-flex";
+                btn.style.alignItems = "center";
+                btn.style.justifyContent = "center";
+                btn.style.width = "8px";
+                btn.style.height = "8px";
+                btn.style.padding = "0";
+                btn.style.border = "none";
+                btn.style.borderRadius = "50%";
+                btn.style.background = "transparent";
+                btn.style.color = "inherit";
+                btn.style.cursor = "pointer";
+                btn.style.lineHeight = "0";
+                const x = iconX();
+                x.setAttribute("width", "6");
+                x.setAttribute("height", "6");
+                btn.appendChild(x);
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel();
+                });
+                chip.appendChild(btn);
+            }
         } else {
-            this.queueStatusChip.textContent = "running";
-            this.queueStatusChip.style.background = "rgba(0, 150, 255, 0.18)";
-            this.queueStatusChip.style.color = "rgba(0, 80, 140, 0.95)";
+            chip.style.background = "rgba(0, 150, 255, 0.18)";
+            chip.style.color = "rgba(0, 80, 140, 0.95)";
         }
     }
 

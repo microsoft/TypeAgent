@@ -438,10 +438,14 @@ export class MessageGroup {
 
     /**
      * Reflect the server-side queue state onto the user bubble's chip.
-     * Pass `null` on cancellation/completion to clear it.
+     * Pass `null` on cancellation/completion to clear it. `onCancel` is wired
+     * to the inline X button shown for queued entries.
      */
-    public setQueueStatus(status: "queued" | "running" | null) {
-        this.userMessage.setQueueStatus(status);
+    public setQueueStatus(
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ) {
+        this.userMessage.setQueueStatus(status, onCancel);
     }
 
     public notifyExplained(data: NotifyExplainedData) {

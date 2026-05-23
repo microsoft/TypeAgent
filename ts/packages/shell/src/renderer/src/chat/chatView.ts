@@ -1091,6 +1091,19 @@ export class ChatView {
         snap.queued = snap.queued.filter(
             (e) => e.requestId !== entry.requestId,
         );
+        // The previous running entry (if any and not this one) just completed —
+        // its `queueStateChanged(running:null)` broadcast was collapsed by the
+        // coalescer with this start. Clear its chip explicitly; otherwise the
+        // intermediate item stays stuck on "running" forever (only the first
+        // and last items in a multi-item queue get cleared via the trailing
+        // running:null snapshot).
+        const prevRunning = snap.running;
+        if (prevRunning && prevRunning.requestId !== entry.requestId) {
+            this.pendingQueueStatus.delete(prevRunning.requestId);
+            this.idToMessageGroup
+                .get(prevRunning.requestId)
+                ?.setQueueStatus(null);
+        }
         snap.running = { ...entry };
         this.tryApplyQueueStatusToGroup(entry, "running");
     }
@@ -1190,12 +1203,15 @@ export class ChatView {
             requestId: entry.requestId,
             clientRequestId: entry.clientRequestId,
         });
+        const onCancel =
+            status === "queued"
+                ? () => this.cancelQueuedById(entry.requestId)
+                : undefined;
         if (mg) {
-            mg.setQueueStatus(status);
+            mg.setQueueStatus(status, onCancel);
             this.pendingQueueStatus.delete(entry.requestId);
             return;
         }
-        // Defer to MG creation; storing `null` would be a no-op.
         if (status === null) {
             this.pendingQueueStatus.delete(entry.requestId);
         } else {
@@ -1207,8 +1223,28 @@ export class ChatView {
     private applyPendingQueueStatus(requestId: string, mg: MessageGroup): void {
         const status = this.pendingQueueStatus.get(requestId);
         if (status !== undefined) {
-            mg.setQueueStatus(status);
+            const onCancel =
+                status === "queued"
+                    ? () => this.cancelQueuedById(requestId)
+                    : undefined;
+            mg.setQueueStatus(status, onCancel);
             this.pendingQueueStatus.delete(requestId);
+        }
+    }
+
+    /**
+     * Cancel a single queued entry from the per-bubble X button. Errors are
+     * swallowed; the server's `requestCancelled` broadcast updates the chip.
+     */
+    private cancelQueuedById(requestId: string): void {
+        const dispatcher = this._dispatcher;
+        if (!dispatcher) return;
+        try {
+            void Promise.resolve(dispatcher.cancelCommand(requestId)).catch(
+                () => {},
+            );
+        } catch {
+            // Channel gone; nothing to cancel.
         }
     }
 
