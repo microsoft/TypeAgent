@@ -41,6 +41,9 @@ import { Token, TokenKind, LexComment, StringToken } from "./lexer.js";
 import { decodeStringLiteral } from "./literal.js";
 import {
     WorkflowDecl,
+    ImportDecl,
+    ImportSpecifier,
+    Module,
     ParamDecl,
     TypeExpr,
     Statement,
@@ -139,7 +142,6 @@ export class Parser {
     /** Last token consumed by `advance()`. Used to compute statement end
      *  position for trailing-comment same-line detection. */
     private lastToken: Token | undefined;
-    private singleWorkflowMode = false;
 
     private tokens: Token[];
 
@@ -324,32 +326,36 @@ export class Parser {
         return { items, innerComments };
     }
 
-    parse(): { workflows: WorkflowDecl[]; errors: ParseError[] } {
-        this.singleWorkflowMode = false;
+    /**
+     * Parse the source into a `Module` (top-level container holding
+     * imports and workflow declarations). The canonical top-level
+     * parse entry point.
+     */
+    parseModule(): { module: Module; errors: ParseError[] } {
+        const l = this.loc();
         const workflows: WorkflowDecl[] = [];
+        const imports: ImportDecl[] = [];
         while (this.peek().kind !== TokenKind.EOF) {
-            const wf = this.parseWorkflow();
-            if (wf) workflows.push(wf);
-        }
-        return { workflows, errors: this.errors };
-    }
-
-    /** Parse a single workflow (backward compat). */
-    parseSingle(): { ast: WorkflowDecl | undefined; errors: ParseError[] } {
-        this.singleWorkflowMode = true;
-        const ast = this.parseWorkflow();
-        // Trailing tokens past the workflow are a parse error — without
-        // this check, stray punctuation (e.g. an extra `}`) or a second
-        // unintentional `workflow` would be silently dropped on emit.
-        const next = this.peek();
-        if (next.kind !== TokenKind.EOF) {
+            const t = this.peek();
+            if (t.kind === TokenKind.Import) {
+                const imp = this.parseImport();
+                if (imp) imports.push(imp);
+                continue;
+            }
+            if (t.kind === TokenKind.Workflow || t.kind === TokenKind.Export) {
+                const wf = this.parseWorkflow();
+                if (wf) workflows.push(wf);
+                continue;
+            }
             this.error(
-                `Unexpected token after workflow: ${next.kind} (${JSON.stringify(
-                    next.value,
-                )})`,
+                `Expected 'workflow', 'export', or 'import', got ${t.kind}`,
             );
+            this.advance();
         }
-        return { ast, errors: this.errors };
+        return {
+            module: { kind: "Module", imports, workflows, loc: l },
+            errors: this.errors,
+        };
     }
 
     private peek(): Token {
@@ -441,6 +447,11 @@ export class Parser {
     private parseWorkflow(): WorkflowDecl | undefined {
         const leadingComments = this.takeLeadingComments();
         const l = this.loc();
+        let exported = false;
+        if (this.peek().kind === TokenKind.Export) {
+            exported = true;
+            this.advance();
+        }
         if (this.peek().kind !== TokenKind.Workflow) {
             this.error(`Expected 'workflow', got ${this.peek().kind}`);
             this.advance();
@@ -468,7 +479,7 @@ export class Parser {
         // before EOF). They have no statement to attach to, so they go
         // on the workflow's trailingComments.
         const trailingComments =
-            this.singleWorkflowMode || this.peek().kind === TokenKind.EOF
+            this.peek().kind === TokenKind.EOF
                 ? this.takeLeadingComments()
                 : undefined;
         const decl: WorkflowDecl = {
@@ -479,6 +490,7 @@ export class Parser {
             body,
             loc: l,
         };
+        if (exported) decl.exported = true;
         if (leadingComments) decl.leadingComments = leadingComments;
         if (innerComments) decl.innerComments = innerComments;
         if (paramInnerComments) decl.paramInnerComments = paramInnerComments;
@@ -499,12 +511,80 @@ export class Parser {
                 this.expect(TokenKind.Colon);
                 const type = this.parseTypeExpr();
                 const decl: ParamDecl = { name, type, loc: l };
+                if (this.peek().kind === TokenKind.Equals) {
+                    this.advance(); // =
+                    decl.default = this.parseExpression();
+                }
                 if (leading) decl.leadingComments = leading;
                 if (this.lastToken) decl.endLine = this.lastToken.line;
                 return decl;
             },
         );
         return { params: items, innerComments };
+    }
+
+    /**
+     * Parse an import declaration:
+     *   import { name1, name2 as alias } from "./path.wf";
+     * The parser handles the syntax only; path resolution and symbol
+     * binding are handled by the type checker and fileLoader.
+     */
+    private parseImport(): ImportDecl | undefined {
+        const leadingComments = this.takeLeadingComments();
+        const l = this.loc();
+        this.expect(TokenKind.Import);
+        this.expect(TokenKind.LBrace);
+        const names: ImportSpecifier[] = [];
+        if (this.peek().kind !== TokenKind.RBrace) {
+            names.push(this.parseImportSpecifier());
+            while (this.peek().kind === TokenKind.Comma) {
+                this.advance();
+                if (this.peek().kind === TokenKind.RBrace) break;
+                names.push(this.parseImportSpecifier());
+            }
+        }
+        this.expect(TokenKind.RBrace);
+        this.expect(TokenKind.From);
+        const sourceTok = this.peek();
+        let source = "";
+        if (sourceTok.kind === TokenKind.StringLiteral) {
+            this.advance();
+            const st = sourceTok as StringToken;
+            this.checkLiteralEscapes(st.value, st.quote, st);
+            const decoded = decodeStringLiteral(st.value, st.quote);
+            source = decoded.value;
+        } else {
+            this.error(
+                `Expected string literal for import source, got ${sourceTok.kind}`,
+            );
+        }
+        if (this.peek().kind === TokenKind.Semicolon) this.advance();
+        const decl: ImportDecl = {
+            kind: "ImportDecl",
+            names,
+            source,
+            loc: l,
+        };
+        if (leadingComments) decl.leadingComments = leadingComments;
+        return decl;
+    }
+
+    private parseImportSpecifier(): ImportSpecifier {
+        const l = this.loc();
+        const name = this.expect(TokenKind.Identifier).value;
+        let alias: string | undefined;
+        // `as` is not a reserved keyword; recognize it lexically as an
+        // identifier with text "as" to avoid stealing the bareword.
+        if (
+            this.peek().kind === TokenKind.Identifier &&
+            this.peek().value === "as"
+        ) {
+            this.advance();
+            alias = this.expect(TokenKind.Identifier).value;
+        }
+        const spec: ImportSpecifier = { name, loc: l };
+        if (alias !== undefined) spec.alias = alias;
+        return spec;
     }
 
     // ---- Types ----

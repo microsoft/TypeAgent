@@ -5,6 +5,11 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { compile, TaskSchemaInfo, CompileOptions } from "../src/index.js";
+import { WorkflowIR, WorkflowBody } from "workflow-model";
+
+function bodyOf(ir: WorkflowIR): WorkflowBody {
+    return ir.workflows[ir.entry];
+}
 
 const VALIDATE: CompileOptions = { validate: true };
 import { lex } from "../src/lexer.js";
@@ -149,7 +154,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         expect(ast).toBeDefined();
         expect(ast!.name).toBe("hello");
@@ -168,7 +174,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         expect(ast!.body[0].kind).toBe("ConstStatement");
     });
@@ -179,7 +186,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         const paramType = ast!.params[0].type;
         expect(paramType.kind).toBe("ObjectType");
@@ -197,12 +205,15 @@ describe("DSL compiler", () => {
         expect(result.ir).toBeDefined();
         const ir = result.ir!;
         expect(ir.kind).toBe("workflow");
-        expect(ir.name).toBe("hello");
+        expect(ir.entry).toBe("hello");
         expect(ir.version).toBe("1");
-        expect(ir.entry).toBe("greeting");
-        expect(ir.nodes["greeting"]).toBeDefined();
-        expect(ir.nodes["greeting"].kind).toBe("task");
-        const taskNode = ir.nodes["greeting"] as { task: string; bind: string };
+        expect(bodyOf(ir).entry).toBe("greeting");
+        expect(bodyOf(ir).nodes["greeting"]).toBeDefined();
+        expect(bodyOf(ir).nodes["greeting"].kind).toBe("task");
+        const taskNode = bodyOf(ir).nodes["greeting"] as {
+            task: string;
+            bind: string;
+        };
         expect(taskNode.task).toBe("text.template");
         expect(taskNode.bind).toBe("greeting");
     });
@@ -214,7 +225,10 @@ describe("DSL compiler", () => {
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
-        const schema = result.ir!.inputSchema as Record<string, unknown>;
+        const schema = bodyOf(result.ir!).inputSchema as Record<
+            string,
+            unknown
+        >;
         expect(schema.type).toBe("object");
         expect(schema.required).toEqual(["repos", "author"]);
         const props = schema.properties as Record<
@@ -239,7 +253,7 @@ describe("DSL compiler", () => {
         const ir = result.ir!;
 
         // Should have a loop node
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
@@ -265,7 +279,7 @@ describe("DSL compiler", () => {
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
 
-        const nodeB = result.ir!.nodes["b"] as {
+        const nodeB = bodyOf(result.ir!).nodes["b"] as {
             inputs: Record<string, unknown>;
         };
         const varsInput = nodeB.inputs.vars as Record<string, unknown>;
@@ -295,8 +309,8 @@ describe("DSL compiler", () => {
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
 
-        const nodeA = result.ir!.nodes["a"] as { next?: string };
-        const nodeB = result.ir!.nodes["b"] as { next?: string };
+        const nodeA = bodyOf(result.ir!).nodes["a"] as { next?: string };
+        const nodeB = bodyOf(result.ir!).nodes["b"] as { next?: string };
         expect(nodeA.next).toBe("b");
         expect(nodeB.next).toBe("c");
     });
@@ -313,7 +327,7 @@ describe("DSL compiler", () => {
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
@@ -332,7 +346,7 @@ describe("DSL compiler", () => {
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
-        const branchNodes = Object.entries(ir.nodes).filter(
+        const branchNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "branch",
         );
         expect(branchNodes.length).toBeGreaterThanOrEqual(1);
@@ -356,7 +370,7 @@ describe("DSL compiler", () => {
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
-        const forkNodes = Object.entries(ir.nodes).filter(
+        const forkNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "fork",
         );
         expect(forkNodes.length).toBe(1);
@@ -382,26 +396,26 @@ describe("DSL d1-standup-prep", () => {
         const ir = result.ir!;
 
         // Top-level structure
-        expect(ir.name).toBe("standupPrep");
+        expect(ir.entry).toBe("standupPrep");
         expect(ir.version).toBe("1");
-        const schema = ir.inputSchema as Record<string, unknown>;
+        const schema = bodyOf(ir).inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["repos", "author"]);
 
         // Should have a loop node (from map)
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
 
         // Post-loop: joined task should reference the loop's output
-        expect(ir.nodes["joined"]).toBeDefined();
-        const joinedNode = ir.nodes["joined"] as {
+        expect(bodyOf(ir).nodes["joined"]).toBeDefined();
+        const joinedNode = bodyOf(ir).nodes["joined"] as {
             task: string;
         };
         expect(joinedNode.task).toBe("string.join");
 
         // Output should reference joined
-        const output = ir.output as Record<string, unknown>;
+        const output = bodyOf(ir).output as Record<string, unknown>;
         expect(output.$from).toBe("scope");
         expect(output.name).toBe("joined");
     });
@@ -429,24 +443,24 @@ describe("DSL d8-summarize-url", () => {
         const ir = result.ir!;
 
         // Top-level structure
-        expect(ir.name).toBe("summarizeUrl");
+        expect(ir.entry).toBe("summarizeUrl");
         expect(ir.version).toBe("1");
-        const schema = ir.inputSchema as Record<string, unknown>;
+        const schema = bodyOf(ir).inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["url", "outputPath"]);
 
         // Should have a loop node (from attempts)
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
 
         // Post-loop: should have prompt, summaryResult, writeResult
-        expect(ir.nodes["prompt"]).toBeDefined();
-        expect(ir.nodes["summaryResult"]).toBeDefined();
-        expect(ir.nodes["writeResult"]).toBeDefined();
+        expect(bodyOf(ir).nodes["prompt"]).toBeDefined();
+        expect(bodyOf(ir).nodes["summaryResult"]).toBeDefined();
+        expect(bodyOf(ir).nodes["writeResult"]).toBeDefined();
 
         // Output should be an object
-        const output = ir.output as Record<string, unknown>;
+        const output = bodyOf(ir).output as Record<string, unknown>;
         expect(output).toBeDefined();
     });
 });

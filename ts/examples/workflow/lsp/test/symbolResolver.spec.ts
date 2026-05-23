@@ -6,7 +6,8 @@ import { buildSymbolTable } from "../src/symbolResolver.js";
 
 function parse(src: string) {
     const { tokens, comments } = lex(src);
-    const { ast } = new Parser(tokens, comments).parseSingle();
+    const { module } = new Parser(tokens, comments).parseModule();
+    const ast = module.workflows[0];
     if (!ast) throw new Error("parse failed");
     return ast;
 }

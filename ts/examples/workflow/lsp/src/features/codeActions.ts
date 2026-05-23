@@ -32,8 +32,8 @@ import {
     WorkspaceEdit,
 } from "vscode-languageserver/node.js";
 import type { Statement, Expr } from "workflow-dsl";
-import { getParsed } from "../parsedDocument.js";
-import { toLspPosition } from "../util/position.js";
+import { getParsed, findWorkflowAt } from "../parsedDocument.js";
+import { fromLspPosition, toLspPosition } from "../util/position.js";
 
 /**
  * Collect every identifier reference (head segment of a DottedNameExpr)
@@ -158,9 +158,11 @@ export function computeCodeActions(
     range: Range,
 ): CodeAction[] {
     const parsed = getParsed(doc);
-    if (!parsed.ast) return [];
+    const { line, col } = fromLspPosition(range.start);
+    const wf = findWorkflowAt(parsed, line, col);
+    if (!wf) return [];
     const text = doc.getText();
-    const stmts = parsed.ast.body;
+    const stmts = wf.decl.body;
     const actions: CodeAction[] = [];
 
     const enclosing = findEnclosingStatement(stmts, range);
@@ -262,8 +264,11 @@ export function computeCodeActions(
     // Offer when the cursor is on a ConstStatement (single binding only).
     // Safety: refuse to inline if any identifier in the RHS would resolve
     // differently at a use site than at the declaration site (shadowing).
-    if (enclosing && enclosing.kind === "ConstStatement" && parsed.symbols) {
+    if (enclosing && enclosing.kind === "ConstStatement") {
         const constName = enclosing.name;
+        // Scope the safety checks to the workflow containing the cursor;
+        // unrelated workflows can legitimately reuse the same name.
+        const localSymbols = wf.symbols;
         const safeToInline = (() => {
             if (!constName || constName.startsWith("__synthetic_"))
                 return false;
@@ -276,7 +281,7 @@ export function computeCodeActions(
             // also veto the inline) but it is sound and easy to reason about.
             for (const name of rhsIdentifiers) {
                 let count = 0;
-                for (const def of parsed.symbols!.defs) {
+                for (const def of localSymbols.defs) {
                     if (def.name === name) count++;
                 }
                 if (count > 1) return false;
@@ -285,7 +290,7 @@ export function computeCodeActions(
         })();
 
         if (safeToInline) {
-            const refs = parsed.symbols.refs.filter(
+            const refs = localSymbols.refs.filter(
                 (r) => r.name === constName && r.def?.kind === "const",
             );
             if (refs.length > 0) {

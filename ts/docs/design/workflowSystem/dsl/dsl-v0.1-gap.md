@@ -27,26 +27,27 @@ new surface area:
    parsing and checking, and becomes more ergonomic once named aliases exist.
 8. **G18: Add union/literal types.** This is the broadest type-system expansion
    and should come after type soundness and named types.
-9. **G1: Implement sub-workflow calls and compile-time inlining.** This is
-   strategically important, but touches compiler architecture and emitter
-   lowering, so it should follow the core correctness and type-system
-   foundations.
-10. **G11: Decide/document bind stripping for explicit user names.** This is
-    primarily debuggability and spec clarity.
-11. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+9. **G11: Decide/document bind stripping for explicit user names.** This is
+   primarily debuggability and spec clarity.
+10. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
     AST honesty and visual-editor clarity, but current behavior works.
-12. **G12: Decide `list.append` naming/semantics.** This is naming/API
+11. **G12: Decide `list.append` naming/semantics.** This is naming/API
     consistency with coordinated emitter, engine, and snapshot churn.
-13. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+12. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
     Decision 0010 removed `identity` / `noop` as load-bearing at branch
     convergence, but the emitter still synthesizes them in several other
     places. Classify each remaining usage as (a) reducible after 0010,
     (b) forced by an IR shape that could be relaxed additively, or (c)
     inherent to decision 0006 (no expressions). Pure audit; only
     schedules follow-up work.
-14. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+13. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
+
+G1 (sub-workflow calls and cross-file composition) is now resolved; see its
+section below for the landed surface. G24-G28 capture follow-up design
+questions raised during the G1 implementation that have not yet been
+scheduled.
 
 Dependency spine:
 
@@ -54,56 +55,42 @@ Dependency spine:
 - `G10 -> G3 -> G4 -> G18` builds type-system features on sound
   assignability (G13 resolved the structural-comparison prerequisite).
 
-## G1: Sub-workflow calls
+## G1: Sub-workflow calls ✅ Resolved
 
-**Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
-sub-workflows are called by name and inlined at compile time.
+**Status:** Resolved as of the workflow-composition implementation plan
+(Phases 1–7). Multiple workflows in one file _and_ across multiple files
+now compose end-to-end through compiler, engine, and CLI. Cross-workflow
+calls emit `WorkflowCallNode` (not inlined) and the engine resolves the
+target via the IR's `workflows` table.
 
-**Current state:**
+**What landed:**
 
-- Parser: works. Single-segment calls (`sendEmail(message)`) produce
-  `WorkflowCallExpr` AST nodes.
-- Type checker: partially works. Resolves return type from the called
-  workflow's declaration, but `compile()` only passes a single workflow
-  to the checker (`TypeChecker` constructor defaults `workflows` to `[]`).
-  Cross-workflow calls produce "Unknown workflow" unless the caller
-  explicitly provides sibling workflows.
-- Emitter: does not inline. Emits a `TaskNode` with
-  `task: "workflow.<name>"` and empty schemas. The current emit strategy
-  was a placeholder: it generates an unregistered task reference rather
-  than inlining the sub-workflow body.
-- Runtime: fails. `workflow.<name>` tasks are not registered in the
-  engine.
+- Parser: `export workflow`, `import { … } from "./other.wf"` (with
+  optional aliases), default-expression parameters, named-record args.
+- Type checker: takes the full flat workflow list; resolves single-
+  segment names to either workflow or task (workflow shadows task), and
+  rejects call-graph cycles (across files too).
+- Emitter: emits one `WorkflowBody` per workflow into
+  `WorkflowIR.workflows[name]` and emits `WorkflowCallNode` (kind
+  `"workflowCall"`) at each call site. Default arguments are inlined
+  at the call site per design §4.3.
+- Engine: `WorkflowCallNode` handler creates an isolated child frame,
+  propagates errors out to the caller's `onError`, and honors
+  `timeoutMs`. A concurrent-run guard rejects re-entrancy on the same
+  engine instance.
+- CLI (`wfc`): `--entry <name>` selects the program entry from the
+  entry file's workflows; `--workspace-root <dir>` opts into
+  containment for cross-file imports (otherwise `tsc`-style trust).
+- File loader: BFS-loads `.wf` files, detects duplicate workflow names
+  across files, rejects non-exported / missing imports, rewrites
+  aliased call sites to canonical names before type-check, and uses
+  `realpathSync` for symlink-safe containment.
 
-**What needs to happen:**
+**References:**
 
-1. `compile()` should pass all parsed workflows to the type checker so
-   cross-workflow references resolve.
-2. The emitter should inline sub-workflow bodies into the calling
-   workflow's IR (as the spec says), or alternatively, register
-   `workflow.<name>` tasks in the engine at runtime.
-3. Add integration tests that compile and execute a multi-workflow file.
-
-**Related decisions:**
-
-- Recursion is unsupported. The type checker resolves return types from
-  declared signatures (no divergence), but sub-workflow calls emit as
-  unregistered tasks that fail at runtime. Once inlining lands, true
-  recursion is structurally impossible (infinite inlining). A static
-  cycle check would give a better error but is low priority.
-- Sub-workflow emit strategy: the current `workflow.<name>` task-node
-  approach is a placeholder. The intended behavior is compile-time
-  inlining per dsl-v0.1.md section 4.
-- Call classification: the parser uses a syntactic rule to distinguish
-  task calls from workflow calls: dotted names (`ns.task()`) are task
-  calls, single-segment names (`fn()`) are workflow calls. There is no
-  way to call a task without a namespace prefix. This means task naming
-  must always use dotted form, and single-segment task names are
-  unreachable from DSL code. When sub-workflow calls are implemented,
-  this classification rule should be revisited together: if tasks can
-  ever have single-segment names, the disambiguation needs a different
-  strategy (e.g., checking whether the name matches a declared workflow
-  vs. a registered task schema).
+- Design: [`workflow-composition.md`](./workflow-composition.md)
+- IR additions folded into [`../ir/ir-v0.2.md`](../ir/ir-v0.2.md)
+  (no version bump).
 
 ## G2: Parallel branches missing IR schema fields
 
@@ -670,3 +657,199 @@ expected 'string'`), reusing the recursion already done inside
 4. Update existing type-checker tests whose substring assertions rely on
    the collapsed `'object'` rendering, and add tests asserting the
    richer field-level wording.
+
+## G24: Named-record call syntax diverges from TypeScript
+
+**Spec/intent:** The DSL supports a "named-record" call form where a
+workflow with positional params can be called with a single object
+literal: `summarize({ text: "hello", maxLen: 100 })`. This is a DSL
+convenience that maps object keys to the callee's named params.
+
+**The gap:** In TypeScript, `f({ a, b })` only works if `f` is declared
+with a destructured parameter (`f({ a, b }: T)`). Positional-param
+functions (`f(a: string, b: number)`) cannot be called with an object
+— TypeScript produces a type error. The DSL's named-record form is
+therefore a non-standard extension with no TypeScript precedent.
+
+**Consequences:**
+
+1. `summarize(myObj)` where `myObj` is a variable (not an inline literal)
+   is treated as a single positional arg in the DSL today — it does NOT
+   trigger named-record matching. This means named-record semantics are
+   only available via inline object literals, limiting use in `map`
+   bodies and other computed-argument contexts.
+
+2. There is a semantic gap: DSL callers can write
+   `summarize({ text: "x", maxLen: 1 })` but TypeScript callers of the
+   same interface would not be able to. If the DSL ever emits TypeScript
+   stubs, this call form has no direct equivalent.
+
+**Options for alignment:**
+
+- **Drop named-record syntax** and require callers to pass positional
+  args (`summarize("hello", 100)`). Aligns with TypeScript exactly.
+- **Adopt TypeScript destructuring convention**: a workflow declared
+  as `workflow summarize({ text, maxLen }: SummarizeArgs)` takes a
+  single object param — then both inline literals and variables work,
+  matching TypeScript exactly.
+- **Keep named-record as DSL sugar** (current) but document it as a
+  DSL-only convenience that does not map to TypeScript call semantics.
+
+**Decision needed:** Should DSL workflow call syntax align with
+TypeScript (positional only, or explicit destructuring) or keep the
+named-record convenience syntax as a DSL-specific ergonomic feature?
+
+**Raised during:** G1 workflow composition implementation (designing workflow
+call syntax).
+
+## G25: `export` conflates entry-point selection with cross-file importability; no library compile mode
+
+**Spec/intent:** `export workflow` was introduced to (1) allow a workflow to
+be imported by other `.wf` files and (2) act as the tiebreaker for which
+workflow is the entry point when a file contains multiple workflows.
+
+**The gap:** These are two distinct concerns collapsed onto one keyword:
+
+- **Importability** — whether other files can `import { foo } from "./m.wf"`.
+  This is a module-visibility concern, analogous to TypeScript `export`.
+- **Entry selection** — which workflow `compile()` / `compileFile()` treats
+  as the root to execute. This is a bundler/runner concern with no TypeScript
+  equivalent.
+
+Because they share one keyword, a workflow marked `export` for importability
+automatically becomes an entry candidate, and vice versa. This causes two
+concrete problems:
+
+1. A file intended as a pure library (multiple exported helpers, no single
+   entry) cannot be compiled today — the compiler requires exactly one entry,
+   so two `export workflow` declarations are an error unless `--entry` is
+   passed. There is no "library mode" that skips entry resolution and emits
+   all exported workflows.
+
+2. A single-purpose helper marked `export` just to be importable raises
+   ambiguity if a second `export workflow` exists in the same file, even
+   though neither was intended as the entry.
+
+**Options:**
+
+- **Separate keywords / annotations**: e.g., `export workflow` for
+  importability only, and a separate marker (`@entry`, `main workflow`, etc.)
+  for entry selection. Matches TypeScript's model more closely.
+- **Library compile mode**: keep one keyword but add a `--library` flag to
+  `compile()`/`compileFile()` that skips entry resolution and emits all
+  exported workflows as a `WorkflowIR[]` or a named map. Entry-selection
+  behavior is unchanged for non-library builds.
+- **Implicit entry by name**: treat a workflow named `main` (or the file
+  stem) as the entry when no explicit `--entry` is given, making `export`
+  purely a visibility qualifier.
+
+**Raised during:** G1 workflow composition implementation (designing
+export / entry-point semantics).
+
+## G26: No DSL syntax for `timeoutMs` on workflow calls
+
+**Spec/intent:** The IR `WorkflowCallNode` has an optional `timeoutMs` field.
+When set, the engine enforces it by composing an `AbortSignal` that fires
+after the deadline, aborting the sub-workflow with a clear
+`"Sub-workflow … timed out after Nms"` error.
+
+**The gap:** The DSL compiler never emits `timeoutMs` on a `workflowCall`
+node. There is no syntax for a caller to declare a per-call timeout. The
+field is only reachable by tools that build IR directly.
+
+**Options:**
+
+- **Call-site annotation**: `const r = helper(x) timeout 5000;` — reads
+  naturally, consistent with task-level timeout style.
+- **Named argument**: `const r = helper(x, @timeout: 5000);` — uses a
+  special reserved keyword argument, similar to how some languages
+  handle call-site options.
+- **Workflow-level declaration**: `workflow helper(…) timeout 5000 { … }`
+  — declares max runtime on the callee declaration rather than each call
+  site. Simpler but less flexible (no per-call override).
+
+**Raised during:** G1 workflow composition implementation (designing
+sub-workflow call nodes in the IR).
+
+## G27: No per-file namespacing for exported workflows in IR
+
+**Spec/intent:** The IR `workflows` map is a flat name-keyed table. Callee
+resolution is by exact name. In the current implementation, all non-entry-file
+workflows are mangled to `__f{N}_{name}` to avoid collisions, but this mangling
+is opaque to IR consumers (debuggers, tooling, introspection).
+
+**The gap:** There is no structured way in the IR to represent which file a
+workflow originated from, or to resolve name conflicts without mangling. A
+`WorkflowRef` could carry an optional `source` field (already reserved in the
+schema for registry-style resolution) but it is not used by the bundler today.
+
+**Options:**
+
+- **Structured source field**: populate `WorkflowRef.source` with the originating
+  file path; resolve by `(source, name)` pair in the engine.
+- **Per-file workflow namespaces**: nest workflows under a file key in the IR,
+  e.g. `ir.files[path].workflows[name]`.
+- **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
+  expose a `workflowOrigins` side-table mapping mangled name → original path + name.
+
+**Raised during:** G1 workflow composition implementation (building the
+cross-file bundler and name mangling strategy).
+
+## G28: `maxConcurrency` only accepts literal integers
+
+**Spec/intent:** `parallel(...)` and `parallelMap(...)` accept an options
+object with a `maxConcurrency` field that caps in-flight branches /
+iterations. The AST already types `maxConcurrency` as an arbitrary `Expr`
+(see `ParallelNode.maxConcurrency` and `ParallelMapNode.maxConcurrency` in
+`ast.ts`), and the type checker only requires it to be numeric, so the
+surface syntax accepts any numeric expression.
+
+**The gap:** The emitter's `constExprToValue` only handles literal
+expressions (`StringLiteralExpr`, `NumberLiteralExpr`, `BooleanLiteralExpr`,
+`NullLiteralExpr`, `ArrayLiteralExpr`, `ObjectLiteralExpr`). Anything else
+
+- a parameter reference, a const reference, an arithmetic expression, a
+  task call, a workflow call - is rejected at emit time with
+  `"Expression must be a literal value"`. That diagnostic is also generic
+  (it points at "literal value" without naming the option), so the failure
+  mode for a user who writes `{ maxConcurrency: n }` where `n` is a workflow
+  param is unhelpful.
+
+This also means the static recursion check's descent into `maxConcurrency`
+(`walkExpr` in `typeChecker.ts`) is defense-in-depth only: any cycle
+routed through `maxConcurrency` is independently rejected by the emitter
+with the literal-only error before the recursion diagnostic could matter
+at runtime.
+
+**Desired behavior:** `maxConcurrency` should accept any expression whose
+runtime value is an integer ≥ 1 (the same constraint
+`validateWorkflowIR` already enforces on the literal form). Concretely:
+
+- A workflow param (`workflow run(parallelism: integer) { ... parallel(..., { maxConcurrency: parallelism }) }`).
+- A `const` binding (`const N = computeParallelism(); ... { maxConcurrency: N }`).
+- An arithmetic expression over the above.
+- The result of a task or sub-workflow call returning an integer.
+
+**Required changes:**
+
+- IR: extend `ForkNode.maxConcurrency` / `ForkMapNode.maxConcurrency`
+  from `number | undefined` to accept either a literal integer or a
+  reference / template that resolves to one at run time (mirroring how
+  other dynamic numeric fields are represented).
+- Emitter: instead of `constExprToValue`, emit `maxConcurrency` through
+  the standard expression-lowering path used for other numeric values
+  (binding references via `Template`, generating intermediate bind
+  nodes as needed for complex sub-expressions).
+- Engine: resolve the IR field to an integer at fork/forkMap entry,
+  validate `>= 1`, and surface a clear runtime error if the resolved
+  value is non-integer, non-positive, or otherwise invalid.
+- Validator (`validate.ts`): relax the literal-integer requirement to
+  accept the new dynamic forms and validate them structurally; keep the
+  `>= 1` and integer constraints for the literal case.
+- Type checker: keep the existing numeric requirement; once the engine
+  can validate the runtime value, the type checker does not need a
+  separate integer check (the existing `isNumeric` check is sufficient).
+- Tests: add an end-to-end DSL → IR → engine test for each accepted
+  shape (param ref, const, arithmetic, task call) and a runtime test
+  that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
+  fork entry with a useful error pointing at the option name.

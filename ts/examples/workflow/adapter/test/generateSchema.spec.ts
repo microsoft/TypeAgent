@@ -38,23 +38,27 @@ describe("generateDynamicSchema", () => {
     it("generates pas schema for a workflow with string params", () => {
         const ir: WorkflowIR = {
             kind: "workflow",
-            name: "d4-commit-summary",
-            description: "Generate a commit message from staged changes.",
             version: "1.0",
-            inputSchema: {
-                type: "object",
-                required: ["repoPath"],
-                properties: {
-                    repoPath: {
-                        type: "string",
-                        description: "Absolute path to the git repo.",
+            description: "Generate a commit message from staged changes.",
+            entry: "d4-commit-summary",
+            workflows: {
+                ["d4-commit-summary"]: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["repoPath"],
+                        properties: {
+                            repoPath: {
+                                type: "string",
+                                description: "Absolute path to the git repo.",
+                            },
+                        },
                     },
+                    outputSchema: { type: "object" },
+                    entry: "start",
+                    nodes: {},
+                    output: {},
                 },
             },
-            outputSchema: { type: "object" },
-            nodes: {},
-            entry: "start",
-            output: {},
         };
 
         const workflows = new Map([["d4-commit-summary", ir]]);
@@ -71,26 +75,30 @@ describe("generateDynamicSchema", () => {
     it("marks optional parameters correctly", () => {
         const ir: WorkflowIR = {
             kind: "workflow",
-            name: "d5-code-review-prep",
             version: "1.0",
-            inputSchema: {
-                type: "object",
-                required: ["repoPath"],
-                properties: {
-                    repoPath: {
-                        type: "string",
-                        description: "Repo path.",
+            entry: "d5-code-review-prep",
+            workflows: {
+                ["d5-code-review-prep"]: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["repoPath"],
+                        properties: {
+                            repoPath: {
+                                type: "string",
+                                description: "Repo path.",
+                            },
+                            baseBranch: {
+                                type: "string",
+                                description: "Branch to diff against.",
+                            },
+                        },
                     },
-                    baseBranch: {
-                        type: "string",
-                        description: "Branch to diff against.",
-                    },
+                    outputSchema: { type: "object" },
+                    entry: "start",
+                    nodes: {},
+                    output: {},
                 },
             },
-            outputSchema: { type: "object" },
-            nodes: {},
-            entry: "start",
-            output: {},
         };
 
         const workflows = new Map([["d5-code-review-prep", ir]]);
@@ -113,27 +121,31 @@ describe("generateDynamicSchema", () => {
     it("handles array types", () => {
         const ir: WorkflowIR = {
             kind: "workflow",
-            name: "d1-standup-prep",
             version: "1.0",
-            inputSchema: {
-                type: "object",
-                required: ["repos", "author"],
-                properties: {
-                    repos: {
-                        type: "array",
-                        items: { type: "string" },
-                        description: "Git repos.",
+            entry: "d1-standup-prep",
+            workflows: {
+                ["d1-standup-prep"]: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["repos", "author"],
+                        properties: {
+                            repos: {
+                                type: "array",
+                                items: { type: "string" },
+                                description: "Git repos.",
+                            },
+                            author: {
+                                type: "string",
+                                description: "Author.",
+                            },
+                        },
                     },
-                    author: {
-                        type: "string",
-                        description: "Author.",
-                    },
+                    outputSchema: { type: "object" },
+                    entry: "start",
+                    nodes: {},
+                    output: {},
                 },
             },
-            outputSchema: { type: "object" },
-            nodes: {},
-            entry: "start",
-            output: {},
         };
 
         const workflows = new Map([["d1-standup-prep", ir]]);
@@ -154,29 +166,37 @@ describe("generateDynamicSchema", () => {
     it("generates schema for multiple workflows", () => {
         const ir1: WorkflowIR = {
             kind: "workflow",
-            name: "wf-a",
             version: "1.0",
-            inputSchema: {
-                type: "object",
-                properties: { x: { type: "number" } },
+            entry: "wf-a",
+            workflows: {
+                ["wf-a"]: {
+                    inputSchema: {
+                        type: "object",
+                        properties: { x: { type: "number" } },
+                    },
+                    outputSchema: { type: "object" },
+                    entry: "start",
+                    nodes: {},
+                    output: {},
+                },
             },
-            outputSchema: { type: "object" },
-            nodes: {},
-            entry: "start",
-            output: {},
         };
         const ir2: WorkflowIR = {
             kind: "workflow",
-            name: "wf-b",
             version: "1.0",
-            inputSchema: {
-                type: "object",
-                properties: { y: { type: "boolean" } },
+            entry: "wf-b",
+            workflows: {
+                ["wf-b"]: {
+                    inputSchema: {
+                        type: "object",
+                        properties: { y: { type: "boolean" } },
+                    },
+                    outputSchema: { type: "object" },
+                    entry: "start",
+                    nodes: {},
+                    output: {},
+                },
             },
-            outputSchema: { type: "object" },
-            nodes: {},
-            entry: "start",
-            output: {},
         };
 
         const workflows = new Map([
@@ -196,20 +216,24 @@ describe("generateDynamicSchema", () => {
     it("handles number and integer types", () => {
         const ir: WorkflowIR = {
             kind: "workflow",
-            name: "test-nums",
             version: "1.0",
-            inputSchema: {
-                type: "object",
-                required: ["count"],
-                properties: {
-                    count: { type: "integer" },
-                    ratio: { type: "number" },
+            entry: "test-nums",
+            workflows: {
+                ["test-nums"]: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["count"],
+                        properties: {
+                            count: { type: "integer" },
+                            ratio: { type: "number" },
+                        },
+                    },
+                    outputSchema: { type: "object" },
+                    entry: "start",
+                    nodes: {},
+                    output: {},
                 },
             },
-            outputSchema: { type: "object" },
-            nodes: {},
-            entry: "start",
-            output: {},
         };
 
         const workflows = new Map([["test-nums", ir]]);

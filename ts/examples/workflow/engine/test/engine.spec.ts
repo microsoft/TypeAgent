@@ -11,6 +11,10 @@
 
 import {
     WorkflowIR,
+    WorkflowNode,
+    WorkflowCallNode,
+    JSONSchema,
+    ConstantDef,
     TaskDefinition,
     TaskPolicy,
     Template,
@@ -47,6 +51,58 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { compile as compileDsl, TaskSchemaInfo } from "workflow-dsl";
+
+// ---- Test helper: wrap legacy flat WorkflowIR into multi-workflow shape ----
+// Engine tests were written against the pre-multi-workflow flat WorkflowIR
+// shape (`{ kind, name, version, ...WorkflowScope fields }`). The multi-
+// workflow refactor moves the body into `workflows[name]`. This helper lets
+// the existing fixtures keep their compact flat literal form by wrapping at
+// call sites.
+type LegacyWorkflowIR = {
+    kind: "workflow";
+    name: string;
+    description?: string;
+    version: string;
+    types?: Record<string, JSONSchema>;
+    constants?: Record<string, ConstantDef>;
+    inputSchema: JSONSchema;
+    entry: string;
+    nodes: Record<string, WorkflowNode>;
+    output: Template;
+    outputSchema: JSONSchema;
+};
+
+function wrapIR(legacy: LegacyWorkflowIR): WorkflowIR {
+    const {
+        kind,
+        name,
+        version,
+        types,
+        constants,
+        inputSchema,
+        entry,
+        nodes,
+        output,
+        outputSchema,
+    } = legacy;
+    const ir: WorkflowIR = {
+        kind,
+        version,
+        entry: name,
+        workflows: {
+            [name]: {
+                inputSchema,
+                entry,
+                nodes,
+                output,
+                outputSchema,
+            },
+        },
+    };
+    if (types) ir.types = types;
+    if (constants) ir.constants = constants;
+    return ir;
+}
 
 function compileWfFile(relPath: string): WorkflowIR {
     const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -220,7 +276,7 @@ const domainTasks: TaskDefinition[] = [
 // ---- A4 morning-brief IR ----
 
 function makeA4IR(): WorkflowIR {
-    return {
+    return wrapIR({
         kind: "workflow",
         name: "morningBrief",
         version: "1",
@@ -728,7 +784,7 @@ function makeA4IR(): WorkflowIR {
         },
         entry: "fetchCalendar",
         output: { $from: "scope", name: "result" } as Template,
-    };
+    });
 }
 
 // ---- Helpers ----
@@ -908,7 +964,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("standard-library tasks", () => {
         it("math.add computes correctly", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "addTest",
                 version: "1",
@@ -942,7 +998,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "sum" } as Template,
-            };
+            });
 
             const result = await engine.run(ir, { input: { a: 3, b: 7 } });
             expect(result.success).toBe(true);
@@ -952,7 +1008,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("bool.toLabel converts boolean to string (legacy)", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "labelTest",
                 version: "1",
@@ -982,7 +1038,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "label",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -992,7 +1048,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("branch nodes", () => {
         it("routes based on boolean discriminant", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "branchTest",
                 version: "1",
@@ -1075,7 +1131,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
@@ -1121,7 +1177,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "templateTest",
                 version: "1",
@@ -1153,7 +1209,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "tmpl",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1164,7 +1220,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "multiReplace",
                 version: "1",
@@ -1195,7 +1251,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "tmpl",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1208,7 +1264,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "joinTest",
                 version: "1",
@@ -1239,7 +1295,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "join",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1250,7 +1306,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "joinEmpty",
                 version: "1",
@@ -1281,7 +1337,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "join",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1294,7 +1350,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "echoTest",
                 version: "1",
@@ -1336,7 +1392,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "echo",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1356,7 +1412,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "falseTest",
                 version: "1",
@@ -1398,7 +1454,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fail",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1417,7 +1473,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "notFoundTest",
                 version: "1",
@@ -1451,7 +1507,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "bad",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1665,7 +1721,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "splitTest",
                 version: "1",
@@ -1696,7 +1752,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "split",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1707,7 +1763,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "splitEmpty",
                 version: "1",
@@ -1738,7 +1794,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "split",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1922,7 +1978,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "httpTest",
                 version: "1",
@@ -1951,7 +2007,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1979,7 +2035,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // Write
-            const writeIr: WorkflowIR = {
+            const writeIr: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "writeTest",
                 version: "1",
@@ -2007,7 +2063,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "write",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const writeResult = await eng.run(writeIr, {
                 input: {},
@@ -2017,7 +2073,7 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(writeResult.output).toBe(testFile);
 
             // Read back
-            const readIr: WorkflowIR = {
+            const readIr: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "readTest",
                 version: "1",
@@ -2039,7 +2095,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "read",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const readResult = await eng.run(readIr, {
                 input: {},
@@ -2289,7 +2345,7 @@ describe("WorkflowEngine (IR v1)", () => {
     describe("task policy", () => {
         // Minimal workflow that calls a single side-effecting task.
         function sideEffectWorkflow(taskName: string): WorkflowIR {
-            return {
+            return wrapIR({
                 kind: "workflow",
                 name: "policyTest",
                 version: "1",
@@ -2311,7 +2367,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
         }
 
         it("denies a side-effecting task when policy is 'deny'", async () => {
@@ -2406,7 +2462,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // math.add has no sideEffects, should run even with no approve fn
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "pureTest",
                 version: "1",
@@ -2431,7 +2487,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // No policy, no approve fn: pure tasks should still work
             const opts: RunOptions = { input: {} };
@@ -2445,7 +2501,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // Confirm the old two-arg signature still works for pure tasks
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "legacyTest",
                 version: "1",
@@ -2470,7 +2526,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: { a: 1, b: 2 } });
             expect(result.success).toBe(true);
@@ -2505,7 +2561,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, badTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "schemaViolation",
                 version: "1",
@@ -2523,7 +2579,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -2545,7 +2601,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, goodTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "schemaOk",
                 version: "1",
@@ -2563,7 +2619,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -2576,7 +2632,7 @@ describe("WorkflowEngine (IR v1)", () => {
             // Node "consumer" references $from: "scope", name: "data",
             // path: ["nonexistent"] - but the producer's outputSchema
             // has no such property.
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badRef",
                 version: "1",
@@ -2624,7 +2680,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "producer",
                 output: { $from: "scope", name: "final" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2638,7 +2694,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("static validator passes valid scope path reference", async () => {
             const { validateWorkflowIR } = await import("workflow-model");
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "goodRef",
                 version: "1",
@@ -2685,7 +2741,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "producer",
                 output: { $from: "scope", name: "final" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2695,7 +2751,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("static validator detects invalid path in loop iterateState", async () => {
             const { validateWorkflowIR } = await import("workflow-model");
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badLoopState",
                 version: "1",
@@ -2751,7 +2807,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2765,7 +2821,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "typedInput",
                 version: "1",
@@ -2797,7 +2853,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // String where integer is required
             const result = await eng.run(ir, {
@@ -2810,7 +2866,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("branch node events", () => {
         it("emits nodeStarted and nodeCompleted for branch nodes", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "branchEvents",
                 version: "1",
@@ -2893,7 +2949,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
@@ -2931,7 +2987,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "loopOnError",
                 version: "1",
@@ -2987,7 +3043,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "badLoop",
                 output: { $from: "scope", name: "recovered" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3031,7 +3087,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "timeoutTest",
                 version: "1",
@@ -3052,7 +3108,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "result",
                 } as Template,
-            };
+            });
 
             const start = Date.now();
             const result = await eng.run(ir, {
@@ -3072,7 +3128,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fastTask",
                 version: "1",
@@ -3103,7 +3159,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "result",
                 } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3119,7 +3175,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "pathTraversalRead",
                 version: "1",
@@ -3143,7 +3199,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "read",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3159,7 +3215,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "pathTraversalWrite",
                 version: "1",
@@ -3187,7 +3243,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "write",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3212,7 +3268,7 @@ describe("WorkflowEngine (IR v1)", () => {
             writeFileSync(testPath, "safe-content", "utf8");
 
             try {
-                const ir: WorkflowIR = {
+                const ir: WorkflowIR = wrapIR({
                     kind: "workflow",
                     name: "allowedRead",
                     version: "1",
@@ -3234,7 +3290,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     entry: "read",
                     output: { $from: "scope", name: "result" } as Template,
-                };
+                });
 
                 const result = await eng.run(ir, {
                     input: {},
@@ -3296,7 +3352,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "httpTruncateTest",
                 version: "1",
@@ -3331,7 +3387,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3347,7 +3403,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "branchNoDefault",
                 version: "1",
@@ -3418,7 +3474,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3434,7 +3490,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badConstant",
                 version: "1",
@@ -3465,7 +3521,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3478,7 +3534,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "goodConstant",
                 version: "1",
@@ -3515,7 +3571,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -3528,7 +3584,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "approvalTimeout",
                 version: "1",
@@ -3552,7 +3608,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3595,7 +3651,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "abortTest",
                 version: "1",
@@ -3613,7 +3669,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const ac = new AbortController();
             setTimeout(() => ac.abort(), 50);
@@ -3644,7 +3700,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, counterTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "loopAbortTest",
                 version: "1",
@@ -3702,7 +3758,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const ac = new AbortController();
             setTimeout(() => ac.abort(), 100);
@@ -3720,7 +3776,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "maxIterTest",
                 version: "1",
@@ -3781,7 +3837,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3794,7 +3850,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "loopConstantTest",
                 version: "1",
@@ -3919,7 +3975,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -3956,7 +4012,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "nodeFailedTest",
                 version: "1",
@@ -3990,7 +4046,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             await eng.run(ir, { input: {} });
 
@@ -4020,7 +4076,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "runFailedTest",
                 version: "1",
@@ -4038,7 +4094,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -4051,7 +4107,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("emits runStarted and runCompleted in order", async () => {
             const events = collectEvents(engine);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "eventOrderTest",
                 version: "1",
@@ -4076,7 +4132,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             await engine.run(ir, { input: {} });
 
@@ -4105,7 +4161,7 @@ describe("WorkflowEngine (IR v1)", () => {
             eng.on(listener1);
             eng.on(listener2);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "offTest",
                 version: "1",
@@ -4130,7 +4186,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             // Both get events from first run
             await eng.run(ir, { input: {} });
@@ -4155,7 +4211,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "bindOverwrite",
                 version: "1",
@@ -4196,7 +4252,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "first",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4239,7 +4295,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "cascadeError",
                 version: "1",
@@ -4273,7 +4329,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -4299,7 +4355,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "optionalRef",
                 version: "1",
@@ -4323,7 +4379,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4358,7 +4414,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "optionalPath",
                 version: "1",
@@ -4402,7 +4458,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "first",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4416,7 +4472,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "cwdTest",
                 version: "1",
@@ -4460,7 +4516,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4477,7 +4533,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "stderrTest",
                 version: "1",
@@ -4516,7 +4572,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4542,7 +4598,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "literalTest",
                 version: "1",
@@ -4567,7 +4623,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4585,7 +4641,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrfTest",
                 version: "1",
@@ -4616,7 +4672,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4630,7 +4686,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrfMetadata",
                 version: "1",
@@ -4661,7 +4717,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4675,7 +4731,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrf127",
                 version: "1",
@@ -4706,7 +4762,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4720,7 +4776,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrf192",
                 version: "1",
@@ -4751,7 +4807,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4765,7 +4821,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrfFile",
                 version: "1",
@@ -4796,7 +4852,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4882,7 +4938,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask, captureTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "errorStructure",
                 version: "1",
@@ -4920,7 +4976,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4960,7 +5016,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "runtimeError",
                 version: "1",
@@ -4998,7 +5054,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -5015,7 +5071,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "unrecoverable",
                 version: "1",
@@ -5071,7 +5127,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "branch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // Even if the branch node had an onError, unrecoverable errors bypass it.
             // Here we just confirm the run fails (not recovers silently).
@@ -5090,7 +5146,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("detects type mismatch (producer: string, consumer: integer)", async () => {
             const { validateWorkflowIR } = await import("workflow-model");
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "typeMismatch",
                 version: "1",
@@ -5142,7 +5198,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "producer",
                 output: { $from: "scope", name: "final" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -5153,7 +5209,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("unresolved $from reference", () => {
         it("fails with clear error for missing scope binding", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "missingRef",
                 version: "1",
@@ -5184,7 +5240,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5195,7 +5251,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("unknown $from namespace", () => {
         it("fails with clear error for invalid namespace", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badNamespace",
                 version: "1",
@@ -5226,7 +5282,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5249,7 +5305,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, numTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badProjection",
                 version: "1",
@@ -5290,7 +5346,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "first",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5317,7 +5373,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "unhandledFail",
                 version: "1",
@@ -5335,7 +5391,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5353,7 +5409,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "defaultTimeoutOk",
                 version: "1",
@@ -5378,7 +5434,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // No taskTimeoutMs: should use 60s default, fast task succeeds
             const result = await eng.run(ir, { input: {} });
@@ -5399,7 +5455,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(slow);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "noTimeout",
                 version: "1",
@@ -5417,7 +5473,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // taskTimeoutMs: 0 disables timeout; 200ms task should succeed
             const result = await eng.run(ir, {
@@ -5433,7 +5489,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "inputValidation",
                 version: "1",
@@ -5462,7 +5518,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // Missing required "name" field
             const result = await eng.run(ir, { input: {} });
@@ -5474,7 +5530,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "missingInput",
                 version: "1",
@@ -5503,7 +5559,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // No input at all
             const result = await eng.run(ir);
@@ -5551,7 +5607,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(mockExec);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "blockedCmd",
                 version: "1",
@@ -5581,7 +5637,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5632,7 +5688,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(mockExec);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "allowedCmd",
                 version: "1",
@@ -5662,7 +5718,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5679,7 +5735,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "blockedHost",
                 version: "1",
@@ -5710,7 +5766,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5728,7 +5784,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "notAllowedHost",
                 version: "1",
@@ -5759,7 +5815,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5803,7 +5859,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             // step fails -> cleanup runs (binds "cleanupResult")
             // but output references "happyResult" which was never bound
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "cleanupFail",
                 version: "1",
@@ -5840,7 +5896,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "happyResult",
                 } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5885,7 +5941,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             // step fails -> recover runs and binds "result"
             // output references "result", which IS bound by the recovery node
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "recoverSuccess",
                 version: "1",
@@ -5923,7 +5979,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -5957,7 +6013,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask, noopTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "nodeIdCheck",
                 version: "1",
@@ -5994,7 +6050,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "workOutput",
                 } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6405,7 +6461,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-test",
                 version: "1",
@@ -6472,7 +6528,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkResult" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6502,7 +6558,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-min2-test",
                 version: "1",
@@ -6541,7 +6597,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkResult" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6584,7 +6640,7 @@ describe("WorkflowEngine (IR v1)", () => {
             reg.register(makeSlowTask("mock.slow3"));
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-concurrency",
                 version: "1",
@@ -6659,7 +6715,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6712,7 +6768,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-multinode",
                 version: "1",
@@ -6812,7 +6868,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkResult" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6869,7 +6925,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-error",
                 version: "1",
@@ -6937,7 +6993,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6974,7 +7030,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-no-onerror",
                 version: "1",
@@ -7029,7 +7085,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkOut" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -7065,7 +7121,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-test",
                 version: "1",
@@ -7119,7 +7175,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { nums: [1, 2, 3, 4] },
@@ -7158,7 +7214,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-concurrency",
                 version: "1",
@@ -7205,7 +7261,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { items: ["a", "b", "c", "d", "e"] },
@@ -7234,7 +7290,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-maxiter",
                 version: "1",
@@ -7281,7 +7337,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
@@ -7308,7 +7364,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-empty",
                 version: "1",
@@ -7354,7 +7410,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { items: [] },
@@ -7390,7 +7446,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-fail",
                 version: "1",
@@ -7445,7 +7501,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { nums: [1, 2, 3, 4, 5] },
@@ -7477,7 +7533,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-events",
                 version: "1",
@@ -7532,7 +7588,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -7583,7 +7639,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-fail-events",
                 version: "1",
@@ -7647,7 +7703,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "recovered" },
-            };
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -7679,7 +7735,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-events",
                 version: "1",
@@ -7727,7 +7783,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             await eng.run(ir, {
                 input: { items: [10, 20, 30] },
@@ -7767,7 +7823,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-order",
                 version: "1",
@@ -7822,7 +7878,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -7852,7 +7908,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "never-output-violation",
                 version: "1",
@@ -7869,7 +7925,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: {},
-            };
+            });
 
             const reg = makeRegistry(...allBuiltinTasks, rogueFail);
             const engine = new WorkflowEngine(reg);
@@ -7884,7 +7940,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("allows a proper never-output task that fails", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "proper-throw",
                 version: "1",
@@ -7905,7 +7961,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: {},
-            };
+            });
 
             const reg = makeRegistry(...allBuiltinTasks);
             const engine = new WorkflowEngine(reg);
@@ -7947,7 +8003,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const loopIR: WorkflowIR = {
+            const loopIR: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "iterTest",
                 version: "1",
@@ -8031,7 +8087,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(loopIR, { input: {} });
             expect(result.success).toBe(true);
@@ -8104,6 +8160,119 @@ describe("WorkflowEngine (IR v1)", () => {
                 expect(e.iteration).toBeDefined();
                 expect(typeof e.iteration).toBe("number");
             });
+        });
+    });
+
+    // ---- Defense-in-depth: runtime workflow call cycle detection ----
+
+    describe("defense-in-depth: runtime workflow call cycle detection", () => {
+        /** Minimal call node whose schemas match a body with inputSchema/outputSchema: {type:"object"}. */
+        function callNode(
+            targetName: string,
+            bind = "result",
+        ): WorkflowCallNode {
+            return {
+                kind: "workflowCall",
+                workflowRef: { name: targetName },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                inputs: {},
+                bind,
+            };
+        }
+
+        it("fails at runtime when a direct call cycle bypasses static validation", async () => {
+            // alpha -> beta -> alpha: the static check (validateWorkflowCalls)
+            // normally catches this, but skipValidation lets crafted IR through.
+            // defenseInDepth must then catch it in executeWorkflowCall.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callBeta",
+                        nodes: { callBeta: callNode("beta") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: callNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+            const result = await eng.run(ir, {
+                skipValidation: true,
+                defenseInDepth: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/[Rr]ecursive|cycle/i);
+        });
+
+        it("fails at runtime when a cycle is routed through a branch arm", async () => {
+            // alpha has a branch node whose arm calls beta; beta calls alpha.
+            // This exercises the wfCallStack check across nested sub-scopes.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "pick",
+                        nodes: {
+                            pick: {
+                                kind: "branch",
+                                selector: { $literal: true },
+                                selectorSchema: { type: "boolean" },
+                                cases: {
+                                    true: {
+                                        inputs: {},
+                                        scope: {
+                                            inputSchema: { type: "object" },
+                                            entry: "callBeta",
+                                            nodes: {
+                                                callBeta: callNode("beta"),
+                                            },
+                                            output: {
+                                                $from: "scope",
+                                                name: "result",
+                                            },
+                                            outputSchema: { type: "object" },
+                                        },
+                                    },
+                                },
+                                bind: "result",
+                                outputSchema: { type: "object" },
+                            },
+                        },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: callNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+            const result = await eng.run(ir, {
+                skipValidation: true,
+                defenseInDepth: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/[Rr]ecursive|cycle/i);
         });
     });
 });

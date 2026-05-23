@@ -21,6 +21,7 @@
 
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     TaskNode,
     BranchNode,
@@ -28,6 +29,7 @@ import {
     LoopNode,
     ForkNode,
     ForkMapNode,
+    WorkflowCallNode,
     LoopStateVar,
     Template,
     JSONSchema,
@@ -123,20 +125,92 @@ export class Emitter {
         {};
     /** Set of node IDs that are referenced by expressions */
     private referencedNodes = new Set<string>();
+    /**
+     * Map of workflow name -> declaration, populated by `emitAll` so
+     * `emitWorkflowCall` can look up callee parameters / schemas for
+     * argument lowering. Empty when a single-workflow `emit(ast)` is
+     * called directly (legacy path; workflow calls are not allowed in
+     * that mode because the callee is unreachable).
+     */
+    private workflowMap: Map<string, WorkflowDecl> = new Map();
+    /** Cached (input,output) schemas per workflow, used by WorkflowCallNode. */
+    private workflowSchemas: Map<
+        string,
+        { input: JSONSchema; output: JSONSchema }
+    > = new Map();
 
     constructor(taskSchemas: TaskSchemaInfo[]) {
         this.taskSchemas = new Map(taskSchemas.map((t) => [t.name, t]));
     }
 
-    emit(ast: WorkflowDecl): {
-        ir: WorkflowIR | undefined;
-        errors: EmitError[];
-    } {
+    /**
+     * Emit a multi-workflow IR. The `entryName` selects which workflow's
+     * inputs/outputs become the artifact's top-level surface; every
+     * workflow in the input list is emitted into the IR's `workflows`
+     * table so it can be invoked as a sub-workflow.
+     */
+    emitAll(
+        workflows: WorkflowDecl[],
+        entryName: string,
+    ): { ir: WorkflowIR | undefined; errors: EmitError[] } {
         this.errors = [];
         this.nodeCounter = 0;
         this.constants = {};
         this.referencedNodes = new Set();
 
+        if (workflows.length === 0) {
+            this.emitError("No workflows to emit", 0, 0);
+            return { ir: undefined, errors: this.errors };
+        }
+        const entryDecl = workflows.find((w) => w.name === entryName);
+        if (!entryDecl) {
+            this.emitError(
+                `Entry workflow '${entryName}' not found in input`,
+                workflows[0].loc.line,
+                workflows[0].loc.col,
+            );
+            return { ir: undefined, errors: this.errors };
+        }
+
+        this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
+        this.workflowSchemas = new Map();
+        for (const w of workflows) {
+            this.workflowSchemas.set(w.name, {
+                input: this.paramsToSchema(w.params),
+                output: this.typeToSchema(w.returnType),
+            });
+        }
+
+        const bodies: Record<string, WorkflowBody> = {};
+        for (const w of workflows) {
+            const body = this.emitWorkflowBody(w);
+            if (!body) continue;
+            bodies[w.name] = body;
+        }
+        if (this.errors.length > 0) {
+            return { ir: undefined, errors: this.errors };
+        }
+
+        const ir: WorkflowIR = {
+            kind: "workflow",
+            version: "1",
+            ...(entryDecl.description
+                ? { description: entryDecl.description }
+                : {}),
+            ...(Object.keys(this.constants).length > 0
+                ? { constants: this.constants }
+                : {}),
+            entry: entryName,
+            workflows: bodies,
+        };
+        return { ir, errors: this.errors };
+    }
+
+    /**
+     * Emit a single workflow into a WorkflowBody (the value stored in
+     * `WorkflowIR.workflows[name]`). Called per workflow by emitAll.
+     */
+    private emitWorkflowBody(ast: WorkflowDecl): WorkflowBody | undefined {
         const inputSchema = this.paramsToSchema(ast.params);
         const outputSchema = this.typeToSchema(ast.returnType);
 
@@ -188,26 +262,14 @@ export class Emitter {
 
         this.stripUnreferencedBinds(rootScope);
 
-        const ir: WorkflowIR = {
-            kind: "workflow",
-            name: ast.name,
-            ...(ast.description ? { description: ast.description } : {}),
-            version: "1",
+        return {
             inputSchema,
             outputSchema,
-            ...(Object.keys(this.constants).length > 0
-                ? { constants: this.constants }
-                : {}),
             nodes: rootScope.nodes,
             entry: rootScope.nodeOrder.length > 0 ? rootScope.nodeOrder[0] : "",
             output:
                 outputTemplate ??
                 ({ $from: "input", name: "" } as unknown as Template),
-        };
-
-        return {
-            ir: this.errors.length === 0 ? ir : undefined,
-            errors: this.errors,
         };
     }
 
@@ -796,20 +858,123 @@ export class Emitter {
         expr: import("./ast.js").WorkflowCallExpr,
         scope: ScopeContext,
         bindName: string,
-    ): TaskNode | undefined {
-        // Emit as a task call with name "workflow.<name>"
-        // The engine or a future pass handles workflow resolution
-        const taskName = `workflow.${expr.name}`;
-        const inputs = this.resolveTaskArgs(expr.args, undefined, scope);
-
+    ): WorkflowCallNode | undefined {
+        const callee = this.workflowMap.get(expr.name);
+        if (!callee) {
+            this.emitError(
+                `Unknown workflow '${expr.name}'`,
+                expr.loc.line,
+                expr.loc.col,
+            );
+            return undefined;
+        }
+        const schemas = this.workflowSchemas.get(expr.name);
+        if (!schemas) {
+            this.emitError(
+                `Missing schema cache for workflow '${expr.name}'`,
+                expr.loc.line,
+                expr.loc.col,
+            );
+            return undefined;
+        }
+        const inputs = this.resolveWorkflowCallInputs(callee, expr.args, scope);
         return {
-            kind: "task",
-            task: taskName,
-            inputSchema: {},
-            outputSchema: {},
+            kind: "workflowCall",
+            workflowRef: { name: expr.name },
+            inputSchema: schemas.input,
+            outputSchema: schemas.output,
             inputs,
             bind: bindName,
         };
+    }
+
+    /**
+     * Resolve workflow-call arguments into the inputs map keyed by the
+     * callee's parameter names, applying defaults for any omitted param.
+     *
+     * Default-expression inlining: defaults are emitted in a synthetic
+     * sub-scope where earlier callee param names are bound to the
+     * caller-resolved templates (kind "literal"). This means a default
+     * like `b = a` becomes `inputs[b] = <whatever the caller passed for a>`,
+     * with all literal substitution performed at compile time (§4.3).
+     *
+     * The same default expression is re-expanded at every call site
+     * (duplication intentional in P4; see
+     * `ir/future/workflow-default-arguments.md`).
+     */
+    private resolveWorkflowCallInputs(
+        callee: WorkflowDecl,
+        args: import("./ast.js").TaskArg[],
+        scope: ScopeContext,
+    ): Record<string, Template> {
+        const recordForm =
+            args.length === 1 &&
+            args[0].kind === "PositionalArg" &&
+            args[0].value.kind === "ObjectLiteralExpr";
+
+        const inputs: Record<string, Template> = {};
+
+        if (recordForm) {
+            const obj = args[0].value as Extract<
+                Expr,
+                { kind: "ObjectLiteralExpr" }
+            >;
+            for (const entry of obj.entries) {
+                inputs[entry.key] = this.emitExpr(entry.value, scope);
+            }
+        } else {
+            let posIdx = 0;
+            for (const arg of args) {
+                if (arg.kind === "NamedArg") {
+                    inputs[arg.name] = this.emitExpr(arg.value, scope);
+                } else {
+                    if (posIdx < callee.params.length) {
+                        const paramName = callee.params[posIdx].name;
+                        inputs[paramName] = this.emitExpr(arg.value, scope);
+                        posIdx++;
+                    } else {
+                        // Type checker already reports too-many-args; skip
+                        // silently here to avoid duplicate errors.
+                    }
+                }
+            }
+        }
+
+        // Apply defaults in declaration order so a default referencing
+        // an earlier param sees the already-resolved template.
+        const defaultScope: ScopeContext = {
+            nodes: {},
+            nodeOrder: [],
+            bindings: new Map(),
+        };
+        for (const p of callee.params) {
+            if (inputs[p.name] !== undefined) {
+                defaultScope.bindings.set(p.name, {
+                    kind: "literal",
+                    value: inputs[p.name],
+                });
+                continue;
+            }
+            if (!p.default) continue;
+            // Emit the default expression in the synthetic scope. Any
+            // node-producing expression in a default is emitted into
+            // the calling scope; the default's result template is what
+            // we record for the input.
+            const inheritedScope: ScopeContext = {
+                ...defaultScope,
+                nodes: scope.nodes,
+                nodeOrder: scope.nodeOrder,
+                parent: scope,
+            };
+            const template = this.emitExpr(p.default, inheritedScope);
+            inputs[p.name] = template;
+            defaultScope.bindings.set(p.name, {
+                kind: "literal",
+                value: template,
+            });
+        }
+
+        return inputs;
     }
 
     private emitTemplateLiteral(
@@ -1971,7 +2136,9 @@ export class Emitter {
                     (lastNode.kind === "task" ||
                         lastNode.kind === "loop" ||
                         lastNode.kind === "fork" ||
-                        lastNode.kind === "forkMap") &&
+                        lastNode.kind === "forkMap" ||
+                        lastNode.kind === "branch" ||
+                        lastNode.kind === "workflowCall") &&
                     lastNode.bind
                         ? lastNode.bind
                         : undefined;
@@ -2067,7 +2234,9 @@ export class Emitter {
                 (lastNode.kind === "task" ||
                     lastNode.kind === "loop" ||
                     lastNode.kind === "fork" ||
-                    lastNode.kind === "forkMap") &&
+                    lastNode.kind === "forkMap" ||
+                    lastNode.kind === "branch" ||
+                    lastNode.kind === "workflowCall") &&
                 lastNode.bind
                     ? lastNode.bind
                     : undefined;
@@ -2203,12 +2372,20 @@ export class Emitter {
                     }
                     case "literal":
                         if (rest.length > 0) {
-                            this.emitError(
-                                `Cannot access path on literal value '${first}'`,
-                                expr.loc.line,
-                                expr.loc.col,
-                            );
-                            return null;
+                            // Forward the path onto the resolved template so
+                            // that default expressions like `b = a.foo` work
+                            // when `a` was inlined as a caller-resolved ref.
+                            const base = binding.value as Record<
+                                string,
+                                unknown
+                            >;
+                            const existingPath = Array.isArray(base.path)
+                                ? (base.path as string[])
+                                : [];
+                            return {
+                                ...base,
+                                path: [...existingPath, ...rest],
+                            } as unknown as Template;
                         }
                         return binding.value!;
                 }

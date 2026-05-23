@@ -13,6 +13,9 @@ import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
 export enum TokenKind {
     // Keywords
     Workflow = "workflow",
+    Export = "export",
+    Import = "import",
+    From = "from",
     Const = "const",
     If = "if",
     Else = "else",
@@ -112,6 +115,9 @@ export interface LexError {
 
 const KEYWORDS = new Map<string, TokenKind>([
     ["workflow", TokenKind.Workflow],
+    ["export", TokenKind.Export],
+    ["import", TokenKind.Import],
+    ["from", TokenKind.From],
     ["const", TokenKind.Const],
     ["if", TokenKind.If],
     ["else", TokenKind.Else],

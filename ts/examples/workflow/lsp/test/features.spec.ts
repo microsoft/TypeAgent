@@ -257,3 +257,92 @@ describe("semantic tokens", () => {
         }
     });
 });
+
+describe("multi-workflow LSP features", () => {
+    // Two workflows in one file with the same param name `x`. Both
+    // workflows must be visible to the LSP — pre-multi-workflow LSP
+    // silently dropped workflows[1..N].
+    const MULTI_SRC = [
+        "workflow a(x: string): string {",
+        "    return x;",
+        "}",
+        "",
+        "workflow b(x: number): number {",
+        "    return x;",
+        "}",
+    ].join("\n");
+
+    it("hover resolves a reference in the second workflow", () => {
+        // `return x;` in workflow b is on line 5 (0-based); the `x`
+        // reference sits at character 11.
+        const h = computeHover(
+            doc(MULTI_SRC),
+            { line: 5, character: 11 },
+            schemas,
+        );
+        expect(h).not.toBeNull();
+        const value = (h!.contents as { value: string }).value;
+        // Must resolve to workflow b's `x: number`, not workflow a's
+        // `x: string`.
+        expect(value).toContain("(parameter) x: number");
+    });
+
+    it("definition jumps within the second workflow", () => {
+        // The `x` reference in workflow b should resolve to workflow
+        // b's param definition (line 4), not workflow a's (line 0).
+        const def = computeDefinition(doc(MULTI_SRC), {
+            line: 5,
+            character: 11,
+        });
+        expect(def).not.toBeNull();
+        expect(def!.range.start.line).toBe(4);
+    });
+
+    it("references in the second workflow do not bleed into the first", () => {
+        // Asking for refs of workflow b's `x` should only list b's
+        // declaration + use, not workflow a's `x`.
+        const refs = computeReferences(
+            doc(MULTI_SRC),
+            { line: 4, character: 11 },
+            true,
+        );
+        expect(refs).not.toBeNull();
+        // workflow b spans lines 4..6; every reference must be in
+        // that range.
+        for (const r of refs!) {
+            expect(r.range.start.line).toBeGreaterThanOrEqual(4);
+            expect(r.range.start.line).toBeLessThanOrEqual(6);
+        }
+        expect(refs!.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("semantic tokens cover both workflows", () => {
+        const tokens = computeSemanticTokens(doc(MULTI_SRC));
+        // Reconstruct absolute line numbers from the delta stream;
+        // tokens must appear in both the first workflow (line 1) and
+        // the second workflow (lines 4..5).
+        const lines = new Set<number>();
+        let prevLine = 0;
+        let prevChar = 0;
+        for (let i = 0; i < tokens.data.length; i += 5) {
+            const dLine = tokens.data[i]!;
+            const dChar = tokens.data[i + 1]!;
+            const line = prevLine + dLine;
+            const char = dLine === 0 ? prevChar + dChar : dChar;
+            lines.add(line);
+            prevLine = line;
+            prevChar = char;
+        }
+        // workflow a's body is on line 1; workflow b's body is on
+        // line 5.
+        expect([...lines].some((l) => l <= 1)).toBe(true);
+        expect([...lines].some((l) => l >= 5)).toBe(true);
+    });
+
+    it("completion lists symbols from all workflows", () => {
+        const items = computeCompletions(doc(MULTI_SRC), schemas);
+        // Both workflows declare `x`; the completion list dedupes by
+        // name, so we expect a single entry that does appear.
+        expect(items.some((i) => i.label === "x")).toBe(true);
+    });
+});

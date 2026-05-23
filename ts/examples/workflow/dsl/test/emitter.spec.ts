@@ -6,6 +6,7 @@ import { Parser } from "../src/parser.js";
 import { lex } from "../src/lexer.js";
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     TaskNode,
     BranchNode,
@@ -13,6 +14,10 @@ import {
     ForkNode,
     ForkMapNode,
 } from "workflow-model";
+
+function bodyOf(ir: WorkflowIR): WorkflowBody {
+    return ir.workflows[ir.entry];
+}
 
 // Common task schemas for testing
 const taskSchemas: TaskSchemaInfo[] = [
@@ -165,20 +170,27 @@ function compile(source: string): {
         };
     }
     const parser = new Parser(tokens.tokens);
-    const ast = parser.parse();
-    if (ast.errors.length > 0) {
+    const { module, errors } = parser.parseModule();
+    if (errors.length > 0) {
         return {
             ir: undefined,
-            errors: ast.errors.map((e: { message: string }) => ({
+            errors: errors.map((e: { message: string }) => ({
                 message: e.message,
             })),
         };
     }
-    if (ast.workflows.length === 0) {
+    if (module.workflows.length === 0) {
         return { ir: undefined, errors: [{ message: "No workflow found" }] };
     }
     const emitter = new Emitter(taskSchemas);
-    return emitter.emit(ast.workflows[0]);
+    // Use multi-workflow emit so workflow-to-workflow calls resolve.
+    // Pick the first 'export' workflow as the entry, or the first
+    // workflow if none exported (matches compiler.ts behavior for
+    // single-workflow tests).
+    const entry =
+        module.workflows.find((w) => w.exported)?.name ??
+        module.workflows[0].name;
+    return emitter.emitAll(module.workflows, entry);
 }
 
 function compileOk(source: string): WorkflowIR {
@@ -195,9 +207,9 @@ function compileOk(source: string): WorkflowIR {
 }
 
 function getNode(ir: WorkflowIR, id: string): WorkflowNode {
-    const node = ir.nodes[id];
+    const node = bodyOf(ir).nodes[id];
     if (!node) {
-        const keys = Object.keys(ir.nodes);
+        const keys = Object.keys(bodyOf(ir).nodes);
         throw new Error(
             `Node '${id}' not found. Available: ${keys.join(", ")}`,
         );
@@ -206,7 +218,7 @@ function getNode(ir: WorkflowIR, id: string): WorkflowNode {
 }
 
 function findNodeByTask(ir: WorkflowIR, task: string): [string, TaskNode] {
-    for (const [id, node] of Object.entries(ir.nodes)) {
+    for (const [id, node] of Object.entries(bodyOf(ir).nodes)) {
         if (node.kind === "task" && node.task === task) {
             return [id, node];
         }
@@ -218,7 +230,7 @@ function findNodeByKind<T extends WorkflowNode>(
     ir: WorkflowIR,
     kind: T["kind"],
 ): [string, T] {
-    for (const [id, node] of Object.entries(ir.nodes)) {
+    for (const [id, node] of Object.entries(bodyOf(ir).nodes)) {
         if (node.kind === kind) {
             return [id, node as T];
         }
@@ -231,38 +243,38 @@ describe("Emitter", () => {
 
     test("minimal workflow with literal return", () => {
         const ir = compileOk(`workflow hello(): string { return "hi"; }`);
-        expect(ir.name).toBe("hello");
+        expect(ir.entry).toBe("hello");
         // Pure literal returns are wrapped in identity nodes for engine entry
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect(ir.nodes["return_0"]).toBeDefined();
-        expect((ir.nodes["return_0"] as any).task).toBe("identity");
-        expect((ir.nodes["return_0"] as any).inputs.value).toBe("hi");
-        expect(ir.inputSchema).toEqual({
+        expect(bodyOf(ir).nodes["return_0"]).toBeDefined();
+        expect((bodyOf(ir).nodes["return_0"] as any).task).toBe("identity");
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toBe("hi");
+        expect(bodyOf(ir).inputSchema).toEqual({
             type: "object",
             required: [],
             properties: {},
         });
-        expect(ir.outputSchema).toEqual({ type: "string" });
+        expect(bodyOf(ir).outputSchema).toEqual({ type: "string" });
     });
 
     test("workflow with params", () => {
         const ir = compileOk(
             `workflow greet(name: string): string { return name; }`,
         );
-        expect(ir.inputSchema).toEqual({
+        expect(bodyOf(ir).inputSchema).toEqual({
             type: "object",
             required: ["name"],
             properties: { name: { type: "string" } },
         });
         // Input-only return is wrapped in identity for engine entry
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toEqual({
             $from: "input",
             name: "name",
         });
@@ -277,7 +289,7 @@ describe("Emitter", () => {
                 return result;
             }
         `);
-        expect(ir.entry).toBe("result");
+        expect(bodyOf(ir).entry).toBe("result");
         const node = getNode(ir, "result") as TaskNode;
         expect(node.kind).toBe("task");
         expect(node.task).toBe("web.fetch");
@@ -321,11 +333,11 @@ describe("Emitter", () => {
             schema: { type: "string" },
             value: "hello",
         });
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toEqual({
             $from: "constant",
             name: "greeting",
         });
@@ -511,7 +523,7 @@ describe("Emitter", () => {
                 throw "always fails";
             }
         `);
-        expect(ir.outputSchema).toEqual({ not: {} });
+        expect(bodyOf(ir).outputSchema).toEqual({ not: {} });
     });
 
     test("unknown return type produces {} outputSchema", () => {
@@ -520,7 +532,7 @@ describe("Emitter", () => {
                 return "anything";
             }
         `);
-        expect(ir.outputSchema).toEqual({});
+        expect(bodyOf(ir).outputSchema).toEqual({});
     });
 
     // ---- Ternary expression ----
@@ -823,7 +835,7 @@ describe("Emitter", () => {
                 return { data: result, source: url };
             }
         `);
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             data: expect.objectContaining({ $from: "scope" }),
             source: { $from: "input", name: "url" },
         });
@@ -831,17 +843,84 @@ describe("Emitter", () => {
 
     // ---- Workflow call ----
 
-    test("workflow call emits task node", () => {
-        // compile only the main workflow that calls helper
+    test("workflow call emits workflowCall node", () => {
         const ir = compileOk(`
-            workflow main(url: string): unknown {
+            workflow helper(url: string): unknown { return url; }
+            export workflow main(url: string): unknown {
                 const result = helper(url);
                 return result;
             }
         `);
-        // Should have a workflow.helper task node
-        const [, node] = findNodeByTask(ir, "workflow.helper");
-        expect(node).toBeDefined();
+        // Should emit a workflowCall node referencing helper.
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        );
+        expect(callNode).toBeDefined();
+        expect(
+            (callNode as { workflowRef: { name: string } }).workflowRef.name,
+        ).toBe("helper");
+        // helper body must also be present in the workflows table.
+        expect(ir.workflows.helper).toBeDefined();
+    });
+
+    test("workflow call inlines literal default for omitted arg", () => {
+        const ir = compileOk(`
+            workflow helper(a: string, n: number = 7): unknown { return a; }
+            export workflow main(s: string): unknown {
+                const r = helper(s);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // The omitted 'n' is filled from the default literal 7.
+        expect(callNode.inputs.n).toBe(7);
+    });
+
+    test("workflow call inlines default referencing earlier param", () => {
+        const ir = compileOk(`
+            workflow helper(a: number, b: number = a): number { return b; }
+            export workflow main(x: number): number {
+                const r = helper(x);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // 'a' resolved from caller input 'x'; 'b' inlined to same template.
+        expect(callNode.inputs.a).toEqual(callNode.inputs.b);
+    });
+
+    test("workflow call inlines default with path access on earlier param", () => {
+        const ir = compileOk(`
+            workflow helper(a: { n: number }, b: number = a.n): number { return b; }
+            export workflow main(obj: { n: number }): number {
+                const r = helper(obj);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // 'b' default = a.n; 'a' was resolved to the input ref for 'obj',
+        // so 'b' should be that same ref with path ["n"] appended.
+        const bInput = callNode.inputs.b as {
+            $from: string;
+            name: string;
+            path: string[];
+        };
+        expect(bInput.$from).toBe("input");
+        expect(bInput.name).toBe("obj");
+        expect(bInput.path).toEqual(["n"]);
     });
 
     // ---- Error cases ----
@@ -867,11 +946,13 @@ describe("Emitter", () => {
             }
         `);
         // a is a literal binding resolved to "hello", wrapped in identity
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect((ir.nodes["return_0"] as any).inputs.value).toBe("hello");
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toBe(
+            "hello",
+        );
     });
 
     // ---- Bind stripping ----
@@ -884,7 +965,7 @@ describe("Emitter", () => {
             }
         `);
         // The web.fetch node should exist but bind should be stripped
-        const nodes = Object.values(ir.nodes);
+        const nodes = Object.values(bodyOf(ir).nodes);
         const fetchNode = nodes.find(
             (n) => n.kind === "task" && n.task === "web.fetch",
         ) as TaskNode | undefined;
@@ -905,12 +986,12 @@ describe("Emitter", () => {
             }
         `);
         // The summarize node should be reachable via a merge node
-        const summarizeNode = Object.values(ir.nodes).find(
+        const summarizeNode = Object.values(bodyOf(ir).nodes).find(
             (n) => n.kind === "task" && n.task === "text.summarize",
         ) as TaskNode | undefined;
         expect(summarizeNode).toBeDefined();
         // There should be a merge (noop) node
-        const noopNodes = Object.values(ir.nodes).filter(
+        const noopNodes = Object.values(bodyOf(ir).nodes).filter(
             (n) => n.kind === "task" && (n as TaskNode).task === "noop",
         );
         expect(noopNodes.length).toBeGreaterThan(0);
@@ -953,7 +1034,7 @@ describe("Emitter", () => {
                 return result.body;
             }
         `);
-        const output = ir.output as Record<string, unknown>;
+        const output = bodyOf(ir).output as Record<string, unknown>;
         expect(output.$from).toBe("scope");
         // Should have a path for .body access
         expect(output.path).toEqual(["body"]);
@@ -968,7 +1049,7 @@ describe("Emitter", () => {
             }
         `);
         // Should have at least 2 math nodes (add and multiply)
-        const mathNodes = Object.values(ir.nodes).filter(
+        const mathNodes = Object.values(bodyOf(ir).nodes).filter(
             (n) =>
                 n.kind === "task" && (n as TaskNode).task.startsWith("math."),
         );

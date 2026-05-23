@@ -35,7 +35,7 @@ import { fileURLToPath } from "url";
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { TypeChecker } from "../src/typeChecker.js";
 import { Emitter, TaskSchemaInfo } from "../src/emitter.js";
 import { extractGraph } from "../src/graphExtractor.js";
@@ -50,7 +50,8 @@ function parseWithComments(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens, comments);
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;
@@ -60,7 +61,8 @@ function parseNoComments(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens); // no comments argument
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;
@@ -133,10 +135,12 @@ describe("comments don't affect typeChecker", () => {
                 return "n";
             }
         }`;
-        const errsBare = new TypeChecker(SCHEMAS).check(parseNoComments(bare));
-        const errsCommented = new TypeChecker(SCHEMAS).check(
+        const errsBare = new TypeChecker(SCHEMAS).checkAll([
+            parseNoComments(bare),
+        ]);
+        const errsCommented = new TypeChecker(SCHEMAS).checkAll([
             parseWithComments(commented),
-        );
+        ]);
         expect(errsBare).toEqual([]);
         expect(errsCommented).toEqual([]);
     });
@@ -148,7 +152,7 @@ describe("comments don't affect typeChecker", () => {
                line */
             return 42; // wrong type
         }`;
-        const errs = new TypeChecker([]).check(parseWithComments(src));
+        const errs = new TypeChecker([]).checkAll([parseWithComments(src)]);
         expect(errs.length).toBeGreaterThan(0);
     });
 });
@@ -206,9 +210,12 @@ describe("comments don't leak into emitter IR", () => {
             // c2
             return x;
         }`;
-        const irBare = new Emitter([]).emit(parseNoComments(bare)).ir;
-        const irCommented = new Emitter([]).emit(
-            parseWithComments(commented),
+        const bareAst = parseNoComments(bare);
+        const commentedAst = parseWithComments(commented);
+        const irBare = new Emitter([]).emitAll([bareAst], bareAst.name).ir;
+        const irCommented = new Emitter([]).emitAll(
+            [commentedAst],
+            commentedAst.name,
         ).ir;
         expect(irBare).toBeDefined();
         expect(irCommented).toBeDefined();
@@ -223,7 +230,8 @@ describe("comments don't leak into emitter IR", () => {
             /* block */
             return x;
         }`;
-        const ir = new Emitter([]).emit(parseWithComments(src)).ir!;
+        const ast = parseWithComments(src);
+        const ir = new Emitter([]).emitAll([ast], ast.name).ir!;
         const json = JSON.stringify(ir);
         expect(json).not.toContain("leadingComments");
         expect(json).not.toContain("// h");
@@ -365,7 +373,7 @@ describe("parser robustness with comments", () => {
             `}\n`; // 8
         const { tokens, comments } = lex(src);
         const parser = new Parser(tokens, comments);
-        const { errors } = parser.parseSingle();
+        const { errors } = parser.parseModule();
         expect(errors.length).toBeGreaterThan(0);
         // At least one error should point at line 6 (or just after) — i.e. NOT
         // confused into pointing at a comment line.
@@ -397,18 +405,20 @@ describe("comments array is safe to share across Parser instances", () => {
 
         const p1 = new Parser(tokens, comments);
         const p2 = new Parser(tokens, comments);
-        const r1 = p1.parseSingle();
-        const r2 = p2.parseSingle();
+        const r1 = p1.parseModule();
+        const r2 = p2.parseModule();
 
         expect(r1.errors).toEqual([]);
         expect(r2.errors).toEqual([]);
-        expect(r1.ast).toBeDefined();
-        expect(r2.ast).toBeDefined();
+        const ast1 = r1.module.workflows[0];
+        const ast2 = r2.module.workflows[0];
+        expect(ast1).toBeDefined();
+        expect(ast2).toBeDefined();
 
-        expect(r1.ast!.leadingComments?.[0].text).toBe("// h1");
-        expect(r2.ast!.leadingComments?.[0].text).toBe("// h1");
-        expect(r1.ast!.body[0].leadingComments?.[0].text).toBe("// h2");
-        expect(r2.ast!.body[0].leadingComments?.[0].text).toBe("// h2");
+        expect(ast1.leadingComments?.[0].text).toBe("// h1");
+        expect(ast2.leadingComments?.[0].text).toBe("// h1");
+        expect(ast1.body[0].leadingComments?.[0].text).toBe("// h2");
+        expect(ast2.body[0].leadingComments?.[0].text).toBe("// h2");
 
         // Array must not have been mutated.
         expect(comments.length).toBe(lenBefore);

@@ -33,7 +33,7 @@ export function computeHover(
     schemas: TaskSchema[],
 ): Hover | null {
     const parsed = getParsed(doc);
-    if (!parsed.symbols) return null;
+    if (parsed.workflows.length === 0) return null;
 
     const { line, col } = fromLspPosition(position);
 
@@ -48,16 +48,16 @@ export function computeHover(
     const def = ref?.def ?? findDefinitionAt(parsed.symbols, line, col);
     if (!def) return null;
 
-    // Look up the inferred type when the AST is available.
+    // Look up the inferred type via a single multi-workflow pass.
+    // The merged map is keyed by file-wide unique source offset, so
+    // the workflow boundary doesn't matter.
     let typeLabel: string | undefined;
-    if (parsed.ast) {
-        const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(
-            parsed.ast,
-        );
-        const info = symbolTypes.get(def.loc.offset);
-        if (info && info.kind !== "unresolved") {
-            typeLabel = formatType(info);
-        }
+    const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(
+        parsed.workflows.map((w) => w.decl),
+    );
+    const info = symbolTypes.get(def.loc.offset);
+    if (info && info.kind !== "unresolved") {
+        typeLabel = formatType(info);
     }
 
     return symbolHover(def, typeLabel);
