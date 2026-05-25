@@ -161,9 +161,11 @@ if (
    Fixed `emitParallelMap` to declare proper `inputSchema.properties` (elementParam
    - captured outer refs) and `collectionSchema.items` instead of bare `{}`.
      The validator now naturally validates parallelMap body refs.
-3. **Gap 9** (forkMap element vs body) - small additive check in validator.
-4. **Gap 6** (normalize `.type` inference) - small helper + call sites in
-   `checkSchemaCompat` and `checkStructuralSubtype`.
+3. ~~**Gap 9** (forkMap element vs body)~~ **DONE**
+   validateForkMapNode checks collectionSchema.items against body elementParam.
+4. ~~**Gap 6** (normalize `.type` inference)~~ **DONE**
+   `inferSchemaType()` infers type from structural cues; applied in
+   `checkStructuralSubtype` and `checkSchemaCompat`.
 5. **Gap 1 emitter** (destructuring picks, identity wrappers) - requires plumbing
    resolved schemas from type checker.
 6. **Gap 7 emitter** (branch outputSchema as union) - requires collecting arm schemas.
