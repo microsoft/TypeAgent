@@ -1854,8 +1854,7 @@ function validateForkMapNode(
         node.elementParam &&
         !isTopSchema(node.body.inputSchema)
     ) {
-        const bodyProp =
-            node.body.inputSchema?.properties?.[node.elementParam];
+        const bodyProp = node.body.inputSchema?.properties?.[node.elementParam];
         if (bodyProp && typeof bodyProp !== "boolean") {
             checkStructuralSubtype(
                 itemSchema,
@@ -3980,9 +3979,8 @@ function checkInputConstantRefsInTemplate(
         // Empty name is the emitter convention for "entire scope input";
         // not a property lookup - skip.
         if (ref.name === "") continue;
-        // When inputSchema is unconstrained (top schema `{}`), any name is
-        // valid at the schema level - skip name existence check.
-        if (!scopeInputSchema || isTopSchema(scopeInputSchema)) continue;
+        // No schema info available - skip name existence check.
+        if (!scopeInputSchema) continue;
         const inputProps = scopeInputSchema.properties;
         if (!inputProps || !(ref.name in inputProps)) {
             if (!ref.optional) {

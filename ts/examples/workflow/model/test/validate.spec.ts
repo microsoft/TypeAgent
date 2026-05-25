@@ -7006,7 +7006,7 @@ describe("validateWorkflowIR", () => {
                 expect(result.valid).toBe(true);
             });
 
-            it("skips validation when inputSchema is top schema ({})", () => {
+            it("rejects $from input when inputSchema is top schema ({}) with no properties", () => {
                 const ir = makeMinimalIR({
                     inputSchema: {},
                     nodes: {
@@ -7019,7 +7019,15 @@ describe("validateWorkflowIR", () => {
                     },
                 });
                 const result = validateWorkflowIR(ir, taskMap("noop"));
-                expect(result.valid).toBe(true);
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "input"') &&
+                            e.message.includes('"anything"') &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
             });
 
             it("rejects $from input in output template to undeclared name", () => {

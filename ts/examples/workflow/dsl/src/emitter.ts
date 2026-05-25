@@ -2237,10 +2237,22 @@ export class Emitter {
                     : null;
             }
 
+            const outer = this.captureOuterRefs(branchScope, new Set(), {
+                extraVisit: branchOutput !== null ? [branchOutput] : [],
+            });
+
             branches[`branch_${i}`] = {
-                inputs: {},
+                inputs: outer.inputs,
                 scope: {
-                    inputSchema: {},
+                    inputSchema: {
+                        type: "object",
+                        ...(outer.required.length > 0
+                            ? {
+                                  required: outer.required,
+                                  properties: outer.properties,
+                              }
+                            : {}),
+                    },
                     entry: branchScope.nodeOrder[0] ?? "",
                     nodes: branchScope.nodes,
                     output: branchOutput,
