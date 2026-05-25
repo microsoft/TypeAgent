@@ -6746,4 +6746,468 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
     });
+
+    // ---- Gaps 3 + 4 + 5: input/constant ref existence & path checks ----
+
+    describe("input/constant ref validation (gaps 3-5)", () => {
+        describe("gap 3: $from input name existence", () => {
+            it("rejects $from input ref to undeclared name", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: { x: { type: "string" } },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: { $from: "input", name: "missing" },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "input"') &&
+                            e.message.includes('"missing"') &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("accepts $from input ref to declared name", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: { x: { type: "string" } },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: { $from: "input", name: "x" },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("accepts optional $from input ref to undeclared name", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: { x: { type: "string" } },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: {
+                                    $from: "input",
+                                    name: "missing",
+                                    optional: true,
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("skips validation when inputSchema is top schema ({})", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {},
+                    nodes: {
+                        start: makeTaskNode({
+                            inputs: {
+                                val: { $from: "input", name: "anything" },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("rejects $from input in output template to undeclared name", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: { x: { type: "string" } },
+                    },
+                    nodes: {
+                        start: makeTaskNode({ bind: "out" }),
+                    },
+                    output: { $from: "input", name: "bogus" },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "input"') &&
+                            e.message.includes('"bogus"') &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("rejects $from input in loop body node to name not in body inputSchema", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: { x: { type: "string" } },
+                    },
+                    nodes: {
+                        start: {
+                            kind: "loop",
+                            inputs: {},
+                            body: {
+                                inputSchema: {
+                                    type: "object",
+                                    properties: { i: { type: "integer" } },
+                                },
+                                entry: "step",
+                                nodes: {
+                                    step: makeTaskNode({
+                                        inputs: {
+                                            val: {
+                                                $from: "input",
+                                                name: "x",
+                                            },
+                                        },
+                                    }),
+                                },
+                                output: null,
+                                outputSchema: {},
+                            },
+                            state: {
+                                i: {
+                                    schema: { type: "integer" },
+                                    initial: 0,
+                                },
+                            },
+                            iterateState: { i: 0 },
+                            continueWhen: false,
+                            bind: "out",
+                        } as unknown as LoopNode,
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "input"') &&
+                            e.message.includes('"x"') &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+        });
+
+        describe("gap 4: $from constant name existence", () => {
+            it("rejects $from constant ref to undeclared name", () => {
+                const ir = makeMinimalIR({
+                    constants: {
+                        greeting: {
+                            schema: { type: "string" },
+                            value: "hello",
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: { $from: "constant", name: "missing" },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "constant"') &&
+                            e.message.includes('"missing"') &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("accepts $from constant ref to declared name", () => {
+                const ir = makeMinimalIR({
+                    constants: {
+                        greeting: {
+                            schema: { type: "string" },
+                            value: "hello",
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: { $from: "constant", name: "greeting" },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("rejects $from constant when no constants defined", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: { $from: "constant", name: "anything" },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "constant"') &&
+                            e.message.includes('"anything"') &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("accepts optional $from constant ref to undeclared name", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        start: makeTaskNode({
+                            inputs: {
+                                val: {
+                                    $from: "constant",
+                                    name: "missing",
+                                    optional: true,
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+        });
+
+        describe("gap 5: input/constant path validation", () => {
+            it("rejects $from input with invalid path", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            user: {
+                                type: "object",
+                                properties: { name: { type: "string" } },
+                            },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: {
+                                    $from: "input",
+                                    name: "user",
+                                    path: ["nonexistent"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "input"') &&
+                            e.message.includes("path") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("accepts $from input with valid path", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            user: {
+                                type: "object",
+                                properties: { name: { type: "string" } },
+                            },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: {
+                                    $from: "input",
+                                    name: "user",
+                                    path: ["name"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("rejects $from constant with invalid path", () => {
+                const ir = makeMinimalIR({
+                    constants: {
+                        config: {
+                            schema: {
+                                type: "object",
+                                properties: { host: { type: "string" } },
+                            },
+                            value: { host: "localhost" },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: {
+                                    $from: "constant",
+                                    name: "config",
+                                    path: ["bogusField"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "constant"') &&
+                            e.message.includes("path") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("accepts $from constant with valid path", () => {
+                const ir = makeMinimalIR({
+                    constants: {
+                        config: {
+                            schema: {
+                                type: "object",
+                                properties: { host: { type: "string" } },
+                            },
+                            value: { host: "localhost" },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: {
+                                    $from: "constant",
+                                    name: "config",
+                                    path: ["host"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("rejects $from input with nested path through non-object", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            count: { type: "integer" },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputs: {
+                                val: {
+                                    $from: "input",
+                                    name: "count",
+                                    path: ["foo"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes('$from "input"') &&
+                            e.message.includes("path") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+        });
+    });
 });

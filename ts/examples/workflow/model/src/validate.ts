@@ -241,6 +241,16 @@ function validateWorkflowBody(
         `${basePath}.output`,
         body.outputSchema,
     );
+
+    validateInputConstantRefs(
+        body.nodes,
+        nodesPath,
+        errors,
+        body.inputSchema,
+        ir.constants,
+        body.output,
+        `${basePath}.output`,
+    );
 }
 
 /**
@@ -3743,6 +3753,247 @@ function validateSchemaCompat(
                 `${ref.templatePath} ($from "scope", name "${ref.name}")`,
                 errors,
                 consumerType,
+            );
+        }
+    }
+}
+
+// ---- Pass: input/constant ref existence and path validation ----
+
+/**
+ * Validate that `$from "input"` refs reference names declared in
+ * `inputSchema.properties`, and `$from "constant"` refs reference names
+ * declared in `ir.constants`. For refs with a `path`, also verify the
+ * path is navigable within the resolved base schema (same check that
+ * scope refs already receive via `checkSchemaCompat`).
+ *
+ * This pass recurses into loop/fork/branch/forkMap sub-scopes with
+ * the appropriate `inputSchema` for each nested scope.
+ */
+function validateInputConstantRefs(
+    nodes: Record<string, WorkflowNode>,
+    prefix: string,
+    errors: ValidationError[],
+    scopeInputSchema?: JSONSchema,
+    constants?: Record<string, ConstantDef>,
+    outputTemplate?: Template,
+    outputPrefix?: string,
+): void {
+    // Check all node inputs.
+    for (const [id, node] of Object.entries(nodes)) {
+        const path = `${prefix}.${id}`;
+
+        if (hasInputs(node)) {
+            checkInputConstantRefsInTemplate(
+                node.inputs,
+                `${path}.inputs`,
+                scopeInputSchema,
+                constants,
+                errors,
+            );
+        }
+
+        // Branch selector template may also reference input/constant.
+        if (node.kind === "branch") {
+            checkInputConstantRefsInTemplate(
+                node.selector,
+                `${path}.selector`,
+                scopeInputSchema,
+                constants,
+                errors,
+            );
+        }
+
+        // Loop continueWhen and iterateState templates.
+        if (node.kind === "loop") {
+            checkInputConstantRefsInTemplate(
+                node.continueWhen,
+                `${path}.continueWhen`,
+                scopeInputSchema,
+                constants,
+                errors,
+            );
+            for (const [stateName, stateTemplate] of Object.entries(
+                node.iterateState,
+            )) {
+                checkInputConstantRefsInTemplate(
+                    stateTemplate,
+                    `${path}.iterateState.${stateName}`,
+                    scopeInputSchema,
+                    constants,
+                    errors,
+                );
+            }
+        }
+
+        // ForkMap collection template.
+        if (node.kind === "forkMap") {
+            checkInputConstantRefsInTemplate(
+                node.collection,
+                `${path}.collection`,
+                scopeInputSchema,
+                constants,
+                errors,
+            );
+        }
+
+        // Recurse into sub-scopes.
+        switch (node.kind) {
+            case "task":
+            case "workflowCall":
+                break;
+            case "loop":
+                if (node.body.entry in node.body.nodes) {
+                    validateInputConstantRefs(
+                        node.body.nodes,
+                        `${path}.body.nodes`,
+                        errors,
+                        node.body.inputSchema,
+                        constants,
+                        node.body.output,
+                        `${path}.body.output`,
+                    );
+                }
+                break;
+            case "fork":
+                for (const [bName, branch] of Object.entries(node.branches)) {
+                    if (branch.scope.entry in branch.scope.nodes) {
+                        validateInputConstantRefs(
+                            branch.scope.nodes,
+                            `${path}.branches.${bName}.scope.nodes`,
+                            errors,
+                            branch.scope.inputSchema,
+                            constants,
+                        );
+                    }
+                }
+                break;
+            case "forkMap":
+                if (node.body.entry in node.body.nodes) {
+                    validateInputConstantRefs(
+                        node.body.nodes,
+                        `${path}.body.nodes`,
+                        errors,
+                        node.body.inputSchema,
+                        constants,
+                    );
+                }
+                break;
+            case "branch":
+                for (const [label, arm] of Object.entries(node.cases)) {
+                    if (arm?.scope && arm.scope.entry in arm.scope.nodes) {
+                        validateInputConstantRefs(
+                            arm.scope.nodes,
+                            `${path}.cases.${label}.scope.nodes`,
+                            errors,
+                            arm.scope.inputSchema,
+                            constants,
+                        );
+                    }
+                }
+                if (
+                    node.default?.scope &&
+                    node.default.scope.entry in node.default.scope.nodes
+                ) {
+                    validateInputConstantRefs(
+                        node.default.scope.nodes,
+                        `${path}.default.scope.nodes`,
+                        errors,
+                        node.default.scope.inputSchema,
+                        constants,
+                    );
+                }
+                break;
+            default:
+                assertNever(node);
+        }
+    }
+
+    // Also check the output template (it may reference input/constant).
+    if (outputTemplate && outputPrefix) {
+        checkInputConstantRefsInTemplate(
+            outputTemplate,
+            outputPrefix,
+            scopeInputSchema,
+            constants,
+            errors,
+        );
+    }
+}
+
+/**
+ * Check all `$from "input"` and `$from "constant"` refs within a single
+ * template expression for name existence and path validity.
+ */
+function checkInputConstantRefsInTemplate(
+    template: Template,
+    templatePath: string,
+    scopeInputSchema: JSONSchema | undefined,
+    constants: Record<string, ConstantDef> | undefined,
+    errors: ValidationError[],
+): void {
+    // Check $from "input" refs.
+    const inputRefs = collectTemplateRefs(template, templatePath, "input");
+    for (const ref of inputRefs) {
+        // Empty name is the emitter convention for "entire scope input";
+        // not a property lookup - skip.
+        if (ref.name === "") continue;
+        // When inputSchema is unconstrained (top schema `{}`), any name is
+        // valid at the schema level - skip name existence check.
+        if (!scopeInputSchema || isTopSchema(scopeInputSchema)) continue;
+        const inputProps = scopeInputSchema.properties;
+        if (!inputProps || !(ref.name in inputProps)) {
+            if (!ref.optional) {
+                errors.push({
+                    path: ref.templatePath,
+                    message:
+                        `$from "input", name "${ref.name}": ` +
+                        `not declared in scope inputSchema.`,
+                });
+            }
+            continue;
+        }
+        const prop = inputProps[ref.name];
+        if (typeof prop === "boolean") continue;
+        // Path validation (gap 5): verify path is navigable.
+        if (ref.path && ref.path.length > 0) {
+            checkSchemaCompat(
+                prop,
+                ref.path,
+                ref.templatePath,
+                `${ref.templatePath} ($from "input", name "${ref.name}")`,
+                errors,
+            );
+        }
+    }
+
+    // Check $from "constant" refs.
+    const constantRefs = collectTemplateRefs(
+        template,
+        templatePath,
+        "constant",
+    );
+    for (const ref of constantRefs) {
+        if (!constants || !(ref.name in constants)) {
+            if (!ref.optional) {
+                errors.push({
+                    path: ref.templatePath,
+                    message:
+                        `$from "constant", name "${ref.name}": ` +
+                        `not declared in ir.constants.`,
+                });
+            }
+            continue;
+        }
+        const constDef = constants[ref.name];
+        // Path validation (gap 5): verify path is navigable.
+        if (ref.path && ref.path.length > 0 && constDef.schema) {
+            checkSchemaCompat(
+                constDef.schema,
+                ref.path,
+                ref.templatePath,
+                `${ref.templatePath} ($from "constant", name "${ref.name}")`,
+                errors,
             );
         }
     }
