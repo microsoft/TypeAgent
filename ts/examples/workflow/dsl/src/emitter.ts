@@ -2277,6 +2277,14 @@ export class Emitter {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const forkMapId = this.freshId("parallelMap");
 
+        // Resolve element type from type checker (stored at the expr offset).
+        const resolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `parallelMap element type`,
+        );
+        const elementSchema: JSONSchema = resolved?.outputSchema ?? {};
+
         const bodyScope = this.childScope(scope);
         bodyScope.bindings.set(expr.param, {
             kind: "loopInput",
@@ -2338,13 +2346,20 @@ export class Emitter {
         const forkMapNode: ForkMapNode = {
             kind: "forkMap",
             collection: collectionTemplate,
-            collectionSchema: { type: "array" },
+            collectionSchema: { type: "array", items: elementSchema },
             elementParam: expr.param,
             ...(Object.keys(outer.inputs).length > 0
                 ? { inputs: outer.inputs }
                 : {}),
             body: {
-                inputSchema: {},
+                inputSchema: {
+                    type: "object",
+                    required: [expr.param, ...outer.required],
+                    properties: {
+                        [expr.param]: elementSchema,
+                        ...outer.properties,
+                    },
+                },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
                 output: bodyOutput,
