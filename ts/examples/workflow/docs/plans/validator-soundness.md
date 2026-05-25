@@ -155,22 +155,25 @@ if (
 ## Implementation order
 
 1. ~~**Gaps 3 + 4 + 5** (name existence + path checking for input/constant refs)~~ **DONE**
-   Landed in `validateInputConstantRefs`. The `isTopSchema` guard is semantically
-   correct: a top schema (`{}`) means unconstrained, so any name is valid.
+   Landed in `validateInputConstantRefs`.
 2. ~~**Emitter: constrained sub-scope inputSchemas**~~ **DONE**
-   Fixed `emitParallelMap` to declare proper `inputSchema.properties` (elementParam
-   - captured outer refs) and `collectionSchema.items` instead of bare `{}`.
-     The validator now naturally validates parallelMap body refs.
+   Fixed `emitParallelMap` and `emitParallel` (fork branches) to declare proper
+   `inputSchema.properties` via `captureOuterRefs` instead of bare `{}`.
+   The validator now naturally validates parallelMap and fork body refs.
 3. ~~**Gap 9** (forkMap element vs body)~~ **DONE**
    validateForkMapNode checks collectionSchema.items against body elementParam.
 4. ~~**Gap 6** (normalize `.type` inference)~~ **DONE**
    `inferSchemaType()` infers type from structural cues; applied in
    `checkStructuralSubtype` and `checkSchemaCompat`.
-5. **Gap 1 emitter** (destructuring picks, identity wrappers) - requires plumbing
+5. ~~**isTopSchema guard removal**~~ **DONE**
+   Removed `isTopSchema(scopeInputSchema)` leniency from
+   `checkInputConstantRefsInTemplate`. Now all scopes with a defined inputSchema
+   validate `$from input` refs against declared properties (no silent passthrough).
+6. **Gap 1 emitter** (destructuring picks, identity wrappers) - requires plumbing
    resolved schemas from type checker.
-6. **Gap 7 emitter** (branch outputSchema as union) - requires collecting arm schemas.
-7. **Gap 8 emitter** (while-loop body outputSchema) - requires type checker integration.
-8. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - add `warnings`
+7. **Gap 7 emitter** (branch outputSchema as union) - requires collecting arm schemas.
+8. **Gap 8 emitter** (while-loop body outputSchema) - requires type checker integration.
+9. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - add `warnings`
    array to `ValidationResult` and populate it from lenient skips.
 
 ## Testing strategy

@@ -3979,9 +3979,7 @@ function checkInputConstantRefsInTemplate(
         // Empty name is the emitter convention for "entire scope input";
         // not a property lookup - skip.
         if (ref.name === "") continue;
-        // No schema info available - skip name existence check.
-        if (!scopeInputSchema) continue;
-        const inputProps = scopeInputSchema.properties;
+        const inputProps = scopeInputSchema?.properties;
         if (!inputProps || !(ref.name in inputProps)) {
             if (!ref.optional) {
                 errors.push({
