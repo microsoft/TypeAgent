@@ -33,6 +33,7 @@ import {
     LoopStateVar,
     Template,
     JSONSchema,
+    SchemaTemplate,
     WorkflowScope,
 } from "workflow-model";
 import {
@@ -53,11 +54,35 @@ import {
     DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
 import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
+import { ResolvedTaskSchemas, typeExprToSchema } from "./typeParamUtils.js";
 
-export interface TaskSchemaInfo {
+export interface TaskSchemaTypeParam {
+    name: string;
+    default?: JSONSchema;
+}
+
+/** A non-generic task schema: fixed JSON Schema for input/output. */
+export interface ConcreteTaskSchemaInfo {
     name: string;
     inputSchema: JSONSchema;
     outputSchema: JSONSchema;
+}
+
+/** A generic task schema with type parameters and schema templates. */
+export interface GenericTaskSchemaInfo {
+    name: string;
+    inputSchema: SchemaTemplate;
+    outputSchema: SchemaTemplate;
+    typeParameters: TaskSchemaTypeParam[];
+}
+
+export type TaskSchemaInfo = ConcreteTaskSchemaInfo | GenericTaskSchemaInfo;
+
+/** Type guard: narrows a TaskSchemaInfo to its generic variant. */
+export function isGenericSchema(
+    schema: TaskSchemaInfo,
+): schema is GenericTaskSchemaInfo {
+    return "typeParameters" in schema;
 }
 
 export interface EmitError {
@@ -120,6 +145,7 @@ function inferCommonType(
 export class Emitter {
     private errors: EmitError[] = [];
     private taskSchemas: Map<string, TaskSchemaInfo>;
+    private resolvedSchemas: ReadonlyMap<number, ResolvedTaskSchemas>;
     private nodeCounter = 0;
     private constants: Record<string, { schema: JSONSchema; value: unknown }> =
         {};
@@ -139,8 +165,34 @@ export class Emitter {
         { input: JSONSchema; output: JSONSchema }
     > = new Map();
 
-    constructor(taskSchemas: TaskSchemaInfo[]) {
+    constructor(
+        taskSchemas: TaskSchemaInfo[],
+        resolvedSchemas: ReadonlyMap<number, ResolvedTaskSchemas>,
+    ) {
         this.taskSchemas = new Map(taskSchemas.map((t) => [t.name, t]));
+        this.resolvedSchemas = resolvedSchemas;
+    }
+
+    /**
+     * Look up pre-resolved schemas by source offset. Emits an error and
+     * returns undefined if the entry is missing (indicates a type checker
+     * bug or a missing resolution pass).
+     */
+    private getResolvedSchemas(
+        offset: number,
+        loc: { line: number; col: number },
+        desc: string,
+    ): ResolvedTaskSchemas | undefined {
+        const cached = this.resolvedSchemas.get(offset);
+        if (!cached) {
+            this.emitError(
+                `Missing resolved schemas for ${desc}`,
+                loc.line,
+                loc.col,
+            );
+            return undefined;
+        }
+        return cached;
     }
 
     /**
@@ -177,7 +229,7 @@ export class Emitter {
         for (const w of workflows) {
             this.workflowSchemas.set(w.name, {
                 input: this.paramsToSchema(w.params),
-                output: this.typeToSchema(w.returnType),
+                output: typeExprToSchema(w.returnType),
             });
         }
 
@@ -212,7 +264,7 @@ export class Emitter {
      */
     private emitWorkflowBody(ast: WorkflowDecl): WorkflowBody | undefined {
         const inputSchema = this.paramsToSchema(ast.params);
-        const outputSchema = this.typeToSchema(ast.returnType);
+        const outputSchema = typeExprToSchema(ast.returnType);
 
         const rootScope: ScopeContext = {
             nodes: {},
@@ -322,7 +374,7 @@ export class Emitter {
         if (this.isPureLiteral(expr)) {
             const value = this.constExprToValue(expr);
             const schema = stmt.typeAnnotation
-                ? this.typeToSchema(stmt.typeAnnotation)
+                ? typeExprToSchema(stmt.typeAnnotation)
                 : this.inferLiteralSchema(expr);
             this.constants[stmt.name] = { schema, value };
             scope.bindings.set(stmt.name, { kind: "constant" });
@@ -844,11 +896,27 @@ export class Emitter {
 
         const inputs = this.resolveTaskArgs(expr.args, schema, scope);
 
+        // Resolve effective input/output schemas.
+        let outputSchema: JSONSchema;
+        let inputSchema: JSONSchema;
+        if (isGenericSchema(schema)) {
+            const cached = this.getResolvedSchemas(
+                expr.loc.offset,
+                expr.loc,
+                `generic task '${expr.task}'`,
+            );
+            if (!cached) return undefined;
+            ({ inputSchema, outputSchema } = cached);
+        } else {
+            outputSchema = schema.outputSchema;
+            inputSchema = schema.inputSchema;
+        }
+
         return {
             kind: "task",
             task: expr.task,
-            inputSchema: schema.inputSchema,
-            outputSchema: schema.outputSchema,
+            inputSchema,
+            outputSchema,
             inputs,
             bind: bindName,
         };
@@ -983,7 +1051,7 @@ export class Emitter {
         bindName: string,
     ): TaskNode | undefined {
         const schema = this.taskSchemas.get("text.template");
-        if (!schema) {
+        if (!schema || isGenericSchema(schema)) {
             this.emitError(
                 "Task schema for text.template not found",
                 expr.loc.line,
@@ -1028,16 +1096,19 @@ export class Emitter {
         const nodeId = this.freshId(taskName.replace(/\./g, "_"));
 
         const schema = this.taskSchemas.get(taskName);
+        const concreteSchema =
+            schema && !isGenericSchema(schema) ? schema : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: schema?.inputSchema ?? {
+            inputSchema: concreteSchema?.inputSchema ?? {
                 type: "object",
                 required: ["left", "right"],
                 properties: { left: {}, right: {} },
             },
             outputSchema:
-                schema?.outputSchema ?? this.binaryOpOutputSchema(expr.op),
+                concreteSchema?.outputSchema ??
+                this.binaryOpOutputSchema(expr.op),
             inputs: { left, right },
             bind: nodeId,
         };
@@ -1104,16 +1175,18 @@ export class Emitter {
         const nodeId = this.freshId(taskName.replace(/\./g, "_"));
 
         const schema = this.taskSchemas.get(taskName);
+        const concreteSchema =
+            schema && !isGenericSchema(schema) ? schema : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: schema?.inputSchema ?? {
+            inputSchema: concreteSchema?.inputSchema ?? {
                 type: "object",
                 required: ["value"],
                 properties: { value: {} },
             },
             outputSchema:
-                schema?.outputSchema ??
+                concreteSchema?.outputSchema ??
                 (expr.op === "!" ? { type: "boolean" } : { type: "number" }),
             inputs: { value: operand },
             bind: nodeId,
@@ -1598,6 +1671,13 @@ export class Emitter {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const loopId = this.freshId("map");
 
+        const resolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `map element type`,
+        );
+        const elementSchema = resolved?.outputSchema ?? {};
+
         // Body scope: only loop-control nodes live here.
         // The per-iteration work lives in the checkBranch's true arm scope.
         const bodyScope = this.childScope(scope);
@@ -1657,11 +1737,11 @@ export class Emitter {
                 type: "object",
                 required: ["list", "index"],
                 properties: {
-                    list: { type: "array" },
+                    list: { type: "array", items: elementSchema },
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {},
+            outputSchema: elementSchema,
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1833,6 +1913,13 @@ export class Emitter {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const loopId = this.freshId("filter");
 
+        const filterResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `filter element type`,
+        );
+        const filterElemSchema = filterResolved?.outputSchema ?? {};
+
         const bodyScope = this.childScope(scope);
 
         // --- Loop condition check ---
@@ -1887,11 +1974,11 @@ export class Emitter {
                 type: "object",
                 required: ["list", "index"],
                 properties: {
-                    list: { type: "array" },
+                    list: { type: "array", items: filterElemSchema },
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {},
+            outputSchema: filterElemSchema,
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -2817,43 +2904,10 @@ export class Emitter {
         const properties: Record<string, JSONSchema> = {};
         const required: string[] = [];
         for (const p of params) {
-            properties[p.name] = this.typeToSchema(p.type);
+            properties[p.name] = typeExprToSchema(p.type);
             required.push(p.name);
         }
         return { type: "object", required, properties };
-    }
-
-    private typeToSchema(t: TypeExpr): JSONSchema {
-        switch (t.kind) {
-            case "NamedType":
-                switch (t.name) {
-                    case "string":
-                        return { type: "string" };
-                    case "number":
-                        return { type: "number" };
-                    case "integer":
-                        return { type: "integer" };
-                    case "boolean":
-                        return { type: "boolean" };
-                    case "never":
-                        return { not: {} };
-                    case "unknown":
-                        return {};
-                    default:
-                        return { type: t.name as JSONSchema["type"] };
-                }
-            case "ArrayType":
-                return { type: "array", items: this.typeToSchema(t.element) };
-            case "ObjectType": {
-                const props: Record<string, JSONSchema> = {};
-                const req: string[] = [];
-                for (const f of t.fields) {
-                    props[f.name] = this.typeToSchema(f.type);
-                    if (!f.optional) req.push(f.name);
-                }
-                return { type: "object", required: req, properties: props };
-            }
-        }
     }
 
     private emitError(

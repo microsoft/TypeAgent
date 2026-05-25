@@ -8,7 +8,7 @@ import {
     ParameterInformation,
     Position,
 } from "vscode-languageserver/node.js";
-import type { TaskSchema } from "../taskSchemas.js";
+import { type TaskSchema, isGenericTaskSchema } from "../taskSchemas.js";
 
 const IDENT_TAIL = /[A-Za-z0-9_.]/;
 const IDENT_HEAD = /[A-Za-z_]/;
@@ -121,7 +121,17 @@ function buildSignature(schema: TaskSchema): SignatureInformation {
     const params: ParameterInformation[] = required.map((name) => ({
         label: `${name}: ${describeJsonType(props[name])}`,
     }));
-    const label = `${schema.name}(${params.map((p) => p.label).join(", ")})`;
+
+    // Include type parameters in the signature label if present
+    let typeParamLabel = "";
+    if (isGenericTaskSchema(schema) && schema.typeParameters.length > 0) {
+        const tpLabels = schema.typeParameters.map((p) =>
+            p.default ? `${p.name} = unknown` : p.name,
+        );
+        typeParamLabel = `<${tpLabels.join(", ")}>`;
+    }
+
+    const label = `${schema.name}${typeParamLabel}(${params.map((p) => p.label).join(", ")})`;
     return {
         label,
         parameters: params,

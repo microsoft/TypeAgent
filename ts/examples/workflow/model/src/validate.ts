@@ -16,8 +16,14 @@ import {
     JSONSchema,
     ConstantDef,
     LoopStateVar,
+    SchemaTemplate,
+    isTypeParamRef,
 } from "./ir.js";
-import { TaskDefinition } from "./taskDefinition.js";
+import {
+    TaskDefinition,
+    isGenericTask,
+    GenericTaskDefinition,
+} from "./taskDefinition.js";
 
 export interface ValidationError {
     path: string;
@@ -131,15 +137,14 @@ export function validateWorkflowIR(
         for (const [name, def] of Object.entries(ir.constants)) {
             if (def.schema) {
                 const valueSchema = jsonValueToSchema(def.value);
-                if (!isStructuralSubtype(valueSchema, def.schema)) {
-                    errors.push({
-                        path: `constants.${name}`,
-                        message:
-                            `Constant value type ${formatSchemaType(valueSchema)} ` +
-                            `is not compatible with declared schema ` +
-                            `${formatSchemaType(def.schema)}.`,
-                    });
-                }
+                checkStructuralSubtype(
+                    valueSchema,
+                    def.schema,
+                    `constants.${name}`,
+                    errors,
+                    "Constant value",
+                    "declared schema",
+                );
             }
         }
     }
@@ -1878,14 +1883,14 @@ function checkArmCovariance(
     if (!scope || typeof scope !== "object") return;
     const armOutput = scope.outputSchema;
     if (armOutput === undefined) return;
-    if (isStructuralSubtype(armOutput, branchOutputSchema)) return;
-    errors.push({
-        path: `${armPath}.scope.outputSchema`,
-        message:
-            `${armLabel} outputSchema ${formatSchemaType(armOutput)} ` +
-            `is not assignable to branch outputSchema ` +
-            `${formatSchemaType(branchOutputSchema)}.`,
-    });
+    checkStructuralSubtype(
+        armOutput,
+        branchOutputSchema,
+        `${armPath}.scope.outputSchema`,
+        errors,
+        `${armLabel} outputSchema`,
+        "branch outputSchema",
+    );
 }
 
 /**
@@ -2342,85 +2347,169 @@ function resolveTemplateType(
 }
 
 /**
- * Structural subtype check per section 4.2.
- * Returns true if producer P is compatible with consumer C.
+ * Diagnostic structural subtype check per section 4.2.
+ * Pushes path-qualified errors explaining why producer P is not compatible
+ * with consumer C. Returns nothing; check errors.length to determine pass/fail.
  */
-function isStructuralSubtype(
+export function checkStructuralSubtype(
     producer: JSONSchema,
     consumer: JSONSchema,
-): boolean {
-    if (isTopSchema(consumer)) return true;
+    path: string,
+    errors: ValidationError[],
+    producerLabel: string = "Producer",
+    consumerLabel: string = "consumer",
+): void {
+    if (isTopSchema(consumer)) return;
     if (isTopSchema(producer) && !isTopSchema(consumer)) {
         // Producer is unconstrained; can't prove it's a subtype of
         // a constrained consumer. Be lenient: skip.
-        return true;
+        return;
     }
 
-    // Handle union types (anyOf, oneOf) per §4.2:
+    // Handle union types (anyOf, oneOf) per section 4.2:
     // "P compatible iff every variant of P compatible with some variant of C".
     const producerVariants = producer.anyOf ?? producer.oneOf;
     const consumerVariants = consumer.anyOf ?? consumer.oneOf;
 
     if (producerVariants) {
-        // Every producer variant must be compatible with consumer (or some
-        // consumer variant when consumer is also a union).
-        return producerVariants.every((v) => {
-            if (typeof v === "boolean") return false;
-            return consumerVariants
-                ? consumerVariants.some(
-                      (cv) =>
-                          typeof cv !== "boolean" && isStructuralSubtype(v, cv),
-                  )
-                : isStructuralSubtype(v, consumer);
-        });
+        for (let i = 0; i < producerVariants.length; i++) {
+            const v = producerVariants[i];
+            if (typeof v === "boolean") {
+                errors.push({
+                    path,
+                    message: `${producerLabel} union variant [${i}] is a boolean schema.`,
+                });
+                continue;
+            }
+            if (consumerVariants) {
+                const compatible = consumerVariants.some(
+                    (cv) =>
+                        typeof cv !== "boolean" && isStructuralSubtype(v, cv),
+                );
+                if (!compatible) {
+                    errors.push({
+                        path,
+                        message:
+                            `${producerLabel} union variant [${i}] ` +
+                            `(${formatSchemaType(v)}) is not assignable to ` +
+                            `any ${consumerLabel} variant.`,
+                    });
+                }
+            } else {
+                checkStructuralSubtype(
+                    v,
+                    consumer,
+                    `${path}[${i}]`,
+                    errors,
+                    `${producerLabel} variant [${i}]`,
+                    consumerLabel,
+                );
+            }
+        }
+        return;
     }
 
     if (consumerVariants) {
-        // Non-union producer: must be compatible with at least one consumer variant.
-        return consumerVariants.some(
+        const compatible = consumerVariants.some(
             (v) => typeof v !== "boolean" && isStructuralSubtype(producer, v),
         );
+        if (!compatible) {
+            errors.push({
+                path,
+                message:
+                    `${producerLabel} type ${formatSchemaType(producer)} is ` +
+                    `not assignable to any ${consumerLabel} union variant.`,
+            });
+        }
+        return;
     }
 
     // Const / enum narrowing checks.
-    // Only applied when both sides have const/enum constraints. When the
-    // producer is wider (no const/enum), we stay lenient — narrowing is
-    // verified by runtime input/selectorSchema validation. Exhaustiveness
-    // checking uses isProvablyNarrowedTo (see below) for strict subset.
     if (consumer.const !== undefined) {
         if (producer.const !== undefined) {
-            return producer.const === consumer.const;
+            if (producer.const !== consumer.const) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
+                        `does not equal ${consumerLabel} const ` +
+                        `${JSON.stringify(consumer.const)}.`,
+                });
+            }
+            return;
         }
         if (producer.enum) {
-            return producer.enum.every((v) => v === consumer.const);
+            const bad = producer.enum.filter((v) => v !== consumer.const);
+            if (bad.length > 0) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
+                        `do not match ${consumerLabel} const ` +
+                        `${JSON.stringify(consumer.const)}.`,
+                });
+            }
+            return;
         }
-        // Producer is wider; stay lenient (defense-in-depth at runtime).
     } else if (consumer.enum) {
         const allowed = new Set(consumer.enum);
         if (producer.const !== undefined) {
-            return allowed.has(producer.const);
+            if (!allowed.has(producer.const)) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
+                        `is not in ${consumerLabel} enum ` +
+                        `${JSON.stringify(consumer.enum)}.`,
+                });
+            }
+            return;
         }
         if (producer.enum) {
-            return producer.enum.every((v) => allowed.has(v));
+            const bad = producer.enum.filter((v) => !allowed.has(v));
+            if (bad.length > 0) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
+                        `are not in ${consumerLabel} enum ` +
+                        `${JSON.stringify(consumer.enum)}.`,
+                });
+            }
+            return;
         }
-        // Producer is wider; stay lenient (defense-in-depth at runtime).
     }
 
     // Handle allOf: intersection semantics.
     if (producer.allOf) {
-        // Producer satisfies every allOf member simultaneously (intersection).
-        // It is compatible with C when any single member satisfies C, because
-        // the intersection is at least as constrained as that member.
-        return producer.allOf.some(
+        const compatible = producer.allOf.some(
             (v) => typeof v !== "boolean" && isStructuralSubtype(v, consumer),
         );
+        if (!compatible) {
+            errors.push({
+                path,
+                message:
+                    `No member of ${producerLabel} allOf satisfies ` +
+                    `${consumerLabel} type ${formatSchemaType(consumer)}.`,
+            });
+        }
+        return;
     }
 
     if (consumer.allOf) {
-        // Producer must satisfy every member of consumer's allOf.
-        return consumer.allOf.every(
-            (v) => typeof v !== "boolean" && isStructuralSubtype(producer, v),
-        );
+        for (let i = 0; i < consumer.allOf.length; i++) {
+            const v = consumer.allOf[i];
+            if (typeof v === "boolean") continue;
+            checkStructuralSubtype(
+                producer,
+                v,
+                `${path}.allOf[${i}]`,
+                errors,
+                producerLabel,
+                `${consumerLabel} allOf[${i}]`,
+            );
+        }
+        return;
     }
 
     // Type check
@@ -2428,20 +2517,35 @@ function isStructuralSubtype(
         const pTypes = normalizeTypeSet(producer.type);
         const cTypes = normalizeTypeSet(consumer.type);
         for (const pt of pTypes) {
-            if (!cTypes.some((ct) => typeAssignableTo(pt, ct))) return false;
+            if (!cTypes.some((ct) => typeAssignableTo(pt, ct))) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} type "${pt}" is not assignable ` +
+                        `to ${consumerLabel} type ${JSON.stringify(consumer.type)}.`,
+                });
+            }
         }
     } else if (consumer.type && !producer.type) {
-        return true; // producer unconstrained, be lenient
+        return; // producer unconstrained, be lenient
     }
 
-    // Object: every required property of C must be present in P
-    // with a compatible type
+    // Object: every required property of C must be required by P
     const cRequired = consumer.required ?? [];
+    const pRequired = new Set(producer.required ?? []);
     const pProps = producer.properties ?? {};
     const cProps = consumer.properties ?? {};
 
     for (const req of cRequired) {
-        if (!(req in pProps)) return false;
+        if (!pRequired.has(req)) {
+            errors.push({
+                path,
+                message:
+                    `${consumerLabel} requires "${req}" but ` +
+                    `${producerLabel} does not declare it as required.`,
+            });
+            continue;
+        }
         const pProp = pProps[req];
         const cProp = cProps[req];
         if (
@@ -2450,7 +2554,14 @@ function isStructuralSubtype(
             typeof pProp !== "boolean" &&
             typeof cProp !== "boolean"
         ) {
-            if (!isStructuralSubtype(pProp, cProp)) return false;
+            checkStructuralSubtype(
+                pProp,
+                cProp,
+                `${path}.${req}`,
+                errors,
+                `${producerLabel} property "${req}"`,
+                `${consumerLabel} property "${req}"`,
+            );
         }
     }
 
@@ -2464,7 +2575,14 @@ function isStructuralSubtype(
             typeof pPropDef !== "boolean" &&
             typeof cPropDef !== "boolean"
         ) {
-            if (!isStructuralSubtype(pPropDef, cPropDef)) return false;
+            checkStructuralSubtype(
+                pPropDef,
+                cPropDef,
+                `${path}.${key}`,
+                errors,
+                `${producerLabel} property "${key}"`,
+                `${consumerLabel} property "${key}"`,
+            );
         }
     }
 
@@ -2476,13 +2594,28 @@ function isStructuralSubtype(
             !Array.isArray(consumer.items) &&
             !Array.isArray(producer.items)
         ) {
-            if (!isStructuralSubtype(producer.items, consumer.items)) {
-                return false;
-            }
+            checkStructuralSubtype(
+                producer.items,
+                consumer.items,
+                `${path}.items`,
+                errors,
+                `${producerLabel} items`,
+                `${consumerLabel} items`,
+            );
         }
     }
+}
 
-    return true;
+/**
+ * Boolean wrapper: returns true if producer P is compatible with consumer C.
+ */
+export function isStructuralSubtype(
+    producer: JSONSchema,
+    consumer: JSONSchema,
+): boolean {
+    const errors: ValidationError[] = [];
+    checkStructuralSubtype(producer, consumer, "", errors);
+    return errors.length === 0;
 }
 
 /**
@@ -2570,16 +2703,14 @@ function validateTypeCompatibility(
                 if (!consumerPropDef || typeof consumerPropDef === "boolean") {
                     continue;
                 }
-                if (!isStructuralSubtype(resolved, consumerPropDef)) {
-                    errors.push({
-                        path: `${path}.inputs.${fieldName}`,
-                        message:
-                            `Type mismatch: resolved input type ` +
-                            `${formatSchemaType(resolved)} is not ` +
-                            `compatible with expected type ` +
-                            `${formatSchemaType(consumerPropDef)}.`,
-                    });
-                }
+                checkStructuralSubtype(
+                    resolved,
+                    consumerPropDef,
+                    `${path}.inputs.${fieldName}`,
+                    errors,
+                    "Resolved input",
+                    "expected",
+                );
             }
         }
 
@@ -2606,18 +2737,14 @@ function validateTypeCompatibility(
                     }
                 }
                 if (!isTopSchema(node.selectorSchema)) {
-                    if (
-                        !isStructuralSubtype(selectorType, node.selectorSchema)
-                    ) {
-                        errors.push({
-                            path: `${path}.selector`,
-                            message:
-                                `Selector resolved type ` +
-                                `${formatSchemaType(selectorType)} is not ` +
-                                `compatible with selectorSchema ` +
-                                `${formatSchemaType(node.selectorSchema)}.`,
-                        });
-                    }
+                    checkStructuralSubtype(
+                        selectorType,
+                        node.selectorSchema,
+                        `${path}.selector`,
+                        errors,
+                        "Selector resolved type",
+                        "selectorSchema",
+                    );
                 }
             }
 
@@ -2733,21 +2860,14 @@ function validateTypeCompatibility(
                             outputResolved &&
                             !isTopSchema(node.body.outputSchema)
                         ) {
-                            if (
-                                !isStructuralSubtype(
-                                    outputResolved,
-                                    node.body.outputSchema,
-                                )
-                            ) {
-                                errors.push({
-                                    path: `${path}.body.output`,
-                                    message:
-                                        `Loop output resolved type ` +
-                                        `${formatSchemaType(outputResolved)} is not ` +
-                                        `compatible with loop outputSchema ` +
-                                        `${formatSchemaType(node.body.outputSchema)}.`,
-                                });
-                            }
+                            checkStructuralSubtype(
+                                outputResolved,
+                                node.body.outputSchema,
+                                `${path}.body.output`,
+                                errors,
+                                "Loop output",
+                                "loop outputSchema",
+                            );
                         }
                     }
                 }
@@ -2814,16 +2934,14 @@ function validateTypeCompatibility(
     if (outputTemplate && outputSchema && outputPrefix) {
         const outputResolved = resolveTemplateType(outputTemplate, ctx);
         if (outputResolved && !isTopSchema(outputSchema)) {
-            if (!isStructuralSubtype(outputResolved, outputSchema)) {
-                errors.push({
-                    path: outputPrefix,
-                    message:
-                        `Output resolved type ` +
-                        `${formatSchemaType(outputResolved)} is not ` +
-                        `compatible with outputSchema ` +
-                        `${formatSchemaType(outputSchema)}.`,
-                });
-            }
+            checkStructuralSubtype(
+                outputResolved,
+                outputSchema,
+                outputPrefix,
+                errors,
+                "Output resolved type",
+                "outputSchema",
+            );
         }
     }
 }
@@ -2879,16 +2997,14 @@ function checkPhiMergeTypes(
                         : binderSchema;
                 if (!projected) continue;
 
-                if (!isStructuralSubtype(projected, consumerPropDef)) {
-                    errors.push({
-                        path: `${prefix}.${id}.inputs.${fieldName}`,
-                        message:
-                            `Phi-merge: binder "${binderId}" produces ` +
-                            `${formatSchemaType(projected)} which is not ` +
-                            `compatible with consumer's expected type ` +
-                            `${formatSchemaType(consumerPropDef)}.`,
-                    });
-                }
+                checkStructuralSubtype(
+                    projected,
+                    consumerPropDef,
+                    `${prefix}.${id}.inputs.${fieldName}`,
+                    errors,
+                    `Phi-merge binder "${binderId}"`,
+                    "consumer's expected type",
+                );
             }
         }
     }
@@ -2905,13 +3021,8 @@ function formatSchemaType(schema: JSONSchema): string {
  * Validate that a workflow node's inputSchema and outputSchema are
  * compatible with the registered task definition's schemas.
  *
- * Rules:
- * - Input: the node must declare as required every property the task
- *   requires. Shared property types must be compatible.
- * - Output: the node can refine (narrow) the task's output. It must
- *   keep all task-required properties as required. It may only declare
- *   properties that the task itself declares. Task properties with
- *   empty schemas ({}, the top type) accept any refinement.
+ * Each check explicitly names the producer/consumer or def/impl
+ * relationship rather than deriving it from a "side" discriminator.
  */
 function checkNodeTaskSchemas(
     taskDef: TaskDefinition,
@@ -2919,106 +3030,333 @@ function checkNodeTaskSchemas(
     path: string,
     errors: ValidationError[],
 ): void {
-    // --- Input: node must satisfy task's requirements ---
-    const taskInputReq = taskDef.inputSchema.required ?? [];
-    const nodeInputReq = node.inputSchema.required ?? [];
-    for (const prop of taskInputReq) {
-        if (!nodeInputReq.includes(prop)) {
+    // Generic tasks have schema templates with $typeParam markers.
+    // The node's schemas are already resolved (concrete), so we validate
+    // the structurally fixed parts of the template against the node.
+    if (isGenericTask(taskDef)) {
+        checkGenericNodeSchemas(taskDef, node, path, errors);
+        return;
+    }
+
+    const inputPath = `${path}.inputSchema`;
+    const outputPath = `${path}.outputSchema`;
+
+    // Extra properties: node must not declare properties unknown to task.
+    // This is stricter than structural subtyping (which allows extra producer
+    // properties), so it stays as a separate check.
+    checkExtraProperties(
+        taskDef.inputSchema,
+        node.inputSchema,
+        inputPath,
+        "input",
+        "accept",
+        errors,
+    );
+    checkExtraProperties(
+        taskDef.outputSchema,
+        node.outputSchema,
+        outputPath,
+        "output",
+        "produce",
+        errors,
+    );
+
+    // Structural subtype checks (includes required-field and type compat):
+    // Input: node is producer (what it provides), task is consumer (what it needs)
+    checkStructuralSubtype(
+        node.inputSchema,
+        taskDef.inputSchema,
+        inputPath,
+        errors,
+        "Node",
+        "task",
+    );
+    // Output: task is producer (what it emits), node is consumer (what it claims)
+    checkStructuralSubtype(
+        taskDef.outputSchema,
+        node.outputSchema,
+        outputPath,
+        errors,
+        "Task",
+        "node",
+    );
+}
+
+/**
+ * Check that the implementation (node) does not declare properties
+ * that the definition (task) does not know about.
+ */
+function checkExtraProperties(
+    defSchema: JSONSchema,
+    implSchema: JSONSchema,
+    path: string,
+    sideLabel: "input" | "output",
+    verb: string,
+    errors: ValidationError[],
+): void {
+    if (isTopSchema(defSchema)) return;
+    const defProps = defSchema.properties ?? {};
+    const implProps = implSchema.properties ?? {};
+    for (const propName of Object.keys(implProps)) {
+        if (!(propName in defProps)) {
             errors.push({
-                path: `${path}.inputSchema`,
+                path,
                 message:
-                    `Task requires input "${prop}" but node ` +
-                    `does not declare it as required.`,
+                    `Node declares ${sideLabel} property "${propName}" ` +
+                    `but task does not ${verb} it.`,
             });
         }
     }
+}
 
-    const taskInputProps = taskDef.inputSchema.properties ?? {};
-    const nodeInputProps = node.inputSchema.properties ?? {};
-    for (const [propName, taskPropDef] of Object.entries(taskInputProps)) {
-        if (typeof taskPropDef === "boolean" || isTopSchema(taskPropDef)) {
-            continue;
-        }
-        const nodePropDef = nodeInputProps[propName];
-        if (
-            nodePropDef === undefined ||
-            typeof nodePropDef === "boolean" ||
-            !nodePropDef.type ||
-            !taskPropDef.type
-        ) {
-            continue;
-        }
-        if (!typeSetsOverlap(nodePropDef.type, taskPropDef.type)) {
-            errors.push({
-                path: `${path}.inputSchema`,
-                message:
-                    `Input property "${propName}": node declares type ` +
-                    `${JSON.stringify(nodePropDef.type)} but task expects ` +
-                    `${JSON.stringify(taskPropDef.type)}.`,
-            });
-        }
+/**
+ * Validate a generic task's resolved node schemas against the structurally
+ * fixed parts of its schema template. Each check explicitly names the
+ * producer/consumer relationship via argument order.
+ */
+function checkGenericNodeSchemas(
+    taskDef: GenericTaskDefinition,
+    node: { inputSchema: JSONSchema; outputSchema: JSONSchema },
+    path: string,
+    errors: ValidationError[],
+): void {
+    const inputPath = `${path}.inputSchema`;
+    const outputPath = `${path}.outputSchema`;
+
+    // Build synthetic JSONSchemas from each template's concrete parts
+    // (required array + non-$typeParam properties). checkStructuralSubtype
+    // handles both required-field and type-compatibility checks in one call.
+    const syntheticInput = buildSyntheticFromTemplate(
+        taskDef.inputSchemaTemplate,
+    );
+    const syntheticOutput = buildSyntheticFromTemplate(
+        taskDef.outputSchemaTemplate,
+    );
+
+    // Input: node is producer, template is consumer.
+    // No extra-property check (type params may expand to additional properties).
+    if (syntheticInput) {
+        checkStructuralSubtype(
+            node.inputSchema,
+            syntheticInput,
+            inputPath,
+            errors,
+            "Node",
+            "task template",
+        );
     }
 
-    // --- Output: node can only refine what the task produces ---
-    const taskOutputReq = taskDef.outputSchema.required ?? [];
-    const nodeOutputReq = node.outputSchema.required ?? [];
-    for (const prop of taskOutputReq) {
-        if (!nodeOutputReq.includes(prop)) {
-            errors.push({
-                path: `${path}.outputSchema`,
-                message:
-                    `Task requires output "${prop}" but node ` +
-                    `does not declare it as required.`,
-            });
-        }
-    }
-
-    const taskOutputProps = taskDef.outputSchema.properties ?? {};
-    const nodeOutputProps = node.outputSchema.properties ?? {};
-
-    // Node must not claim output properties the task does not produce,
-    // unless the task's entire outputSchema is unconstrained.
-    if (!isTopSchema(taskDef.outputSchema)) {
-        for (const propName of Object.keys(nodeOutputProps)) {
-            if (!(propName in taskOutputProps)) {
+    // Output: template is producer, node is consumer.
+    if (syntheticOutput) {
+        // Extra-property check uses full template properties (including $typeParam
+        // slots) since even type-param properties are known property names.
+        const tmplObj = taskDef.outputSchemaTemplate as Record<string, unknown>;
+        const tmplProps = (tmplObj.properties as Record<string, unknown>) ?? {};
+        const nodeProps = node.outputSchema.properties ?? {};
+        for (const propName of Object.keys(nodeProps)) {
+            if (!(propName in tmplProps)) {
                 errors.push({
-                    path: `${path}.outputSchema`,
+                    path: outputPath,
                     message:
                         `Node declares output property "${propName}" ` +
                         `but task does not produce it.`,
                 });
             }
         }
+
+        checkStructuralSubtype(
+            syntheticOutput,
+            node.outputSchema,
+            outputPath,
+            errors,
+            "Task template",
+            "node",
+        );
     }
 
-    // Type compatibility for output properties (skip top-schema properties).
-    for (const [propName, taskPropDef] of Object.entries(taskOutputProps)) {
-        if (typeof taskPropDef === "boolean" || isTopSchema(taskPropDef)) {
-            continue;
-        }
-        const nodePropDef = nodeOutputProps[propName];
+    // Check type parameter consistency: each $typeParam must resolve to the
+    // same schema everywhere it appears across both templates.
+    checkTypeParamConsistency(taskDef, node, path, errors);
+}
+
+/**
+ * Build a synthetic JSONSchema from a schema template's concrete parts:
+ * the full `required` array and only the non-$typeParam properties.
+ * Returns undefined if the template is a $typeParam marker or non-object.
+ */
+function buildSyntheticFromTemplate(
+    template: SchemaTemplate,
+): JSONSchema | undefined {
+    if (isTypeParamRef(template)) return undefined;
+    if (
+        typeof template !== "object" ||
+        template === null ||
+        typeof template === "boolean"
+    ) {
+        return undefined;
+    }
+    const tmplObj = template as Record<string, unknown>;
+    const properties: Record<string, JSONSchema> = {};
+    const taskProps =
+        (tmplObj.properties as Record<string, SchemaTemplate>) ?? {};
+    for (const [propName, taskPropTmpl] of Object.entries(taskProps)) {
+        if (isTypeParamRef(taskPropTmpl)) continue;
         if (
-            nodePropDef === undefined ||
-            typeof nodePropDef === "boolean" ||
-            !nodePropDef.type ||
-            !taskPropDef.type
+            typeof taskPropTmpl !== "object" ||
+            taskPropTmpl === null ||
+            typeof taskPropTmpl === "boolean"
         ) {
             continue;
         }
-        const taskTypes = normalizeTypeSet(taskPropDef.type);
-        const nodeTypes = normalizeTypeSet(nodePropDef.type);
-        for (const nt of nodeTypes) {
-            if (!taskTypes.some((tt) => typeAssignableTo(nt, tt))) {
+        properties[propName] = taskPropTmpl as JSONSchema;
+    }
+    const schema: JSONSchema = { type: "object", properties };
+    if (tmplObj.required) {
+        schema.required = tmplObj.required as string[];
+    }
+    return schema;
+}
+
+/**
+ * Verify that each type parameter resolves to the same schema at every
+ * position where it appears in the input and output templates.
+ */
+function checkTypeParamConsistency(
+    taskDef: GenericTaskDefinition,
+    node: { inputSchema: JSONSchema; outputSchema: JSONSchema },
+    path: string,
+    errors: ValidationError[],
+): void {
+    // Collect resolved schemas for each type param across both templates
+    const resolutions = new Map<
+        string,
+        { schema: unknown; location: string }[]
+    >();
+
+    collectTypeParamResolutions(
+        taskDef.inputSchemaTemplate,
+        node.inputSchema,
+        "inputSchema",
+        resolutions,
+    );
+    collectTypeParamResolutions(
+        taskDef.outputSchemaTemplate,
+        node.outputSchema,
+        "outputSchema",
+        resolutions,
+    );
+
+    // For each type param, verify all resolutions are structurally equal
+    for (const [paramName, entries] of resolutions) {
+        if (entries.length < 2) continue;
+        const first = entries[0];
+        for (let i = 1; i < entries.length; i++) {
+            if (!schemasEqual(first.schema, entries[i].schema)) {
                 errors.push({
-                    path: `${path}.outputSchema`,
+                    path,
                     message:
-                        `Output property "${propName}": node declares ` +
-                        `type "${nt}" but task only produces ` +
-                        `${JSON.stringify(taskPropDef.type)}.`,
+                        `Type parameter "${paramName}" resolves inconsistently: ` +
+                        `${JSON.stringify(first.schema)} at ${first.location} vs ` +
+                        `${JSON.stringify(entries[i].schema)} at ${entries[i].location}.`,
                 });
+                break;
             }
         }
     }
+}
+
+/**
+ * Walk a schema template and its corresponding resolved schema in parallel.
+ * At each $typeParam marker position, record the resolved schema value.
+ */
+function collectTypeParamResolutions(
+    template: SchemaTemplate,
+    resolved: unknown,
+    location: string,
+    out: Map<string, { schema: unknown; location: string }[]>,
+): void {
+    if (isTypeParamRef(template)) {
+        const paramName = template.$typeParam;
+        let entries = out.get(paramName);
+        if (!entries) {
+            entries = [];
+            out.set(paramName, entries);
+        }
+        entries.push({ schema: resolved, location });
+        return;
+    }
+    if (
+        typeof template !== "object" ||
+        template === null ||
+        typeof template === "boolean"
+    ) {
+        return;
+    }
+    if (typeof resolved !== "object" || resolved === null) return;
+
+    const tmplObj = template as Record<string, unknown>;
+    const resObj = resolved as Record<string, unknown>;
+
+    // Recurse into properties
+    const tmplProps = tmplObj.properties as
+        | Record<string, SchemaTemplate>
+        | undefined;
+    const resProps = resObj.properties as Record<string, unknown> | undefined;
+    if (tmplProps && resProps) {
+        for (const [key, tmplProp] of Object.entries(tmplProps)) {
+            if (key in resProps) {
+                collectTypeParamResolutions(
+                    tmplProp,
+                    resProps[key],
+                    `${location}.properties.${key}`,
+                    out,
+                );
+            }
+        }
+    }
+
+    // Recurse into items (array schema)
+    if (tmplObj.items !== undefined && resObj.items !== undefined) {
+        collectTypeParamResolutions(
+            tmplObj.items as SchemaTemplate,
+            resObj.items,
+            `${location}.items`,
+            out,
+        );
+    }
+
+    // Recurse into additionalProperties
+    if (
+        tmplObj.additionalProperties !== undefined &&
+        resObj.additionalProperties !== undefined
+    ) {
+        collectTypeParamResolutions(
+            tmplObj.additionalProperties as SchemaTemplate,
+            resObj.additionalProperties,
+            `${location}.additionalProperties`,
+            out,
+        );
+    }
+}
+
+/**
+ * Deep-equal comparison for JSON schema values (plain JSON structures).
+ */
+function schemasEqual(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (a === null || b === null) return false;
+    if (typeof a !== typeof b) return false;
+    if (typeof a !== "object") return false;
+    const aObj = a as Record<string, unknown>;
+    const bObj = b as Record<string, unknown>;
+    const aKeys = Object.keys(aObj);
+    const bKeys = Object.keys(bObj);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const key of aKeys) {
+        if (!Object.prototype.hasOwnProperty.call(bObj, key)) return false;
+        if (!schemasEqual(aObj[key], bObj[key])) return false;
+    }
+    return true;
 }
 
 // ---- Pass: Reserved $-key check (§3.4) ----

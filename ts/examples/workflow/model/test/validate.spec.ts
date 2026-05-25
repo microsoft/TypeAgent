@@ -18,6 +18,7 @@ import {
     TaskDefinition,
     validateWorkflowIR,
     isNeverSchema,
+    isStructuralSubtype,
 } from "../src/index.js";
 
 /**
@@ -589,7 +590,7 @@ describe("validateWorkflowIR", () => {
         const result = validateWorkflowIR(ir, taskMap("noop"));
         expect(result.valid).toBe(false);
         expect(
-            result.errors.some((e) => e.message.includes("not compatible")),
+            result.errors.some((e) => e.message.includes("not assignable")),
         ).toBe(true);
     });
 
@@ -814,6 +815,111 @@ describe("validateWorkflowIR", () => {
         expect(result.valid).toBe(true);
     });
 
+    it("rejects node that declares input property task does not accept", () => {
+        const task = makeTypedTask(
+            "gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            { type: "object" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt", "extra"],
+                        properties: {
+                            prompt: { type: "string" },
+                            extra: { type: "number" },
+                        },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: { prompt: "hello", extra: 42 },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message ===
+                    'Node declares input property "extra" but task does not accept it.',
+            ),
+        ).toBe(true);
+    });
+
+    it("allows extra input properties when task inputSchema is unconstrained", () => {
+        // Task inputSchema is {} (top type) - node can declare anything
+        const task = makeTypedTask(
+            "gen",
+            {},
+            { type: "object", properties: { out: { type: "string" } } },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["anything"],
+                        properties: { anything: { type: "number" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        properties: { out: { type: "string" } },
+                    },
+                    inputs: { anything: 42 },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("allows extra output properties when task outputSchema is unconstrained", () => {
+        // Task outputSchema is {} (top type) - node can declare anything
+        const task = makeTypedTask(
+            "gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {},
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["anything"],
+                        properties: { anything: { type: "boolean" } },
+                    },
+                    inputs: { prompt: "hi" },
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
     it("rejects node that declares output property task does not produce", () => {
         const task = makeTypedTask(
             "gen",
@@ -845,21 +951,22 @@ describe("validateWorkflowIR", () => {
         });
         const result = validateWorkflowIR(ir, new Map([["gen", task]]));
         expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.message.includes('"extra"'))).toBe(
-            true,
-        );
         expect(
-            result.errors.some((e) => e.message.includes("does not produce")),
+            result.errors.some(
+                (e) =>
+                    e.message ===
+                    'Node declares output property "extra" but task does not produce it.',
+            ),
         ).toBe(true);
     });
 
-    it("rejects node that drops a task-required output property", () => {
+    it("rejects node that requires an output property the task does not guarantee", () => {
         const task = makeTypedTask(
             "gen",
             { type: "object" },
             {
                 type: "object",
-                required: ["a", "b"],
+                required: ["a"],
                 properties: {
                     a: { type: "string" },
                     b: { type: "integer" },
@@ -874,8 +981,11 @@ describe("validateWorkflowIR", () => {
                     inputSchema: { type: "object" },
                     outputSchema: {
                         type: "object",
-                        required: ["a"],
-                        properties: { a: { type: "string" } },
+                        required: ["a", "b"],
+                        properties: {
+                            a: { type: "string" },
+                            b: { type: "integer" },
+                        },
                     },
                     inputs: {},
                     bind: "out",
@@ -885,8 +995,10 @@ describe("validateWorkflowIR", () => {
         const result = validateWorkflowIR(ir, new Map([["gen", task]]));
         expect(result.valid).toBe(false);
         expect(
-            result.errors.some((e) =>
-                e.message.includes('requires output "b"'),
+            result.errors.some(
+                (e) =>
+                    e.message.includes('requires "b"') &&
+                    e.message.includes("does not declare it as required"),
             ),
         ).toBe(true);
     });
@@ -928,6 +1040,79 @@ describe("validateWorkflowIR", () => {
         ).toBe(true);
     });
 
+    it("allows widened output type (node accepts superset of task types)", () => {
+        // Task produces "string", node declares ["string", "number"].
+        // task ⊆ node: "string" is in ["string", "number"] → OK
+        const task = makeTypedTask(
+            "gen",
+            { type: "object" },
+            {
+                type: "object",
+                required: ["value"],
+                properties: { value: { type: "string" } },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: {
+                            value: { type: ["string", "number"] },
+                        },
+                    },
+                    inputs: {},
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects narrowed output type (node does not accept all task types)", () => {
+        // Task produces ["string", "number"], node only declares "string".
+        // task ⊆ node: "number" is NOT in ["string"] → error
+        const task = makeTypedTask(
+            "gen",
+            { type: "object" },
+            {
+                type: "object",
+                required: ["value"],
+                properties: { value: { type: ["string", "number"] } },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "gen",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value"],
+                        properties: { value: { type: "string" } },
+                    },
+                    inputs: {},
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("not assignable") &&
+                    e.message.includes("number"),
+            ),
+        ).toBe(true);
+    });
+
     it("rejects node that drops a task-required input property", () => {
         const task = makeTypedTask(
             "gen",
@@ -961,7 +1146,7 @@ describe("validateWorkflowIR", () => {
         expect(result.valid).toBe(false);
         expect(
             result.errors.some((e) =>
-                e.message.includes('requires input "endpoint"'),
+                e.message.includes('requires "endpoint"'),
             ),
         ).toBe(true);
     });
@@ -999,6 +1184,831 @@ describe("validateWorkflowIR", () => {
                 (e) =>
                     e.message.includes("string") &&
                     e.message.includes("integer"),
+            ),
+        ).toBe(true);
+    });
+
+    // ---- Generic task schema validation ----
+
+    function makeGenericTask(
+        name: string,
+        inputSchemaTemplate: Record<string, unknown>,
+        outputSchemaTemplate: Record<string, unknown>,
+    ): TaskDefinition {
+        return {
+            name,
+            typeParameters: [{ name: "T" }],
+            inputSchemaTemplate,
+            outputSchemaTemplate,
+            execute: async () => ({ kind: "ok" as const, output: {} }),
+        } as TaskDefinition;
+    }
+
+    it("accepts generic task node with correctly resolved schemas", () => {
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["name"],
+                        properties: { name: { type: "string" } },
+                    },
+                    inputs: { prompt: "hello" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects generic task node missing required input field", () => {
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt", "schema"],
+                properties: {
+                    prompt: { type: "string" },
+                    schema: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: { type: "string" },
+                    inputs: { prompt: "hello" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes('requires "schema"')),
+        ).toBe(true);
+    });
+
+    it("validates non-marker input property types on generic task", () => {
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: {
+                    prompt: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        // Node declares prompt as integer (wrong)
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "integer" } },
+                    },
+                    outputSchema: { type: "number" },
+                    inputs: { prompt: 42 },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("prompt") &&
+                    e.message.includes("string"),
+            ),
+        ).toBe(true);
+    });
+
+    it("skips type check for $typeParam marker properties", () => {
+        // The "data" property is $typeParam - any resolved type is valid
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt", "data"],
+                properties: {
+                    prompt: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            outputSchema: { type: "array", items: { type: "number" } },
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt", "data"],
+                        properties: {
+                            prompt: { type: "string" },
+                            data: { type: "array", items: { type: "number" } },
+                        },
+                    },
+                    outputSchema: { type: "array", items: { type: "number" } },
+                    inputs: { prompt: "hi", data: [1, 2, 3] },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects input union type where one member is not accepted by task", () => {
+        // Task accepts string, node declares ["string", "number"] - number is invalid
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: {
+                    prompt: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: {
+                            prompt: { type: ["string", "number"] },
+                        },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: { prompt: "hi" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("prompt") &&
+                    e.message.includes("number") &&
+                    e.message.includes("not assignable"),
+            ),
+        ).toBe(true);
+    });
+
+    it("allows widened output type on generic task (overlap is sufficient)", () => {
+        // Task produces { meta: string }, node claims { meta: ["string", "number"] }
+        // Widening is safe - overlap with string is enough
+        const task = makeGenericTask(
+            "llm.nested",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {
+                type: "object",
+                required: ["meta"],
+                properties: {
+                    meta: { type: "string" },
+                    value: { $typeParam: "T" },
+                },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.nested",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["meta"],
+                        properties: {
+                            meta: { type: ["string", "number"] },
+                        },
+                    },
+                    inputs: { prompt: "test" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.nested", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("validates output required fields for generic task with structured template", () => {
+        const task = makeGenericTask(
+            "llm.nested",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {
+                type: "object",
+                required: ["value"],
+                properties: {
+                    value: { $typeParam: "T" },
+                    meta: { type: "string" },
+                },
+            },
+        );
+        // Node requires "meta" but task template does not guarantee it
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.nested",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value", "meta"],
+                        properties: {
+                            value: { type: "number" },
+                            meta: { type: "string" },
+                        },
+                    },
+                    inputs: { prompt: "test" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.nested", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes('requires "meta"') &&
+                    e.message.includes("does not declare it as required"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects undeclared output property on generic task with structured template", () => {
+        const task = makeGenericTask(
+            "llm.nested",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {
+                type: "object",
+                required: ["value"],
+                properties: { value: { $typeParam: "T" } },
+            },
+        );
+        // Node claims "extra" which the task template does not declare
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.nested",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value", "extra"],
+                        properties: {
+                            value: { type: "string" },
+                            extra: { type: "number" },
+                        },
+                    },
+                    inputs: { prompt: "test" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.nested", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("extra") &&
+                    e.message.includes("does not produce"),
+            ),
+        ).toBe(true);
+    });
+
+    it("allows any output when template is purely $typeParam", () => {
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            { $typeParam: "T" },
+        );
+        // Output can be anything since the template is entirely parameterized
+        const ir = makeMinimalIR({
+            outputSchema: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: { x: { type: "number" } },
+                },
+            },
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: { x: { type: "number" } },
+                        },
+                    },
+                    inputs: { prompt: "give me data" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("accepts consistent type param resolution across input and output", () => {
+        // T appears in input (data property) and output (entire schema)
+        // Both resolve to { type: "number" } - consistent
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt", "data"],
+                properties: {
+                    prompt: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            outputSchema: { type: "number" },
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt", "data"],
+                        properties: {
+                            prompt: { type: "string" },
+                            data: { type: "number" },
+                        },
+                    },
+                    outputSchema: { type: "number" },
+                    inputs: { prompt: "hi", data: 42 },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects inconsistent type param resolution across input and output", () => {
+        // T in input resolves to { type: "number" }, T in output resolves to { type: "string" }
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt", "data"],
+                properties: {
+                    prompt: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            outputSchema: { type: "string" },
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt", "data"],
+                        properties: {
+                            prompt: { type: "string" },
+                            data: { type: "number" },
+                        },
+                    },
+                    outputSchema: { type: "string" },
+                    inputs: { prompt: "hi", data: 42 },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("T") &&
+                    e.message.includes("inconsistently"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects inconsistent type param within same template", () => {
+        // T appears twice in the output template, resolves to different types
+        const task = makeGenericTask(
+            "llm.dual",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {
+                type: "object",
+                required: ["first", "second"],
+                properties: {
+                    first: { $typeParam: "T" },
+                    second: { $typeParam: "T" },
+                },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.dual",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["first", "second"],
+                        properties: {
+                            first: { type: "number" },
+                            second: { type: "string" },
+                        },
+                    },
+                    inputs: { prompt: "test" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.dual", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("T") &&
+                    e.message.includes("inconsistently"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects generic task when node is missing a required input field", () => {
+        // Template requires ["prompt", "context"], node only requires ["prompt"]
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt", "context"],
+                properties: {
+                    prompt: { type: "string" },
+                    context: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: {
+                            prompt: { type: "string" },
+                            data: { type: "number" },
+                        },
+                    },
+                    outputSchema: { type: "number" },
+                    inputs: { prompt: "hi", data: 42 },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes('"context"') &&
+                    e.message.includes("required"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects generic task when concrete input type is structurally incompatible", () => {
+        // Template has prompt: { type: "object", properties: { text: string } }
+        // Node declares prompt: { type: "string" } - not assignable
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: {
+                    prompt: {
+                        type: "object",
+                        properties: { text: { type: "string" } },
+                    },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: {
+                            prompt: { type: "string" },
+                            data: { type: "number" },
+                        },
+                    },
+                    outputSchema: { type: "number" },
+                    inputs: { prompt: "hi", data: 42 },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.path.includes("inputSchema") &&
+                    e.message.includes("not assignable"),
+            ),
+        ).toBe(true);
+    });
+
+    it("rejects generic task when concrete output type is incompatible", () => {
+        // Template produces meta: { type: "string" }, node expects meta: { type: "number" }
+        const task = makeGenericTask(
+            "llm.nested",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {
+                type: "object",
+                required: ["meta"],
+                properties: {
+                    meta: { type: "string" },
+                    value: { $typeParam: "T" },
+                },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.nested",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["meta"],
+                        properties: {
+                            meta: { type: "number" },
+                            value: { type: "boolean" },
+                        },
+                    },
+                    inputs: { prompt: "test" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.nested", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.path.includes("outputSchema") &&
+                    e.message.includes("not assignable"),
+            ),
+        ).toBe(true);
+    });
+
+    it("allows extra input properties on generic task (type params may expand)", () => {
+        // Template only declares prompt + $typeParam data.
+        // Node adds "extra" property - allowed since type params can introduce new fields.
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: {
+                    prompt: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            outputSchema: { type: "boolean" },
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt", "extra"],
+                        properties: {
+                            prompt: { type: "string" },
+                            extra: { type: "number" },
+                            data: { type: "boolean" },
+                        },
+                    },
+                    outputSchema: { type: "boolean" },
+                    inputs: { prompt: "hi", extra: 1, data: true },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(true);
+    });
+
+    it("reports multiple errors for generic task with both required and type violations", () => {
+        // Template requires ["prompt", "context"] with prompt: string, context: string
+        // Node missing "context" required AND prompt has wrong type
+        const task = makeGenericTask(
+            "llm.gen",
+            {
+                type: "object",
+                required: ["prompt", "context"],
+                properties: {
+                    prompt: { type: "string" },
+                    context: { type: "string" },
+                    data: { $typeParam: "T" },
+                },
+            },
+            { $typeParam: "T" },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.gen",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: {
+                            prompt: { type: "number" },
+                            data: { type: "boolean" },
+                        },
+                    },
+                    outputSchema: { type: "boolean" },
+                    inputs: { prompt: 42, data: true },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.gen", task]]));
+        expect(result.valid).toBe(false);
+        // Should have both a required-field error and a type-mismatch error
+        const hasRequired = result.errors.some(
+            (e) =>
+                e.message.includes('"context"') &&
+                e.message.includes("required"),
+        );
+        const hasType = result.errors.some(
+            (e) =>
+                e.message.includes("not assignable") &&
+                e.path.includes("inputSchema"),
+        );
+        expect(hasRequired).toBe(true);
+        expect(hasType).toBe(true);
+    });
+
+    it("rejects generic task output when node requires field not guaranteed by template", () => {
+        // Template: required: ["value"], properties: { value: $T, info: string }
+        // Node requires "info" but template doesn't guarantee it
+        const task = makeGenericTask(
+            "llm.nested",
+            {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            {
+                type: "object",
+                required: ["value"],
+                properties: {
+                    value: { $typeParam: "T" },
+                    info: { type: "string" },
+                },
+            },
+        );
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "llm.nested",
+                    inputSchema: {
+                        type: "object",
+                        required: ["prompt"],
+                        properties: { prompt: { type: "string" } },
+                    },
+                    outputSchema: {
+                        type: "object",
+                        required: ["value", "info"],
+                        properties: {
+                            value: { type: "number" },
+                            info: { type: "string" },
+                        },
+                    },
+                    inputs: { prompt: "test" },
+                    bind: "out",
+                } as TaskNode,
+            },
+        });
+        const result = validateWorkflowIR(ir, new Map([["llm.nested", task]]));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes('"info"') &&
+                    e.message.includes("required"),
             ),
         ).toBe(true);
     });
@@ -2517,7 +3527,7 @@ describe("validateWorkflowIR", () => {
                 result.errors.some(
                     (e) =>
                         e.path.includes("inputs.count") &&
-                        e.message.includes("not compatible"),
+                        e.message.includes("not assignable"),
                 ),
             ).toBe(true);
         });
@@ -2596,7 +3606,7 @@ describe("validateWorkflowIR", () => {
                 result.errors.some(
                     (e) =>
                         e.path.includes("inputs.count") &&
-                        e.message.includes("not compatible"),
+                        e.message.includes("not assignable"),
                 ),
             ).toBe(true);
         });
@@ -2813,8 +3823,8 @@ describe("validateWorkflowIR", () => {
             expect(
                 result.errors.some(
                     (e) =>
-                        e.path.endsWith(".output") &&
-                        e.message.includes("not compatible"),
+                        e.path.includes("output") &&
+                        e.message.includes("not assignable"),
                 ),
             ).toBe(true);
         });
@@ -3041,7 +4051,8 @@ describe("validateWorkflowIR", () => {
                 result.errors.some(
                     (e) =>
                         e.path.includes("inputs.cfg") &&
-                        e.message.includes("not compatible"),
+                        (e.message.includes("not assignable") ||
+                            e.message.includes("required")),
                 ),
             ).toBe(true);
         });
@@ -3131,7 +4142,7 @@ describe("validateWorkflowIR", () => {
                 result.errors.some(
                     (e) =>
                         e.path.includes("output") &&
-                        e.message.includes("not compatible"),
+                        e.message.includes("not assignable"),
                 ),
             ).toBe(true);
         });
@@ -4344,7 +5355,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) => e.message.includes("not compatible")),
+                result.errors.some((e) => e.message.includes("not assignable")),
             ).toBe(true);
         });
 
@@ -4445,7 +5456,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) => e.message.includes("not compatible")),
+                result.errors.some((e) => e.message.includes("not assignable")),
             ).toBe(true);
         });
 
@@ -5240,6 +6251,498 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(false);
             expect(
                 result.errors.some((e) => e.message.includes("type mismatch")),
+            ).toBe(true);
+        });
+    });
+
+    describe("isStructuralSubtype required-field semantics", () => {
+        it("rejects when consumer requires a field the producer only has as optional", () => {
+            const producer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" }, b: { type: "number" } },
+                required: ["a"],
+            };
+            const consumer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" }, b: { type: "number" } },
+                required: ["a", "b"],
+            };
+            expect(isStructuralSubtype(producer, consumer)).toBe(false);
+        });
+
+        it("accepts when producer requires all fields the consumer requires", () => {
+            const producer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" }, b: { type: "number" } },
+                required: ["a", "b"],
+            };
+            const consumer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" }, b: { type: "number" } },
+                required: ["a"],
+            };
+            expect(isStructuralSubtype(producer, consumer)).toBe(true);
+        });
+
+        it("accepts when producer and consumer have identical required fields", () => {
+            const schema: JSONSchema = {
+                type: "object",
+                properties: { x: { type: "string" }, y: { type: "integer" } },
+                required: ["x", "y"],
+            };
+            expect(isStructuralSubtype(schema, schema)).toBe(true);
+        });
+
+        it("rejects when consumer requires a field not present in producer at all", () => {
+            const producer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" } },
+                required: ["a"],
+            };
+            const consumer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" }, b: { type: "number" } },
+                required: ["a", "b"],
+            };
+            expect(isStructuralSubtype(producer, consumer)).toBe(false);
+        });
+
+        it("accepts when consumer has no required fields", () => {
+            const producer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" } },
+            };
+            const consumer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" }, b: { type: "number" } },
+            };
+            expect(isStructuralSubtype(producer, consumer)).toBe(true);
+        });
+
+        it("rejects when required property types are incompatible", () => {
+            const producer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" } },
+                required: ["a"],
+            };
+            const consumer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "number" } },
+                required: ["a"],
+            };
+            expect(isStructuralSubtype(producer, consumer)).toBe(false);
+        });
+
+        it("accepts top-schema consumer regardless of producer shape", () => {
+            const producer: JSONSchema = {
+                type: "object",
+                properties: { a: { type: "string" } },
+                required: ["a"],
+            };
+            const consumer: JSONSchema = {};
+            expect(isStructuralSubtype(producer, consumer)).toBe(true);
+        });
+    });
+
+    describe("checkNodeTaskSchemas required-field integration", () => {
+        it("rejects node input requiring a field the task input only has as optional", () => {
+            const task: TaskDefinition = {
+                name: "t1",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        a: { type: "string" },
+                        b: { type: "number" },
+                    },
+                    required: ["a", "b"],
+                },
+                outputSchema: {},
+                execute: async () => ({ kind: "ok" as const, output: {} }),
+            };
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "t1",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "string" },
+                                b: { type: "number" },
+                            },
+                            required: ["a"],
+                        },
+                        outputSchema: {},
+                        inputs: {},
+                    },
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, new Map([["t1", task]]));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("required")),
+            ).toBe(true);
+        });
+
+        it("rejects node output that makes a field optional when task output requires it", () => {
+            const task: TaskDefinition = {
+                name: "t1",
+                inputSchema: {},
+                outputSchema: {
+                    type: "object",
+                    properties: {
+                        x: { type: "string" },
+                        y: { type: "number" },
+                    },
+                    required: ["x"],
+                },
+                execute: async () => ({ kind: "ok" as const, output: {} }),
+            };
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "t1",
+                        inputSchema: {},
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                x: { type: "string" },
+                                y: { type: "number" },
+                            },
+                            required: ["x", "y"],
+                        },
+                        inputs: {},
+                        bind: "r",
+                    },
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, new Map([["t1", task]]));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("required")),
+            ).toBe(true);
+        });
+
+        it("accepts when node and task schemas have matching required fields", () => {
+            const task: TaskDefinition = {
+                name: "t1",
+                inputSchema: {
+                    type: "object",
+                    properties: { a: { type: "string" } },
+                    required: ["a"],
+                },
+                outputSchema: {
+                    type: "object",
+                    properties: { x: { type: "number" } },
+                    required: ["x"],
+                },
+                execute: async () => ({ kind: "ok" as const, output: {} }),
+            };
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "t1",
+                        inputSchema: {
+                            type: "object",
+                            properties: { a: { type: "string" } },
+                            required: ["a"],
+                        },
+                        outputSchema: {
+                            type: "object",
+                            properties: { x: { type: "number" } },
+                            required: ["x"],
+                        },
+                        inputs: {},
+                        bind: "r",
+                    },
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, new Map([["t1", task]]));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    describe("checkArmCovariance required-field integration", () => {
+        it("rejects arm outputSchema with optional field that branch outputSchema requires", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "yesTask",
+                                    nodes: {
+                                        yesTask: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                properties: {
+                                                    a: { type: "string" },
+                                                    b: { type: "number" },
+                                                },
+                                                required: ["a"],
+                                            },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: {
+                                        type: "object",
+                                        properties: {
+                                            a: { type: "string" },
+                                            b: { type: "number" },
+                                        },
+                                        required: ["a"],
+                                    },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "defTask",
+                                nodes: {
+                                    defTask: makeTaskNode({ bind: "r" }),
+                                },
+                                output: { $from: "scope", name: "r" },
+                                outputSchema: { type: "object" },
+                            },
+                        },
+                        bind: "branchOut",
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "string" },
+                                b: { type: "number" },
+                            },
+                            required: ["a", "b"],
+                        },
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("branch outputSchema") &&
+                        e.message.includes("required"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts arm outputSchema that requires superset of branch outputSchema required fields", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "yesTask",
+                                    nodes: {
+                                        yesTask: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                properties: {
+                                                    a: { type: "string" },
+                                                    b: { type: "number" },
+                                                },
+                                                required: ["a", "b"],
+                                            },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: {
+                                        type: "object",
+                                        properties: {
+                                            a: { type: "string" },
+                                            b: { type: "number" },
+                                        },
+                                        required: ["a", "b"],
+                                    },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "defTask",
+                                nodes: {
+                                    defTask: {
+                                        kind: "task",
+                                        task: "noop",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            properties: {
+                                                a: { type: "string" },
+                                                b: { type: "number" },
+                                            },
+                                            required: ["a", "b"],
+                                        },
+                                        inputs: {},
+                                        bind: "r",
+                                    },
+                                },
+                                output: { $from: "scope", name: "r" },
+                                outputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        a: { type: "string" },
+                                        b: { type: "number" },
+                                    },
+                                    required: ["a", "b"],
+                                },
+                            },
+                        },
+                        bind: "branchOut",
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                a: { type: "string" },
+                                b: { type: "number" },
+                            },
+                            required: ["a"],
+                        },
+                    } as BranchNode,
+                },
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+    });
+
+    describe("phi-merge required-field integration", () => {
+        it("rejects phi merge when binder has optional field that consumer requires", () => {
+            // Branch binds to "branchOut" with outputSchema that has "x" optional,
+            // but a downstream node consumes it with "x" required.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: "yes",
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "yesTask",
+                                    nodes: {
+                                        yesTask: {
+                                            kind: "task",
+                                            task: "noop",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: {
+                                                type: "object",
+                                                properties: {
+                                                    x: { type: "string" },
+                                                },
+                                            },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: {
+                                        type: "object",
+                                        properties: { x: { type: "string" } },
+                                    },
+                                },
+                            },
+                        },
+                        default: {
+                            inputs: {},
+                            scope: {
+                                inputSchema: { type: "object" },
+                                entry: "defTask",
+                                nodes: {
+                                    defTask: {
+                                        kind: "task",
+                                        task: "noop",
+                                        inputSchema: { type: "object" },
+                                        outputSchema: {
+                                            type: "object",
+                                            properties: {
+                                                x: { type: "string" },
+                                            },
+                                        },
+                                        inputs: {},
+                                        bind: "r",
+                                    },
+                                },
+                                output: { $from: "scope", name: "r" },
+                                outputSchema: {
+                                    type: "object",
+                                    properties: { x: { type: "string" } },
+                                },
+                            },
+                        },
+                        bind: "branchOut",
+                        outputSchema: {
+                            type: "object",
+                            properties: { x: { type: "string" } },
+                        },
+                        next: "consumer",
+                    } as BranchNode,
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            properties: { x: { type: "string" } },
+                            required: ["x"],
+                        },
+                        outputSchema: {},
+                        inputs: {
+                            x: { $from: "scope", name: "branchOut" },
+                        },
+                    },
+                },
+                entry: "start",
+                output: null,
+                outputSchema: {},
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("not assignable") ||
+                        e.message.includes("required"),
+                ),
             ).toBe(true);
         });
     });

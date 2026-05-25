@@ -3,6 +3,7 @@
 
 import { Emitter, TaskSchemaInfo } from "../src/emitter.js";
 import { Parser } from "../src/parser.js";
+import { TypeChecker } from "../src/typeChecker.js";
 import { lex } from "../src/lexer.js";
 import {
     WorkflowIR,
@@ -182,7 +183,9 @@ function compile(source: string): {
     if (module.workflows.length === 0) {
         return { ir: undefined, errors: [{ message: "No workflow found" }] };
     }
-    const emitter = new Emitter(taskSchemas);
+    const checker = new TypeChecker(taskSchemas, module.workflows);
+    checker.checkAll(module.workflows);
+    const emitter = new Emitter(taskSchemas, checker.resolvedSchemas);
     // Use multi-workflow emit so workflow-to-workflow calls resolve.
     // Pick the first 'export' workflow as the entry, or the first
     // workflow if none exported (matches compiler.ts behavior for

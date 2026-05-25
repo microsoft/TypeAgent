@@ -20,8 +20,8 @@ import {
     isAbsolute,
 } from "node:path";
 import { createRequire } from "node:module";
-import { compileFile, CompileError, TaskSchemaInfo } from "workflow-dsl";
-import { allBuiltinTasks } from "workflow-engine";
+import { compileFile, CompileError } from "workflow-dsl";
+import { getBuiltinTaskSchemas } from "workflow-engine";
 
 const require = createRequire(import.meta.url);
 const pkgVersion: string = require("../package.json").version;
@@ -68,14 +68,6 @@ function defaultOutPath(inputAbs: string): string {
     const dir = dirname(inputAbs);
     const base = basename(inputAbs, extname(inputAbs));
     return join(dir, `${base}.json`);
-}
-
-function builtinTaskSchemas(): TaskSchemaInfo[] {
-    return allBuiltinTasks.map((t) => ({
-        name: t.name,
-        inputSchema: t.inputSchema,
-        outputSchema: t.outputSchema,
-    }));
 }
 
 function formatError(inputDisplay: string, e: CompileError): string {
@@ -213,7 +205,7 @@ function compileOne(
     outIsDir: boolean,
 ): boolean {
     const { abs } = readSource(inputDisplay);
-    const result = compileFile(abs, builtinTaskSchemas(), {
+    const result = compileFile(abs, getBuiltinTaskSchemas(), {
         validate: args.validate,
         ...(args.entry !== undefined ? { entry: args.entry } : {}),
         ...(args.workspaceRoot !== undefined

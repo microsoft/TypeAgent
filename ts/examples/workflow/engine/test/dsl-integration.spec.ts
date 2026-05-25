@@ -27,6 +27,7 @@ import {
     TaskSchemaInfo,
     CompileOptions,
 } from "workflow-dsl";
+import { isGenericTask } from "workflow-model";
 
 // ---- Helpers ----
 
@@ -51,11 +52,21 @@ function collectEvents(engine: WorkflowEngine): WorkflowEvent[] {
  * can look up input/output schemas for each task.
  */
 function taskSchemasFrom(tasks: TaskDefinition[]): TaskSchemaInfo[] {
-    return tasks.map((t) => ({
-        name: t.name,
-        inputSchema: t.inputSchema,
-        outputSchema: t.outputSchema,
-    }));
+    return tasks.map((t) => {
+        if (isGenericTask(t)) {
+            return {
+                name: t.name,
+                inputSchema: t.inputSchemaTemplate,
+                outputSchema: t.outputSchemaTemplate,
+                typeParameters: t.typeParameters,
+            };
+        }
+        return {
+            name: t.name,
+            inputSchema: t.inputSchema,
+            outputSchema: t.outputSchema,
+        };
+    });
 }
 
 /**

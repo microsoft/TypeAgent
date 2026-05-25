@@ -127,7 +127,7 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "icon": "icons/wf.svg",
+  "icon": "icons/wf.png",
   "fluidBuild": {
     "tasks": {
       "build": {

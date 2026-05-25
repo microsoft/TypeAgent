@@ -15,7 +15,14 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { JSONSchema, TaskDefinition } from "workflow-model";
+import {
+    JSONSchema,
+    TaskDefinition,
+    ConcreteTaskDefinition,
+    GenericTaskDefinition,
+    TaskTypeParameter,
+} from "workflow-model";
+import { isGenericBuiltinSchema } from "./builtinTaskSchemas.js";
 import { openai } from "aiclient";
 import { BUILTIN_TASK_SCHEMAS } from "./builtinTaskSchemas.js";
 
@@ -23,23 +30,62 @@ const SCHEMA_BY_NAME = new Map(
     BUILTIN_TASK_SCHEMAS.map((s) => [s.name, s] as const),
 );
 
+type ConcreteSchemaFields = Pick<
+    ConcreteTaskDefinition,
+    "name" | "inputSchema" | "outputSchema"
+>;
+type GenericSchemaFields = Pick<
+    GenericTaskDefinition,
+    "name" | "inputSchemaTemplate" | "outputSchemaTemplate" | "typeParameters"
+>;
+
 /**
- * Look up a task's declared schema triple (name, inputSchema, outputSchema)
- * from the single source of truth in `builtinTaskSchemas.ts`.
+ * Look up a non-generic task's schema from `builtinTaskSchemas.ts`.
  */
-function taskSchema(
-    name: string,
-): Pick<TaskDefinition, "name" | "inputSchema" | "outputSchema"> {
+function taskSchema(name: string): ConcreteSchemaFields {
     const s = SCHEMA_BY_NAME.get(name);
     if (!s) {
         throw new Error(
             `No schema declared for builtin task '${name}' in builtinTaskSchemas.ts`,
         );
     }
+    if (isGenericBuiltinSchema(s)) {
+        throw new Error(
+            `Task '${name}' has type parameters; use genericTaskSchema() instead`,
+        );
+    }
     return {
         name: s.name,
         inputSchema: s.inputSchema,
         outputSchema: s.outputSchema,
+    };
+}
+
+/**
+ * Look up a generic task's schema from `builtinTaskSchemas.ts`.
+ * Returns the template and type parameter metadata.
+ */
+function genericTaskSchema(name: string): GenericSchemaFields {
+    const s = SCHEMA_BY_NAME.get(name);
+    if (!s) {
+        throw new Error(
+            `No schema declared for builtin task '${name}' in builtinTaskSchemas.ts`,
+        );
+    }
+    if (!isGenericBuiltinSchema(s)) {
+        throw new Error(
+            `Task '${name}' has no type parameters; use taskSchema() instead`,
+        );
+    }
+    const typeParameters: TaskTypeParameter[] = s.typeParameters.map((p) => ({
+        name: p.name,
+        ...(p.default ? { default: p.default } : {}),
+    }));
+    return {
+        name: s.name,
+        inputSchemaTemplate: s.inputSchema,
+        outputSchemaTemplate: s.outputSchema,
+        typeParameters,
     };
 }
 
@@ -91,7 +137,7 @@ export const listElementAt: TaskDefinition<
     { list: unknown[]; index: number },
     unknown
 > = {
-    ...taskSchema("list.elementAt"),
+    ...genericTaskSchema("list.elementAt"),
     sideEffects: false,
     async execute(input) {
         if (input.index < 0 || input.index >= input.list.length) {
@@ -238,11 +284,11 @@ export const llmGenerate: TaskDefinition<
     },
 };
 
-export const llmGenerateJson: TaskDefinition<
+export const llmGenerateJson: GenericTaskDefinition<
     { prompt: string; endpoint?: string },
     unknown
 > = {
-    ...taskSchema("llm.generateJson"),
+    ...genericTaskSchema("llm.generateJson"),
     sideEffects: true,
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();

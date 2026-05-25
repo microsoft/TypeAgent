@@ -15,7 +15,7 @@ import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { compileFile as compileDslFile, TaskSchemaInfo } from "workflow-dsl";
-import { allBuiltinTasks } from "workflow-engine";
+import { getBuiltinTaskSchemas } from "workflow-engine";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI = resolve(__dirname, "../cli.js");
@@ -28,11 +28,7 @@ let WORKFLOWS_BUILT: string;
 
 beforeAll(() => {
     WORKFLOWS_BUILT = mkdtempSync(join(tmpdir(), "wf-built-"));
-    const schemas: TaskSchemaInfo[] = allBuiltinTasks.map((t) => ({
-        name: t.name,
-        inputSchema: t.inputSchema,
-        outputSchema: t.outputSchema,
-    }));
+    const schemas = getBuiltinTaskSchemas() as TaskSchemaInfo[];
     for (const f of readdirSync(WORKFLOWS_DSL)) {
         if (!f.endsWith(".wf")) continue;
         // Skip library files (only consumed via cross-file import).

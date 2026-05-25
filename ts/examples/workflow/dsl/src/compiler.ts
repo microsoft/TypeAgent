@@ -117,7 +117,7 @@ export function compile(
     }
 
     // Emit
-    const emitter = new Emitter(taskSchemas);
+    const emitter = new Emitter(taskSchemas, checker.resolvedSchemas);
     const { ir, errors: emitErrors } = emitter.emitAll(
         workflows,
         entry.value.name,
@@ -269,7 +269,7 @@ export function compileFile(
         return { errors };
     }
 
-    const emitter = new Emitter(taskSchemas);
+    const emitter = new Emitter(taskSchemas, checker.resolvedSchemas);
     const { ir, errors: emitErrors } = emitter.emitAll(
         workflows,
         entry.value.name,

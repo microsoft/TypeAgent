@@ -881,7 +881,16 @@ class Printer {
                 return;
             }
             case "TaskCallExpr": {
-                this.write(`${e.task}(`);
+                this.write(`${e.task}`);
+                if (e.typeArgs && e.typeArgs.length > 0) {
+                    this.write("<");
+                    for (let i = 0; i < e.typeArgs.length; i++) {
+                        if (i > 0) this.write(", ");
+                        this.printType(e.typeArgs[i]!);
+                    }
+                    this.write(">");
+                }
+                this.write("(");
                 this.printArgs(e.args);
                 this.write(")");
                 return;

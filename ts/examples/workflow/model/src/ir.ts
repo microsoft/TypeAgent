@@ -13,6 +13,112 @@ import type { JSONSchema7 } from "json-schema";
 /** JSON Schema Draft 7 type, re-exported from @types/json-schema. */
 export type JSONSchema = JSONSchema7;
 
+// ---- Schema template type (JSON Schema extended with $typeParam markers) ----
+
+/**
+ * A reference to a type parameter, used as a placeholder in schema templates.
+ * Resolved by `resolveTypeParams()` before runtime use.
+ */
+export interface TypeParamRef {
+    $typeParam: string;
+}
+
+/** Type guard: narrows a SchemaTemplate node to a $typeParam reference. */
+export function isTypeParamRef(
+    schema: SchemaTemplate | null | undefined,
+): schema is TypeParamRef {
+    return (
+        typeof schema === "object" &&
+        schema !== null &&
+        !Array.isArray(schema) &&
+        "$typeParam" in schema &&
+        typeof schema.$typeParam === "string"
+    );
+}
+
+/**
+ * A single schema node that may be either a concrete schema definition or a
+ * type parameter reference. This is the recursive building block of
+ * {@link SchemaTemplate}.
+ *
+ * Includes `JSONSchema` in the union so that plain JSON Schema values
+ * are directly assignable without casts.
+ */
+export type SchemaTemplateNode =
+    | SchemaTemplateDefinition
+    | TypeParamRef
+    | boolean
+    | JSONSchema;
+
+/**
+ * JSON Schema extended to allow `{ "$typeParam": "T" }` markers at any
+ * sub-schema position. Used for task schema declarations that have generic
+ * type parameters.
+ *
+ * After resolution via `resolveTypeParams()`, the result is a plain
+ * {@link JSONSchema} (no markers remain).
+ *
+ * Inherits all scalar fields from `JSONSchema7` and overrides only the
+ * sub-schema-bearing fields to accept `SchemaTemplateNode`.
+ */
+
+/** Fields in JSONSchema7 that contain sub-schema references. */
+type SchemaRefKeys =
+    | "items"
+    | "additionalItems"
+    | "contains"
+    | "properties"
+    | "patternProperties"
+    | "additionalProperties"
+    | "dependencies"
+    | "propertyNames"
+    | "if"
+    | "then"
+    | "else"
+    | "allOf"
+    | "anyOf"
+    | "oneOf"
+    | "not"
+    | "definitions";
+
+export interface SchemaTemplateDefinition
+    extends Omit<JSONSchema7, SchemaRefKeys> {
+    // §6.4 - array
+    items?: SchemaTemplateNode | SchemaTemplateNode[];
+    additionalItems?: SchemaTemplateNode;
+    contains?: SchemaTemplateNode;
+
+    // §6.5 - object
+    properties?: Record<string, SchemaTemplateNode>;
+    patternProperties?: Record<string, SchemaTemplateNode>;
+    additionalProperties?: SchemaTemplateNode;
+    dependencies?: Record<string, SchemaTemplateNode | string[]>;
+    propertyNames?: SchemaTemplateNode;
+
+    // §6.6 - conditional
+    if?: SchemaTemplateNode;
+    then?: SchemaTemplateNode;
+    else?: SchemaTemplateNode;
+
+    // §6.7 - composition
+    allOf?: SchemaTemplateNode[];
+    anyOf?: SchemaTemplateNode[];
+    oneOf?: SchemaTemplateNode[];
+    not?: SchemaTemplateNode;
+
+    // §9 - definitions (legacy)
+    definitions?: Record<string, SchemaTemplateNode>;
+}
+
+/**
+ * A JSON Schema that may contain `{ "$typeParam": "T" }` markers at any
+ * nesting level. Used in task schema declarations for generic tasks.
+ *
+ * Assignable from plain JSON Schema objects (a `SchemaTemplateDefinition`
+ * is a strict superset of valid `JSONSchema7` shapes minus `boolean`).
+ */
+export type SchemaTemplate = SchemaTemplateNode;
+
 /**
  * Template: any JSON value the engine evaluates recursively.
  *

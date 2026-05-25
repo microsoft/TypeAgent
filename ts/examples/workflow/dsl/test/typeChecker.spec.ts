@@ -66,6 +66,26 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
             properties: { value: {} },
         },
     },
+    {
+        name: "test.genJson",
+        typeParameters: [{ name: "T", default: {} }],
+        inputSchema: {
+            type: "object",
+            required: ["prompt"],
+            properties: { prompt: { type: "string" } },
+        },
+        outputSchema: { $typeParam: "T" },
+    },
+    {
+        name: "test.requiredGeneric",
+        typeParameters: [{ name: "T" }],
+        inputSchema: {
+            type: "object",
+            required: ["input"],
+            properties: { input: { type: "string" } },
+        },
+        outputSchema: { $typeParam: "T" },
+    },
 ];
 
 function check(source: string): TypeError[] {
@@ -1146,6 +1166,633 @@ describe("type checker", () => {
         expectNoErrors(`
             workflow test(x: { name: string }): { name: string } {
                 return x;
+            }
+        `);
+    });
+
+    // ---- Generic type arguments ----
+
+    test("generic type arg on task allows property access", () => {
+        expectNoErrors(`
+            workflow test(): string {
+                const r = test.genJson<{ name: string }>(prompt: "x");
+                return r.name;
+            }
+        `);
+    });
+
+    test("generic type arg with array output", () => {
+        expectNoErrors(`
+            workflow test(): string[] {
+                const r = test.genJson<string[]>(prompt: "x");
+                return r;
+            }
+        `);
+    });
+
+    test("generic task without type arg uses default (unknown)", () => {
+        expectError(
+            `workflow test(): string {
+                const r = test.genJson(prompt: "x");
+                return r;
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("generic task without type arg allows unknown usage", () => {
+        expectNoErrors(`
+            workflow test(): unknown {
+                const r = test.genJson(prompt: "x");
+                return r;
+            }
+        `);
+    });
+
+    test("type arg on non-generic task errors", () => {
+        expectError(
+            `workflow test(): string {
+                const r = test.exec<string>(command: "ls");
+                return r.stdout;
+            }`,
+            "does not accept type arguments",
+        );
+    });
+
+    test("required generic type param errors when omitted", () => {
+        expectError(
+            `workflow test(): unknown {
+                const r = test.requiredGeneric(input: "x");
+                return r;
+            }`,
+            "requires a type argument",
+        );
+    });
+
+    test("required generic type param works when provided", () => {
+        expectNoErrors(`
+            workflow test(): number {
+                const r = test.requiredGeneric<number>(input: "x");
+                return r;
+            }
+        `);
+    });
+
+    test("too many type args errors", () => {
+        expectError(
+            `workflow test(): unknown {
+                const r = test.genJson<string, number>(prompt: "x");
+                return r;
+            }`,
+            "expects 1 type argument(s) but got 2",
+        );
+    });
+
+    test("generic type arg with complex object type", () => {
+        expectNoErrors(`
+            workflow test(): string[] {
+                const r = test.genJson<{ items: string[] }>(prompt: "x");
+                return r.items;
+            }
+        `);
+    });
+
+    test("generic type arg targeting nested property", () => {
+        const { tokens, errors: lexErrors } = lex(`
+            workflow test(): { value: string } {
+                const r = test.nestedGeneric<string>(prompt: "x");
+                return r;
+            }
+        `);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens);
+        const { module, errors: parseErrors } = parser.parseModule();
+        expect(parseErrors).toEqual([]);
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.nestedGeneric",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { $typeParam: "T" } },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    test("generic type arg targeting array items", () => {
+        const { tokens, errors: lexErrors } = lex(`
+            workflow test(): string[] {
+                const r = test.arrayGeneric<string>(prompt: "x");
+                return r;
+            }
+        `);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens);
+        const { module, errors: parseErrors } = parser.parseModule();
+        expect(parseErrors).toEqual([]);
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.arrayGeneric",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "array",
+                    items: { $typeParam: "T" },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    test("generic type param substituted in multiple output positions", () => {
+        const { tokens, errors: lexErrors } = lex(`
+            workflow test(): string {
+                const r = test.multiSite<string>(prompt: "x");
+                const a = r.result;
+                const b = r.echo;
+                return a;
+            }
+        `);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens);
+        const { module, errors: parseErrors } = parser.parseModule();
+        expect(parseErrors).toEqual([]);
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.multiSite",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result", "echo"],
+                    properties: {
+                        result: { $typeParam: "T" },
+                        echo: { $typeParam: "T" },
+                    },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    // ---- resolvedSchemas side map ----
+
+    test("resolvedSchemas map is populated for generic calls", () => {
+        const source = `
+            workflow test(): unknown {
+                const r = test.genJson<{ name: string }>(prompt: "x");
+                return r;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        // Should have exactly one resolved schema entry
+        expect(checker.resolvedSchemas.size).toBe(1);
+        const entry = [...checker.resolvedSchemas.values()][0];
+        expect(entry.outputSchema).toEqual({
+            type: "object",
+            required: ["name"],
+            properties: { name: { type: "string" } },
+        });
+    });
+
+    test("resolvedSchemas uses default when no type arg", () => {
+        const source = `
+            workflow test(): unknown {
+                const r = test.genJson(prompt: "x");
+                return r;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        expect(checker.resolvedSchemas.size).toBe(1);
+        const entry = [...checker.resolvedSchemas.values()][0];
+        // default for test.genJson is {} (unknown)
+        expect(entry.outputSchema).toEqual({});
+    });
+
+    test("resolvedSchemas has entry per call site", () => {
+        const source = `
+            workflow test(): unknown {
+                const a = test.genJson<string>(prompt: "x");
+                const b = test.genJson<number>(prompt: "y");
+                return a;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        expect(checker.resolvedSchemas.size).toBe(2);
+        const schemas = [...checker.resolvedSchemas.values()];
+        const outputs = schemas.map((s) => s.outputSchema);
+        expect(outputs).toContainEqual({ type: "string" });
+        expect(outputs).toContainEqual({ type: "number" });
+    });
+
+    test("resolvedSchemas not populated for non-generic tasks", () => {
+        const source = `
+            workflow test(): unknown {
+                const r = test.exec(command: "ls");
+                return r;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        checker.checkAll(module.workflows);
+        expect(checker.resolvedSchemas.size).toBe(0);
+    });
+
+    test("null literal has unknown type", () => {
+        expectNoErrors(`
+            workflow test(): unknown {
+                return null;
+            }
+        `);
+    });
+
+    test("null literal is not assignable to string", () => {
+        expectError(
+            `workflow test(): string { return null; }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("integer literal inferred as integer", () => {
+        expectNoErrors(`
+            workflow test(): integer {
+                return 42;
+            }
+        `);
+    });
+
+    test("float literal inferred as number", () => {
+        expectNoErrors(`
+            workflow test(): number {
+                return 3.14;
+            }
+        `);
+    });
+
+    test("integer is assignable to number", () => {
+        expectNoErrors(`
+            workflow test(): number {
+                return 42;
+            }
+        `);
+    });
+
+    test("number is assignable to integer", () => {
+        expectNoErrors(`
+            workflow test(): integer {
+                const x: number = 5;
+                return x;
+            }
+        `);
+    });
+
+    test("array literal infers element type from first element", () => {
+        expectNoErrors(`
+            workflow test(): string[] {
+                return ["a", "b", "c"];
+            }
+        `);
+    });
+
+    test("empty array literal has unknown element type", () => {
+        expectNoErrors(`
+            workflow test(): unknown[] {
+                return [];
+            }
+        `);
+    });
+
+    test("object literal infers field types", () => {
+        expectNoErrors(`
+            workflow test(): { name: string, count: number } {
+                return { name: "hello", count: 42 };
+            }
+        `);
+    });
+
+    test("object literal missing field is not assignable", () => {
+        expectError(
+            `workflow test(): { name: string, count: number } {
+                return { name: "hello" };
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    // ---- Additional operators ----
+
+    test("!== with same types passes", () => {
+        expectNoErrors(`
+            workflow test(a: string, b: string): boolean {
+                return a !== b;
+            }
+        `);
+    });
+
+    test("!== with mixed types errors", () => {
+        expectError(
+            `workflow test(x: number): boolean { return x !== "5"; }`,
+            "same types",
+        );
+    });
+
+    test(">= comparison", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): boolean {
+                return x >= y;
+            }
+        `);
+    });
+
+    test("<= comparison", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): boolean {
+                return x <= y;
+            }
+        `);
+    });
+
+    test("< comparison", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): boolean {
+                return x < y;
+            }
+        `);
+    });
+
+    test("modulo operator", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): number {
+                return x % y;
+            }
+        `);
+    });
+
+    test("modulo on string errors", () => {
+        expectError(
+            `workflow test(x: string): number { return x % 2; }`,
+            "must be numeric",
+        );
+    });
+
+    test("unary minus on number passes", () => {
+        expectNoErrors(`
+            workflow test(x: number): number {
+                return -x;
+            }
+        `);
+    });
+
+    test("boolean literal", () => {
+        expectNoErrors(`
+            workflow test(): boolean {
+                return true;
+            }
+        `);
+    });
+
+    // ---- Field access edge cases ----
+
+    test("field access on array type errors", () => {
+        expectError(
+            `workflow test(x: string[]): string { return x.length; }`,
+            "Cannot access property",
+        );
+    });
+
+    test("nested field access (3 segments)", () => {
+        expectNoErrors(`
+            workflow test(data: { inner: { value: string } }): string {
+                return data.inner.value;
+            }
+        `);
+    });
+
+    test("nested field access with intermediate error", () => {
+        expectError(
+            `workflow test(data: { inner: { value: string } }): string {
+                return data.inner.missing;
+            }`,
+            "does not exist",
+        );
+    });
+
+    // ---- Destructuring from array ----
+
+    test("destructuring from array assigns element type", () => {
+        expectNoErrors(`
+            workflow test(items: string[]): string {
+                const [a, b] = items;
+                return a;
+            }
+        `);
+    });
+
+    // ---- parallelMap ----
+
+    test("parallelMap returns array of body return type", () => {
+        expectNoErrors(`
+            workflow test(items: string[]): number[] {
+                return parallelMap(items, (item) => {
+                    return 42;
+                });
+            }
+        `);
+    });
+
+    test("parallelMap maxConcurrency must be numeric", () => {
+        expectError(
+            `workflow test(items: string[]): string[] {
+                return parallelMap(items, (item) => { return item; }, { maxConcurrency: "fast" });
+            }`,
+            "maxConcurrency must be numeric",
+        );
+    });
+
+    // ---- Switch statement typing ----
+
+    test("switch with numeric discriminant", () => {
+        expectNoErrors(`
+            workflow test(x: number): string {
+                switch (x) {
+                    case 1:
+                        return "one";
+                    case 2:
+                        return "two";
+                    default:
+                        return "other";
+                }
+            }
+        `);
+    });
+
+    test("switch return type inferred from first arm", () => {
+        expectNoErrors(`
+            workflow test(x: string): number {
+                switch (x) {
+                    case "a":
+                        return 1;
+                    default:
+                        return 0;
+                }
+            }
+        `);
+    });
+
+    // ---- If-else ----
+
+    test("if-else both branches type checked", () => {
+        expectNoErrors(`
+            workflow test(x: boolean): string {
+                if (x) {
+                    const r = test.template(template: "yes", vars: {});
+                    return r.text;
+                } else {
+                    return "no";
+                }
+            }
+        `);
+    });
+
+    // ---- Attempts fallback ----
+
+    test("attempts with fallback", () => {
+        expectNoErrors(`
+            workflow test(): string {
+                return attempts(3, () => {
+                    const r = test.exec(command: "echo hi");
+                    return r.stdout;
+                }, (err) => {
+                    return "fallback";
+                });
+            }
+        `);
+    });
+
+    // ---- Filter return type ----
+
+    test("filter returns same array type as input", () => {
+        expectNoErrors(`
+            workflow test(items: number[]): number[] {
+                return filter(items, (item) => {
+                    return item > 0;
+                });
+            }
+        `);
+    });
+
+    // ---- Template literal with interpolation ----
+
+    test("template literal with multiple interpolations", () => {
+        expectNoErrors(`
+            workflow test(a: string, b: number): string {
+                return \`\${a} is \${b}\`;
+            }
+        `);
+    });
+
+    // ---- Unresolved (error recovery) does not cascade ----
+
+    test("error recovery: access on unknown task does not cascade", () => {
+        // Only one error (unknown task), not additional errors from the
+        // unresolved result.
+        const errors = check(`
+            workflow test(): string {
+                const r = fake.task(x: 1);
+                return r.field;
+            }
+        `);
+        expect(errors.length).toBe(1);
+        expect(errors[0].message).toContain("Unknown task");
+    });
+
+    // ---- Multiple errors accumulate ----
+
+    test("multiple errors reported in same workflow", () => {
+        const errors = check(`
+            workflow test(x: string): number {
+                const a = x + 1;
+                const b = x * 2;
+                return "hello";
+            }
+        `);
+        // At least: arithmetic on string (x2) + return type mismatch
+        expect(errors.length).toBeGreaterThanOrEqual(3);
+    });
+
+    // ---- Const annotation overrides inferred type ----
+
+    test("const annotation narrows type for subsequent usage", () => {
+        expectNoErrors(`
+            workflow test(): string {
+                const r: { text: string } = test.template(template: "hi", vars: {});
+                return r.text;
+            }
+        `);
+    });
+
+    // ---- Task argument checking ----
+
+    test("task arguments are type-checked", () => {
+        expectNoErrors(`
+            workflow test(): { text: string } {
+                const t = "hello";
+                return test.template(template: t, vars: {});
+            }
+        `);
+    });
+
+    // ---- Break statement ----
+
+    test("break statement returns unresolved (no value)", () => {
+        expectNoErrors(`
+            workflow test(x: string): string {
+                switch (x) {
+                    case "skip":
+                        break;
+                    default:
+                        return x;
+                }
+                return "done";
             }
         `);
     });

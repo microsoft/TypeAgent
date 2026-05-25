@@ -26,6 +26,7 @@ import {
     WorkflowEvent,
     RunOptions,
     allBuiltinTasks,
+    getBuiltinTaskSchemas,
     listLength,
     listElementAt,
     listAppend,
@@ -116,11 +117,7 @@ function compileWfFile(relPath: string): WorkflowIR {
     const __dirname = dirname(fileURLToPath(import.meta.url));
     const abs = resolve(__dirname, relPath);
     const source = readFileSync(abs, "utf8");
-    const schemas: TaskSchemaInfo[] = allBuiltinTasks.map((t) => ({
-        name: t.name,
-        inputSchema: t.inputSchema,
-        outputSchema: t.outputSchema,
-    }));
+    const schemas = getBuiltinTaskSchemas() as TaskSchemaInfo[];
     const result = compileDsl(source, schemas, { validate: true });
     if (result.errors.length > 0 || !result.ir) {
         const msg = result.errors

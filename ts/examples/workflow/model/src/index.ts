@@ -3,6 +3,11 @@
 
 export {
     JSONSchema,
+    SchemaTemplate,
+    SchemaTemplateDefinition,
+    SchemaTemplateNode,
+    TypeParamRef,
+    isTypeParamRef,
     Template,
     TaskNode,
     BranchArm,
@@ -26,6 +31,10 @@ export {
     TaskContext,
     TaskConstraints,
     TaskDefinition,
+    ConcreteTaskDefinition,
+    GenericTaskDefinition,
+    isGenericTask,
+    TaskTypeParameter,
     TaskPolicyMode,
     TaskPolicy,
     ApprovalResult,
@@ -37,4 +46,6 @@ export {
     ValidationResult,
     validateWorkflowIR,
     isNeverSchema,
+    isStructuralSubtype,
+    checkStructuralSubtype,
 } from "./validate.js";

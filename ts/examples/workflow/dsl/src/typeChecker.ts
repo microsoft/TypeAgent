@@ -21,7 +21,13 @@ import {
     TaskArg,
     DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
-import { TaskSchemaInfo } from "./emitter.js";
+import { TaskSchemaInfo, isGenericSchema } from "./emitter.js";
+import {
+    ResolvedTaskSchemas,
+    resolveGenericSchemas,
+    typeExprToSchema,
+} from "./typeParamUtils.js";
+import type { JSONSchema } from "workflow-model";
 
 // ---- Type representation ----
 
@@ -89,6 +95,34 @@ const BOOLEAN: PrimitiveType = { kind: "primitive", name: "boolean" };
 const UNKNOWN: UnknownType = { kind: "unknown" };
 const NEVER: NeverType = { kind: "never" };
 const UNRESOLVED: UnresolvedType = { kind: "unresolved" };
+
+/** Convert a TypeInfo to its JSONSchema equivalent. */
+function typeInfoToSchema(ti: TypeInfo): JSONSchema {
+    switch (ti.kind) {
+        case "primitive":
+            return { type: ti.name };
+        case "object": {
+            const props: Record<string, JSONSchema> = {};
+            const req: string[] = [];
+            for (const [name, { type, optional }] of ti.fields) {
+                props[name] = typeInfoToSchema(type);
+                if (!optional) req.push(name);
+            }
+            const schema: JSONSchema = { type: "object", properties: props };
+            if (req.length > 0) schema.required = req;
+            return schema;
+        }
+        case "array":
+            return { type: "array", items: typeInfoToSchema(ti.element) };
+        case "tuple":
+            return { type: "array" };
+        case "unknown":
+        case "unresolved":
+            return {};
+        case "never":
+            return { not: {} };
+    }
+}
 
 function isNumeric(t: TypeInfo): boolean {
     return (
@@ -366,6 +400,11 @@ export class TypeChecker {
     private workflowMap: Map<string, WorkflowDecl>;
     private _propertyRefs: PropertyRef[] | null = null;
     private _symbolTypes: Map<number, TypeInfo> | null = null;
+    /**
+     * Resolved schemas for generic task calls, keyed by
+     * TaskCallExpr.loc.offset. Populated during checkAll/checkOne.
+     */
+    private _resolvedSchemas = new Map<number, ResolvedTaskSchemas>();
 
     constructor(taskSchemas: TaskSchemaInfo[], workflows: WorkflowDecl[] = []) {
         this.taskSchemaMap = new Map(taskSchemas.map((s) => [s.name, s]));
@@ -437,6 +476,7 @@ export class TypeChecker {
      */
     checkAll(workflows: WorkflowDecl[]): TypeError[] {
         this.errors = [];
+        this._resolvedSchemas = new Map();
         this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
 
         // Ambiguous shadow: same name registered as both a task and a
@@ -476,6 +516,15 @@ export class TypeChecker {
         this.checkRecursion(workflows);
 
         return this.errors;
+    }
+
+    /**
+     * Resolved schemas for generic task calls computed during the last
+     * checkAll run. Keyed by TaskCallExpr.loc.offset. The emitter can
+     * use this to avoid recomputing type-arg resolution.
+     */
+    get resolvedSchemas(): ReadonlyMap<number, ResolvedTaskSchemas> {
+        return this._resolvedSchemas;
     }
 
     /**
@@ -874,6 +923,58 @@ export class TypeChecker {
                     return UNRESOLVED;
                 }
                 this.checkArgs(e.args, scope);
+
+                if (isGenericSchema(schema)) {
+                    const params = schema.typeParameters;
+                    const numExplicit = e.typeArgs?.length ?? 0;
+
+                    if (numExplicit > params.length) {
+                        this.addError(
+                            `Task '${e.task}' expects ${params.length} type argument(s) but got ${numExplicit}`,
+                            e.loc.line,
+                            e.loc.col,
+                            e.task.length,
+                        );
+                        return UNRESOLVED;
+                    }
+
+                    // Build effective type arg list: explicit args
+                    // padded with defaults for remaining params.
+                    const argSchemas: JSONSchema[] = [];
+                    for (let i = 0; i < params.length; i++) {
+                        if (i < numExplicit) {
+                            argSchemas.push(typeExprToSchema(e.typeArgs![i]));
+                        } else if (params[i].default) {
+                            argSchemas.push(params[i].default!);
+                        } else {
+                            this.addError(
+                                `Task '${e.task}' requires a type argument <${params[i].name}>`,
+                                e.loc.line,
+                                e.loc.col,
+                                e.task.length,
+                            );
+                            return UNRESOLVED;
+                        }
+                    }
+
+                    const resolved = resolveGenericSchemas(schema, argSchemas);
+                    this._resolvedSchemas.set(e.loc.offset, resolved);
+                    return jsonSchemaToTypeInfo(
+                        resolved.outputSchema as Record<string, unknown>,
+                    );
+                }
+
+                // Concrete task: type args are invalid
+                if (e.typeArgs && e.typeArgs.length > 0) {
+                    this.addError(
+                        `Task '${e.task}' does not accept type arguments`,
+                        e.loc.line,
+                        e.loc.col,
+                        e.task.length,
+                    );
+                    return UNRESOLVED;
+                }
+
                 return jsonSchemaToTypeInfo(
                     schema.outputSchema as Record<string, unknown>,
                 );
@@ -981,15 +1082,20 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                // Store the element schema so the emitter can emit a
+                // typed list.elementAt node.
+                const elemType = bodyScope.get(e.param) ?? UNKNOWN;
+                const elemSchema = typeInfoToSchema(elemType);
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: elemSchema },
+                    outputSchema: elemSchema,
+                });
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
                     e.paramLoc.offset !== undefined
                 ) {
-                    this._symbolTypes.set(
-                        e.paramLoc.offset,
-                        bodyScope.get(e.param) ?? UNKNOWN,
-                    );
+                    this._symbolTypes.set(e.paramLoc.offset, elemType);
                 }
                 const mapReturnType = this.checkStatements(e.body, bodyScope);
                 return { kind: "array", element: mapReturnType };
@@ -1012,15 +1118,19 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                // Store the element schema for the emitter.
+                const filterElemType = bodyScope.get(e.param) ?? UNKNOWN;
+                const filterElemSchema = typeInfoToSchema(filterElemType);
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: filterElemSchema },
+                    outputSchema: filterElemSchema,
+                });
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
                     e.paramLoc.offset !== undefined
                 ) {
-                    this._symbolTypes.set(
-                        e.paramLoc.offset,
-                        bodyScope.get(e.param) ?? UNKNOWN,
-                    );
+                    this._symbolTypes.set(e.paramLoc.offset, filterElemType);
                 }
                 this.checkStatements(e.body, bodyScope);
                 return colType;
@@ -1069,15 +1179,19 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                // Store the element schema for the emitter.
+                const pmElemType = bodyScope.get(e.param) ?? UNKNOWN;
+                const pmElemSchema = typeInfoToSchema(pmElemType);
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: pmElemSchema },
+                    outputSchema: pmElemSchema,
+                });
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
                     e.paramLoc.offset !== undefined
                 ) {
-                    this._symbolTypes.set(
-                        e.paramLoc.offset,
-                        bodyScope.get(e.param) ?? UNKNOWN,
-                    );
+                    this._symbolTypes.set(e.paramLoc.offset, pmElemType);
                 }
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
                 if (e.maxConcurrency) {
