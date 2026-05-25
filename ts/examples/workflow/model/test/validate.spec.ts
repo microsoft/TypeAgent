@@ -548,6 +548,101 @@ describe("validateWorkflowIR", () => {
         expect(result.valid).toBe(true);
     });
 
+    it("detects type mismatch when producer has properties but no .type (inferred object)", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                producer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        required: ["value"],
+                        properties: { value: { type: "string" } },
+                    },
+                    inputs: {},
+                    next: "consumer",
+                    bind: "data",
+                },
+                consumer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: {
+                        type: "object",
+                        required: ["x"],
+                        properties: { x: { type: "integer" } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        x: {
+                            $from: "scope",
+                            name: "data",
+                            path: ["value"],
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "producer",
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes("type mismatch")),
+        ).toBe(true);
+    });
+
+    it("detects type mismatch when consumer has items but no .type (inferred array vs object)", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                producer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: {
+                        type: "object",
+                        required: ["data"],
+                        properties: {
+                            data: {
+                                type: "object",
+                                properties: { x: { type: "string" } },
+                            },
+                        },
+                    },
+                    inputs: {},
+                    next: "consumer",
+                    bind: "result",
+                },
+                consumer: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: {
+                        type: "object",
+                        required: ["arr"],
+                        properties: { arr: { items: { type: "string" } } },
+                    },
+                    outputSchema: { type: "object" },
+                    inputs: {
+                        arr: {
+                            $from: "scope",
+                            name: "result",
+                            path: ["data"],
+                        },
+                    },
+                    bind: "out",
+                },
+            },
+            entry: "producer",
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some(
+                (e) =>
+                    e.message.includes("object") && e.message.includes("array"),
+            ),
+        ).toBe(true);
+    });
+
     it("rejects union producer [string, null] against consumer string (null has no match)", () => {
         const ir = makeMinimalIR({
             nodes: {
@@ -4604,6 +4699,85 @@ describe("validateWorkflowIR", () => {
                 name: "afterOut",
             };
             ir.workflows[ir.entry].outputSchema = { type: "object" };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts forkMap when element schema matches body elementParam type", () => {
+            const ir = makeForkMapIR({
+                collectionSchema: {
+                    type: "array",
+                    items: { type: "string" },
+                },
+                elementParam: "item",
+                body: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["item"],
+                        properties: { item: { type: "string" } },
+                    },
+                    entry: "body_step",
+                    nodes: {
+                        body_step: makeTaskNode({ bind: "stepOut" }),
+                    },
+                    output: { $from: "scope", name: "stepOut" },
+                    outputSchema: { type: "object" },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects forkMap when element schema mismatches body elementParam type", () => {
+            const ir = makeForkMapIR({
+                collectionSchema: {
+                    type: "array",
+                    items: { type: "string" },
+                },
+                elementParam: "item",
+                body: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["item"],
+                        properties: { item: { type: "integer" } },
+                    },
+                    entry: "body_step",
+                    nodes: {
+                        body_step: makeTaskNode({ bind: "stepOut" }),
+                    },
+                    output: { $from: "scope", name: "stepOut" },
+                    outputSchema: { type: "object" },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("collection element") &&
+                        e.message.includes("body elementParam"),
+                ),
+            ).toBe(true);
+        });
+
+        it("skips element check when collectionSchema has no items", () => {
+            const ir = makeForkMapIR({
+                collectionSchema: { type: "array" },
+                elementParam: "item",
+                body: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["item"],
+                        properties: { item: { type: "integer" } },
+                    },
+                    entry: "body_step",
+                    nodes: {
+                        body_step: makeTaskNode({ bind: "stepOut" }),
+                    },
+                    output: { $from: "scope", name: "stepOut" },
+                    outputSchema: { type: "object" },
+                },
+            });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
         });

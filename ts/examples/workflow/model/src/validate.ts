@@ -1845,6 +1845,28 @@ function validateForkMapNode(
             message: `forkMap collectionSchema must be type "array".`,
         });
     }
+    // Gap 9: validate element schema against body inputSchema's elementParam.
+    const itemSchema = node.collectionSchema?.items;
+    if (
+        itemSchema &&
+        typeof itemSchema !== "boolean" &&
+        !Array.isArray(itemSchema) &&
+        node.elementParam &&
+        !isTopSchema(node.body.inputSchema)
+    ) {
+        const bodyProp =
+            node.body.inputSchema?.properties?.[node.elementParam];
+        if (bodyProp && typeof bodyProp !== "boolean") {
+            checkStructuralSubtype(
+                itemSchema,
+                bodyProp,
+                `${path}.body.inputSchema.properties.${node.elementParam}`,
+                errors,
+                "collection element",
+                "body elementParam",
+            );
+        }
+    }
     if (!(node.body.entry in node.body.nodes)) {
         errors.push({
             path: `${path}.body.entry`,
@@ -2011,13 +2033,14 @@ function checkSchemaCompat(
     }
     // Type compatibility check: if the consumer declares a type and the
     // producer declares a type, verify they overlap.
-    if (consumerType && resolved.type) {
-        if (!typeSetsOverlap(resolved.type, consumerType)) {
+    const normalizedResolved = inferSchemaType(resolved);
+    if (consumerType && normalizedResolved.type) {
+        if (!typeSetsOverlap(normalizedResolved.type, consumerType)) {
             errors.push({
                 path: errorPath,
                 message:
                     `${refDesc}: type mismatch: producer declares ` +
-                    `${JSON.stringify(resolved.type)} but consumer expects ${JSON.stringify(consumerType)}`,
+                    `${JSON.stringify(normalizedResolved.type)} but consumer expects ${JSON.stringify(consumerType)}`,
             });
         }
     }
@@ -2186,6 +2209,21 @@ function buildArraySchema(elemSchemas: JSONSchema[]): JSONSchema {
 /** True when a schema is the top type (empty object: no constraints). */
 function isTopSchema(schema: JSONSchema): boolean {
     return Object.keys(schema).length === 0;
+}
+
+/**
+ * Infer the `.type` of a schema from structural cues when `.type` is absent.
+ * Returns a new schema with `.type` added if inferable, or the original if not.
+ */
+function inferSchemaType(schema: JSONSchema): JSONSchema {
+    if (schema.type) return schema;
+    if (schema.properties || schema.required || schema.additionalProperties) {
+        return { ...schema, type: "object" };
+    }
+    if (schema.items) {
+        return { ...schema, type: "array" };
+    }
+    return schema;
 }
 
 /**
@@ -2521,6 +2559,10 @@ export function checkStructuralSubtype(
         }
         return;
     }
+
+    // Normalize type from structural cues before comparison.
+    producer = inferSchemaType(producer);
+    consumer = inferSchemaType(consumer);
 
     // Type check
     if (producer.type && consumer.type) {
