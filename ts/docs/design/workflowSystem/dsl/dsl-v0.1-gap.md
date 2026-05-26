@@ -938,9 +938,12 @@ exists in practice is an open empirical question.
   the result type in `_resolvedSchemas`; emitter threads it through
   `branch.outputSchema`, arm `scope.outputSchema`, and ternary identity
   wrappers.
-- **Q4 (exhaustive switch without `default`):** open. A `switch` without
-  `default` whose selector enum is exhaustive should be value-producing,
-  but the type checker does not track enum exhaustiveness yet.
+- **Q4 (exhaustive switch without `default`):** ✅ resolved. `TypeInfo` now
+  includes an `EnumType` variant (`kind: "enum"`, `base`, `values`).
+  `jsonSchemaToTypeInfo` parses JSON Schema `enum` arrays into `EnumType`.
+  The switch checker calls `isEnumExhaustive` — if the discriminant is an
+  `EnumType` and every enum value appears as a literal arm, the switch is
+  treated as exhaustive and value-producing even without `default`.
 
 ### G30 diagnostic set (implemented)
 

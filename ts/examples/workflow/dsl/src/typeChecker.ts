@@ -19,6 +19,7 @@ import {
     Expr,
     TypeExpr,
     TaskArg,
+    SwitchArm,
     DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
 import { TaskSchemaInfo, isGenericSchema } from "./emitter.js";
@@ -28,6 +29,7 @@ import {
     typeExprToSchema,
 } from "./typeParamUtils.js";
 import type { JSONSchema } from "workflow-model";
+import { decodeStringLiteral } from "./literal.js";
 
 // ---- Type representation ----
 
@@ -36,6 +38,7 @@ export type TypeInfo =
     | ObjectTypeInfo
     | ArrayTypeInfo
     | TupleTypeInfo
+    | EnumType
     | NeverType
     | UnknownType
     | UnresolvedType;
@@ -58,6 +61,18 @@ export interface ArrayTypeInfo {
 export interface TupleTypeInfo {
     kind: "tuple";
     elements: TypeInfo[];
+}
+
+/**
+ * A string or numeric type constrained to a finite set of literal values
+ * (corresponds to JSON Schema `{ type: "string", enum: [...] }`).
+ * Used by the switch exhaustiveness checker (Q4) to verify that a switch
+ * without `default` covers every possible discriminant value.
+ */
+export interface EnumType {
+    kind: "enum";
+    base: "string" | "number" | "integer";
+    values: readonly (string | number)[];
 }
 
 export interface UnknownType {
@@ -116,6 +131,8 @@ export function typeInfoToSchema(ti: TypeInfo): JSONSchema {
             return { type: "array", items: typeInfoToSchema(ti.element) };
         case "tuple":
             return { type: "array" };
+        case "enum":
+            return { type: ti.base, enum: ti.values as JSONSchema["enum"] };
         case "unknown":
         case "unresolved":
             return {};
@@ -136,6 +153,28 @@ function isBoolean(t: TypeInfo): boolean {
 
 function isUnresolved(t: TypeInfo): boolean {
     return t.kind === "unresolved";
+}
+
+/**
+ * Returns true when every value in `discType.values` appears as a literal
+ * arm in the switch.  Used for Q4 exhaustiveness: a switch without `default`
+ * over an enum discriminant is value-producing when it covers all values.
+ */
+function isEnumExhaustive(
+    discType: EnumType,
+    arms: SwitchArm[],
+): boolean {
+    const covered = new Set<string | number>();
+    for (const arm of arms) {
+        const e = arm.value;
+        if (e.kind === "StringLiteralExpr")
+            covered.add(decodeStringLiteral(e.raw, e.quote).value);
+        else if (e.kind === "NumberLiteralExpr") covered.add(e.value);
+        else return false; // non-literal arm — can't prove coverage
+    }
+    return (discType.values as (string | number)[]).every((v) =>
+        covered.has(v),
+    );
 }
 
 /**
@@ -162,6 +201,19 @@ function isEqualityComparable(a: TypeInfo, b: TypeInfo): boolean {
     // source=unknown not assignable to concrete.
     if (a.kind === "unknown") return true;
     if (b.kind === "unknown") return false;
+    // EnumType is comparable to its base primitive and to other enum types
+    // with the same base (the values might overlap at runtime).
+    if (a.kind === "enum") {
+        if (b.kind === "primitive")
+            return b.name === a.base || (a.base === "integer" && b.name === "number");
+        if (b.kind === "enum") return a.base === b.base;
+        return false;
+    }
+    if (b.kind === "enum") {
+        if (a.kind === "primitive")
+            return a.name === b.base || (b.base === "integer" && a.name === "number");
+        return false;
+    }
     if (a.kind !== b.kind) return false;
     if (a.kind === "primitive" && b.kind === "primitive") {
         // integer is compatible with number
@@ -186,6 +238,25 @@ function isAssignableTo(target: TypeInfo, source: TypeInfo): boolean {
     if (target.kind === "never") return false;
     if (target.kind === "unknown") return true;
     if (source.kind === "unknown") return false;
+    // EnumType: assignable to its base primitive; enum-to-enum requires same
+    // base and the source values must be a subset of the target values.
+    if (source.kind === "enum") {
+        if (target.kind === "primitive") {
+            if (source.base === "integer")
+                return target.name === "integer" || target.name === "number";
+            return target.name === source.base;
+        }
+        if (target.kind === "enum") {
+            if (source.base !== target.base) return false;
+            const tv = target.values as (string | number)[];
+            return source.values.every((v) => tv.includes(v));
+        }
+        return false;
+    }
+    if (target.kind === "enum") {
+        // A plain primitive is not narrowly assignable to an enum.
+        return false;
+    }
     if (target.kind !== source.kind) return false;
     switch (target.kind) {
         case "primitive": {
@@ -248,6 +319,8 @@ function typeName(t: TypeInfo): string {
             return `${typeName(t.element)}[]`;
         case "tuple":
             return `[${t.elements.map(typeName).join(", ")}]`;
+        case "enum":
+            return t.values.map((v) => JSON.stringify(v)).join(" | ");
         case "unknown":
             return "unknown";
         case "never":
@@ -276,6 +349,8 @@ export function formatType(t: TypeInfo): string {
             return `${formatType(t.element)}[]`;
         case "tuple":
             return `[${t.elements.map(formatType).join(", ")}]`;
+        case "enum":
+            return t.values.map((v) => JSON.stringify(v)).join(" | ");
         case "unknown":
             return "unknown";
         case "never":
@@ -354,6 +429,23 @@ function typeExprToInfo(
 
 function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
     const type = schema["type"];
+    // Check for enum constraint first — takes priority over bare primitive.
+    const enumVals = schema["enum"];
+    if (Array.isArray(enumVals) && enumVals.length > 0) {
+        if (enumVals.every((v) => typeof v === "string")) {
+            return {
+                kind: "enum",
+                base: "string",
+                values: enumVals as string[],
+            };
+        }
+        if (enumVals.every((v) => typeof v === "number")) {
+            const base = enumVals.every((v) => Number.isInteger(v as number))
+                ? "integer"
+                : "number";
+            return { kind: "enum", base, values: enumVals as number[] };
+        }
+    }
     if (type === "string") return STRING;
     if (type === "number") return NUMBER;
     if (type === "integer") return { kind: "primitive", name: "integer" };
@@ -786,21 +878,21 @@ export class TypeChecker {
                 if (thenReturns && !hasElse) {
                     this.addError(
                         `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
-                            `Add an explicit else block or use a ternary expression.`,
+                        `Add an explicit else block or use a ternary expression.`,
                         s.loc.line,
                         s.loc.col,
                     );
                 } else if (thenReturns && !elseReturns) {
                     this.addError(
                         `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
-                            `Both arms must return a value, or neither should.`,
+                        `Both arms must return a value, or neither should.`,
                         s.loc.line,
                         s.loc.col,
                     );
                 } else if (!thenReturns && elseReturns) {
                     this.addError(
                         `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
-                            `Both arms must return a value, or neither should.`,
+                        `Both arms must return a value, or neither should.`,
                         s.loc.line,
                         s.loc.col,
                     );
@@ -825,7 +917,7 @@ export class TypeChecker {
                 return thenType;
             }
             case "SwitchStatement": {
-                this.inferExpr(s.discriminant, scope);
+                const discType = this.inferExpr(s.discriminant, scope);
                 const armTypes: TypeInfo[] = [];
                 for (const arm of s.arms) {
                     this.inferExpr(arm.value, scope);
@@ -835,6 +927,15 @@ export class TypeChecker {
                 const defType: TypeInfo = s.default_
                     ? this.checkStatements(s.default_, scope.child())
                     : UNRESOLVED;
+
+                // Q4: a switch without `default` is exhaustive when its
+                // discriminant is an EnumType and every enum value appears as
+                // a literal arm.  In that case the switch is value-producing
+                // without a `default` arm.
+                const exhaustiveByEnum =
+                    !s.default_ &&
+                    discType.kind === "enum" &&
+                    isEnumExhaustive(discType, s.arms);
 
                 // G30 (symmetric with if): error when any arm returns a value
                 // but not all arms do.  Mixed arms silently drop the returning
@@ -850,16 +951,21 @@ export class TypeChecker {
                 if (anyArmReturns && !allArmsReturn) {
                     this.addError(
                         `Switch has arms that return a value but not all arms return. ` +
-                            `All arms must return a value, or none should.`,
+                        `All arms must return a value, or none should.`,
                         s.loc.line,
                         s.loc.col,
                     );
                 }
 
                 // G29 Q1+Q3: store schema when every arm returns same type.
+                // Requires either an explicit `default` arm or an exhaustive
+                // enum discriminant (Q4).
                 let resultType: TypeInfo = UNRESOLVED;
-                if (allArmsReturn && s.default_ && armTypes.length > 0) {
-                    const allTypes = [...armTypes, defType];
+                const hasDefaultCoverage = s.default_ || exhaustiveByEnum;
+                if (allArmsReturn && hasDefaultCoverage && armTypes.length > 0) {
+                    const allTypes = s.default_
+                        ? [...armTypes, defType]
+                        : armTypes;
                     resultType = allTypes[0]!;
                     for (let i = 1; i < allTypes.length; i++) {
                         if (

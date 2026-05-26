@@ -86,6 +86,24 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
         },
         outputSchema: { $typeParam: "T" },
     },
+    {
+        name: "test.classify",
+        inputSchema: {
+            type: "object",
+            required: ["text"],
+            properties: { text: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["label"],
+            properties: {
+                label: {
+                    type: "string",
+                    enum: ["low", "medium", "high"],
+                },
+            },
+        },
+    },
 ];
 
 function check(source: string): TypeError[] {
@@ -1912,6 +1930,82 @@ describe("type checker", () => {
                     case "a": return "x";
                     case "b": return "y";
                     default: return "z";
+                }
+            }
+        `);
+    });
+
+    // ---- Q4: exhaustive switch without default ----
+
+    test("Q4: exhaustive switch on enum discriminant is value-producing", () => {
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    case "high": return 3;
+                }
+            }
+        `);
+    });
+
+    test("Q4: non-exhaustive switch on enum (missing value) is not value-producing but not an error", () => {
+        // The switch covers "low" and "medium" but not "high".
+        // Q4 requires ALL enum values to be covered for value-production;
+        // since "high" is absent, the switch is not value-producing.
+        // G30 does not fire here — all *present* arms return; the missing
+        // enum value is simply an uncovered path (not a mixed-return pattern).
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                }
+            }
+        `);
+    });
+
+    test("Q4: exhaustive switch on enum with mismatched arm types errors", () => {
+        expectError(
+            `
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    case "high": return "three";
+                }
+            }
+            `,
+            "switch arms must return the same type",
+        );
+    });
+
+    test("Q4: exhaustive enum switch with explicit default is also OK", () => {
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    default: return 3;
+                }
+            }
+        `);
+    });
+
+    test("Q4: switch on plain string without default — all arms return, no error (not value-producing)", () => {
+        // Plain `string` is not an EnumType, so Q4 exhaustiveness does not
+        // apply.  All present arms return; G30 fires only on mixed-return
+        // patterns — this is not one.  No error; the switch is simply not
+        // value-producing (no _resolvedSchemas entry is stored).
+        expectNoErrors(`
+            workflow test(x: string): number {
+                switch (x) {
+                    case "a": return 1;
+                    case "b": return 2;
                 }
             }
         `);
