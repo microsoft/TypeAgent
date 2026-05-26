@@ -910,7 +910,60 @@ Value-producing `if`/`switch` is legal when:
 | Then-arm returns, else does not | `Then-arm returns a value … but the else-arm does not return.` |
 | Else-arm returns, then does not | `Else-arm returns a value … but the then-arm does not return.` |
 | Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.` |
-| Switch arms return different types | `switch arms must return the same type: 'X' vs 'Y'` |
+| Switch arms return different types | `switch arms must return the same type: arm N returns 'X' but arm 1 returns 'Y'` |
+
+### Examples
+
+**Exhaustive enum switch without `default` (Q4).** When the task output
+constrains a field with a JSON Schema `enum`, the type checker exposes
+that as an `EnumType` and treats the switch as value-producing without a
+`default`:
+
+```ts
+// test.classify returns { label: "low" | "medium" | "high" }
+workflow priority(text: string): string {
+    const c = test.classify(text: text);
+    switch (c.label) {       // enum discriminant
+        case "low":    return "L";
+        case "medium": return "M";
+        case "high":   return "H";
+    }
+}
+```
+
+**What does NOT count as exhaustive:**
+
+```ts
+// ❌ Missing enum value — `default` would be required.
+switch (c.label) {
+    case "low":    return "L";
+    case "medium": return "M";
+    // "high" is missing → switch is not exhaustive
+}
+
+// ❌ Non-literal arm — coverage cannot be proven statically.
+const target = "low";
+switch (c.label) {
+    case target:   return "L";   // variable, not literal
+    case "medium": return "M";
+    case "high":   return "H";
+}
+
+// ❌ Plain `string` discriminant — no enum constraint to exhaust.
+workflow test(x: string): string {
+    switch (x) {
+        case "a": return "A";
+        case "b": return "B";
+    }   // → not value-producing
+}
+```
+
+In each rejected case the switch is silently treated as non-value-producing
+(no error today). Attempting to bind its result downstream surfaces the
+missing schema. A future tightening may add an "expected exhaustive"
+warning surface backed by the structured `EnumExhaustivenessResult`
+returned by `isEnumExhaustive` (it distinguishes "missing value X" from
+"arm K is non-literal").
 
 ### Design examination
 

@@ -382,15 +382,16 @@ function collectCallsInNode(
                     message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
                 });
             }
-            // Bound producers must declare a concrete outputSchema (Decision 0011).
-            if (node.bind && isTopSchema(node.outputSchema)) {
-                errors.push({
-                    path: `${path}.outputSchema`,
-                    message:
-                        `Bound workflowCall "${node.bind}" (ref "${refName}") has outputSchema {} (unknown). ` +
-                        `Bound producers must declare a concrete outputSchema.`,
-                });
-            }
+            // Decision 0011: bound producer must declare concrete schema.
+            checkBoundProducerSchema(
+                node.bind,
+                node.outputSchema,
+                path,
+                "outputSchema",
+                "workflowCall",
+                `workflow: "${refName}"`,
+                errors,
+            );
             break;
         }
         case "loop":
@@ -1728,15 +1729,16 @@ function validateTaskNode(
             checkNodeTaskSchemas(taskDef, node, path, errors);
         }
     }
-    // Bound producers must declare a concrete outputSchema (Decision 0011).
-    if (node.bind && isTopSchema(node.outputSchema)) {
-        errors.push({
-            path: `${path}.outputSchema`,
-            message:
-                `Bound producer "${node.bind}" (task "${node.task}") has outputSchema {} (unknown). ` +
-                `Bound producers must declare a concrete outputSchema.`,
-        });
-    }
+    // Decision 0011: bound producer must declare concrete schema.
+    checkBoundProducerSchema(
+        node.bind,
+        node.outputSchema,
+        path,
+        "outputSchema",
+        "task",
+        `task call: "${node.task}"`,
+        errors,
+    );
     // Never-output tasks always fail: next, bind, and onError are unreachable.
     if (isNeverSchema(node.outputSchema)) {
         if (node.next) {
@@ -1808,15 +1810,19 @@ function validateBranchNode(
                 `branch publishes its value via bind.`,
         });
     }
-    // Bound producers must declare a concrete outputSchema (Decision 0011).
-    if (node.bind && node.outputSchema !== undefined && isTopSchema(node.outputSchema)) {
-        errors.push({
-            path: `${path}.outputSchema`,
-            message:
-                `Bound branch "${node.bind}" has outputSchema {} (unknown). ` +
-                `Bound producers must declare a concrete outputSchema.`,
-        });
-    }
+    // Decision 0011: bound producer must declare concrete schema.
+    // (Helper is a no-op when outputSchema is undefined; the earlier
+    // bind/outputSchema mutual-requirement check above already errors
+    // for the undefined case.)
+    checkBoundProducerSchema(
+        node.bind,
+        node.outputSchema,
+        path,
+        "outputSchema",
+        "branch",
+        undefined,
+        errors,
+    );
     // Per-arm outputSchema covariance vs branch.outputSchema.
     if (node.outputSchema !== undefined) {
         const branchOutput = node.outputSchema;
@@ -1912,15 +1918,16 @@ function validateLoopNode(
         errors,
     );
     checkBindableTargets(nodeIds, node, path, errors);
-    // Bound producers must declare a concrete outputSchema (Decision 0011).
-    if (node.bind && isTopSchema(node.body.outputSchema)) {
-        errors.push({
-            path: `${path}.body.outputSchema`,
-            message:
-                `Bound loop "${node.bind}" has body.outputSchema {} (unknown). ` +
-                `Bound producers must declare a concrete outputSchema.`,
-        });
-    }
+    // Decision 0011: bound producer must declare concrete schema.
+    checkBoundProducerSchema(
+        node.bind,
+        node.body.outputSchema,
+        path,
+        "body.outputSchema",
+        "loop",
+        undefined,
+        errors,
+    );
 }
 
 function validateForkNode(
@@ -1958,15 +1965,16 @@ function validateForkNode(
         errors,
     );
     checkBindableTargets(nodeIds, node, path, errors);
-    // Bound producers must declare a concrete outputSchema (Decision 0011).
-    if (node.bind && isTopSchema(node.outputSchema)) {
-        errors.push({
-            path: `${path}.outputSchema`,
-            message:
-                `Bound fork "${node.bind}" has outputSchema {} (unknown). ` +
-                `Bound producers must declare a concrete outputSchema.`,
-        });
-    }
+    // Decision 0011: bound producer must declare concrete schema.
+    checkBoundProducerSchema(
+        node.bind,
+        node.outputSchema,
+        path,
+        "outputSchema",
+        "fork",
+        undefined,
+        errors,
+    );
 }
 
 function validateForkMapNode(
@@ -1989,7 +1997,7 @@ function validateForkMapNode(
         typeof itemSchema !== "boolean" &&
         !Array.isArray(itemSchema) &&
         node.elementParam &&
-        !isTopSchema(node.body.inputSchema)
+        !isEmptySchema(node.body.inputSchema)
     ) {
         const bodyProp = node.body.inputSchema?.properties?.[node.elementParam];
         if (bodyProp && typeof bodyProp !== "boolean") {
@@ -2032,15 +2040,16 @@ function validateForkMapNode(
         errors,
     );
     checkBindableTargets(nodeIds, node, path, errors);
-    // Bound producers must declare a concrete outputSchema (Decision 0011).
-    if (node.bind && isTopSchema(node.outputSchema)) {
-        errors.push({
-            path: `${path}.outputSchema`,
-            message:
-                `Bound forkMap "${node.bind}" has outputSchema {} (unknown). ` +
-                `Bound producers must declare a concrete outputSchema.`,
-        });
-    }
+    // Decision 0011: bound producer must declare concrete schema.
+    checkBoundProducerSchema(
+        node.bind,
+        node.outputSchema,
+        path,
+        "outputSchema",
+        "forkMap",
+        undefined,
+        errors,
+    );
 }
 
 /**
@@ -2376,14 +2385,73 @@ function buildArraySchema(elemSchemas: JSONSchema[]): JSONSchema {
         : { type: "array" };
 }
 
-/** True when a schema is the top type (empty object: no constraints). */
-function isTopSchema(schema: JSONSchema): boolean {
+/**
+ * Returns true when a schema is `{}` (empty object: no constraints).
+ *
+ * In JSON Schema, `{}` is the **top type** — it accepts every value —
+ * which the DSL/IR uses as the "unknown" sentinel for schema-less
+ * positions (cf. Decision 0011: bound producers must declare a concrete
+ * outputSchema, so `{}` in a bound slot is a hard error).
+ */
+function isEmptySchema(schema: JSONSchema): boolean {
     return Object.keys(schema).length === 0;
+}
+
+/**
+ * Decision 0011 enforcement: a node that publishes its result via
+ * `bind` must declare a concrete `outputSchema`. An empty `{}` schema
+ * is the "unknown" sentinel and is rejected at every bound producer
+ * site (task, branch, loop body, fork, forkMap, workflowCall).
+ *
+ * Centralised so all six sites share one diagnostic format:
+ *   `Bound <kind> "<bind>" [<context>] has <field> {} (unknown). ...`
+ *
+ * @param bind          The `node.bind` (skip when undefined).
+ * @param schema        The schema to inspect (skip when undefined or
+ *                      non-empty).
+ * @param path          Validation path prefix (e.g., `workflows.main.nodes.x`).
+ * @param schemaField   Dotted suffix appended to `path` for the error
+ *                      and used in the message body (typically
+ *                      `"outputSchema"`, or `"body.outputSchema"` for
+ *                      loop/forkMap).
+ * @param nodeKind      The IR node kind for the message
+ *                      (`"task" | "branch" | "loop" | "fork" |
+ *                      "forkMap" | "workflowCall"`).
+ * @param context       Optional contextual info appended in parens
+ *                      (e.g., `task call: "text.summarize"`).
+ */
+function checkBoundProducerSchema(
+    bind: string | undefined,
+    schema: JSONSchema | undefined,
+    path: string,
+    schemaField: string,
+    nodeKind: string,
+    context: string | undefined,
+    errors: ValidationError[],
+): void {
+    if (bind === undefined) return;
+    if (schema === undefined) return;
+    if (!isEmptySchema(schema)) return;
+    const suffix = context ? ` (${context})` : "";
+    errors.push({
+        path: `${path}.${schemaField}`,
+        message:
+            `Bound ${nodeKind} "${bind}"${suffix} has ${schemaField} {} (unknown). ` +
+            `Bound producers must declare a concrete outputSchema.`,
+    });
 }
 
 /**
  * Infer the `.type` of a schema from structural cues when `.type` is absent.
  * Returns a new schema with `.type` added if inferable, or the original if not.
+ *
+ * Note: only object (via `properties`/`required`/`additionalProperties`)
+ * and array (via `items`) are inferred. Primitive validation keywords
+ * (`minLength`, `minimum`, `pattern`, etc.) are intentionally NOT used
+ * to infer type — they are ambiguous (e.g., `minLength` could apply to
+ * strings or arrays in legacy JSON Schema) and inferring here would
+ * mask malformed schemas that omit `type` by accident. Authors that
+ * want primitive constraints must spell `type` explicitly.
  */
 function inferSchemaType(schema: JSONSchema): JSONSchema {
     if (schema.type) return schema;
@@ -2613,8 +2681,8 @@ export function checkStructuralSubtype(
     producerLabel: string = "Producer",
     consumerLabel: string = "consumer",
 ): void {
-    if (isTopSchema(consumer)) return;
-    if (isTopSchema(producer) && !isTopSchema(consumer)) {
+    if (isEmptySchema(consumer)) return;
+    if (isEmptySchema(producer) && !isEmptySchema(consumer)) {
         // Producer is unconstrained; can't prove it's a subtype of
         // a constrained consumer. Be lenient: skip.
         return;
@@ -3012,7 +3080,7 @@ function validateTypeCompatibility(
                         });
                     }
                 }
-                if (!isTopSchema(node.selectorSchema)) {
+                if (!isEmptySchema(node.selectorSchema)) {
                     checkStructuralSubtype(
                         selectorType,
                         node.selectorSchema,
@@ -3135,7 +3203,7 @@ function validateTypeCompatibility(
                         );
                         if (
                             outputResolved &&
-                            !isTopSchema(node.body.outputSchema)
+                            !isEmptySchema(node.body.outputSchema)
                         ) {
                             checkStructuralSubtype(
                                 outputResolved,
@@ -3210,7 +3278,7 @@ function validateTypeCompatibility(
     // Check scope output template type vs outputSchema
     if (outputTemplate && outputSchema && outputPrefix) {
         const outputResolved = resolveTemplateType(outputTemplate, ctx);
-        if (outputResolved && !isTopSchema(outputSchema)) {
+        if (outputResolved && !isEmptySchema(outputSchema)) {
             checkStructuralSubtype(
                 outputResolved,
                 outputSchema,
@@ -3256,7 +3324,7 @@ function checkPhiMergeTypes(
             if (
                 !consumerPropDef ||
                 typeof consumerPropDef === "boolean" ||
-                isTopSchema(consumerPropDef)
+                isEmptySchema(consumerPropDef)
             ) {
                 continue;
             }
@@ -3371,7 +3439,7 @@ function checkExtraProperties(
     verb: string,
     errors: ValidationError[],
 ): void {
-    if (isTopSchema(defSchema)) return;
+    if (isEmptySchema(defSchema)) return;
     const defProps = defSchema.properties ?? {};
     const implProps = implSchema.properties ?? {};
     for (const propName of Object.keys(implProps)) {

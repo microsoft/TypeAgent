@@ -2260,3 +2260,136 @@ describe("isEnumExhaustive: non-literal arm punt", () => {
         `);
     });
 });
+
+describe("switch arm type-mismatch diagnostics", () => {
+    test("error names the disagreeing arm by index", () => {
+        // The diagnostic should pin the arm position so the author
+        // doesn't have to count manually in a 5-arm switch.
+        expectError(
+            `
+            workflow test(text: string): string {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return "L";
+                    case "medium": return 2;
+                    case "high": return "H";
+                    default: return "X";
+                }
+            }
+            `,
+            "arm 2",
+        );
+    });
+
+    test("error names the default arm when default disagrees", () => {
+        expectError(
+            `
+            workflow test(text: string): string {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return "L";
+                    case "medium": return "M";
+                    case "high": return "H";
+                    default: return 42;
+                }
+            }
+            `,
+            "default arm",
+        );
+    });
+});
+
+describe("exhaustive enum switch with explicit default (characterization)", () => {
+    test("redundant default on exhaustive enum is currently allowed (no warning)", () => {
+        // Author covers every enum value AND writes a default. Today this
+        // is silently allowed — the default arm is simply unreachable at
+        // runtime. We pin the behavior so any future tightening (e.g.,
+        // an "unreachable default arm" warning) is an intentional change.
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    case "high": return 3;
+                    default: return 0;
+                }
+            }
+        `);
+    });
+});
+
+describe("TypeChecker.diagnoseMalformedEnums", () => {
+    test("flags empty enum arrays", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.empty",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: { v: { type: "string", enum: [] } },
+                },
+            },
+        ]);
+        expect(warnings).toEqual([
+            { taskName: "t.empty", path: "outputSchema.v", reason: "empty" },
+        ]);
+    });
+
+    test("flags mixed-type enum arrays", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.mixed",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: { v: { enum: ["a", 1] } },
+                },
+            },
+        ]);
+        expect(warnings).toEqual([
+            { taskName: "t.mixed", path: "outputSchema.v", reason: "mixed" },
+        ]);
+    });
+
+    test("walks nested object and array shapes", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.nested",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        a: {
+                            type: "array",
+                            items: { type: "string", enum: [] },
+                        },
+                    },
+                },
+                outputSchema: { type: "object" },
+            },
+        ]);
+        expect(warnings).toEqual([
+            {
+                taskName: "t.nested",
+                path: "inputSchema.a[]",
+                reason: "empty",
+            },
+        ]);
+    });
+
+    test("returns empty list when all enums are well-formed", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.ok",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: {
+                        v: { type: "string", enum: ["a", "b"] },
+                    },
+                },
+            },
+        ]);
+        expect(warnings).toEqual([]);
+    });
+});

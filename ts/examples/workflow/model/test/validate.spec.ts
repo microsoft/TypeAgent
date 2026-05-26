@@ -7777,6 +7777,34 @@ describe("validateWorkflowIR", () => {
     // that can carry `bind` + `outputSchema`.
 
     describe("Decision 0011: bound `{}` producer rejection", () => {
+        // Matches the canonical message shape emitted by
+        // checkBoundProducerSchema:
+        //   Bound <kind> "<bind>" [...] has <field> {} (unknown). ...
+        // The regex is intentionally loose on the parenthesized context so
+        // that contextual additions (task name, workflow ref) do not break
+        // tests; semantic substructure ("Bound <kind> ... <field> ...")
+        // is still checked.
+        const boundEmptyMessage = (
+            kind: string,
+            bind: string,
+            field: string = "outputSchema",
+        ): RegExp =>
+            new RegExp(
+                `Bound ${kind} "${bind}".* has ${field.replace(
+                    /\./g,
+                    "\\.",
+                )} \\{\\} \\(unknown\\)`,
+            );
+        const expectBoundEmptyError = (
+            result: { errors: { message: string }[] },
+            kind: string,
+            bind: string,
+            field: string = "outputSchema",
+        ): void => {
+            const re = boundEmptyMessage(kind, bind, field);
+            expect(result.errors.some((e) => re.test(e.message))).toBe(true);
+        };
+
         it("rejects bound task with outputSchema {}", () => {
             const ir = makeMinimalIR({
                 nodes: {
@@ -7788,14 +7816,7 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some(
-                    (e) =>
-                        e.message.includes("Bound producer") &&
-                        e.message.includes("out") &&
-                        e.message.includes("outputSchema {}"),
-                ),
-            ).toBe(true);
+            expectBoundEmptyError(result, "task", "out");
         });
 
         it("rejects bound branch with outputSchema {}", () => {
@@ -7817,14 +7838,7 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some(
-                    (e) =>
-                        e.message.includes("Bound branch") &&
-                        e.message.includes("out") &&
-                        e.message.includes("outputSchema {}"),
-                ),
-            ).toBe(true);
+            expectBoundEmptyError(result, "branch", "out");
         });
 
         it("rejects bound loop with body.outputSchema {}", () => {
@@ -7839,14 +7853,7 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some(
-                    (e) =>
-                        e.message.includes("Bound loop") &&
-                        e.message.includes("out") &&
-                        e.message.includes("body.outputSchema {}"),
-                ),
-            ).toBe(true);
+            expectBoundEmptyError(result, "loop", "out", "body.outputSchema");
         });
 
         it("rejects bound fork with outputSchema {}", () => {
@@ -7888,14 +7895,7 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some(
-                    (e) =>
-                        e.message.includes("Bound fork") &&
-                        e.message.includes("out") &&
-                        e.message.includes("outputSchema {}"),
-                ),
-            ).toBe(true);
+            expectBoundEmptyError(result, "fork", "out");
         });
 
         it("rejects bound forkMap with outputSchema {}", () => {
@@ -7933,14 +7933,7 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some(
-                    (e) =>
-                        e.message.includes("Bound forkMap") &&
-                        e.message.includes("out") &&
-                        e.message.includes("outputSchema {}"),
-                ),
-            ).toBe(true);
+            expectBoundEmptyError(result, "forkMap", "out");
         });
 
         it("rejects bound workflowCall with outputSchema {}", () => {
@@ -7978,14 +7971,7 @@ describe("validateWorkflowIR", () => {
             };
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            expect(
-                result.errors.some(
-                    (e) =>
-                        e.message.includes("Bound workflowCall") &&
-                        e.message.includes("result") &&
-                        e.message.includes("outputSchema {}"),
-                ),
-            ).toBe(true);
+            expectBoundEmptyError(result, "workflowCall", "result");
         });
 
         it("accepts unbound task with outputSchema {} (no bind → no enforcement)", () => {
@@ -8005,11 +7991,9 @@ describe("validateWorkflowIR", () => {
                 output: { $from: "scope", name: "out" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            // Should not produce any "Bound producer" error.
+            // Should not produce any "Bound …" rejection.
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("Bound producer"),
-                ),
+                result.errors.some((e) => /^Bound \w+/.test(e.message)),
             ).toBe(false);
         });
     });

@@ -160,21 +160,49 @@ function isUnresolved(t: TypeInfo): boolean {
  * arm in the switch.  Used for Q4 exhaustiveness: a switch without `default`
  * over an enum discriminant is value-producing when it covers all values.
  */
+/**
+ * Result of `isEnumExhaustive`. When `exhaustive` is false, exactly one
+ * "why" field is populated (mutually exclusive) so the caller can build
+ * an actionable diagnostic:
+ *
+ *   - `missingValues` — enum values the switch did not cover via a
+ *     literal arm (all arms were literals; the set is just incomplete).
+ *   - `nonLiteralArmIndex` — index (into `arms`) of the first arm whose
+ *     `value` is not a string/number literal; coverage cannot be proven
+ *     statically when an arm references a variable or expression.
+ */
+export type EnumExhaustivenessResult =
+    | { exhaustive: true }
+    | { exhaustive: false; missingValues: readonly (string | number)[] }
+    | { exhaustive: false; nonLiteralArmIndex: number };
+
+/**
+ * Returns whether `arms` exhaustively cover every value in `discType`.
+ * Used for Q4 exhaustiveness: a switch without `default` over an enum
+ * discriminant is value-producing when it covers all values.
+ *
+ * Returns a structured result so the caller can produce a specific
+ * diagnostic (missing values vs. non-literal arm punt) rather than a
+ * generic "not exhaustive" message.
+ */
 function isEnumExhaustive(
     discType: EnumType,
     arms: SwitchArm[],
-): boolean {
+): EnumExhaustivenessResult {
     const covered = new Set<string | number>();
-    for (const arm of arms) {
-        const e = arm.value;
-        if (e.kind === "StringLiteralExpr")
+    for (let i = 0; i < arms.length; i++) {
+        const e = arms[i]!.value;
+        if (e.kind === "StringLiteralExpr") {
             covered.add(decodeStringLiteral(e.raw, e.quote).value);
-        else if (e.kind === "NumberLiteralExpr") covered.add(e.value);
-        else return false; // non-literal arm — can't prove coverage
+        } else if (e.kind === "NumberLiteralExpr") {
+            covered.add(e.value);
+        } else {
+            return { exhaustive: false, nonLiteralArmIndex: i };
+        }
     }
-    return (discType.values as (string | number)[]).every((v) =>
-        covered.has(v),
-    );
+    const missing = discType.values.filter((v) => !covered.has(v));
+    if (missing.length === 0) return { exhaustive: true };
+    return { exhaustive: false, missingValues: missing };
 }
 
 /**
@@ -248,8 +276,7 @@ function isAssignableTo(target: TypeInfo, source: TypeInfo): boolean {
         }
         if (target.kind === "enum") {
             if (source.base !== target.base) return false;
-            const tv = target.values as (string | number)[];
-            return source.values.every((v) => tv.includes(v));
+            return source.values.every((v) => target.values.includes(v));
         }
         return false;
     }
@@ -427,24 +454,62 @@ function typeExprToInfo(
 
 // ---- Converter: JSON Schema -> TypeInfo ----
 
+/**
+ * Classify a JSON Schema `enum` array. Used to keep `jsonSchemaToTypeInfo`
+ * focused on type construction and to centralise the "what counts as a
+ * well-formed enum" decision in one place.
+ *
+ * Cases:
+ *   - `{ kind: "string", values }`     — all strings (→ EnumType base "string")
+ *   - `{ kind: "number", base, values }` — all numbers; `base` is
+ *     `"integer"` iff every value passes `Number.isInteger`, else `"number"`
+ *   - `{ kind: "empty" }`              — `enum: []` (no constraint; falls
+ *     through to the bare `type` keyword if any)
+ *   - `{ kind: "mixed" }`              — heterogeneous values (e.g.,
+ *     `["a", 1]`).  Malformed by JSON Schema convention; we deliberately
+ *     do NOT construct an `EnumType` here and fall through to `UNKNOWN`.
+ *     A future surface (warning channel) can use this signal to flag the
+ *     schema; today the silent fallback is the policy.
+ */
+type EnumClassification =
+    | { kind: "empty" }
+    | { kind: "mixed" }
+    | { kind: "string"; values: string[] }
+    | { kind: "number"; base: "integer" | "number"; values: number[] };
+
+function classifyEnumValues(values: unknown[]): EnumClassification {
+    if (values.length === 0) return { kind: "empty" };
+    if (values.every((v) => typeof v === "string")) {
+        return { kind: "string", values: values as string[] };
+    }
+    if (values.every((v) => typeof v === "number")) {
+        const allIntegers = values.every((v) =>
+            Number.isInteger(v as number),
+        );
+        return {
+            kind: "number",
+            base: allIntegers ? "integer" : "number",
+            values: values as number[],
+        };
+    }
+    return { kind: "mixed" };
+}
+
 function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
     const type = schema["type"];
-    // Check for enum constraint first — takes priority over bare primitive.
+    // Enum constraint takes priority over the bare primitive type.
+    // Malformed enums (empty or mixed-type) fall through to the bare
+    // type; see `classifyEnumValues` for the policy.
     const enumVals = schema["enum"];
-    if (Array.isArray(enumVals) && enumVals.length > 0) {
-        if (enumVals.every((v) => typeof v === "string")) {
-            return {
-                kind: "enum",
-                base: "string",
-                values: enumVals as string[],
-            };
+    if (Array.isArray(enumVals)) {
+        const cls = classifyEnumValues(enumVals);
+        if (cls.kind === "string") {
+            return { kind: "enum", base: "string", values: cls.values };
         }
-        if (enumVals.every((v) => typeof v === "number")) {
-            const base = enumVals.every((v) => Number.isInteger(v as number))
-                ? "integer"
-                : "number";
-            return { kind: "enum", base, values: enumVals as number[] };
+        if (cls.kind === "number") {
+            return { kind: "enum", base: cls.base, values: cls.values };
         }
+        // `empty` and `mixed` deliberately fall through.
     }
     if (type === "string") return STRING;
     if (type === "number") return NUMBER;
@@ -501,6 +566,63 @@ export class TypeChecker {
     constructor(taskSchemas: TaskSchemaInfo[], workflows: WorkflowDecl[] = []) {
         this.taskSchemaMap = new Map(taskSchemas.map((s) => [s.name, s]));
         this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
+    }
+
+    /**
+     * Diagnose malformed `enum` declarations in a set of task schemas.
+     *
+     * Returns one warning per offending field. Walks input + output
+     * schemas (and nested object properties / array items) and flags
+     * enums classified as `empty` (`enum: []`) or `mixed`
+     * (heterogeneous value types like `["a", 1]`).
+     *
+     * The type checker treats malformed enums as `UNKNOWN` and continues
+     * silently (see `classifyEnumValues`); callers that want to surface
+     * these to the schema author should invoke this and emit warnings
+     * out-of-band (the checker has no AST location for task-schema
+     * fields, so they cannot be raised through the normal error
+     * channel).
+     */
+    static diagnoseMalformedEnums(
+        taskSchemas: TaskSchemaInfo[],
+    ): { taskName: string; path: string; reason: "empty" | "mixed" }[] {
+        const out: { taskName: string; path: string; reason: "empty" | "mixed" }[] = [];
+        const walk = (
+            schema: unknown,
+            taskName: string,
+            path: string,
+        ): void => {
+            if (
+                schema === null ||
+                typeof schema !== "object" ||
+                Array.isArray(schema)
+            )
+                return;
+            const s = schema as Record<string, unknown>;
+            const enumVals = s["enum"];
+            if (Array.isArray(enumVals)) {
+                const cls = classifyEnumValues(enumVals);
+                if (cls.kind === "empty")
+                    out.push({ taskName, path, reason: "empty" });
+                if (cls.kind === "mixed")
+                    out.push({ taskName, path, reason: "mixed" });
+            }
+            const props = s["properties"];
+            if (props && typeof props === "object") {
+                for (const [k, v] of Object.entries(
+                    props as Record<string, unknown>,
+                )) {
+                    walk(v, taskName, `${path}.${k}`);
+                }
+            }
+            const items = s["items"];
+            if (items) walk(items, taskName, `${path}[]`);
+        };
+        for (const t of taskSchemas) {
+            walk(t.inputSchema, t.name, "inputSchema");
+            walk(t.outputSchema, t.name, "outputSchema");
+        }
+        return out;
     }
 
     /**
@@ -747,6 +869,46 @@ export class TypeChecker {
         this.errors.push({ message: msg, line, col, length });
     }
 
+    /**
+     * G30: report asymmetric return across `if`/`else` arms.
+     *
+     * Centralised so all three cases (then-only, then-but-not-else,
+     * else-but-not-then) share a single phrasing template; the message
+     * always names the offending arm and the suggested fix.
+     */
+    private reportIfReturnAsymmetry(
+        thenType: TypeInfo,
+        elseType: TypeInfo,
+        thenReturns: boolean,
+        elseReturns: boolean,
+        hasElse: boolean,
+        line: number,
+        col: number,
+    ): void {
+        if (thenReturns && !hasElse) {
+            this.addError(
+                `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
+                    `Add an explicit else block or use a ternary expression.`,
+                line,
+                col,
+            );
+        } else if (thenReturns && !elseReturns) {
+            this.addError(
+                `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
+                    `Both arms must return a value, or neither should.`,
+                line,
+                col,
+            );
+        } else if (!thenReturns && elseReturns) {
+            this.addError(
+                `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
+                    `Both arms must return a value, or neither should.`,
+                line,
+                col,
+            );
+        }
+    }
+
     private resolveTypeExpr(te: TypeExpr): TypeInfo {
         return typeExprToInfo(te, (unknownType) => {
             this.addError(
@@ -875,28 +1037,15 @@ export class TypeChecker {
                 const hasElse = !!(s.else_ && s.else_.length > 0);
                 const thenReturns = thenType.kind !== "unresolved";
                 const elseReturns = elseType.kind !== "unresolved";
-                if (thenReturns && !hasElse) {
-                    this.addError(
-                        `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
-                        `Add an explicit else block or use a ternary expression.`,
-                        s.loc.line,
-                        s.loc.col,
-                    );
-                } else if (thenReturns && !elseReturns) {
-                    this.addError(
-                        `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
-                        `Both arms must return a value, or neither should.`,
-                        s.loc.line,
-                        s.loc.col,
-                    );
-                } else if (!thenReturns && elseReturns) {
-                    this.addError(
-                        `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
-                        `Both arms must return a value, or neither should.`,
-                        s.loc.line,
-                        s.loc.col,
-                    );
-                }
+                this.reportIfReturnAsymmetry(
+                    thenType,
+                    elseType,
+                    thenReturns,
+                    elseReturns,
+                    hasElse,
+                    s.loc.line,
+                    s.loc.col,
+                );
                 // G29 Q1+Q3: store schema when both arms return same type.
                 if (thenReturns && elseReturns) {
                     if (
@@ -932,10 +1081,20 @@ export class TypeChecker {
                 // discriminant is an EnumType and every enum value appears as
                 // a literal arm.  In that case the switch is value-producing
                 // without a `default` arm.
-                const exhaustiveByEnum =
-                    !s.default_ &&
-                    discType.kind === "enum" &&
-                    isEnumExhaustive(discType, s.arms);
+                let exhaustiveByEnum = false;
+                if (!s.default_ && discType.kind === "enum") {
+                    const r = isEnumExhaustive(discType, s.arms);
+                    exhaustiveByEnum = r.exhaustive;
+                    // We intentionally do NOT raise an error for
+                    // non-exhaustive enum switches without `default` — the
+                    // switch simply isn't value-producing.  Authors that
+                    // intend exhaustiveness will discover the issue when
+                    // they try to bind the switch's result (the missing
+                    // schema produces a downstream error).  The structured
+                    // result is reserved for future tightening (e.g., a
+                    // warning surface or a stricter "expected exhaustive"
+                    // flag on the switch syntax).
+                }
 
                 // G30 (symmetric with if): error when any arm returns a value
                 // but not all arms do.  Mixed arms silently drop the returning
@@ -972,8 +1131,14 @@ export class TypeChecker {
                             !isAssignableTo(resultType, allTypes[i]!) ||
                             !isAssignableTo(allTypes[i]!, resultType)
                         ) {
+                            // #11: identify which arm disagrees with arm 0
+                            // (or the default).  Arms are 1-indexed in
+                            // diagnostics for author convenience.
+                            const otherLabel = s.default_ && i === allTypes.length - 1
+                                ? "default arm"
+                                : `arm ${i + 1}`;
                             this.addError(
-                                `switch arms must return the same type: '${typeName(resultType)}' vs '${typeName(allTypes[i]!)}'`,
+                                `switch arms must return the same type: ${otherLabel} returns '${typeName(allTypes[i]!)}' but arm 1 returns '${typeName(resultType)}'`,
                                 s.loc.line,
                                 s.loc.col,
                             );
