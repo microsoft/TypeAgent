@@ -772,23 +772,113 @@ export class TypeChecker {
                     );
                 }
                 const thenType = this.checkStatements(s.then, scope.child());
-                if (s.else_) {
-                    this.checkStatements(s.else_, scope.child());
+                const elseType: TypeInfo = s.else_
+                    ? this.checkStatements(s.else_, scope.child())
+                    : UNRESOLVED;
+
+                // G29: value-producing if/else enforcement.
+                const isValueProducing =
+                    thenType.kind !== "unresolved" ||
+                    elseType.kind !== "unresolved";
+                let resultType: TypeInfo = UNRESOLVED;
+                if (isValueProducing) {
+                    if (thenType.kind === "unresolved") {
+                        this.addError(
+                            `Value-producing if/else: then arm must return a value`,
+                            s.loc.line,
+                            s.loc.col,
+                        );
+                    } else if (!s.else_ || elseType.kind === "unresolved") {
+                        this.addError(
+                            `Value-producing if/else: else arm must also return a value`,
+                            s.loc.line,
+                            s.loc.col,
+                        );
+                    } else if (
+                        !isAssignableTo(thenType, elseType) ||
+                        !isAssignableTo(elseType, thenType)
+                    ) {
+                        this.addError(
+                            `if/else arms must return the same type: '${typeName(thenType)}' vs '${typeName(elseType)}'`,
+                            s.loc.line,
+                            s.loc.col,
+                        );
+                        resultType = thenType;
+                    } else {
+                        resultType = thenType;
+                    }
+                    // G29 Q3: store result type for emitter.
+                    this._resolvedSchemas.set(s.loc.offset, {
+                        inputSchema: {},
+                        outputSchema: typeInfoToSchema(resultType),
+                    });
                 }
-                return thenType;
+                return resultType;
             }
             case "SwitchStatement": {
                 this.inferExpr(s.discriminant, scope);
-                let retType: TypeInfo = UNRESOLVED;
+                const armTypes: TypeInfo[] = [];
                 for (const arm of s.arms) {
                     this.inferExpr(arm.value, scope);
                     const t = this.checkStatements(arm.body, scope.child());
-                    if (retType.kind === "unresolved") retType = t;
+                    armTypes.push(t);
                 }
-                if (s.default_) {
-                    this.checkStatements(s.default_, scope.child());
+                const defType: TypeInfo = s.default_
+                    ? this.checkStatements(s.default_, scope.child())
+                    : UNRESOLVED;
+
+                // G29: value-producing switch enforcement.
+                const allTypes: TypeInfo[] = [
+                    ...armTypes,
+                    ...(s.default_ ? [defType] : []),
+                ];
+                const isValueProducing = allTypes.some(
+                    (t) => t.kind !== "unresolved",
+                );
+                let resultType: TypeInfo = UNRESOLVED;
+                if (isValueProducing) {
+                    const missingArmReturn = armTypes.some(
+                        (t) => t.kind === "unresolved",
+                    );
+                    const missingDefault = !s.default_;
+                    const missingDefaultReturn =
+                        s.default_ && defType.kind === "unresolved";
+                    if (
+                        missingArmReturn ||
+                        missingDefault ||
+                        missingDefaultReturn
+                    ) {
+                        this.addError(
+                            `Value-producing switch: all arms including default must return a value`,
+                            s.loc.line,
+                            s.loc.col,
+                        );
+                    } else {
+                        const returning = allTypes.filter(
+                            (t) => t.kind !== "unresolved",
+                        );
+                        resultType = returning[0]!;
+                        for (let i = 1; i < returning.length; i++) {
+                            if (
+                                !isAssignableTo(resultType, returning[i]!) ||
+                                !isAssignableTo(returning[i]!, resultType)
+                            ) {
+                                this.addError(
+                                    `switch arms must return the same type: '${typeName(resultType)}' vs '${typeName(returning[i]!)}'`,
+                                    s.loc.line,
+                                    s.loc.col,
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    // G29 Q3: store result type for emitter.
+                    this._resolvedSchemas.set(s.loc.offset, {
+                        inputSchema: {},
+                        outputSchema: typeInfoToSchema(resultType),
+                    });
                 }
-                return retType;
+                return resultType;
             }
             case "ThrowStatement":
                 this.inferExpr(s.value, scope);
@@ -1026,6 +1116,11 @@ export class TypeChecker {
                         e.loc.col,
                     );
                 }
+                // G29 Q3: store result type for emitter.
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: {},
+                    outputSchema: typeInfoToSchema(consType),
+                });
                 return consType;
             }
             case "AttemptsNode": {

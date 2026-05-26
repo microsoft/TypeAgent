@@ -528,6 +528,10 @@ export class Emitter {
         // Emit condition - may produce a node
         const condTemplate = this.emitExpr(stmt.condition, scope);
 
+        // G29 Q3: read result type stored by type checker.
+        const ifResolved = this.resolvedSchemas.get(stmt.loc.offset);
+        const resultSchema: JSONSchema = ifResolved?.outputSchema ?? {};
+
         const branchId = this.freshId("branch");
         const mergeId = this.freshId("merge");
 
@@ -570,10 +574,10 @@ export class Emitter {
                       resultBind !== undefined
                           ? (thenOutput ?? null)
                           : undefined,
-                      resultBind !== undefined ? {} : undefined,
+                      resultBind !== undefined ? resultSchema : undefined,
                   )
                 : resultBind !== undefined && thenOutput !== undefined
-                  ? this.buildOutputOnlyArm(thenScope, thenOutput)
+                  ? this.buildOutputOnlyArm(thenScope, thenOutput, resultSchema)
                   : this.makeNoopArm();
 
         const falseArm =
@@ -583,12 +587,12 @@ export class Emitter {
                       resultBind !== undefined
                           ? (elseOutput ?? null)
                           : undefined,
-                      resultBind !== undefined ? {} : undefined,
+                      resultBind !== undefined ? resultSchema : undefined,
                   )
                 : resultBind !== undefined &&
                     elseOutput !== undefined &&
                     elseScope
-                  ? this.buildOutputOnlyArm(elseScope, elseOutput)
+                  ? this.buildOutputOnlyArm(elseScope, elseOutput, resultSchema)
                   : this.makeNoopArm();
 
         // Boolean if-else is always exhaustive: { type: "boolean" } is
@@ -600,7 +604,9 @@ export class Emitter {
             selectorSchema: { type: "boolean" },
             cases: { true: thenArm, false: falseArm },
             next: mergeId,
-            ...(resultBind ? { bind: resultBind, outputSchema: {} } : {}),
+            ...(resultBind
+                ? { bind: resultBind, outputSchema: resultSchema }
+                : {}),
         };
 
         // Merge is a noop task that serves as the continuation point
@@ -638,6 +644,10 @@ export class Emitter {
         const discTemplate = this.emitExpr(stmt.discriminant, scope);
         const branchId = this.freshId("switch");
         const mergeId = this.freshId("merge");
+
+        // G29 Q3: read result type stored by type checker.
+        const switchResolved = this.resolvedSchemas.get(stmt.loc.offset);
+        const resultSchema: JSONSchema = switchResolved?.outputSchema ?? {};
 
         // Cases map to BranchArm sub-scopes; per-arm outputs are exposed to
         // the parent via branch.bind. The arm's `output` is set on its
@@ -694,7 +704,7 @@ export class Emitter {
                     ? this.buildArmScope(
                           armScope,
                           resultBind !== undefined ? armOutput : undefined,
-                          resultBind !== undefined ? {} : undefined,
+                          resultBind !== undefined ? resultSchema : undefined,
                       )
                     : this.makeNoopArm();
         }
@@ -704,7 +714,7 @@ export class Emitter {
                     ? this.buildArmScope(
                           defScope!,
                           resultBind !== undefined ? defOutput : undefined,
-                          resultBind !== undefined ? {} : undefined,
+                          resultBind !== undefined ? resultSchema : undefined,
                       )
                     : this.makeNoopArm();
         }
@@ -726,7 +736,9 @@ export class Emitter {
             cases,
             ...(defaultArm !== undefined ? { default: defaultArm } : {}),
             next: mergeId,
-            ...(resultBind ? { bind: resultBind, outputSchema: {} } : {}),
+            ...(resultBind
+                ? { bind: resultBind, outputSchema: resultSchema }
+                : {}),
         };
 
         const mergeNode: TaskNode = {
@@ -1340,6 +1352,14 @@ export class Emitter {
     private emitTernaryExpr(expr: TernaryExpr, scope: ScopeContext): Template {
         const condTemplate = this.emitExpr(expr.condition, scope);
 
+        // G29 Q3: read result type stored by type checker.
+        const ternaryResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `ternary result type`,
+        );
+        const resultSchema: JSONSchema = ternaryResolved?.outputSchema ?? {};
+
         const branchId = this.freshId("ternary");
         const mergeId = this.freshId("merge");
         const resultBind = this.freshId("ternary_result");
@@ -1350,7 +1370,7 @@ export class Emitter {
         const thenResult = this.emitExpr(expr.consequent, thenScope);
         let thenArm: BranchArm;
         if (thenScope.nodeOrder.length > 0) {
-            thenArm = this.buildArmScope(thenScope, thenResult, {});
+            thenArm = this.buildArmScope(thenScope, thenResult, resultSchema);
         } else {
             // Literal consequent: wrap in a single identity node.
             const passId = this.freshId("ternary_then");
@@ -1361,9 +1381,9 @@ export class Emitter {
                 inputSchema: {
                     type: "object",
                     required: ["value"],
-                    properties: { value: {} },
+                    properties: { value: resultSchema },
                 },
-                outputSchema: {},
+                outputSchema: resultSchema,
                 inputs: { value: thenResult },
                 bind: passId,
             } as TaskNode;
@@ -1374,7 +1394,7 @@ export class Emitter {
                     $from: "scope",
                     name: passId,
                 } as unknown as Template,
-                {},
+                resultSchema,
             );
         }
 
@@ -1382,7 +1402,7 @@ export class Emitter {
         const elseResult = this.emitExpr(expr.alternate, elseScope);
         let elseArm: BranchArm;
         if (elseScope.nodeOrder.length > 0) {
-            elseArm = this.buildArmScope(elseScope, elseResult, {});
+            elseArm = this.buildArmScope(elseScope, elseResult, resultSchema);
         } else {
             const passId = this.freshId("ternary_else");
             const passScope = this.childScope(scope);
@@ -1392,9 +1412,9 @@ export class Emitter {
                 inputSchema: {
                     type: "object",
                     required: ["value"],
-                    properties: { value: {} },
+                    properties: { value: resultSchema },
                 },
-                outputSchema: {},
+                outputSchema: resultSchema,
                 inputs: { value: elseResult },
                 bind: passId,
             } as TaskNode;
@@ -1405,7 +1425,7 @@ export class Emitter {
                     $from: "scope",
                     name: passId,
                 } as unknown as Template,
-                {},
+                resultSchema,
             );
         }
 
@@ -1416,7 +1436,7 @@ export class Emitter {
             cases: { true: thenArm },
             default: elseArm,
             bind: resultBind,
-            outputSchema: {},
+            outputSchema: resultSchema,
             next: mergeId,
         };
 
@@ -2767,6 +2787,7 @@ export class Emitter {
     private buildOutputOnlyArm(
         scope: ScopeContext,
         output: Template,
+        outputSchema: JSONSchema = {},
     ): BranchArm {
         const noopId = this.freshId("arm_noop");
         scope.nodes[noopId] = {
@@ -2777,7 +2798,7 @@ export class Emitter {
             inputs: {},
         } as TaskNode;
         scope.nodeOrder.push(noopId);
-        return this.buildArmScope(scope, output, {});
+        return this.buildArmScope(scope, output, outputSchema);
     }
 
     private childScope(parent: ScopeContext): ScopeContext {
