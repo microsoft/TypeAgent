@@ -705,8 +705,10 @@ describe("generic type arguments", () => {
                 if (flag) {
                     const r = llm.generateJson<{ x: number }>(prompt: p);
                     return r;
+                } else {
+                    const r = llm.generateJson<{ x: number }>(prompt: p);
+                    return r;
                 }
-                return null;
             }`,
             GENERIC_SCHEMAS,
             VALIDATE,

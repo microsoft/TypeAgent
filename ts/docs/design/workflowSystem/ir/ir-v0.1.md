@@ -1457,6 +1457,18 @@ reference will resolve) for any execution path.
    same `"#/types/<typeName>"` reference, compatibility holds by
    identity without structural walking.
 
+   **`{}` = unknown semantics ([decision 0011](decisions/0011-top-schema-unknown-semantics.md)):**
+   An `outputSchema` of `{}` on a **bound** producer (any node with
+   `bind` set) is treated as `unknown` — not `any` — and is rejected
+   by this pass. The empty schema `{}` is the top type; it places no
+   constraint on the value, making every downstream consumer of that
+   binding unverifiable. Bound producers must declare a concrete
+   `outputSchema`. Unbound nodes (no `bind`) may legally retain `{}`
+   since their output is not addressable by name in any template.
+   Compilers targeting this IR are expected to propagate concrete
+   output types from type-checked source programs; hand-authored IR
+   with bound `{}` producers is rejected.
+
 8. **Exhaustiveness pass.** Every branch has either an exhaustive `cases`
    over an enum-typed selector or a `default`. v1 requires `default`
    regardless.

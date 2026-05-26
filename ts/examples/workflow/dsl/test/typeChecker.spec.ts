@@ -197,8 +197,9 @@ describe("type checker", () => {
             workflow test(x: boolean): string {
                 if (x) {
                     return "yes";
+                } else {
+                    return "no";
                 }
-                return "no";
             }
         `);
     });
@@ -1823,15 +1824,17 @@ describe("type checker", () => {
         `);
     });
 
-    test("partial-return if/else is accepted (early return pattern)", () => {
-        // `if (x) { return "a" }` with no else followed by `return "b"` is a
-        // common early-return pattern — must not error.
-        expectNoErrors(`
+    test("then-arm returns value with no else is an error (G30)", () => {
+        // `if (x) { return "a"; }` with no else is the early-return pattern
+        // but silently drops the value — G30 Option C requires explicit else.
+        expectError(
+            `
             workflow test(x: boolean): string {
                 if (x) { return "a"; }
                 return "b";
-            }
-        `);
+            }`,
+            "Then-arm returns a value",
+        );
     });
 
     test("partial-return if/else where else does not return is accepted", () => {

@@ -784,6 +784,25 @@ export class TypeChecker {
                 // dead at the workflow level; we leave the type unresolved
                 // and the emitter falls back to {} outputSchema.  G18 (union
                 // types) may revisit this.
+                //
+                // G30: when the then-arm returns a value but there is no
+                // else arm, the implicit fall-through return is the intended
+                // else branch. We cannot fuse them here (no look-ahead), so
+                // emit a diagnostic that guides the author to the explicit
+                // form.  This prevents the silent value-drop bug where the
+                // then-arm's return is discarded and the workflow always
+                // returns the fall-through value.
+                if (
+                    thenType.kind !== "unresolved" &&
+                    (!s.else_ || s.else_.length === 0)
+                ) {
+                    this.addError(
+                        `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
+                            `Add an explicit else block or use a ternary expression.`,
+                        s.loc.line,
+                        s.loc.col,
+                    );
+                }
                 if (
                     thenType.kind !== "unresolved" &&
                     elseType.kind !== "unresolved"
