@@ -289,7 +289,7 @@ export function formatType(t: TypeInfo): string {
 
 class Scope {
     private bindings = new Map<string, TypeInfo>();
-    constructor(private parent?: Scope) {}
+    constructor(private parent?: Scope) { }
 
     get(name: string): TypeInfo | undefined {
         return this.bindings.get(name) ?? this.parent?.get(name);
@@ -776,25 +776,19 @@ export class TypeChecker {
                     ? this.checkStatements(s.else_, scope.child())
                     : UNRESOLVED;
 
-                // G29: value-producing if/else enforcement.
-                const isValueProducing =
-                    thenType.kind !== "unresolved" ||
-                    elseType.kind !== "unresolved";
-                let resultType: TypeInfo = UNRESOLVED;
-                if (isValueProducing) {
-                    if (thenType.kind === "unresolved") {
-                        this.addError(
-                            `Value-producing if/else: then arm must return a value`,
-                            s.loc.line,
-                            s.loc.col,
-                        );
-                    } else if (!s.else_ || elseType.kind === "unresolved") {
-                        this.addError(
-                            `Value-producing if/else: else arm must also return a value`,
-                            s.loc.line,
-                            s.loc.col,
-                        );
-                    } else if (
+                // G29 Q1+Q3: only when BOTH arms return a value do we treat
+                // the if/else as cleanly value-producing — same-type check
+                // and store the result schema for the emitter.  Partial
+                // return (one arm returns, the other doesn't) is a legal
+                // pattern (early return + fall-through) where the bind is
+                // dead at the workflow level; we leave the type unresolved
+                // and the emitter falls back to {} outputSchema.  G18 (union
+                // types) may revisit this.
+                if (
+                    thenType.kind !== "unresolved" &&
+                    elseType.kind !== "unresolved"
+                ) {
+                    if (
                         !isAssignableTo(thenType, elseType) ||
                         !isAssignableTo(elseType, thenType)
                     ) {
@@ -803,17 +797,13 @@ export class TypeChecker {
                             s.loc.line,
                             s.loc.col,
                         );
-                        resultType = thenType;
-                    } else {
-                        resultType = thenType;
                     }
-                    // G29 Q3: store result type for emitter.
                     this._resolvedSchemas.set(s.loc.offset, {
                         inputSchema: {},
-                        outputSchema: typeInfoToSchema(resultType),
+                        outputSchema: typeInfoToSchema(thenType),
                     });
                 }
-                return resultType;
+                return thenType;
             }
             case "SwitchStatement": {
                 this.inferExpr(s.discriminant, scope);
@@ -827,58 +817,42 @@ export class TypeChecker {
                     ? this.checkStatements(s.default_, scope.child())
                     : UNRESOLVED;
 
-                // G29: value-producing switch enforcement.
-                const allTypes: TypeInfo[] = [
-                    ...armTypes,
-                    ...(s.default_ ? [defType] : []),
-                ];
-                const isValueProducing = allTypes.some(
-                    (t) => t.kind !== "unresolved",
-                );
+                // G29 Q1+Q3: only when EVERY arm (and default if present)
+                // returns a value do we treat the switch as cleanly value-
+                // producing — same-type check and store schema.  Partial
+                // return is a legal pattern (e.g. `break` in some arms);
+                // emitter falls back to {} in that case.  Note: a switch
+                // without `default` is still a partial-return shape unless
+                // the selector enum is exhaustive — which we don't track.
                 let resultType: TypeInfo = UNRESOLVED;
-                if (isValueProducing) {
-                    const missingArmReturn = armTypes.some(
-                        (t) => t.kind === "unresolved",
-                    );
-                    const missingDefault = !s.default_;
-                    const missingDefaultReturn =
-                        s.default_ && defType.kind === "unresolved";
-                    if (
-                        missingArmReturn ||
-                        missingDefault ||
-                        missingDefaultReturn
-                    ) {
-                        this.addError(
-                            `Value-producing switch: all arms including default must return a value`,
-                            s.loc.line,
-                            s.loc.col,
-                        );
-                    } else {
-                        const returning = allTypes.filter(
-                            (t) => t.kind !== "unresolved",
-                        );
-                        resultType = returning[0]!;
-                        for (let i = 1; i < returning.length; i++) {
-                            if (
-                                !isAssignableTo(resultType, returning[i]!) ||
-                                !isAssignableTo(returning[i]!, resultType)
-                            ) {
-                                this.addError(
-                                    `switch arms must return the same type: '${typeName(resultType)}' vs '${typeName(returning[i]!)}'`,
-                                    s.loc.line,
-                                    s.loc.col,
-                                );
-                                break;
-                            }
+                if (s.default_ && armTypes.every((t) => t.kind !== "unresolved") && defType.kind !== "unresolved") {
+                    const allTypes = [...armTypes, defType];
+                    resultType = allTypes[0]!;
+                    for (let i = 1; i < allTypes.length; i++) {
+                        if (
+                            !isAssignableTo(resultType, allTypes[i]!) ||
+                            !isAssignableTo(allTypes[i]!, resultType)
+                        ) {
+                            this.addError(
+                                `switch arms must return the same type: '${typeName(resultType)}' vs '${typeName(allTypes[i]!)}'`,
+                                s.loc.line,
+                                s.loc.col,
+                            );
+                            break;
                         }
                     }
-                    // G29 Q3: store result type for emitter.
                     this._resolvedSchemas.set(s.loc.offset, {
                         inputSchema: {},
                         outputSchema: typeInfoToSchema(resultType),
                     });
                 }
-                return resultType;
+                // Preserve original return-type behavior (first non-unresolved
+                // arm type) so callers see something to chain on.
+                if (resultType.kind !== "unresolved") return resultType;
+                for (const t of armTypes) {
+                    if (t.kind !== "unresolved") return t;
+                }
+                return defType;
             }
             case "ThrowStatement":
                 this.inferExpr(s.value, scope);

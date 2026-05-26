@@ -1796,4 +1796,102 @@ describe("type checker", () => {
             }
         `);
     });
+
+    // ---- G29: value-producing if/else and switch enforcement ----
+    //
+    // Type-checker enforces same-type only when ALL arms return a value.
+    // Partial-return patterns (e.g. early-return + fall-through, or `break`
+    // in some switch arms) are intentionally accepted; the emitter falls
+    // back to `{}` outputSchema for those cases pending G18 / phase 5
+    // validator follow-up.
+
+    test("value-producing if/else with mismatched arm types errors", () => {
+        expectError(
+            `
+            workflow test(x: boolean): string {
+                if (x) { return "a"; } else { return 42; }
+            }`,
+            "if/else arms must return the same type",
+        );
+    });
+
+    test("value-producing if/else with matching arm types is OK", () => {
+        expectNoErrors(`
+            workflow test(x: boolean): string {
+                if (x) { return "a"; } else { return "b"; }
+            }
+        `);
+    });
+
+    test("partial-return if/else is accepted (early return pattern)", () => {
+        // `if (x) { return "a" }` with no else followed by `return "b"` is a
+        // common early-return pattern — must not error.
+        expectNoErrors(`
+            workflow test(x: boolean): string {
+                if (x) { return "a"; }
+                return "b";
+            }
+        `);
+    });
+
+    test("partial-return if/else where else does not return is accepted", () => {
+        expectNoErrors(`
+            workflow test(x: boolean): string {
+                if (x) { return "a"; } else { const y = "b"; }
+                return "c";
+            }
+        `);
+    });
+
+    test("value-producing switch with mismatched arm types errors", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    default: return 42;
+                }
+            }`,
+            "switch arms must return the same type",
+        );
+    });
+
+    test("switch with break arm is accepted (not all arms return)", () => {
+        // `break` in some arms is legal — the switch is not cleanly value-
+        // producing and the type checker leaves it untyped.
+        expectNoErrors(`
+            workflow test(x: string): string {
+                switch (x) {
+                    case "skip": break;
+                    default: return x;
+                }
+                return "done";
+            }
+        `);
+    });
+
+    test("switch with non-returning arm is accepted (partial-return)", () => {
+        expectNoErrors(`
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": const y = "skip";
+                    default: return "z";
+                }
+                return "done";
+            }
+        `);
+    });
+
+    test("value-producing switch with matching arm types is OK", () => {
+        expectNoErrors(`
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": return "y";
+                    default: return "z";
+                }
+            }
+        `);
+    });
 });

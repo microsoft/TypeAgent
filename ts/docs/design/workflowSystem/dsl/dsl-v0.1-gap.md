@@ -864,24 +864,32 @@ runtime value is an integer ≥ 1 (the same constraint
 The mechanical questions originally raised here have been resolved:
 
 - **Q1 (same-type arms):** ✅ enforced. `IfStatement` and `SwitchStatement`
-  now error when value-producing arms return mismatched types (parity with
-  ternary).
-- **Q2 (partial return):** ✅ rejected. Value-producing `if`/`else` requires
-  both arms to return; value-producing `switch` requires a `default` and a
-  `return` in every arm. No more implicit nullables.
-- **Q3 (`outputSchema: {}` on arm scopes):** ✅ wired. The type checker
-  stores the result type in `_resolvedSchemas` at the statement/expression
-  offset; the emitter threads it through `branch.outputSchema`, arm
-  `scope.outputSchema`, and ternary identity wrappers.
-- **Q4 (`switch` exhaustiveness):** moot — Q1 collapses to a single type;
-  Q2 forces a `default`.
+  now error when ALL arms return and types mismatch (parity with ternary).
+- **Q2 (partial return):** ⚠ relaxed. Originally proposed as a hard error,
+  but partial-return is a common legal pattern: early-return inside `if`
+  then fall-through, or `break` in some `switch` arms. The type checker
+  now silently accepts partial-return; the emitter falls back to `{}`
+  on the branch `outputSchema` for that case. Phase 5 validator warnings
+  will surface the residual `{}` so we can revisit. G18 (union types)
+  may eventually let us emit nullable types instead.
+- **Q3 (`outputSchema: {}` on arm scopes):** ✅ wired when all arms return.
+  The type checker stores the result type in `_resolvedSchemas` at the
+  statement/expression offset; the emitter threads it through
+  `branch.outputSchema`, arm `scope.outputSchema`, and ternary identity
+  wrappers. When not all arms return, storage is skipped and the
+  emitter falls back to `{}` (see Q2).
+- **Q4 (`switch` exhaustiveness):** still open in the loose form — a
+  `switch` without `default` whose selector enum is exhaustive should
+  also be value-producing, but the type checker doesn't track enum
+  exhaustiveness yet.
 
 ### Remaining open question — does the syntax earn its keep?
 
-With Q1/Q2 enforced and **no union types** in the surface language (G18),
-value-producing `if`/`else` and `switch` are now extremely constrained:
+With Q1 enforced and **no union types** in the surface language (G18),
+the cleanly value-producing form of `if`/`else` and `switch` is now
+extremely constrained:
 
-- Both/all arms must return.
+- All arms must return.
 - All arms must return the *same* type.
 - There is no way to "narrow" the type per-arm because the type system
   has no unions/nullables to narrow from.

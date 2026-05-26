@@ -1180,4 +1180,129 @@ describe("Emitter", () => {
         expect(stepNode.kind).toBe("task");
         expect(stepNode.task).toBe("math.add");
     });
+
+    // ---- Soundness: typed outputSchema on bound producers ----
+    //
+    // These tests pin the {} -> typed schema migration on bound producers
+    // (validator-soundness plan phases 2 + 4, decision 0011).  Each test
+    // asserts the relevant outputSchema is NOT `{}` and is the expected
+    // concrete schema derived from the type checker.
+
+    test("attempts loop body has typed outputSchema (gap 8)", () => {
+        const ir = compileOk(`
+            workflow test(url: string): unknown {
+                return attempts(3, () => {
+                    const result = web.fetch(url);
+                    return result;
+                });
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        expect(loopNode.body.outputSchema).not.toEqual({});
+        expect(loopNode.body.outputSchema).toEqual({
+            type: "object",
+            properties: { body: { type: "string" } },
+        });
+    });
+
+    test("parallelMap body has typed outputSchema (phase 2)", () => {
+        const ir = compileOk(`
+            workflow test(urls: string[]): unknown {
+                return parallelMap(urls, (url) => {
+                    const result = web.fetch(url);
+                    return result;
+                });
+            }
+        `);
+        const [, forkMapNode] = findNodeByKind<ForkMapNode>(ir, "forkMap");
+        expect(forkMapNode.body.outputSchema).not.toEqual({});
+        expect(forkMapNode.body.outputSchema).toEqual({
+            type: "object",
+            properties: { body: { type: "string" } },
+        });
+    });
+
+    test("parallel branch scopes have typed outputSchema (phase 2)", () => {
+        const ir = compileOk(`
+            workflow test(): unknown {
+                return parallel(
+                    () => {
+                        const a = web.fetch("https://a.com");
+                        return a;
+                    },
+                    () => {
+                        const b = web.fetch("https://b.com");
+                        return b;
+                    }
+                );
+            }
+        `);
+        const [, forkNode] = findNodeByKind<ForkNode>(ir, "fork");
+        for (const key of Object.keys(forkNode.branches)) {
+            const arm = forkNode.branches[key];
+            expect(arm.scope.outputSchema).not.toEqual({});
+            expect(arm.scope.outputSchema).toEqual({
+                type: "object",
+                properties: { body: { type: "string" } },
+            });
+        }
+    });
+
+    test("ternary branch has typed outputSchema (phase 4)", () => {
+        const ir = compileOk(`
+            workflow test(x: boolean): unknown {
+                return x ? "yes" : "no";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        // Arm scope outputSchema also typed (was {} before phase 4).
+        const trueArm = branchNode.cases.true!;
+        expect(trueArm.scope.outputSchema).toEqual({ type: "string" });
+        expect(branchNode.default).toBeDefined();
+        expect(branchNode.default!.scope.outputSchema).toEqual({
+            type: "string",
+        });
+    });
+
+    test("value-producing if/else branch has typed outputSchema (phase 4)", () => {
+        const ir = compileOk(`
+            workflow test(x: boolean): unknown {
+                if (x) { return "a"; } else { return "b"; }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        // bind is set => value-producing => outputSchema must be typed.
+        expect(branchNode.bind).toBeDefined();
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        // Each arm scope output is typed too.
+        const trueArm = branchNode.cases.true!;
+        const falseArm = branchNode.cases.false!;
+        expect(trueArm.scope.outputSchema).toEqual({ type: "string" });
+        expect(falseArm.scope.outputSchema).toEqual({ type: "string" });
+    });
+
+    test("value-producing switch branch has typed outputSchema (phase 4)", () => {
+        const ir = compileOk(`
+            workflow test(x: string): unknown {
+                switch (x) {
+                    case "a": const r1 = web.fetch("https://a.com"); return r1.body;
+                    case "b": const r2 = web.fetch("https://b.com"); return r2.body;
+                    default:  const r3 = web.fetch("https://c.com"); return r3.body;
+                }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.bind).toBeDefined();
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        for (const key of Object.keys(branchNode.cases)) {
+            expect(branchNode.cases[key]!.scope.outputSchema).toEqual({
+                type: "string",
+            });
+        }
+        expect(branchNode.default).toBeDefined();
+        expect(branchNode.default!.scope.outputSchema).toEqual({
+            type: "string",
+        });
+    });
 });
