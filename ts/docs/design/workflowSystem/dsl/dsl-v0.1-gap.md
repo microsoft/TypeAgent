@@ -43,17 +43,17 @@ new surface area:
 13. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
-14. ~~**G30: Return asymmetry errors.**~~ **DONE** — hard errors for all mixed-return if/switch patterns.
+14. ~~**G29 + G30: `if`/`switch` as value producers.**~~ G30 (mixed-return errors) **DONE**; G29 (deprecate value-producing if/switch?) deferred pending `.wf` survey + G18.
 
 G1 (sub-workflow calls and cross-file composition) is now resolved; see its
 section below for the landed surface. G24-G28 capture follow-up design
 questions raised during the G1 implementation that have not yet been
-scheduled. G29's mechanical questions (Q1/Q2/Q3) are resolved by the
-validator-soundness phases 3+4 and G30 enforcement; the remaining open
-question is whether value-producing `if`/`switch` earns its keep alongside
-ternary given the current SSA + no-union-types constraints. G30's Option C
-(reject mixed-return patterns with diagnostics) is now implemented; Option A
-(pre-pass if-return fusion) is deferred pending a `.wf` file survey and G18.
+scheduled. G29 and G30 are treated as a unified gap (see §G29+G30 below):
+both arise from the same root cause — `if`/`switch` statements trying to
+act as value-producing expressions in an SSA compiler without a CFG pass.
+G30 (mixed-return errors) is resolved; G29's open question (whether to
+deprecate value-producing `if`/`switch` in favour of ternary) is deferred
+pending a `.wf` survey and G18 (union types).
 
 Dependency spine:
 
@@ -860,141 +860,106 @@ runtime value is an integer ≥ 1 (the same constraint
   that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
   fork entry with a useful error pointing at the option name.
 
-## G29: Branch arm output type architecture
+## G29 + G30: `if`/`switch` as value producers — a structural mismatch
 
-### Status: Mechanically resolved ✅ (design question remains)
+**G29 status:** Mechanically resolved ✅; open design question remains.
+**G30 status:** ✅ Resolved (hard errors for all mixed-return patterns).
 
-The mechanical questions originally raised here have been resolved:
+### Root cause
 
-- **Q1 (same-type arms):** ✅ enforced. `IfStatement` and `SwitchStatement`
-  now error when all arms return and types mismatch (parity with ternary).
-- **Q2 (partial return):** ✅ rejected (G30 Option C). All mixed-return
-  patterns are now hard errors:
-  - Then-arm returns, no else arm.
-  - Then-arm returns, else arm does not.
-  - Else-arm returns, then arm does not.
-  - Any switch arm returns but not all arms (including default) return.
-  Authors must write the fully explicit form: all arms return the same
-  type (value-producing) or none return (statement form).
-- **Q3 (`outputSchema: {}` on arm scopes):** ✅ wired when all arms return.
-  The type checker stores the result type in `_resolvedSchemas` at the
-  statement/expression offset; the emitter threads it through
-  `branch.outputSchema`, arm `scope.outputSchema`, and ternary identity
-  wrappers. Mixed-return branches are now caught at Q2 before reaching
-  the emitter.
-- **Q4 (`switch` exhaustiveness):** still open — a `switch` without
-  `default` whose selector enum is exhaustive should also be
-  value-producing, but the type checker doesn't track enum exhaustiveness
-  yet. Currently such switches are treated as statement-form (no bind).
+`if` and `switch` are **statements** in the DSL. Statements produce side
+effects; they do not produce values to the surrounding scope. But `return`
+inside their arms makes them act like **expressions** — the arm's value
+needs to be bound, typed, and made visible to subsequent nodes in the
+parent scope.
 
-### Remaining open question — does the syntax earn its keep?
+The DSL is SSA-based and processes statements in isolation (no CFG pass,
+no look-ahead). It cannot reason about value flow across statement
+boundaries. This creates two concrete problems:
 
-#### Root cause: statements doing expression work
+**G29 — emitter complexity.** To surface a value from a statement-level
+`if`/`switch`, the emitter needs a complete second lowering path: branch
+node + arm scopes + per-arm `scope.outputSchema` + `branch.bind` +
+merge noop. Ternary (`?:`) is an expression; it produces a value
+natively as a single IR node with no scaffolding. Every correctness rule
+the DSL must enforce for value-producing `if`/`switch` (same-type arms,
+no mixed returns, typed arm scopes, typed branch bind) duplicates rules
+that ternary gets for free from the expression grammar.
 
-`if`/`switch` are **statements** in the DSL, but `return` inside them
-makes them act like **expressions** — they produce a value to the outer
-scope. The DSL is SSA-based and needs every value explicitly bound and
-typed at the node level. That creates a fundamental tension:
+**G30 — cross-statement value drop.** Because the compiler has no
+look-ahead, it cannot see that
+`if (x) { return r; }` followed by `return null;`
+are *meant* to be a single value-producing expression
+(`x ? r : null`). Without cross-statement reasoning, the then-arm's
+`return r` is silently dropped and the workflow always returns `null`.
+TypeScript resolves this with whole-function CFG analysis; the DSL
+cannot. The only sound fix under the current architecture is to reject
+the pattern outright (which G30 now does).
 
-- Statement syntax has no implicit value context. The compiler processes
-  each statement in isolation. It cannot see that
-  `if (x) { return r; }` + `return null;` are *meant* to be a single
-  value-producing expression — G30 exists solely because of this gap.
+**The common thread:** `return` inside a statement is an expression-level
+concept dressed in statement clothing. Both G29 and G30 are symptoms of
+the same mismatch.
 
-- The emitter needs a whole separate lowering path (branch node + arm
-  scopes + bind + merge) to produce a value from a statement-level
-  `if`/`switch`. Ternary does the same thing natively as a single
-  expression node with no extra scaffolding.
+### Long-term resolution
 
-- TypeScript resolves this with whole-function CFG analysis. The DSL
-  has no CFG pass — it is SSA, one statement at a time. So `return`
-  inside a statement-level `if`/`switch` is an expression-level concept
-  dressed in statement clothing, and it keeps creating soundness problems.
-
-**The cleanest long-term resolution**: make `if`/`switch` **pure
-statements** — they never produce values and `return` inside them is a
-type error. All value-producing conditional logic goes through ternary
-(`?:`). G29 and G30 both dissolve. The DSL invariant becomes:
-**expressions produce values, statements produce side effects — no
+Make `if`/`switch` **pure statements** — `return` inside them is a type
+error. All value-producing conditional logic uses ternary (`?:`). Both
+gaps dissolve. The language invariant becomes clean and teachable:
+**expressions produce values; statements produce side effects — no
 overlap.**
 
-#### Why not now?
+### Why not now?
 
-With Q1–Q3 resolved, value-producing `if`/`switch` is constrained to:
-"pick one of N same-typed expressions based on a condition" — exactly
-what ternary already does. The remaining reason to keep the syntax is
+With the mechanical fixes in place, value-producing `if`/`switch` is
+already constrained to "pick one of N same-typed expressions" — exactly
+what ternary does. The remaining justification for keeping the syntax is
 **multi-statement arms**: arms that bind several intermediate `const`s
-before the `return`, where ternary would be awkward. If `.wf` file
-surveys show this pattern is never used, deprecation is straightforward.
+before the `return`, where ternary would be awkward. Whether that pattern
+exists in practice is an open empirical question.
 
-#### Decision factors
+### Decision factors
 
-1. **Multi-statement arms:** Are there real uses that need `const`
-   bindings inside an arm before the `return`? If yes, keep the syntax.
-   If no, remove it.
-2. **G18 (union types):** If unions land, arms could legitimately return
-   different types and `if`/`switch` becomes strictly more expressive
-   than ternary. Until then the two are equivalent for value production
-   and the statement form adds only complexity.
+1. **Multi-statement arms in the wild.** Survey `.wf` files. If every
+   observed value-producing arm is a single expression, ternary already
+   covers the space and deprecation is safe.
 
-### Suggested next step
+2. **G18 (union types).** If union types land, arms could legitimately
+   return different types, making `if`/`switch` strictly more expressive
+   than ternary. Until then the two are equivalent for value production.
 
-Survey actual `.wf` files for value-producing `if`/`else`/`switch` usage.
-If most/all are single-expression arms, deprecate value-producing
-`if`/`switch` (keep statement form for side effects) and steer authors
-to ternary. Defer until G18 is decided — unions would flip the answer.
+### Mechanical status (G29 sub-questions)
 
-**Raised during:** validator-soundness plan Gap 7 analysis.  Related:
-G7 (branch arm covariance), G18 (union types), G30 (return asymmetry errors).
+- **Q1 (same-type arms):** ✅ enforced. Type error when all arms return
+  but types mismatch.
+- **Q2 (mixed-return):** ✅ rejected (G30). Hard error for any arm that
+  returns while another does not — all arms return the same type, or none
+  return.
+- **Q3 (`outputSchema` on arm scopes):** ✅ wired. Type checker stores
+  the result type in `_resolvedSchemas`; emitter threads it through
+  `branch.outputSchema`, arm `scope.outputSchema`, and ternary identity
+  wrappers.
+- **Q4 (exhaustive switch without `default`):** open. A `switch` without
+  `default` whose selector enum is exhaustive should be value-producing,
+  but the type checker does not track enum exhaustiveness yet.
 
-## G30: Return asymmetry in `if`/`switch` arms ✅ Resolved
+### G30 diagnostic set (implemented)
 
-**Resolution:** Option C — hard errors for all mixed-return patterns.
+The type checker emits hard errors for:
 
-### Problem (historical)
+| Pattern | Error message |
+|---------|---------------|
+| Then-arm returns, no else arm | `Then-arm returns a value of type X but there is no else-arm. Add an explicit else block or use a ternary expression.` |
+| Then-arm returns, else arm does not | `Then-arm returns a value … but the else-arm does not return. Both arms must return a value, or neither should.` |
+| Else-arm returns, then arm does not | `Else-arm returns a value … but the then-arm does not return. Both arms must return a value, or neither should.` |
+| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return. All arms must return a value, or none should.` |
 
-The pattern:
+### G30 long-term option
 
-```
-if (flag) { const r = task(…); return r; }
-return null;
-```
+**Option A — Pre-pass if-return fusion**: fuse
+`if (cond) { …; return x; }` + `return y;` into a synthetic
+`if … else` before type-checking, allowing the TypeScript-idiomatic
+early-return style. Deferred. Moot if G29 resolves toward deprecating
+value-producing `if`/`switch`.
 
-was idiomatic TypeScript/JavaScript early-return style. The DSL compiler
-previously lowered it as two independent statements, silently dropping the
-`return r` inside the then-arm — the workflow always returned `null`.
-
-### Resolution (Option C)
-
-The type checker now emits hard errors for all mixed-return patterns in
-`if`/`else` and `switch`. Authors must write the fully explicit form.
-
-**If errors:**
-- Then-arm returns, no else arm: `Then-arm returns a value of type X but there is no else-arm. Add an explicit else block or use a ternary expression.`
-- Then-arm returns, else does not (or vice versa): `Then-arm/Else-arm returns a value ... but the else/then-arm does not return. Both arms must return a value, or neither should.`
-
-**Switch error:**
-- Any arm returns but not all: `Switch has arms that return a value but not all arms return. All arms must return a value, or none should.`
-
-### Correct form
-
-Write the explicit else arm or use ternary:
-
-```
-if (flag) { const r = task(…); return r; } else { return null; }
-```
-
-### Remaining long-term option
-
-**Option A — Pre-pass if-return fusion**: walk the statement list and fuse
-`if (cond) { …; return x; }` followed by `return y;` into a synthetic
-`if … else` before type-checking. This would let authors write the
-TypeScript-idiomatic early-return style. Deferred; assess after surveying
-`.wf` file patterns and after G18 (union types) is decided.
-
-Note: if G29's open design question resolves toward deprecating
-value-producing `if`/`switch` entirely, Option A becomes moot — the
-early-return pattern would steer to ternary instead.
-
-**Raised during:** validator-soundness enforcement (Phase 5+6, Decision 0011).
-Related: G29 (statements doing expression work — root cause), G18 (union types).
+**Raised during:** validator-soundness plan (Gap 7 / Decision 0011).
+Related: G7 (branch arm covariance), G18 (union types).
