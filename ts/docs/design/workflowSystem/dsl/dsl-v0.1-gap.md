@@ -47,8 +47,10 @@ new surface area:
 G1 (sub-workflow calls and cross-file composition) is now resolved; see its
 section below for the landed surface. G24-G28 capture follow-up design
 questions raised during the G1 implementation that have not yet been
-scheduled. G29 captures architectural questions about branch arm output types
-that must be resolved before the Gap 7 emitter fix can land.
+scheduled. G29's mechanical questions (Q1/Q2/Q3) are resolved by the
+validator-soundness phases 3+4; the remaining open question is whether
+value-producing `if`/`switch` earns its keep alongside ternary given the
+current SSA + no-union-types constraints.
 
 Dependency spine:
 
@@ -857,71 +859,76 @@ runtime value is an integer ≥ 1 (the same constraint
 
 ## G29: Branch arm output type architecture
 
-Several interconnected design questions about how `if`/`else` and `switch`
-produce values need to be resolved before the Gap 7 emitter fix
-(`branch.outputSchema`) can be completed correctly.
+### Status update (post phases 3+4)
 
-**Background:** The DSL is SSA — every name is bound exactly once. Ternary
-(`a ? b : c`) is an expression and is always value-producing; the type checker
-enforces that both arms have the same type. `if`/`else` and `switch` are
-statements, but because of SSA they are also the only way to bind a name to a
-conditionally-produced task result. When an arm body contains a `return`
-statement the emitter sets `branch.bind` and publishes the arm output to the
-parent scope — making the `if`/`else` effectively value-producing.
+The mechanical questions originally raised here have been resolved:
 
-**Open questions:**
+- **Q1 (same-type arms):** ✅ enforced. `IfStatement` and `SwitchStatement`
+  now error when value-producing arms return mismatched types (parity with
+  ternary).
+- **Q2 (partial return):** ✅ rejected. Value-producing `if`/`else` requires
+  both arms to return; value-producing `switch` requires a `default` and a
+  `return` in every arm. No more implicit nullables.
+- **Q3 (`outputSchema: {}` on arm scopes):** ✅ wired. The type checker
+  stores the result type in `_resolvedSchemas` at the statement/expression
+  offset; the emitter threads it through `branch.outputSchema`, arm
+  `scope.outputSchema`, and ternary identity wrappers.
+- **Q4 (`switch` exhaustiveness):** moot — Q1 collapses to a single type;
+  Q2 forces a `default`.
 
-1. **Should `if`/`else` and `switch` arms be required to have the same return
-   type?** Ternary arms already are (type checker error). Inconsistency: `if`
-   arms are not checked. In SSA terms the branch bind is a phi-node, and phi-
-   nodes classically require a common type across all reaching definitions.
-   Aligning `if`/`switch` with ternary would simplify the emitter (just emit
-   the common type as `outputSchema`) and make type errors earlier. The
-   trade-off is a breaking change for any DSL code that returns different types
-   from `if`/`switch` arms today (currently silently accepted).
+### Remaining open question — does the syntax earn its keep?
 
-2. **Partial return (one arm returns, the other doesn't).** When only the
-   `then` arm contains a `return`, the emitter sets the `else` arm's
-   `scope.output = null` (comment: "the other arm's output is `null`"). The
-   branch is still value-producing (`bind` is set). The correct `outputSchema`
-   for this case is `{ anyOf: [T, { type: "null" }] }` — an implicit nullable.
-   - Is this pattern intentional or should it be a type error?
-   - If intentional, how does a caller distinguish "the branch ran but
-     produced null" from "the condition was false and nothing ran"?
-   - The workflow-level output loop takes the *last* statement's output, so a
-     partial-return `if` that is *not* the final statement just feeds `null`
-     silently into whatever consumes the bind name.
+With Q1/Q2 enforced and **no union types** in the surface language (G18),
+value-producing `if`/`else` and `switch` are now extremely constrained:
 
-3. **`outputSchema: {}` on arm scopes.** Both `buildArmScope` and
-   `buildOutputOnlyArm` always pass `{}` as the arm's `scope.outputSchema`.
-   The Gap 7 plan is to derive the arm's output schema from the type checker
-   (`symbolTypes`) and from the last node's `outputSchema`, but
-   `symbolTypes` only stores name-binding sites — the ternary result type and
-   the if/switch return type are not currently recorded there.
-   - For ternary: both arm types are available from `inferExpr` at emit time;
-     they are guaranteed equal so either can be used.
-   - For `if`/`switch`: the type checker returns `thenType` (first arm) and
-     discards the rest. To emit accurate arm `outputSchema` values the checker
-     would need to record per-arm return types, or the emitter would need to
-     walk the arm's output template and resolve it against the arm's own
-     `inputSchema`.
+- Both/all arms must return.
+- All arms must return the *same* type.
+- There is no way to "narrow" the type per-arm because the type system
+  has no unions/nullables to narrow from.
+- Every arm must end in `return <expr>` — and since the DSL is SSA, that
+  `<expr>` is typically just a name bound earlier in the arm.
 
-4. **`switch` exhaustiveness and the default arm.** When a `switch` has no
-   `default` the validator treats the selector as an exhaustive enum. If arms
-   can return different types, the branch `outputSchema` must be their union.
-   If same-type is enforced (question 1), this reduces to a single type — but
-   requires verifying all arms actually return.
+Under these constraints, value-producing `if`/`else`/`switch` reduces to:
+"pick one of N same-typed expressions based on a condition." That is
+exactly what **ternary** already does (and what nested ternaries already
+do for the N-way case). The question is whether the statement-level forms
+add enough expressive power to justify:
 
-**Suggested resolution path:**
-- Decide question 1 first (same-type enforcement). If yes, tighten the type
-  checker for `if`/`switch` to match ternary; the emitter fix becomes trivial.
-- If heterogeneous types are allowed, define how `anyOf` is emitted and how
-  consumers handle it (relates to G18 union types).
-- Address partial return (question 2) as a type-checker warning or error
-  before emitting nullable outputSchema silently.
-- Only after the above decisions, land the Gap 7 emitter change to set
-  accurate `outputSchema` on branch nodes and arm scopes.
+- a second IR lowering path (`branch` node + arm scopes + merge + bind),
+- separate type-checker rules,
+- separate emitter codegen,
+- separate validator rules,
+- and the runtime cost of routing the output through `branch.bind`.
 
-**Raised during:** validator-soundness plan Gap 7 analysis (branch
-`outputSchema` currently always `{}`).  Related gaps: G7 (branch arm
-covariance), G18 (union types).
+**Sub-questions to decide:**
+
+1. **Is there a real use case for multi-statement value-producing arms?**
+   I.e. arms that bind several intermediate `const`s before the `return`.
+   If so, ternary is awkward; statement-level branching pulls its weight.
+   If every observed use site is a single-expression arm, ternary suffices.
+
+2. **Would removing value-producing `if`/`switch` simplify the language
+   surface?** Statement-level `if`/`switch` would remain (for control
+   flow with side effects), but `return` inside them would become a type
+   error. This makes "what produces a value?" trivially clear: only
+   expressions do.
+
+3. **If we keep both, are the diagnostics good enough?** A user writing
+   `if (x) { return a } else { return b }` should get a clear hint
+   ("consider ternary `x ? a : b`") when both arms are single-expression.
+
+4. **Does G18 (union types) change the calculus?** If unions land, arms
+   could legitimately return different types and `if`/`switch` becomes
+   strictly more expressive than ternary. Until then, the two are
+   equivalent for value production.
+
+### Suggested next step
+
+Survey actual `.wf` files for value-producing `if`/`else`/`switch` usage
+patterns. If most/all are single-expression arms, propose deprecating
+value-producing `if`/`switch` (keep statement form for side effects)
+and steering authors to ternary. Defer until G18 is decided — unions
+would flip the answer.
+
+**Raised during:** validator-soundness plan Gap 7 analysis.  Related:
+G7 (branch arm covariance), G18 (union types).
