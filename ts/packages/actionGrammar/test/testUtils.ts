@@ -13,8 +13,11 @@ import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
 import { tokenizeRequest } from "../src/nfaMatcher.js";
 import { compileNFAToDFA } from "../src/dfaCompiler.js";
-import { matchDFAWithSplitting, getDFACompletions } from "../src/dfaMatcher.js";
-import { computeNFACompletions } from "../src/nfaCompletion.js";
+import {
+    matchDFAWithSplitting,
+    getDFACompletionsFromInput,
+} from "../src/dfaMatcher.js";
+import { computeNFACompletionsFromInput } from "../src/nfaCompletion.js";
 import { Grammar } from "../src/grammarTypes.js";
 import type {
     DispatchModeBucket,
@@ -48,7 +51,10 @@ function testMatchGrammarDFA(grammar: Grammar, request: string): unknown[] {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
     const dfa = compileNFAToDFA(nfa, "test.grammar");
     const tokens = tokenizeRequest(request);
-    const result = matchDFAWithSplitting(dfa, tokens);
+    const result = matchDFAWithSplitting(dfa, tokens, false, {
+        request,
+        grammar,
+    });
     if (!result.matched) {
         return [];
     }
@@ -68,9 +74,7 @@ export function createTestMatchGrammar(
     }
 }
 
-const matcherVariants: MatcherVariant[] = ["grammar"];
-// TODO: Enable "nfa" and "dfa" variants once they match grammarMatcher behavior.
-// const matcherVariants: MatcherVariant[] = ["grammar", "nfa", "dfa"];
+const matcherVariants: MatcherVariant[] = ["grammar", "nfa", "dfa"];
 
 /**
  * Run a test suite with all three matcher variants (grammar, nfa, dfa).
@@ -127,35 +131,24 @@ export type TestCompletionFn = (
 function testCompletionNFA(
     grammar: Grammar,
     prefix: string,
+    _minPrefixLength?: number,
+    direction?: "forward" | "backward",
 ): GrammarCompletionResult {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
-    const tokens = tokenizeRequest(prefix);
-    return computeNFACompletions(nfa, tokens);
+    // Use the input-string entry point so matchedPrefixLength is tracked
+    // (Layer 1) and the direction param drives Layer 4 backward rewind.
+    return computeNFACompletionsFromInput(nfa, prefix, direction);
 }
 
 function testCompletionDFA(
     grammar: Grammar,
     prefix: string,
+    _minPrefixLength?: number,
+    direction?: "forward" | "backward",
 ): GrammarCompletionResult {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
     const dfa = compileNFAToDFA(nfa, "test.grammar");
-    const tokens = tokenizeRequest(prefix);
-    const result = getDFACompletions(dfa, tokens);
-    return {
-        groups: [
-            {
-                completions: result.completions ?? [],
-                separatorMode: "space",
-            },
-        ],
-        properties: result.properties?.map((p) => ({
-            match: { actionName: p.actionName },
-            propertyNames: [p.propertyPath],
-            separatorMode: "autoSpacePunctuation" as const,
-        })),
-        directionSensitive: false,
-        afterWildcard: "none",
-    };
+    return getDFACompletionsFromInput(dfa, prefix, direction);
 }
 
 export function createTestCompletion(
@@ -171,9 +164,13 @@ export function createTestCompletion(
     }
 }
 
-const completionVariants: CompletionVariant[] = ["grammar"];
-// TODO: Enable "nfa" and "dfa" variants once they match grammarCompletion behavior.
-// const completionVariants: CompletionVariant[] = ["grammar", "nfa", "dfa"];
+// DFA completion is no longer in the variant gate.  Production uses NFA
+// completion (see commandHandlerContext.ts setUseNFA), and NFA + DFA
+// completion failure sets are 95%+ symmetric — running both doubled
+// maintenance for negligible signal.  The DFA completion code remains in
+// place for benchmarking and as a recoverable option; it just isn't on
+// the parity path.
+const completionVariants: CompletionVariant[] = ["grammar", "nfa"];
 
 /**
  * Run a completion test suite with all enabled completion variants.

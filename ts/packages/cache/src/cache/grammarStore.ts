@@ -307,49 +307,22 @@ export class GrammarStoreImpl implements GrammarStore {
                 continue;
             }
             debugCompletion(`Processing grammar: ${name}`);
-            if (this.useDFA && entry.dfa) {
-                // DFA-based completions
-                const tokens = input
-                    .trim()
-                    .split(/\s+/)
-                    .filter((t) => t.length > 0);
-
-                const dfaCompResult = getDFACompletions(entry.dfa, tokens);
-                if (
-                    dfaCompResult.completions &&
-                    dfaCompResult.completions.length > 0
-                ) {
-                    groups.push({
-                        name: "Request Completions",
-                        completions: dfaCompResult.completions,
-                    });
-                }
-                if (
-                    dfaCompResult.properties &&
-                    dfaCompResult.properties.length > 0
-                ) {
-                    const { schemaName } = splitSchemaNamespaceKey(name);
-                    for (const p of dfaCompResult.properties) {
-                        properties.push({
-                            actions: [
-                                createExecutableAction(
-                                    schemaName,
-                                    p.actionName,
-                                    {},
-                                ),
-                            ],
-                            names: [p.propertyPath],
-                            // Property completions represent free-form entity
-                            // slots — the actual values come from agents at
-                            // runtime, so the grammar cannot know the first
-                            // character.  "autoSpacePunctuation" defers
-                            // resolution to the shell, which inspects the
-                            // character pair per item.
-                            separatorMode: "autoSpacePunctuation",
-                        });
-                    }
-                }
-            } else if (this.useNFA && entry.nfa) {
+            // Completion path preference: NFA before DFA.
+            //
+            // The NFA completion code has caught up to (and in places
+            // surpassed) DFA completion — it produces `groups[]` with
+            // per-group `separatorMode`, while DFA flattens to a single
+            // completions[].  Completion runs at human typing speed, so
+            // DFA's perf advantage on the matcher path doesn't translate
+            // into a meaningful UX gain here.  Routing all production
+            // completion through NFA halves the maintenance surface and
+            // is validated by shell tests.
+            //
+            // The DFA branch below stays as a recoverable fallback for
+            // configs where useDFA is true but useNFA is false (which
+            // setUseDFA() prevents in normal use, but isn't impossible
+            // to construct directly).
+            if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
                 const tokens = input
                     .trim()
@@ -385,8 +358,49 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
-                            // See DFA property comment above — auto
-                            // mode for the same reason.
+                            // Property completions represent free-form entity
+                            // slots — the actual values come from agents at
+                            // runtime, so the grammar cannot know the first
+                            // character.  "autoSpacePunctuation" defers
+                            // resolution to the shell, which inspects the
+                            // character pair per item.
+                            separatorMode: "autoSpacePunctuation",
+                        });
+                    }
+                }
+            } else if (this.useDFA && entry.dfa) {
+                // DFA-based completions (recoverable fallback — see comment
+                // above the NFA branch for why NFA is preferred).
+                const tokens = input
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
+                const dfaCompResult = getDFACompletions(entry.dfa, tokens);
+                if (
+                    dfaCompResult.completions &&
+                    dfaCompResult.completions.length > 0
+                ) {
+                    groups.push({
+                        name: "Request Completions",
+                        completions: dfaCompResult.completions,
+                    });
+                }
+                if (
+                    dfaCompResult.properties &&
+                    dfaCompResult.properties.length > 0
+                ) {
+                    const { schemaName } = splitSchemaNamespaceKey(name);
+                    for (const p of dfaCompResult.properties) {
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    p.actionName,
+                                    {},
+                                ),
+                            ],
+                            names: [p.propertyPath],
                             separatorMode: "autoSpacePunctuation",
                         });
                     }

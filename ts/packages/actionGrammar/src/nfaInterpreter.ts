@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { NFA, NFATransition } from "./nfa.js";
-import { normalizeToken } from "./nfaMatcher.js";
+import { normalizeToken, parseNumberToken } from "./nfaMatcher.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import {
@@ -87,10 +87,94 @@ export interface NFAExecutionState {
  * Note: For future DFA construction where accepting states may be merged,
  * use NFAState.priorityHint to track the best achievable priority for merged states.
  */
+/**
+ * Optional positional context: the original request string plus per-token
+ * raw start/end offsets.  When supplied, multi-input-token grammar matches
+ * (escape-space tokens) verify that the actual input separator chars
+ * between consumed tokens equal the grammar token's literal separators.
+ * Absent, the matcher falls back to single-space-join comparison
+ * (legacy behavior).
+ */
+export interface MatchInputContext {
+    request: string;
+    starts: number[];
+    ends: number[];
+}
+
+/**
+ * When the grammar's display token carries trailing punctuation
+ * (e.g. `hello,`, `set:`), the input's raw slice at this position must also
+ * end with that punctuation.  Without this check, `normalizeToken` strips
+ * trailing punct on both sides and all alternates `hello,` / `hello.` /
+ * `hello!` collapse to the same matching key, so the first alternate always
+ * wins regardless of which the user typed.
+ *
+ * Returns true when:
+ *  - `inputCtx` is absent (legacy callers),
+ *  - the thread is using locally-split tokens (offsets don't apply),
+ *  - the grammar display token has no trailing punctuation, or
+ *  - the input's raw slice ends with the grammar's trailing punctuation.
+ */
+function inputRawHonorsDisplayPunct(
+    displayToken: string | undefined,
+    tokenIndex: number,
+    inputCtx: MatchInputContext | undefined,
+    localTokens: string[] | undefined,
+): boolean {
+    if (!displayToken || !inputCtx || localTokens) return true;
+    const trailingPunctMatch = displayToken.match(/[.,;:!?]+$/);
+    if (!trailingPunctMatch) return true;
+    const start = inputCtx.starts[tokenIndex];
+    const end = inputCtx.ends[tokenIndex];
+    if (start === undefined || end === undefined) return true;
+    const raw = inputCtx.request.substring(start, end).toLowerCase();
+    return raw.endsWith(trailingPunctMatch[0].toLowerCase());
+}
+
+/**
+ * Verify that the raw separator chars between the input tokens consumed by a
+ * multi-input-token grammar match equal the grammar token's literal
+ * separators.  Returns true when:
+ *  - `inputCtx` is absent (legacy callers without positional info),
+ *  - the thread is using locally-split tokens (`localTokens`) where raw
+ *    offsets no longer correspond to input positions, or
+ *  - every separator between consumed tokens matches the grammar's
+ *    corresponding separator segment.
+ *
+ * This is what rejects double-space input (`"hello  world"`) for a grammar
+ * authored as `hello\ world` (literal single space) — without it, the
+ * tokenizer collapses both inputs to `["hello", "world"]` and the matcher
+ * cannot tell them apart.
+ */
+function inputSeparatorsMatch(
+    grammarToken: string,
+    tokenIndex: number,
+    wordCount: number,
+    inputCtx: MatchInputContext | undefined,
+    localTokens: string[] | undefined,
+): boolean {
+    if (!inputCtx) return true;
+    // Threads using on-demand-split localTokens have offsets that no longer
+    // line up with the original input — skip the check rather than reject
+    // a legitimate prefix-split match.
+    if (localTokens) return true;
+    const segments = grammarToken.split(/(\s+)/);
+    for (let k = 0; k < wordCount - 1; k++) {
+        const expected = segments[2 * k + 1] ?? " ";
+        const inputEnd = inputCtx.ends[tokenIndex + k];
+        const inputStart = inputCtx.starts[tokenIndex + k + 1];
+        if (inputEnd === undefined || inputStart === undefined) return false;
+        const actual = inputCtx.request.substring(inputEnd, inputStart);
+        if (actual !== expected) return false;
+    }
+    return true;
+}
+
 export function matchNFA(
     nfa: NFA,
     tokens: string[],
     debug: boolean = false,
+    inputCtx?: MatchInputContext,
 ): NFAMatchResult {
     debugNFA(
         `Matching tokens: [${tokens.join(", ")}] against NFA: ${nfa.name || "(unnamed)"}`,
@@ -113,7 +197,7 @@ export function matchNFA(
     debugNFA(
         `Initial states after epsilon closure: ${initialStates.length} state(s)`,
     );
-    return matchNFACore(nfa, initialStates, tokens, 0, debug);
+    return matchNFACore(nfa, initialStates, tokens, 0, debug, inputCtx);
 }
 
 /**
@@ -167,6 +251,7 @@ function matchNFACore(
     tokens: string[],
     _startTokenIndex: number, // unused — initial states carry their own tokenIndex
     debug: boolean,
+    inputCtx?: MatchInputContext,
 ): NFAMatchResult {
     type QueueEntry = {
         trans: NFATransition;
@@ -191,6 +276,7 @@ function matchNFACore(
             acceptingThreads,
             allVisitedStates,
             debug,
+            inputCtx,
         );
     }
 
@@ -243,6 +329,7 @@ function matchNFACore(
                 state,
                 state.tokenIndex,
                 myTokens,
+                inputCtx,
             );
             // Propagate the thread-local token array to the successor state
             if (newState && state.localTokens) {
@@ -269,6 +356,7 @@ function matchNFACore(
                 acceptingThreads,
                 allVisitedStates,
                 debug,
+                inputCtx,
             );
         }
     }
@@ -313,6 +401,7 @@ function seedQueue(
     acceptingThreads: NFAMatchResult[],
     allVisitedStates: Set<number>,
     debug: boolean,
+    inputCtx?: MatchInputContext,
 ): void {
     const myTokens = state.localTokens ?? globalTokens;
 
@@ -351,17 +440,13 @@ function seedQueue(
                 // Use the existing environment, or create an empty one for
                 // literal-only values that don't reference any variables.
                 const env = state.environment ?? createEnvironment(0);
-                try {
-                    evaluatedActionValue = evaluateExpression(
-                        state.actionValue,
-                        env,
-                    );
-                    debugNFA(
-                        `  Evaluated actionValue: ${JSON.stringify(evaluatedActionValue)}`,
-                    );
-                } catch (e) {
-                    debugNFA(`  Failed to evaluate actionValue: ${e}`);
-                }
+                evaluatedActionValue = evaluateExpression(
+                    state.actionValue,
+                    env,
+                );
+                debugNFA(
+                    `  Evaluated actionValue: ${JSON.stringify(evaluatedActionValue)}`,
+                );
             }
             acceptingThreads.push({
                 matched: true,
@@ -422,8 +507,19 @@ function seedQueue(
         }
 
         if (trans.type === "token" && trans.tokens) {
-            // Exact match
-            if (trans.tokens.includes(normToken)) {
+            // Exact match — but require the input's raw slice to honor any
+            // trailing punctuation the grammar's display token specifies, so
+            // alternates like `hello, world` / `hello. world` don't collapse.
+            const exactIdx = trans.tokens.indexOf(normToken);
+            if (
+                exactIdx !== -1 &&
+                inputRawHonorsDisplayPunct(
+                    trans.displayTokens?.[exactIdx],
+                    state.tokenIndex,
+                    inputCtx,
+                    state.localTokens,
+                )
+            ) {
                 debugNFA(`  token exact "${normToken}" → state ${trans.to}`);
                 queue.push({ trans, state });
             }
@@ -440,6 +536,41 @@ function seedQueue(
                         trans,
                         state: { ...state, localTokens: newLocalTokens },
                     });
+                }
+            }
+            // Multi-input-token match: a grammar token with internal
+            // whitespace (escape-space authoring) spans multiple
+            // consecutive input tokens.  Enqueue if any whitespace-bearing
+            // grammar token has enough input lookahead.  Actual span
+            // verification happens in tryTransition.
+            for (const t of trans.tokens) {
+                if (!/\s/.test(t)) continue;
+                const wordCount = t.split(/\s+/).filter(Boolean).length;
+                if (
+                    wordCount < 2 ||
+                    state.tokenIndex + wordCount > myTokens.length
+                ) {
+                    continue;
+                }
+                const span = myTokens
+                    .slice(state.tokenIndex, state.tokenIndex + wordCount)
+                    .map((tok) => normalizeToken(tok))
+                    .join(" ");
+                if (
+                    span === t &&
+                    inputSeparatorsMatch(
+                        t,
+                        state.tokenIndex,
+                        wordCount,
+                        inputCtx,
+                        state.localTokens,
+                    )
+                ) {
+                    debugNFA(
+                        `  token multi-span "${span}" (${wordCount} tokens) → state ${trans.to}`,
+                    );
+                    queue.push({ trans, state });
+                    break;
                 }
             }
             continue;
@@ -467,33 +598,101 @@ function tryTransition(
     currentState: NFAExecutionState,
     tokenIndex: number,
     tokens?: string[],
+    inputCtx?: MatchInputContext,
 ): NFAExecutionState | undefined {
     switch (trans.type) {
         case "token":
             // Match specific token(s); normalize input token so that
-            // case and trailing punctuation don't prevent a match
-            if (trans.tokens && trans.tokens.includes(normalizeToken(token))) {
-                // StringPart capture: the slot receives the
-                // pre-computed joined StringPart text (slotValue),
-                // not the consumed normalized token.  See
-                // `compileStringPart` in `nfaCompiler.ts`.
-                const environment = applySlotCapture(
-                    currentState.environment,
-                    trans.slotIndex,
-                    trans.slotValue ?? token,
-                );
-                return {
-                    stateId: trans.to,
-                    tokenIndex: tokenIndex + 1,
-                    path: [...currentState.path, trans.to],
-                    fixedStringPartCount: currentState.fixedStringPartCount + 1,
-                    checkedWildcardCount: currentState.checkedWildcardCount,
-                    uncheckedWildcardCount: currentState.uncheckedWildcardCount,
-                    ruleIndex: currentState.ruleIndex,
-                    actionValue: currentState.actionValue,
-                    environment,
-                    slotMap: currentState.slotMap,
-                };
+            // case and trailing punctuation don't prevent a match.
+            if (trans.tokens) {
+                const normalized = normalizeToken(token);
+                const matchIdx = trans.tokens.indexOf(normalized);
+                if (
+                    matchIdx !== -1 &&
+                    inputRawHonorsDisplayPunct(
+                        trans.displayTokens?.[matchIdx],
+                        tokenIndex,
+                        inputCtx,
+                        currentState.localTokens,
+                    )
+                ) {
+                    // StringPart capture: the slot receives the
+                    // pre-computed joined StringPart text (slotValue),
+                    // not the consumed normalized token.  See
+                    // `compileStringPart` in `nfaCompiler.ts`.
+                    const environment = applySlotCapture(
+                        currentState.environment,
+                        trans.slotIndex,
+                        trans.slotValue ?? token,
+                    );
+                    return {
+                        stateId: trans.to,
+                        tokenIndex: tokenIndex + 1,
+                        path: [...currentState.path, trans.to],
+                        fixedStringPartCount:
+                            currentState.fixedStringPartCount + 1,
+                        checkedWildcardCount: currentState.checkedWildcardCount,
+                        uncheckedWildcardCount:
+                            currentState.uncheckedWildcardCount,
+                        ruleIndex: currentState.ruleIndex,
+                        actionValue: currentState.actionValue,
+                        environment,
+                        slotMap: currentState.slotMap,
+                    };
+                }
+                // Multi-input-token match: a grammar token with internal
+                // whitespace (escape-space authoring) spans multiple
+                // consecutive input tokens.  Join input tokens with " "
+                // and compare against any whitespace-bearing grammar token.
+                if (tokens) {
+                    for (const gt of trans.tokens) {
+                        if (!/\s/.test(gt)) continue;
+                        const wordCount = gt
+                            .split(/\s+/)
+                            .filter(Boolean).length;
+                        if (
+                            wordCount < 2 ||
+                            tokenIndex + wordCount > tokens.length
+                        ) {
+                            continue;
+                        }
+                        const span = tokens
+                            .slice(tokenIndex, tokenIndex + wordCount)
+                            .map((t) => normalizeToken(t))
+                            .join(" ");
+                        if (
+                            span === gt &&
+                            inputSeparatorsMatch(
+                                gt,
+                                tokenIndex,
+                                wordCount,
+                                inputCtx,
+                                currentState.localTokens,
+                            )
+                        ) {
+                            const environment = applySlotCapture(
+                                currentState.environment,
+                                trans.slotIndex,
+                                trans.slotValue ?? span,
+                            );
+                            return {
+                                stateId: trans.to,
+                                tokenIndex: tokenIndex + wordCount,
+                                path: [...currentState.path, trans.to],
+                                fixedStringPartCount:
+                                    currentState.fixedStringPartCount + 1,
+                                checkedWildcardCount:
+                                    currentState.checkedWildcardCount,
+                                uncheckedWildcardCount:
+                                    currentState.uncheckedWildcardCount,
+                                ruleIndex: currentState.ruleIndex,
+                                actionValue: currentState.actionValue,
+                                environment,
+                                slotMap: currentState.slotMap,
+                            };
+                        }
+                    }
+                }
             }
             return undefined;
 
@@ -505,9 +704,11 @@ function tryTransition(
             // Check type constraints and validate/convert token
             if (trans.typeName) {
                 if (trans.typeName === "number") {
-                    // Built-in number type
-                    const num = parseFloat(token);
-                    if (isNaN(num)) {
+                    // Built-in number type — accept the same extended literal
+                    // formats as the canonical matcher (0o, 0x, 0b, signed
+                    // decimal w/ fraction/exponent).
+                    const num = parseNumberToken(token);
+                    if (num === undefined) {
                         return undefined; // Token is not a number
                     }
                     slotValue = num;
@@ -522,22 +723,28 @@ function tryTransition(
                         trans.typeName === "word";
 
                     if (validator) {
-                        if (!validator.validate(token)) {
-                            // Single-token validation failed — try multi-token
-                            // lookahead for entity types (e.g. "from 1-2pm"
-                            // as CalendarTimeRange)
-                            if (tokens && !isBuiltInWildcardType) {
-                                const multiResult = tryMultiTokenEntity(
-                                    trans,
-                                    tokens,
-                                    tokenIndex,
-                                    currentState,
-                                    validator,
-                                );
-                                if (multiResult) {
-                                    return multiResult;
-                                }
+                        // Maximal munch: try multi-token span first.  This
+                        // matters when the new char-class-aware tokenizer has
+                        // split a single user-input span (e.g. "2pm" → ["2",
+                        // "pm"]) but the entity validator (CalendarTime,
+                        // CalendarTimeRange, …) is happy to validate the
+                        // single first token alone ("2" validates as a time
+                        // with no period).  Without preferring the longer
+                        // span, the matcher commits to the shorter (wrong)
+                        // match and leaves trailing tokens stranded.
+                        if (tokens && !isBuiltInWildcardType) {
+                            const multiResult = tryMultiTokenEntity(
+                                trans,
+                                tokens,
+                                tokenIndex,
+                                currentState,
+                                validator,
+                            );
+                            if (multiResult) {
+                                return multiResult;
                             }
+                        }
+                        if (!validator.validate(token)) {
                             return undefined; // Validation failed
                         }
                     } else if (!isBuiltInWildcardType) {
@@ -1185,9 +1392,26 @@ export function matchNFAWithIndex(
     index: FirstTokenIndex,
     tokens: string[],
     debug: boolean = false,
+    inputCtx?: MatchInputContext,
 ): NFAMatchResult {
     if (tokens.length === 0) {
-        return matchNFA(nfa, tokens, debug);
+        return matchNFA(nfa, tokens, debug, inputCtx);
+    }
+
+    // Display-punctuation filtering relies on per-transition data the
+    // first-token index has collapsed away.  When the input's raw first
+    // token carries trailing punctuation, fall through to matchNFA so
+    // seedQueue/tryTransition can filter alternates by display token.
+    if (inputCtx) {
+        const start0 = inputCtx.starts[0];
+        const end0 = inputCtx.ends[0];
+        if (
+            start0 !== undefined &&
+            end0 !== undefined &&
+            /[.,;:!?]+$/.test(inputCtx.request.substring(start0, end0))
+        ) {
+            return matchNFA(nfa, tokens, debug, inputCtx);
+        }
     }
 
     const firstToken = normalizeToken(tokens[0]);
@@ -1195,9 +1419,15 @@ export function matchNFAWithIndex(
 
     if (!precomputed || index.hasWildcardStart) {
         if (!precomputed && !index.hasWildcardStart) {
-            // Unknown first token, no wildcard rules.
-            // Check whether any grammar first-token is a strict prefix of
-            // the input token — if so, on-demand splitting may still match.
+            // Unknown first token, no wildcard rules.  Check whether any
+            // grammar first-token is reachable via either:
+            //   (a) prefix-split: grammar token is a strict prefix of input
+            //       (e.g. grammar `Fahr`, input `Fahrrad`) — on-demand
+            //       splitting in matchNFA handles this.
+            //   (b) multi-word grammar token whose FIRST word equals the
+            //       input firstToken (e.g. grammar `hello world` as one
+            //       segment, input first token `hello`) — runtime
+            //       multi-input-token match in tryTransition handles this.
             let hasPrefixMatch = false;
             for (const tok of index.tokenMap.keys()) {
                 if (
@@ -1206,6 +1436,13 @@ export function matchNFAWithIndex(
                 ) {
                     hasPrefixMatch = true;
                     break;
+                }
+                if (tok.includes(" ")) {
+                    const firstWord = tok.split(/\s+/)[0];
+                    if (firstWord === firstToken) {
+                        hasPrefixMatch = true;
+                        break;
+                    }
                 }
             }
             if (!hasPrefixMatch) {
@@ -1218,15 +1455,15 @@ export function matchNFAWithIndex(
                     tokensConsumed: 0,
                 };
             }
-            // Fall through to matchNFA for on-demand prefix splitting
-            return matchNFA(nfa, tokens, debug);
+            // Fall through to matchNFA for on-demand prefix/multi-token splitting
+            return matchNFA(nfa, tokens, debug, inputCtx);
         }
         // Wildcard-start rules exist (or first token found but wildcards too)
-        return matchNFA(nfa, tokens, debug);
+        return matchNFA(nfa, tokens, debug, inputCtx);
     }
 
     debugNFA(
         `matchNFAWithIndex: "${firstToken}" → ${precomputed.length} thread(s), starting at token[1]`,
     );
-    return matchNFACore(nfa, precomputed, tokens, 1, debug);
+    return matchNFACore(nfa, precomputed, tokens, 1, debug, inputCtx);
 }

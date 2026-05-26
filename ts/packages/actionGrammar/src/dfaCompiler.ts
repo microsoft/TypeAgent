@@ -78,7 +78,14 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
 
         for (const [token, info] of transitions.tokenTransitions) {
             const targetStateId = builder.createState(info.targetContexts);
-            builder.addTransition(dfaStateId, token, targetStateId);
+            builder.addTransition(
+                dfaStateId,
+                token,
+                targetStateId,
+                undefined,
+                undefined,
+                info.displayToken,
+            );
             if (!processed.has(targetStateId)) worklist.push(targetStateId);
         }
 
@@ -189,7 +196,10 @@ function epsilonClosure(
  * Transition result — no slot operations, just state routing and completion metadata.
  */
 interface TransitionResult {
-    tokenTransitions: Map<string, { targetContexts: DFAExecutionContext[] }>;
+    tokenTransitions: Map<
+        string,
+        { targetContexts: DFAExecutionContext[]; displayToken?: string }
+    >;
 
     wildcardTransition?: {
         targetContexts: DFAExecutionContext[];
@@ -215,6 +225,8 @@ function computeTransitions(
 ): TransitionResult {
     // token → raw target contexts (before epsilon closure)
     const tokenTargetsRaw = new Map<string, DFAExecutionContext[]>();
+    // normalized token → original (display) form (for completion output)
+    const tokenDisplay = new Map<string, string>();
 
     // wildcard sources
     const wildcardSources: Array<{
@@ -232,9 +244,17 @@ function computeTransitions(
 
             for (const trans of nfaState.transitions) {
                 if (trans.type === "token" && trans.tokens) {
-                    for (const token of trans.tokens) {
+                    for (let i = 0; i < trans.tokens.length; i++) {
+                        const token = trans.tokens[i];
+                        const display = trans.displayTokens?.[i];
                         if (!tokenTargetsRaw.has(token)) {
                             tokenTargetsRaw.set(token, []);
+                        }
+                        // Track the first display form seen for this
+                        // normalized token (used when emitting the DFA
+                        // transition for completion display).
+                        if (display !== undefined && !tokenDisplay.has(token)) {
+                            tokenDisplay.set(token, display);
                         }
                         const newCtx: DFAExecutionContext = {
                             nfaStateIds: new Set([trans.to]),
@@ -294,7 +314,7 @@ function computeTransitions(
     // a specific token also matches wildcard transitions) then apply epsilon closure
     const tokenTransitions = new Map<
         string,
-        { targetContexts: DFAExecutionContext[] }
+        { targetContexts: DFAExecutionContext[]; displayToken?: string }
     >();
     for (const [token, rawCtxs] of tokenTargetsRaw) {
         // Include wildcard targets: the token also matches any wildcard transitions
@@ -302,9 +322,15 @@ function computeTransitions(
             wildcardRawTargets.length > 0
                 ? [...rawCtxs, ...wildcardRawTargets]
                 : rawCtxs;
-        tokenTransitions.set(token, {
+        const entry: {
+            targetContexts: DFAExecutionContext[];
+            displayToken?: string;
+        } = {
             targetContexts: epsilonClosure(nfa, merged),
-        });
+        };
+        const disp = tokenDisplay.get(token);
+        if (disp !== undefined) entry.displayToken = disp;
+        tokenTransitions.set(token, entry);
     }
 
     // Wildcard transition — build captureInfo, use pre-computed wildcardRawTargets
