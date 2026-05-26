@@ -555,12 +555,17 @@ export class Emitter {
             }
         }
 
-        // When ANY branch returns a value, publish through branch.bind so
-        // consumers in the parent scope can read it (arm-scope names are
-        // not visible to the parent). When only one branch returns, the
-        // other arm's output is `null` (declared null-typed scope output).
+        // When ALL branches return a same-typed value AND we have a concrete
+        // resultSchema, publish through branch.bind so consumers in the parent
+        // scope can read it. When the schema is unknown ({}) it means not all
+        // arms return (Q2 relaxation) and we must not bind to avoid a bound
+        // {} producer (Decision 0011).
+        const isConcreteSchema = Object.keys(resultSchema).length > 0;
         let resultBind: string | undefined;
-        if (thenOutput !== undefined || elseOutput !== undefined) {
+        if (
+            (thenOutput !== undefined || elseOutput !== undefined) &&
+            isConcreteSchema
+        ) {
             resultBind = this.freshId("if_result");
             this.referencedNodes.add(resultBind);
         }
@@ -570,30 +575,30 @@ export class Emitter {
         const thenArm =
             thenScope.nodeOrder.length > 0
                 ? this.buildArmScope(
-                      thenScope,
-                      resultBind !== undefined
-                          ? (thenOutput ?? null)
-                          : undefined,
-                      resultBind !== undefined ? resultSchema : undefined,
-                  )
+                    thenScope,
+                    resultBind !== undefined
+                        ? (thenOutput ?? null)
+                        : undefined,
+                    resultBind !== undefined ? resultSchema : undefined,
+                )
                 : resultBind !== undefined && thenOutput !== undefined
-                  ? this.buildOutputOnlyArm(thenScope, thenOutput, resultSchema)
-                  : this.makeNoopArm();
+                    ? this.buildOutputOnlyArm(thenScope, thenOutput, resultSchema)
+                    : this.makeNoopArm();
 
         const falseArm =
             elseScope && elseScope.nodeOrder.length > 0
                 ? this.buildArmScope(
-                      elseScope,
-                      resultBind !== undefined
-                          ? (elseOutput ?? null)
-                          : undefined,
-                      resultBind !== undefined ? resultSchema : undefined,
-                  )
+                    elseScope,
+                    resultBind !== undefined
+                        ? (elseOutput ?? null)
+                        : undefined,
+                    resultBind !== undefined ? resultSchema : undefined,
+                )
                 : resultBind !== undefined &&
                     elseOutput !== undefined &&
                     elseScope
-                  ? this.buildOutputOnlyArm(elseScope, elseOutput, resultSchema)
-                  : this.makeNoopArm();
+                    ? this.buildOutputOnlyArm(elseScope, elseOutput, resultSchema)
+                    : this.makeNoopArm();
 
         // Boolean if-else is always exhaustive: { type: "boolean" } is
         // treated as an implicit enum [true, false] by the validator,
@@ -686,14 +691,17 @@ export class Emitter {
             }
         }
 
-        // If any arm produced an output, we must publish through branch.bind
-        // so consumers in the parent scope can read it. (Arm-scope names are
-        // not visible to the parent.)
+        // If all arms produced an output AND we have a concrete resultSchema,
+        // publish through branch.bind so consumers in the parent scope can
+        // read it. When resultSchema is {} (not all arms return, Q2 relaxation)
+        // we must not bind to avoid a bound {} producer (Decision 0011).
         const anyOutput =
             armOutputs.some((o) => o !== undefined) || defOutput !== undefined;
-        const resultBind = anyOutput
-            ? this.freshId("switch_result")
-            : undefined;
+        const switchHasConcreteSchema = Object.keys(resultSchema).length > 0;
+        const resultBind =
+            anyOutput && switchHasConcreteSchema
+                ? this.freshId("switch_result")
+                : undefined;
         if (resultBind) this.referencedNodes.add(resultBind);
 
         for (let i = 0; i < armScopes.length; i++) {
@@ -702,20 +710,20 @@ export class Emitter {
             cases[caseKey] =
                 armScope.nodeOrder.length > 0
                     ? this.buildArmScope(
-                          armScope,
-                          resultBind !== undefined ? armOutput : undefined,
-                          resultBind !== undefined ? resultSchema : undefined,
-                      )
+                        armScope,
+                        resultBind !== undefined ? armOutput : undefined,
+                        resultBind !== undefined ? resultSchema : undefined,
+                    )
                     : this.makeNoopArm();
         }
         if (hasSourceDefault) {
             defaultArm =
                 defScope!.nodeOrder.length > 0
                     ? this.buildArmScope(
-                          defScope!,
-                          resultBind !== undefined ? defOutput : undefined,
-                          resultBind !== undefined ? resultSchema : undefined,
-                      )
+                        defScope!,
+                        resultBind !== undefined ? defOutput : undefined,
+                        resultBind !== undefined ? resultSchema : undefined,
+                    )
                     : this.makeNoopArm();
         }
 
@@ -1579,7 +1587,9 @@ export class Emitter {
             { type: "boolean" },
         );
 
-        // Retry arm: noop, output true → loop continues.
+        // Retry arm: noop placeholder so the arm has an entry node.
+        // Output is the literal `true` (wired via buildArmScope below),
+        // so no bind needed on the noop itself.
         const retryScope = this.childScope(bodyScope);
         const retryNoopId = this.freshId("attempts_retry");
         retryScope.nodes[retryNoopId] = {
@@ -1588,7 +1598,6 @@ export class Emitter {
             inputSchema: {},
             outputSchema: {},
             inputs: {},
-            bind: retryNoopId,
         } as TaskNode;
         retryScope.nodeOrder.push(retryNoopId);
         const retryArm = this.buildArmScope(
@@ -2265,20 +2274,20 @@ export class Emitter {
                     : undefined;
                 const outputBind =
                     lastNode &&
-                    (lastNode.kind === "task" ||
-                        lastNode.kind === "loop" ||
-                        lastNode.kind === "fork" ||
-                        lastNode.kind === "forkMap" ||
-                        lastNode.kind === "branch" ||
-                        lastNode.kind === "workflowCall") &&
-                    lastNode.bind
+                        (lastNode.kind === "task" ||
+                            lastNode.kind === "loop" ||
+                            lastNode.kind === "fork" ||
+                            lastNode.kind === "forkMap" ||
+                            lastNode.kind === "branch" ||
+                            lastNode.kind === "workflowCall") &&
+                        lastNode.bind
                         ? lastNode.bind
                         : undefined;
                 branchOutput = outputBind
                     ? ({
-                          $from: "scope",
-                          name: outputBind,
-                      } as unknown as Template)
+                        $from: "scope",
+                        name: outputBind,
+                    } as unknown as Template)
                     : null;
             }
 
@@ -2293,9 +2302,9 @@ export class Emitter {
                         type: "object",
                         ...(outer.required.length > 0
                             ? {
-                                  required: outer.required,
-                                  properties: outer.properties,
-                              }
+                                required: outer.required,
+                                properties: outer.properties,
+                            }
                             : {}),
                     },
                     entry: branchScope.nodeOrder[0] ?? "",
@@ -2384,20 +2393,20 @@ export class Emitter {
                 : undefined;
             const outputBind =
                 lastNode &&
-                (lastNode.kind === "task" ||
-                    lastNode.kind === "loop" ||
-                    lastNode.kind === "fork" ||
-                    lastNode.kind === "forkMap" ||
-                    lastNode.kind === "branch" ||
-                    lastNode.kind === "workflowCall") &&
-                lastNode.bind
+                    (lastNode.kind === "task" ||
+                        lastNode.kind === "loop" ||
+                        lastNode.kind === "fork" ||
+                        lastNode.kind === "forkMap" ||
+                        lastNode.kind === "branch" ||
+                        lastNode.kind === "workflowCall") &&
+                    lastNode.bind
                     ? lastNode.bind
                     : undefined;
             bodyOutput = outputBind
                 ? ({
-                      $from: "scope",
-                      name: outputBind,
-                  } as unknown as Template)
+                    $from: "scope",
+                    name: outputBind,
+                } as unknown as Template)
                 : null;
         }
 
@@ -2443,9 +2452,9 @@ export class Emitter {
         const inputs: Record<string, Template> = {};
         const paramNames = schema
             ? Object.keys(
-                  ((schema.inputSchema as Record<string, unknown>)
-                      .properties as Record<string, unknown>) ?? {},
-              )
+                ((schema.inputSchema as Record<string, unknown>)
+                    .properties as Record<string, unknown>) ?? {},
+            )
             : [];
 
         // Single object-literal arg: unwrap entries into named inputs
@@ -2741,9 +2750,9 @@ export class Emitter {
                 type: "object",
                 ...(outer.required.length > 0
                     ? {
-                          required: outer.required,
-                          properties: outer.properties,
-                      }
+                        required: outer.required,
+                        properties: outer.properties,
+                    }
                     : {}),
             },
             entry: childScope.nodeOrder[0] ?? "",

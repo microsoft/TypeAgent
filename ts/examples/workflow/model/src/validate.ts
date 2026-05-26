@@ -382,6 +382,15 @@ function collectCallsInNode(
                     message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
                 });
             }
+            // Bound producers must declare a concrete outputSchema (Decision 0011).
+            if (node.bind && isTopSchema(node.outputSchema)) {
+                errors.push({
+                    path: `${path}.outputSchema`,
+                    message:
+                        `Bound workflowCall "${node.bind}" (ref "${refName}") has outputSchema {} (unknown). ` +
+                        `Bound producers must declare a concrete outputSchema.`,
+                });
+            }
             break;
         }
         case "loop":
@@ -1719,6 +1728,15 @@ function validateTaskNode(
             checkNodeTaskSchemas(taskDef, node, path, errors);
         }
     }
+    // Bound producers must declare a concrete outputSchema (Decision 0011).
+    if (node.bind && isTopSchema(node.outputSchema)) {
+        errors.push({
+            path: `${path}.outputSchema`,
+            message:
+                `Bound producer "${node.bind}" (task "${node.task}") has outputSchema {} (unknown). ` +
+                `Bound producers must declare a concrete outputSchema.`,
+        });
+    }
     // Never-output tasks always fail: next, bind, and onError are unreachable.
     if (isNeverSchema(node.outputSchema)) {
         if (node.next) {
@@ -1788,6 +1806,15 @@ function validateBranchNode(
                 `Branch declares outputSchema without bind. ` +
                 `outputSchema is only meaningful when the ` +
                 `branch publishes its value via bind.`,
+        });
+    }
+    // Bound producers must declare a concrete outputSchema (Decision 0011).
+    if (node.bind && node.outputSchema !== undefined && isTopSchema(node.outputSchema)) {
+        errors.push({
+            path: `${path}.outputSchema`,
+            message:
+                `Bound branch "${node.bind}" has outputSchema {} (unknown). ` +
+                `Bound producers must declare a concrete outputSchema.`,
         });
     }
     // Per-arm outputSchema covariance vs branch.outputSchema.
@@ -1885,6 +1912,15 @@ function validateLoopNode(
         errors,
     );
     checkBindableTargets(nodeIds, node, path, errors);
+    // Bound producers must declare a concrete outputSchema (Decision 0011).
+    if (node.bind && isTopSchema(node.body.outputSchema)) {
+        errors.push({
+            path: `${path}.body.outputSchema`,
+            message:
+                `Bound loop "${node.bind}" has body.outputSchema {} (unknown). ` +
+                `Bound producers must declare a concrete outputSchema.`,
+        });
+    }
 }
 
 function validateForkNode(
@@ -1922,6 +1958,15 @@ function validateForkNode(
         errors,
     );
     checkBindableTargets(nodeIds, node, path, errors);
+    // Bound producers must declare a concrete outputSchema (Decision 0011).
+    if (node.bind && isTopSchema(node.outputSchema)) {
+        errors.push({
+            path: `${path}.outputSchema`,
+            message:
+                `Bound fork "${node.bind}" has outputSchema {} (unknown). ` +
+                `Bound producers must declare a concrete outputSchema.`,
+        });
+    }
 }
 
 function validateForkMapNode(
@@ -1987,6 +2032,15 @@ function validateForkMapNode(
         errors,
     );
     checkBindableTargets(nodeIds, node, path, errors);
+    // Bound producers must declare a concrete outputSchema (Decision 0011).
+    if (node.bind && isTopSchema(node.outputSchema)) {
+        errors.push({
+            path: `${path}.outputSchema`,
+            message:
+                `Bound forkMap "${node.bind}" has outputSchema {} (unknown). ` +
+                `Bound producers must declare a concrete outputSchema.`,
+        });
+    }
 }
 
 /**
