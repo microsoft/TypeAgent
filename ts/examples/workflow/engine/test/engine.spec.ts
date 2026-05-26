@@ -363,7 +363,7 @@ function makeA4IR(): WorkflowIR {
                 inputs: {
                     section: "calendar",
                     reason: {
-                        $from: "input",
+                        $from: "recovery",
                         name: "error",
                         path: ["message"],
                     },
@@ -442,7 +442,7 @@ function makeA4IR(): WorkflowIR {
                 inputs: {
                     section: "email",
                     reason: {
-                        $from: "input",
+                        $from: "recovery",
                         name: "error",
                         path: ["message"],
                     },
@@ -587,7 +587,7 @@ function makeA4IR(): WorkflowIR {
                             inputs: {
                                 section: "repo",
                                 reason: {
-                                    $from: "input",
+                                    $from: "recovery",
                                     name: "error",
                                     path: ["message"],
                                 },
@@ -4029,14 +4029,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.noop",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
@@ -4312,14 +4305,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.failRecovery",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
@@ -4951,18 +4937,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     capture: {
                         kind: "task",
                         task: "test.capture",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
-                                $from: "input",
+                                $from: "recovery",
                                 name: "error",
                             } as Template,
                         },
@@ -5029,18 +5008,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     capture: {
                         kind: "task",
                         task: "test.capture",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
-                                $from: "input",
+                                $from: "recovery",
                                 name: "error",
                             } as Template,
                         },
@@ -5952,18 +5924,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.recover",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
-                                $from: "input",
+                                $from: "recovery",
                                 name: "error",
                             } as Template,
                         },

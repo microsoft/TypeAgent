@@ -94,7 +94,13 @@ export interface EmitError {
 
 // ---- Binding: how a name resolves in scope ----
 
-type BindingKind = "node" | "param" | "constant" | "loopInput" | "literal";
+type BindingKind =
+    | "node"
+    | "param"
+    | "constant"
+    | "loopInput"
+    | "recoveryInput"
+    | "literal";
 
 interface Binding {
     kind: BindingKind;
@@ -1467,12 +1473,10 @@ export class Emitter {
             task: "math.add",
             inputSchema: {
                 type: "object",
-                required: ["left", "right", "error", "trigger"],
+                required: ["left", "right"],
                 properties: {
                     left: { type: "number" },
                     right: { type: "number" },
-                    error: { type: "object" },
-                    trigger: { type: "object" },
                 },
             },
             outputSchema: { type: "number" },
@@ -1582,7 +1586,7 @@ export class Emitter {
             fbScope.bindings.set(
                 expr.fallback.param ?? DEFAULT_FALLBACK_PARAM,
                 {
-                    kind: "loopInput",
+                    kind: "recoveryInput",
                     nodeId: "error",
                 },
             );
@@ -1601,24 +1605,6 @@ export class Emitter {
             }
             if (fbScope.nodeOrder.length > 0) {
                 onError = `${fbPrefix}${fbScope.nodeOrder[0]}`;
-
-                // The first fallback node is a recovery task reached via
-                // onError. The validator requires "error" and "trigger" in
-                // its inputSchema (section 3.8).
-                const entryNode = scope.nodes[onError];
-                if (entryNode && entryNode.kind === "task") {
-                    const schema = entryNode.inputSchema;
-                    if (!schema.required) schema.required = [];
-                    for (const f of ["error", "trigger"] as const) {
-                        if (!schema.required.includes(f)) {
-                            schema.required.push(f);
-                        }
-                        if (!schema.properties?.[f]) {
-                            schema.properties = schema.properties ?? {};
-                            schema.properties[f] = { type: "object" };
-                        }
-                    }
-                }
             }
         }
 
@@ -2481,6 +2467,14 @@ export class Emitter {
                         return {
                             $from: "input",
                             name: inputName,
+                            path: rest.length > 0 ? rest : undefined,
+                        } as unknown as Template;
+                    }
+                    case "recoveryInput": {
+                        const recoveryName = binding.nodeId ?? first;
+                        return {
+                            $from: "recovery",
+                            name: recoveryName,
                             path: rest.length > 0 ? rest : undefined,
                         } as unknown as Template;
                     }

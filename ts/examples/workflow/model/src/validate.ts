@@ -13,6 +13,7 @@ import {
     BranchNode,
     BranchArm,
     Template,
+    TemplateFromRef,
     JSONSchema,
     ConstantDef,
     LoopStateVar,
@@ -45,11 +46,32 @@ const SELECTOR_PRIMITIVE_TYPES = new Set([
     "boolean",
 ]);
 
-/** Field names the engine injects into recovery task inputs (§3.8). */
-const RECOVERY_INJECTED_FIELDS = ["error", "trigger"] as const;
-
 /** Valid namespaces for `$from` template refs. */
-const VALID_FROM_NAMESPACES = new Set(["input", "constant", "scope", "state"]);
+const FROM_NAMESPACES = [
+    "input",
+    "constant",
+    "scope",
+    "state",
+    "recovery",
+] as const;
+
+type FromNamespace = (typeof FROM_NAMESPACES)[number];
+
+const VALID_FROM_NAMESPACES = new Set<string>(FROM_NAMESPACES);
+
+/** Schema for the engine-injected error object in the recovery namespace. */
+const RECOVERY_ERROR_SCHEMA: JSONSchema = {
+    type: "object",
+    properties: {
+        kind: { type: "string" },
+        message: { type: "string" },
+        source: { type: "string" },
+        task: { type: "string" },
+        node: { type: "string" },
+        scopePath: { type: "array", items: { type: "string" } },
+    },
+    required: ["kind", "message", "source", "task", "node", "scopePath"],
+};
 
 /**
  * A JSON Schema `{ "not": {} }` rejects every value (equivalent to `never`).
@@ -1272,6 +1294,7 @@ function validateOnErrorRules(
         if (isBindableNode(node)) {
             if (node.next) normalTargets.add(node.next);
             if (node.onError) {
+                // Rule 2: single trigger
                 const existing = onErrorTargetToTrigger.get(node.onError);
                 if (existing) {
                     errors.push({
@@ -1303,8 +1326,8 @@ function validateOnErrorRules(
             });
         }
 
-        // Rule 4: recovery target must be a task. If it isn't, Rules 3
-        // and 5 (task-specific) don't apply, so skip them.
+        // Recovery target must be a task node. If it isn't, Rule 4
+        // (no recursive recovery) doesn't apply, so skip it.
         if (targetNode.kind !== "task") {
             errors.push({
                 path: `${prefix}.${trigger}.onError`,
@@ -1315,8 +1338,7 @@ function validateOnErrorRules(
             continue;
         }
 
-        // Rule 3: no recursive recovery (task only; loops are already
-        // rejected above as non-task targets).
+        // Rule 4: no recursive recovery.
         if (targetNode.onError) {
             errors.push({
                 path: `${prefix}.${target}.onError`,
@@ -1326,18 +1348,78 @@ function validateOnErrorRules(
                     `allowed in v1.`,
             });
         }
+    }
 
-        // Rule 5: recovery task inputSchema must declare "error" and "trigger" (§3.8)
-        const required = targetNode.inputSchema.required ?? [];
-        for (const field of RECOVERY_INJECTED_FIELDS) {
-            if (!required.includes(field)) {
+    // Rule 5: $from "recovery" refs must only appear in onError target nodes,
+    // and only "error" and "trigger" are valid names in that namespace.
+    const VALID_RECOVERY_NAMES = new Set(["error", "trigger"]);
+    for (const [id, node] of Object.entries(nodes)) {
+        if (!hasInputs(node)) continue;
+        const recoveryRefs = collectTemplateRefs(
+            node.inputs,
+            `${prefix}.${id}.inputs`,
+            "recovery",
+        );
+        if (recoveryRefs.length === 0) continue;
+        if (!onErrorTargetToTrigger.has(id)) {
+            errors.push({
+                path: `${prefix}.${id}.inputs`,
+                message:
+                    `Node "${id}" uses $from "recovery" but is not an ` +
+                    `onError target. The "recovery" namespace is only ` +
+                    `available in nodes reached via onError dispatch.`,
+            });
+            continue;
+        }
+        for (const ref of recoveryRefs) {
+            if (!VALID_RECOVERY_NAMES.has(ref.name)) {
                 errors.push({
-                    path: `${prefix}.${target}.inputSchema`,
+                    path: ref.templatePath,
                     message:
-                        `Recovery task "${target}" must declare "${field}" ` +
-                        `as a required input field. The engine injects ` +
-                        `"error" and "trigger" when dispatching via onError (§3.8).`,
+                        `$from "recovery", name "${ref.name}": only ` +
+                        `"error" and "trigger" are valid recovery names.`,
                 });
+            } else if (ref.name === "trigger") {
+                // Resolve the trigger's schema from the node that declared onError.
+                const triggerId = onErrorTargetToTrigger.get(id);
+                const triggerNode = triggerId ? nodes[triggerId] : undefined;
+                const schema = triggerNode
+                    ? triggerInputSchema(triggerNode)
+                    : undefined;
+                if (!schema) {
+                    const triggerKind = triggerNode
+                        ? triggerNode.kind
+                        : "unknown";
+                    errors.push({
+                        path: ref.templatePath,
+                        message:
+                            `$from "recovery", name "trigger": the trigger ` +
+                            `node is a ${triggerKind} which has no ` +
+                            `resolved-inputs schema. "trigger" is only ` +
+                            `available when the trigger is a task, ` +
+                            `workflowCall, loop, or forkMap.`,
+                    });
+                } else if (ref.path && ref.path.length > 0) {
+                    checkSchemaCompat(
+                        schema,
+                        ref.path,
+                        ref.templatePath,
+                        `${ref.templatePath} ($from "recovery", name "trigger")`,
+                        errors,
+                    );
+                }
+            } else if (
+                ref.name === "error" &&
+                ref.path &&
+                ref.path.length > 0
+            ) {
+                checkSchemaCompat(
+                    RECOVERY_ERROR_SCHEMA,
+                    ref.path,
+                    ref.templatePath,
+                    `${ref.templatePath} ($from "recovery", name "error")`,
+                    errors,
+                );
             }
         }
     }
@@ -1448,6 +1530,16 @@ function checkStateSoundness(
                 });
             } else {
                 const stateSchema = loopNode.state[ref.name].schema;
+                // Path validation: verify path is navigable in state schema.
+                if (ref.path && ref.path.length > 0) {
+                    checkSchemaCompat(
+                        stateSchema,
+                        ref.path,
+                        ref.templatePath,
+                        `${ref.templatePath} ($from "state", name "${ref.name}")`,
+                        errors,
+                    );
+                }
                 const consumerPropSchema = resolveConsumerPropertySchema(
                     ref.templatePath,
                     inputsPrefix,
@@ -2119,6 +2211,31 @@ function nodeOutputSchema(
 }
 
 /**
+ * Get the schema of the "trigger" recovery value for a node that declares
+ * onError. At runtime this is the resolved inputs object the engine built
+ * for the failed node.
+ *
+ * Returns undefined for node kinds that have no meaningful inputs object
+ * (fork, branch) since those don't produce a single resolved-inputs value.
+ */
+function triggerInputSchema(node: WorkflowNode): JSONSchema | undefined {
+    switch (node.kind) {
+        case "task":
+        case "workflowCall":
+            return node.inputSchema;
+        case "loop":
+        case "forkMap":
+            return node.body.inputSchema;
+        case "fork":
+        case "branch":
+            // Fork/branch don't have a single resolved-inputs object.
+            return undefined;
+        default:
+            assertNever(node);
+    }
+}
+
+/**
  * Check that a target reference exists in the scope; push an error if not.
  */
 function checkTargetExists(
@@ -2281,6 +2398,27 @@ interface TypeResolutionContext {
     inputSchema: JSONSchema | undefined;
     stateVars: Record<string, LoopStateVar> | undefined;
     constants: Record<string, ConstantDef> | undefined;
+    /** When resolving inside an onError target, the trigger's inputSchema. */
+    recoveryTriggerInputSchema: JSONSchema | undefined;
+}
+
+function isFromTemplateRef(value: Template): value is TemplateFromRef {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return false;
+    }
+    if (
+        typeof value.$from !== "string" ||
+        !FROM_NAMESPACES.includes(value.$from as FromNamespace)
+    ) {
+        return false;
+    }
+    if (typeof value.name !== "string") {
+        return false;
+    }
+    if (value.path !== undefined && !Array.isArray(value.path)) {
+        return false;
+    }
+    return true;
 }
 
 /** Derive a JSON Schema from a literal JSON value. */
@@ -2338,12 +2476,10 @@ function resolveTemplateType(
         return buildArraySchema(elemSchemas);
     }
 
-    const obj = template as Record<string, unknown>;
-
-    if ("$from" in obj) {
-        const from = obj["$from"] as string;
-        const name = obj["name"] as string;
-        const path = obj["path"] as (string | number)[] | undefined;
+    if (isFromTemplateRef(template)) {
+        const from = template.$from;
+        const name = template.name;
+        const path = template.path;
 
         let baseSchema: JSONSchema | undefined;
         switch (from) {
@@ -2364,23 +2500,40 @@ function resolveTemplateType(
             case "constant":
                 baseSchema = ctx.constants?.[name]?.schema;
                 break;
+            case "recovery":
+                // Recovery refs are engine-injected values available only on
+                // onError targets. Rule 5 validates name/domain legality.
+                if (name === "error") {
+                    baseSchema = RECOVERY_ERROR_SCHEMA;
+                } else if (name === "trigger") {
+                    // The resolved inputs of the failed task. undefined
+                    // when the trigger is fork/branch (no inputs object).
+                    baseSchema = ctx.recoveryTriggerInputSchema;
+                }
+                break;
+            default:
+                assertNever(from);
         }
+        // Unresolvable ref (bad name, missing binding, etc.). Earlier
+        // passes already reported the root cause; skip type checking.
         if (!baseSchema) return undefined;
         if (path && path.length > 0) {
+            // Path segment not declared in schema; earlier passes
+            // (checkSchemaCompat) already reported this.
             return resolveSchemaPath(baseSchema, path);
         }
         return baseSchema;
     }
 
-    if ("$literal" in obj) {
-        return jsonValueToSchema(obj["$literal"]);
+    if ("$literal" in template) {
+        return jsonValueToSchema(template["$literal"]);
     }
 
     // Plain object: property-wise composition
     const properties: Record<string, JSONSchema> = {};
     const required: string[] = [];
-    for (const [key, value] of Object.entries(obj)) {
-        const propType = resolveTemplateType(value as Template, ctx);
+    for (const [key, value] of Object.entries(template)) {
+        const propType = resolveTemplateType(value, ctx);
         if (propType) {
             properties[key] = propType;
             required.push(key);
@@ -2732,15 +2885,33 @@ function validateTypeCompatibility(
     outputSchema?: JSONSchema,
 ): void {
     const bindings = buildBindingMap(nodes);
+
+    // Build map: recovery target nodeId -> trigger node's inputSchema.
+    // The "trigger" recovery value is the resolved inputs object the engine
+    // computed for the failed node, so its schema is that node's inputSchema.
+    const recoveryTriggerSchemas = new Map<string, JSONSchema>();
+    for (const node of Object.values(nodes)) {
+        if (isBindableNode(node) && node.onError) {
+            const schema = triggerInputSchema(node);
+            if (schema) {
+                recoveryTriggerSchemas.set(node.onError, schema);
+            }
+        }
+    }
+
     const ctx: TypeResolutionContext = {
         bindings,
         inputSchema: scopeInputSchema,
         stateVars,
         constants,
+        recoveryTriggerInputSchema: undefined,
     };
 
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
+        // Update recovery context for this node.
+        ctx.recoveryTriggerInputSchema =
+            recoveryTriggerSchemas.get(id) ?? undefined;
 
         if (hasInputs(node)) {
             // Check each input template value against the corresponding
@@ -2901,6 +3072,7 @@ function validateTypeCompatibility(
                         inputSchema: node.body.inputSchema,
                         stateVars: node.state,
                         constants,
+                        recoveryTriggerInputSchema: undefined,
                     };
                     if (node.body.output && node.body.outputSchema) {
                         const outputResolved = resolveTemplateType(
@@ -3457,7 +3629,7 @@ function checkReservedTemplateKeys(
                 path: templatePath,
                 message:
                     `Unknown $from namespace "${from}". ` +
-                    `Valid namespaces are: input, constant, scope, state.`,
+                    `Valid namespaces are: input, constant, scope, state, recovery.`,
             });
         }
         return;

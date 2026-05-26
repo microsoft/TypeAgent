@@ -2632,11 +2632,11 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        it("rejects loop recovery target with its own onError exactly once (no Rule 3+4 double-fire)", () => {
+        it("rejects loop recovery target with its own onError exactly once (no Rule 4 + task-kind double-fire)", () => {
             // Regression test for the validateOnErrorRules fix: a loop-kind
             // recovery target that also declares onError used to trip both
-            // Rule 3 ("no recursive recovery") and Rule 4 ("must be a
-            // task"). Rule 3 / Rule 5 are task-specific; only Rule 4
+            // Rule 4 ("no recursive recovery") and the task-kind check.
+            // Rule 4 is task-specific; only the task-kind check
             // should fire here.
             const ir = makeMinimalIR({
                 nodes: {
@@ -2672,7 +2672,7 @@ describe("validateWorkflowIR", () => {
                 e.message.includes("must be a task node"),
             );
             expect(kindErrors).toHaveLength(1);
-            // No Rule 3 ("Recursive recovery") error should be present.
+            // No Rule 4 ("Recursive recovery") error should be present.
             const recursiveErrors = result.errors.filter((e) =>
                 e.message.includes("Recursive recovery"),
             );
@@ -5303,69 +5303,7 @@ describe("validateWorkflowIR", () => {
     // ---- Gap 5: recovery task inputSchema must declare error and trigger ----
 
     describe("recovery task error/trigger fields", () => {
-        it("rejects recovery task missing error in required", () => {
-            const ir = makeMinimalIR({
-                nodes: {
-                    start: makeTaskNode({
-                        onError: "recover",
-                        bind: "out",
-                    }),
-                    recover: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: {
-                            type: "object",
-                            // "trigger" present but not "error"
-                            required: ["trigger"],
-                            properties: {
-                                trigger: { type: "object" },
-                            },
-                        },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
-                },
-            });
-            const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expect(
-                result.errors.some((e) => e.message.includes('"error"')),
-            ).toBe(true);
-        });
-
-        it("rejects recovery task missing trigger in required", () => {
-            const ir = makeMinimalIR({
-                nodes: {
-                    start: makeTaskNode({
-                        onError: "recover",
-                        bind: "out",
-                    }),
-                    recover: {
-                        kind: "task",
-                        task: "noop",
-                        inputSchema: {
-                            type: "object",
-                            // "error" present but not "trigger"
-                            required: ["error"],
-                            properties: {
-                                error: { type: "object" },
-                            },
-                        },
-                        outputSchema: { type: "object" },
-                        inputs: {},
-                        bind: "out",
-                    },
-                },
-            });
-            const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expect(
-                result.errors.some((e) => e.message.includes('"trigger"')),
-            ).toBe(true);
-        });
-
-        it("rejects recovery task with no required array at all", () => {
+        it("accepts recovery task without error/trigger in inputSchema (recovery namespace)", () => {
             const ir = makeMinimalIR({
                 nodes: {
                     start: makeTaskNode({
@@ -5383,11 +5321,92 @@ describe("validateWorkflowIR", () => {
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts $from recovery ref in an onError target node", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "recovery",
+                                name: "error",
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects $from recovery ref in a non-onError-target node (Rule 5)", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            error: {
+                                $from: "recovery",
+                                name: "error",
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
-            const msgs = result.errors.map((e) => e.message);
             expect(
-                msgs.some((m) => m.includes('"error"')) &&
-                    msgs.some((m) => m.includes('"trigger"')),
+                result.errors.some((e) =>
+                    e.message.includes("not an onError target"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects invalid recovery name in onError target (Rule 5)", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            foo: {
+                                $from: "recovery",
+                                name: "bogus",
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes('"bogus"') &&
+                        e.message.includes("only"),
+                ),
             ).toBe(true);
         });
 
@@ -5417,6 +5436,73 @@ describe("validateWorkflowIR", () => {
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(true);
+        });
+
+        it("accepts $from recovery with valid path into error schema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                msg: { type: "string" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            msg: {
+                                $from: "recovery",
+                                name: "error",
+                                path: ["message"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(true);
+        });
+
+        it("rejects $from recovery with invalid path into error schema", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        onError: "recover",
+                        bind: "out",
+                    }),
+                    recover: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                x: { type: "string" },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            x: {
+                                $from: "recovery",
+                                name: "error",
+                                path: ["nonexistent"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("nonexistent")),
+            ).toBe(true);
         });
     });
 
@@ -7386,6 +7472,296 @@ describe("validateWorkflowIR", () => {
                         (e) =>
                             e.message.includes('$from "input"') &&
                             e.message.includes("path") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+        });
+
+        describe("path validation coverage: all $from namespaces", () => {
+            // Guards against future regressions: every namespace that supports
+            // `path` must reject an invalid path in an earlier pass.
+
+            it("rejects $from scope with invalid path", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        first: makeTaskNode({
+                            outputSchema: {
+                                type: "object",
+                                properties: { x: { type: "string" } },
+                            },
+                            bind: "a",
+                            next: "second",
+                        }),
+                        second: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { val: { type: "string" } },
+                            },
+                            inputs: {
+                                val: {
+                                    $from: "scope",
+                                    name: "a",
+                                    path: ["bogus"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                    entry: "first",
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes("bogus") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("rejects $from state with invalid path", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        start: makeLoopNode({
+                            state: {
+                                obj: {
+                                    schema: {
+                                        type: "object",
+                                        properties: {
+                                            count: { type: "integer" },
+                                        },
+                                    },
+                                    initial: { count: 0 },
+                                },
+                            },
+                            iterateState: {
+                                obj: { $from: "state", name: "obj" },
+                            },
+                            body: {
+                                inputSchema: { type: "object" },
+                                entry: "step",
+                                nodes: {
+                                    step: makeTaskNode({
+                                        inputSchema: {
+                                            type: "object",
+                                            properties: {
+                                                val: { type: "integer" },
+                                            },
+                                        },
+                                        inputs: {
+                                            val: {
+                                                $from: "state",
+                                                name: "obj",
+                                                path: ["nonexistent"],
+                                            },
+                                        },
+                                    }),
+                                },
+                                output: { $from: "state", name: "obj" },
+                                outputSchema: { type: "object" },
+                            },
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes("nonexistent") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("rejects $from recovery with invalid path", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        start: makeTaskNode({
+                            onError: "recover",
+                            bind: "out",
+                        }),
+                        recover: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { x: { type: "string" } },
+                            },
+                            inputs: {
+                                x: {
+                                    $from: "recovery",
+                                    name: "error",
+                                    path: ["bogusField"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes("bogusField") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("rejects $from recovery trigger with invalid path into trigger inputSchema", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: {
+                                    url: { type: "string" },
+                                },
+                            },
+                            inputs: {
+                                url: { $from: "input", name: "url" },
+                            },
+                            onError: "recover",
+                            bind: "out",
+                        }),
+                        recover: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { x: { type: "string" } },
+                            },
+                            inputs: {
+                                x: {
+                                    $from: "recovery",
+                                    name: "trigger",
+                                    path: ["nonexistentField"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                    inputSchema: {
+                        type: "object",
+                        properties: { url: { type: "string" } },
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes("nonexistentField") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("accepts $from recovery trigger with valid path into trigger inputSchema", () => {
+                const ir = makeMinimalIR({
+                    nodes: {
+                        start: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: {
+                                    url: { type: "string" },
+                                },
+                            },
+                            inputs: {
+                                url: { $from: "input", name: "url" },
+                            },
+                            onError: "recover",
+                            bind: "out",
+                        }),
+                        recover: makeTaskNode({
+                            inputSchema: {
+                                type: "object",
+                                properties: { x: { type: "string" } },
+                            },
+                            inputs: {
+                                x: {
+                                    $from: "recovery",
+                                    name: "trigger",
+                                    path: ["url"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                    inputSchema: {
+                        type: "object",
+                        properties: { url: { type: "string" } },
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(true);
+            });
+
+            it("rejects $from input with invalid path", () => {
+                const ir = makeMinimalIR({
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            data: {
+                                type: "object",
+                                properties: { id: { type: "string" } },
+                            },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputs: {
+                                val: {
+                                    $from: "input",
+                                    name: "data",
+                                    path: ["missing"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes("missing") &&
+                            e.message.includes("not declared"),
+                    ),
+                ).toBe(true);
+            });
+
+            it("rejects $from constant with invalid path", () => {
+                const ir = makeMinimalIR({
+                    constants: {
+                        cfg: {
+                            schema: {
+                                type: "object",
+                                properties: { port: { type: "integer" } },
+                            },
+                            value: { port: 8080 },
+                        },
+                    },
+                    nodes: {
+                        start: makeTaskNode({
+                            inputs: {
+                                val: {
+                                    $from: "constant",
+                                    name: "cfg",
+                                    path: ["noSuchKey"],
+                                },
+                            },
+                            bind: "out",
+                        }),
+                    },
+                });
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(result.valid).toBe(false);
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.message.includes("noSuchKey") &&
                             e.message.includes("not declared"),
                     ),
                 ).toBe(true);

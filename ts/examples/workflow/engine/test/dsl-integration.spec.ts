@@ -1566,17 +1566,10 @@ describe("DSL -> Engine integration", () => {
                                 task: "math.add",
                                 inputSchema: {
                                     type: "object",
-                                    required: [
-                                        "left",
-                                        "right",
-                                        "error",
-                                        "trigger",
-                                    ],
+                                    required: ["left", "right"],
                                     properties: {
                                         left: { type: "number" },
                                         right: { type: "number" },
-                                        error: { type: "object" },
-                                        trigger: {},
                                     },
                                 },
                                 outputSchema: { type: "number" },

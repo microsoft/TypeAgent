@@ -126,6 +126,14 @@ export type SchemaTemplate = SchemaTemplateNode;
  * `$literal` key are literal escapes, and everything else evaluates
  * element-wise (arrays) or property-wise (plain objects).
  */
+
+/** A `$from` reference resolved by the engine at runtime. */
+export interface TemplateFromRef {
+    $from: "input" | "constant" | "scope" | "state" | "recovery";
+    name: string;
+    path?: (string | number)[];
+}
+
 // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 export type Template =
     | string
@@ -133,6 +141,7 @@ export type Template =
     | boolean
     | null
     | Template[]
+    | TemplateFromRef
     | { [key: string]: Template };
 
 // ---- Node types ----

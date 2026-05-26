@@ -479,8 +479,8 @@ the §4.1 pass 6 dominator check are the standard SSA join (phi) and
 dominance constraint applied per namespace.
 
 **Namespaces.** Within a scope, names are partitioned into disjoint
-namespaces, one per `$from` discriminant. All four namespaces are
-scope-wide.
+namespaces, one per `$from` discriminant. The first four namespaces are
+scope-wide; `recovery` is node-scoped (see table).
 
 | `$from`      | Declared at                                                             | Visible in                    | Frame (single-assignment lifetime)                                                                                    |
 | ------------ | ----------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -488,15 +488,14 @@ scope-wide.
 | `"constant"` | Workflow root `constants`                                               | Every scope                   | The run.                                                                                                              |
 | `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to | One execution of the binding node. In a loop body, re-bound each iteration.                                           |
 | `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope        | One iteration. Frame transition is body completion with `continueWhen` true, which evaluates `iterateState` (§3.7.1). |
+| `"recovery"` | Engine-injected on error dispatch (§3.8)                                | The onError target node only  | Single node execution. Populated only when the engine dispatches to an onError target; unavailable otherwise.         |
 
-A task node dispatched via an `onError` edge additionally receives two
-engine-injected input fields named `error` and `trigger` before its
-`inputs` block is resolved (see §3.8). These fields are part of the
-recovery node's `inputSchema` and are read with `$from: "input"` like
-any other input field; they are not a `$from` namespace because they
-are never declared at any reference site. The collapse of the previous
-handler-local `error` and `trigger` discriminants into ordinary
-engine-injected input fields is recorded in §8.7.
+The `recovery` namespace provides `error` (the failure value) and
+`trigger` (the failing node's resolved inputs). It is conditional: only
+populated for the single node reached via `onError`, and the validator
+rejects `$from: "recovery"` in any other node. This dedicated namespace
+prevents silent shadowing of user-declared input fields named "error" or
+"trigger" (see §3.8 Rule 5).
 
 Because the namespaces are disjoint, the same name may appear in more than one
 of them without conflict. For example, a workflow may have an input field
@@ -691,8 +690,8 @@ the composed result.
 
    ```jsonc
    {
-     "$from": "input" | "constant" | "scope" | "state",
-     "name":  "<name>",            // input field, constant name, scope variable, or state var
+     "$from": "input" | "constant" | "scope" | "state" | "recovery",
+     "name":  "<name>",            // input field, constant name, scope variable, state var, or recovery field
      "path":  ["a", "b", 0, "c"],  // optional; omit (do not write []) when no projection is needed
      "optional": true              // optional; include only when true (absent = required)
    }
@@ -1133,8 +1132,8 @@ propagates per §5.4.
 v1 has no separate handler node kind. Error recovery is expressed by
 pointing a node's `onError` field at a `task` node N in the same scope.
 When the trigger T fails, the engine dispatches N as the recovery task,
-and injects two fields into N's `inputs` before resolving the rest of
-N's references:
+injecting two values into a dedicated **recovery namespace** that N can
+access via `$from: "recovery"`:
 
 - `error` - the failure value, a structured object whose shape is fixed
   by §3.8.1 (the `Error` type).
@@ -1142,13 +1141,15 @@ N's references:
   values T was about to consume when it failed). This avoids forcing T to
   bind upstream values purely so the recovery can inspect them.
 
-N's `inputSchema` MUST declare both fields (typed against
-`#/types/Error` and against an object schema describing T's inputs,
-respectively); the validator checks this when N is the target of an
-`onError` edge. N reads them with `$from: "input"` like any other input
-field.
+N reads these with `$from: "recovery"` (e.g.
+`{ "$from": "recovery", "name": "error" }`). The recovery namespace is
+only populated for the onError target node; other nodes in the scope
+cannot reference it (the validator rejects `$from: "recovery"` in
+non-target nodes). N's `inputSchema` does NOT need to declare these
+fields: they live in a separate namespace and never pass through the
+task's declared input contract.
 
-**Rules for an `onError` recovery target N (with trigger T).** All four
+**Rules for an `onError` recovery target N (with trigger T).** All five
 are validator obligations and follow from the single "recovery task per
 trigger" model:
 
@@ -1173,6 +1174,12 @@ trigger" model:
    originally failed, it does so by reaching the loop's body natural
    completion with `continueWhen` resolving to `true` (the bounded-retry
    pattern, P3 scenario 27), not by attaching another `onError` to itself.
+5. **Recovery namespace restriction.** `$from: "recovery"` is only legal
+   in N's `inputs` template. Any other node using this namespace is a
+   validation error. This prevents accidental use of error data outside
+   the recovery path and ensures the namespace's behavioral rule
+   (conditional availability, single-node lifetime, engine-injected on
+   failure) is never violated.
 
 A recovery node's `next` follows the same rules as any task's `next`
 (terminal in top-level, must lead somewhere in a loop body), and a
@@ -1843,7 +1850,7 @@ type errors at runtime are unreachable.
 
 | Check                                  | Static guarantee                                | Reasoning                                                                                                        |
 | -------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Unknown `$from` namespace**          | §4.1 schema-syntax pass                         | Only valid namespaces (`input`, `constant`, `scope`, `state`) are accepted                                       |
+| **Unknown `$from` namespace**          | §4.1 schema-syntax pass                         | Only valid namespaces (`input`, `constant`, `scope`, `state`, `recovery`) are accepted                           |
 | **Unresolved reference**               | §4.1 dominator pass with onError-split coverage | Binding coverage is proven on all paths including error-recovery paths; uncovered non-optional refs are rejected |
 | **Path projection on null/wrong type** | §4.1 type-compatibility + `resolveSchemaPath`   | Path segments are checked against declared schema structure; task output check ensures actual values match       |
 
@@ -2210,7 +2217,7 @@ reference them.
 | Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | P1        | **Intra-IR axis:** template model with `$from` references and named source (§3.4); static dominator pass over an acyclic intra-scope CFG; compositional type compatibility pass (resolved template types); `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
-| P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                        |
+| P2        | Five declared `$from` sources (input, constant, scope, state, recovery); error recovery dispatches a task via `onError` and injects `error` / `trigger` into a dedicated `recovery` namespace with its own behavioral rule (conditional availability, single-node lifetime, engine-injected on failure); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                     |
 | P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies, branch arms, and fork branches are structural `WorkflowScope`s, not flat regions; iteration is the loop's `continueWhen` re-entering `body.entry` at body completion ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)), not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                       |
 | P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                                                            |
 | P5        | Required `kind` discriminant; required explicit `next` in body scopes (no implicit re-entry; `next: null` marks natural completion); explicit `continueWhen` for loop termination ([decision 0010](decisions/0010-finish-workflow-scope-unification.md)); required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); optional `maxIterations` with engine default; explicit `bind` makes value lifetime statically predictable                                                                                                                                             |
@@ -2363,16 +2370,21 @@ own design review against P5.
 ### 8.7 Recovery model: task dispatched via `onError` with engine-injected fields
 
 - **Chosen:** error recovery is an `onError` edge to an ordinary `task`
-  node in the same scope; the engine injects two input fields (`error`
+  node in the same scope; the engine injects two values (`error`
   per §3.8.1 and `trigger`, an object whose fields are the trigger's
-  resolved inputs) before resolving the recovery task's other inputs.
+  resolved inputs) into a dedicated `$from: "recovery"` namespace
+  before resolving the recovery task's other inputs.
   The recovery node is a task in every structural respect (it has
   `inputs`, `inputSchema`, `outputSchema`, `next`, optional `bind`,
   and supports the bounded-retry pattern by routing back through a
   body node whose completion lets the loop's `continueWhen` re-fire). The validator
-  enforces four edge-role rules (§3.8): reached only via T's `onError`
+  enforces five rules (§3.8): reached only via T's `onError`
   edge, single trigger, dominator scope `dominators(T) ∪ {T}`, no
-  recursive `onError` on the recovery itself.
+  recursive `onError` on the recovery itself, and `$from: "recovery"`
+  only legal in the onError target's `inputs` template.
+  The recovery node's `inputSchema` does NOT need to declare `error`
+  or `trigger`: they live in the recovery namespace, not in `"input"`,
+  so there is no conflict with the task's declared input contract.
 - **Antecedent in pre-revision v1.** An earlier draft introduced a
   separate `kind: "handler"` node together with two pseudo-`$from`
   discriminants (`"error"` and `"trigger"`) and a per-kind
@@ -2382,9 +2394,23 @@ own design review against P5.
   rules differed from `task` only because of the edge that reaches it,
   plus a pair of `$from` namespaces whose visibility was scoped to that
   one node kind. Collapsing the kind into `task` and the pseudo-sources
-  into engine-injected input fields removes one node kind, two `$from`
-  discriminants, and three validator special cases without changing
-  any expressible workflow.
+  into a single `$from: "recovery"` namespace removes one node kind,
+  one `$from` discriminant, and three validator special cases without
+  changing any expressible workflow. The §1.3.2 one-surface-form test
+  is satisfied: `recovery`'s behavioral rule (conditional availability,
+  single-node lifetime, engine-injected on failure) is genuinely
+  distinct from `input`, `constant`, `scope`, and `state`.
+- **Prior intermediate design (collapsed into input).** Between the
+  `kind: "handler"` draft and the current design, a brief intermediate
+  injected `error`/`trigger` as ordinary `$from: "input"` fields and
+  required the recovery node's `inputSchema` to declare them. This was
+  rejected because: (a) it forced the task's registered input contract
+  to include fields that the task itself never uses in non-recovery
+  contexts, creating a conflict with `checkExtraProperties` validation;
+  (b) it silently shadowed any user input field named "error" or
+  "trigger"; and (c) it violated §1.3.2 since the behavioral rule
+  for these injected fields (conditional, engine-sourced, single-node)
+  differs from the behavioral rule for user-declared input fields.
 - Alt A: keep the dedicated `kind: "handler"` and the `error` /
   `trigger` `$from` namespaces (the antecedent). Rejected by the
   variance lens above: one rule, three surface forms.
