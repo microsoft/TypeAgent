@@ -607,16 +607,35 @@ async function getLatestVersion(pkg) {
  * Extract unique sorted resolved versions of a specific package from
  * `pnpm why <pkg> -r --json` output.
  *
- * The output is an array of workspace-project entries, each with its own
- * `name`/`version` (the workspace's version, NOT the queried package's
- * version) and a nested `dependencies`/`devDependencies`/`optionalDependencies`
- * tree. Each node in those trees keyed by a package name carries the
- * `version` we actually want.
+ * Two output shapes are supported because pnpm changed the JSON format:
  *
- * Earlier this function read `e.version` off the top-level entries, which
- * always returned the workspace project's own version (e.g. `1.0.0`) and
- * caused `verifyAllVersionsFixed` to incorrectly conclude that updates had
- * left vulnerable versions in place.
+ * 1. pnpm 10.x (current) — reverse tree. The top-level array contains
+ *    one entry per resolved version of <pkg>:
+ *        [ { name: <pkg>, version: <pkgVersion>, dependents: [...] }, ... ]
+ *    Each entry's `name`/`version` IS the queried package's version, and
+ *    `dependents` walks back toward workspace roots. There are no forward
+ *    `dependencies`/`devDependencies`/`optionalDependencies` children at
+ *    the root.
+ *
+ * 2. Older pnpm — forward tree. The top-level array contains one entry
+ *    per workspace project; each entry's `name`/`version` is the workspace
+ *    project (NOT the queried package) and the queried package's versions
+ *    appear under nested `dependencies`/`devDependencies`/`optionalDependencies`
+ *    children.
+ *
+ * To handle both, we record `node.version` whenever `node.name === pkg`
+ * (covers shape 1's top-level entries and shape 2's nested matches) AND
+ * recurse through the forward `depKeys` (covers shape 2's nesting). For
+ * shape 2 specifically, ignoring the top-level entry's `name`/`version`
+ * is critical — that's the workspace project's own version, not the
+ * queried package's — but the `node.name === pkg` guard correctly skips
+ * those top-level workspace entries.
+ *
+ * History: an earlier revision read `e.version` off the top-level entries
+ * unconditionally, which under shape 2 always returned the workspace
+ * project's own version and made `verifyAllVersionsFixed` incorrectly
+ * conclude that updates had left vulnerable versions in place. The fix
+ * was to gate top-level version capture on `node.name === pkg`.
  */
 function getResolvedVersions(whyData, pkg) {
     const versions = new Set();
@@ -624,14 +643,11 @@ function getResolvedVersions(whyData, pkg) {
 
     function walk(node) {
         if (!node || typeof node !== "object") return;
-        // pnpm 10.x `pnpm why -r --json` emits one top-level entry per
-        // resolved version of <pkg> as `{name, version, dependents:[...]}`
-        // (reverse-tree shape, no forward `dependencies` children at the
-        // root). Older pnpm versions emitted forward trees where <pkg>
-        // appeared as a child under `dependencies`/`devDependencies`/
-        // `optionalDependencies`. Handle both: record any node whose
-        // `name` matches <pkg> as a resolved version, AND continue
-        // walking the forward `depKeys` for older shapes.
+        // Capture top-level reverse-tree matches (pnpm 10.x) and any
+        // nested matches under forward depKeys (older pnpm). The
+        // `node.name === pkg` guard correctly skips top-level workspace
+        // project entries from the older forward-tree shape — see the
+        // function-level JSDoc for details.
         if (node.name === pkg && typeof node.version === "string") {
             versions.add(node.version);
         }
