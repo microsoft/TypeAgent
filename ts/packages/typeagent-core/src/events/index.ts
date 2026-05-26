@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// F0.3 — Structured event stream. Types land in P-1.
-export {};
+// F0.3 — Structured event stream.
+export * from "./types.js";
+export * from "./eventStream.js";
