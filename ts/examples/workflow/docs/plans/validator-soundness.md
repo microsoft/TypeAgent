@@ -178,8 +178,12 @@ if (
      now correctly creates pick nodes even when `emitExprAsNode` adds nodes to scope
      directly (returns undefined).
    - Ternary identity wrappers deferred to Gap 7 (branch arm types).
-7. **Gap 7 emitter** (branch outputSchema as union) - requires collecting arm schemas.
-8. **Gap 8 emitter** (while-loop body outputSchema) - requires type checker integration.
+7. **Gap 7 emitter** (branch outputSchema as union) - deferred; see G29 in
+   dsl-v0.1-gap.md for the architectural questions that must be resolved first.
+8. ~~**Gap 8 emitter** (attempts loop body outputSchema)~~ **DONE**
+   TypeChecker stores `bodyReturnType` in `_resolvedSchemas` at `e.loc.offset`.
+   Emitter reads it back via `getResolvedSchemas` and sets `body.outputSchema`
+   on the loop node (same pattern as map/filter/parallelMap).
 9. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - add `warnings`
    array to `ValidationResult` and populate it from lenient skips.
 
