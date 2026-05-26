@@ -117,7 +117,12 @@ export function compile(
     }
 
     // Emit
-    const emitter = new Emitter(taskSchemas, checker.resolvedSchemas);
+    const symbolTypes = checker.collectSymbolTypes(workflows);
+    const emitter = new Emitter(
+        taskSchemas,
+        checker.resolvedSchemas,
+        symbolTypes,
+    );
     const { ir, errors: emitErrors } = emitter.emitAll(
         workflows,
         entry.value.name,
@@ -269,7 +274,12 @@ export function compileFile(
         return { errors };
     }
 
-    const emitter = new Emitter(taskSchemas, checker.resolvedSchemas);
+    const symbolTypes = checker.collectSymbolTypes(workflows);
+    const emitter = new Emitter(
+        taskSchemas,
+        checker.resolvedSchemas,
+        symbolTypes,
+    );
     const { ir, errors: emitErrors } = emitter.emitAll(
         workflows,
         entry.value.name,

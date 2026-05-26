@@ -169,8 +169,15 @@ if (
    Removed `isTopSchema(scopeInputSchema)` leniency from
    `checkInputConstantRefsInTemplate`. Now all scopes with a defined inputSchema
    validate `$from input` refs against declared properties (no silent passthrough).
-6. **Gap 1 emitter** (destructuring picks, identity wrappers) - requires plumbing
-   resolved schemas from type checker.
+6. ~~**Gap 1 emitter** (destructuring picks, identity wrappers)~~ **DONE**
+   - Exported `typeInfoToSchema` from type checker.
+   - Emitter accepts `symbolTypes` map (from `checker.collectSymbolTypes()`).
+   - `emitDestructuring` pick nodes use element type from symbolTypes for outputSchema.
+   - Pure-literal return identity wrapper uses the workflow's declared outputSchema.
+   - Fixed pre-existing bug: destructuring of complex expressions (parallel, map, etc.)
+     now correctly creates pick nodes even when `emitExprAsNode` adds nodes to scope
+     directly (returns undefined).
+   - Ternary identity wrappers deferred to Gap 7 (branch arm types).
 7. **Gap 7 emitter** (branch outputSchema as union) - requires collecting arm schemas.
 8. **Gap 8 emitter** (while-loop body outputSchema) - requires type checker integration.
 9. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - add `warnings`

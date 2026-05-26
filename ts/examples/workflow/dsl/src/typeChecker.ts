@@ -97,7 +97,7 @@ const NEVER: NeverType = { kind: "never" };
 const UNRESOLVED: UnresolvedType = { kind: "unresolved" };
 
 /** Convert a TypeInfo to its JSONSchema equivalent. */
-function typeInfoToSchema(ti: TypeInfo): JSONSchema {
+export function typeInfoToSchema(ti: TypeInfo): JSONSchema {
     switch (ti.kind) {
         case "primitive":
             return { type: ti.name };

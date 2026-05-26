@@ -55,6 +55,7 @@ import {
 } from "./ast.js";
 import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
 import { ResolvedTaskSchemas, typeExprToSchema } from "./typeParamUtils.js";
+import { TypeInfo, typeInfoToSchema } from "./typeChecker.js";
 
 export interface TaskSchemaTypeParam {
     name: string;
@@ -152,6 +153,7 @@ export class Emitter {
     private errors: EmitError[] = [];
     private taskSchemas: Map<string, TaskSchemaInfo>;
     private resolvedSchemas: ReadonlyMap<number, ResolvedTaskSchemas>;
+    private symbolTypes: ReadonlyMap<number, TypeInfo>;
     private nodeCounter = 0;
     private constants: Record<string, { schema: JSONSchema; value: unknown }> =
         {};
@@ -174,9 +176,11 @@ export class Emitter {
     constructor(
         taskSchemas: TaskSchemaInfo[],
         resolvedSchemas: ReadonlyMap<number, ResolvedTaskSchemas>,
+        symbolTypes?: ReadonlyMap<number, TypeInfo>,
     ) {
         this.taskSchemas = new Map(taskSchemas.map((t) => [t.name, t]));
         this.resolvedSchemas = resolvedSchemas;
+        this.symbolTypes = symbolTypes ?? new Map();
     }
 
     /**
@@ -305,7 +309,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {},
+                outputSchema: outputSchema,
                 inputs: { value: outputTemplate },
                 bind: wrapId,
             };
@@ -441,10 +445,31 @@ export class Emitter {
             if (node) {
                 scope.nodes[nodeId] = node;
                 scope.nodeOrder.push(nodeId);
+            }
+            // emitExprAsNode may return undefined for complex expressions
+            // (parallel, map, etc.) but still rebind the last emitted node
+            // to nodeId within scope. Check that we have a result to
+            // destructure from.
+            const hasResult =
+                node !== undefined ||
+                Object.values(scope.nodes).some(
+                    (n) => "bind" in n && (n as TaskNode).bind === nodeId,
+                );
+            if (hasResult) {
                 // Each destructured name gets a binding that projects into the output
                 for (let i = 0; i < stmt.names.length; i++) {
                     // Create a pick node for each element
                     const pickId = this.freshId(`pick_${stmt.names[i]}`);
+                    // Resolve element type from the type checker's symbol map
+                    const nameLoc = stmt.nameLocs[i];
+                    const elemType =
+                        nameLoc !== undefined
+                            ? this.symbolTypes.get(nameLoc.offset)
+                            : undefined;
+                    const elemSchema =
+                        elemType !== undefined
+                            ? typeInfoToSchema(elemType)
+                            : {};
                     const pickNode: TaskNode = {
                         kind: "task",
                         task: "list.elementAt",
@@ -456,7 +481,7 @@ export class Emitter {
                                 index: { type: "integer" },
                             },
                         },
-                        outputSchema: {},
+                        outputSchema: elemSchema,
                         inputs: {
                             list: {
                                 $from: "scope",

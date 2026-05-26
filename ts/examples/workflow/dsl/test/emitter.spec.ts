@@ -185,7 +185,12 @@ function compile(source: string): {
     }
     const checker = new TypeChecker(taskSchemas, module.workflows);
     checker.checkAll(module.workflows);
-    const emitter = new Emitter(taskSchemas, checker.resolvedSchemas);
+    const symbolTypes = checker.collectSymbolTypes(module.workflows);
+    const emitter = new Emitter(
+        taskSchemas,
+        checker.resolvedSchemas,
+        symbolTypes,
+    );
     // Use multi-workflow emit so workflow-to-workflow calls resolve.
     // Pick the first 'export' workflow as the entry, or the first
     // workflow if none exported (matches compiler.ts behavior for
@@ -255,6 +260,10 @@ describe("Emitter", () => {
         expect(bodyOf(ir).nodes["return_0"]).toBeDefined();
         expect((bodyOf(ir).nodes["return_0"] as any).task).toBe("identity");
         expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toBe("hi");
+        // Identity wrapper outputSchema matches the workflow's declared return type
+        expect((bodyOf(ir).nodes["return_0"] as any).outputSchema).toEqual({
+            type: "string",
+        });
         expect(bodyOf(ir).inputSchema).toEqual({
             type: "object",
             required: [],
@@ -956,6 +965,33 @@ describe("Emitter", () => {
         expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toBe(
             "hello",
         );
+    });
+
+    test("destructuring pick nodes get concrete outputSchema from type checker", () => {
+        const ir = compileOk(`
+            workflow test(urls: string[]): unknown {
+                const [a, b] = parallel(
+                    () => {
+                        const r = web.fetch("https://a.com");
+                        return r;
+                    },
+                    () => {
+                        const r = web.fetch("https://b.com");
+                        return r;
+                    }
+                );
+                return a;
+            }
+        `);
+        // Pick nodes should have concrete outputSchema (not {})
+        const pickNodes = Object.values(bodyOf(ir).nodes).filter(
+            (n) =>
+                n.kind === "task" && (n as TaskNode).task === "list.elementAt",
+        ) as TaskNode[];
+        expect(pickNodes.length).toBe(2);
+        for (const pn of pickNodes) {
+            expect(pn.outputSchema).not.toEqual({});
+        }
     });
 
     // ---- Bind stripping ----

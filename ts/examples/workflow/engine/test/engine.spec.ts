@@ -1564,6 +1564,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             items: { type: "string" },
                         },
                         cwd: { type: "string" },
+                        maxBuffer: { type: "integer" },
                     },
                 },
                 outputSchema: {
@@ -2145,7 +2146,11 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["url"],
-                    properties: { url: { type: "string" } },
+                    properties: {
+                        url: { type: "string" },
+                        headers: { type: "object" },
+                        maxResponseBytes: { type: "integer" },
+                    },
                 },
                 outputSchema: {
                     type: "object",
@@ -2172,7 +2177,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
-                    properties: { prompt: { type: "string" } },
+                    properties: {
+                        prompt: { type: "string" },
+                        endpoint: { type: "string" },
+                    },
                 },
                 outputSchema: { type: "string" },
                 async execute(input: any) {
@@ -2242,7 +2250,11 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["url"],
-                    properties: { url: { type: "string" } },
+                    properties: {
+                        url: { type: "string" },
+                        headers: { type: "object" },
+                        maxResponseBytes: { type: "integer" },
+                    },
                 },
                 outputSchema: {
                     type: "object",
@@ -2276,7 +2288,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
-                    properties: { prompt: { type: "string" } },
+                    properties: {
+                        prompt: { type: "string" },
+                        endpoint: { type: "string" },
+                    },
                 },
                 outputSchema: { type: "string" },
                 async execute() {
@@ -5168,7 +5183,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
-            expect(validation.errors[0].message).toContain("Type mismatch");
+            expect(validation.errors[0].message).toContain("is not assignable");
         });
     });
 
