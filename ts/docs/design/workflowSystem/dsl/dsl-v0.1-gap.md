@@ -860,23 +860,47 @@ runtime value is an integer ≥ 1 (the same constraint
   that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
   fork entry with a useful error pointing at the option name.
 
-## G29 + G30: value-producing `if`/`switch` ✅
+## G29 + G30: value-producing `if`/`switch` — restricted symmetry
 
-**Status:** Resolved.
+**Status:** Mechanically sound; design open.
 
-`if`/`switch` support value production via `return` in all arms. The rules:
+### The gap
 
-1. **All arms return, or none do.** Mixing returning and non-returning arms
-   is a hard error — the value from a returning arm would be silently dropped
-   at runtime.
+In TypeScript, `if`/`switch` produce values implicitly through control flow.
+The two most common patterns are:
 
-2. **All returning arms must return the same type.** A type error is emitted
-   on mismatch.
+```typescript
+// early-return style — TypeScript: fine; DSL: hard error
+if (flag) { return r; }
+return null;
 
-3. **Coverage requirement for value-producing switch:**
-   - With `default`: always covered.
-   - Without `default`: the discriminant must be an `EnumType` and every
-     enum value must appear as a literal arm (`isEnumExhaustive`).
+// full-symmetry style — both legal in TypeScript and DSL
+if (flag) { return r; } else { return null; }
+```
+
+The DSL rejects the early-return style. It also rejects any switch where
+returning and non-returning arms are mixed. Both are hard errors.
+
+The restrictions exist because the DSL has no control-flow graph pass. It
+processes statements in order without look-ahead, so it cannot see that
+`if (flag) { return r; }` followed by `return null;` are meant to produce
+a single conditional value. Without that analysis, the then-arm's return
+would be silently dropped — a correctness bug. Rejecting the pattern is
+the only sound fix under the current architecture.
+
+### What is allowed
+
+Value-producing `if`/`switch` is legal when:
+
+1. **All arms return the same type.** Returning and non-returning arms
+   cannot be mixed; arm types cannot differ.
+
+2. **Coverage is complete.**
+   - `if`/`else`: both branches must return.
+   - `switch` with `default`: always covered.
+   - `switch` without `default`: discriminant must be an `EnumType` (from a
+     JSON Schema `enum` field) and every enum value must appear as a literal
+     case arm.
 
 ### Error diagnostics
 
@@ -888,15 +912,31 @@ runtime value is an integer ≥ 1 (the same constraint
 | Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.` |
 | Switch arms return different types | `switch arms must return the same type: 'X' vs 'Y'` |
 
-### Open design question
+### Design examination
 
-The clean long-term invariant is: **expressions produce values; statements
-produce side effects — no overlap.** That means `return` inside `if`/`switch`
-becomes a type error, and all value-producing conditional logic migrates to
-ternary (`?:`). Ternary is equivalent for single-expression arms; the only
-gap is **multi-statement arms** (arms that bind intermediate `const`s before
-returning). Survey `.wf` files — if no such pattern exists in practice,
-deprecation is safe. Deferred pending G18 (union types), which would make
-multi-arm `if`/`switch` strictly more expressive than ternary.
+Three directions, each with a different tradeoff:
+
+**A — Keep current restrictions.**
+Simple invariant: value-producing `if`/`switch` requires full explicit
+symmetry. Users who want early-return style use ternary instead. The cost
+is that idiomatic TypeScript patterns become errors at the DSL boundary.
+
+**B — Pre-pass if-return fusion.**
+Before type-checking, fuse `if (cond) { …; return x; }` + `return y;`
+into a synthetic `if … else`. This restores the early-return idiom without
+a full CFG pass — only the narrow pattern of a bare `if` (no `else`)
+immediately followed by a `return` at the same scope level. Cost: a
+special-case pre-pass and more complex error attribution.
+
+**C — Remove value-producing `if`/`switch` entirely.**
+Make `return` inside an `if`/`switch` a type error. All conditional value
+production moves to ternary (`?:`). The language invariant becomes clean:
+expressions produce values, statements produce side effects. Cost: awkward
+when arms need multiple `const` bindings before returning (ternary can't
+span statements). Viable if a survey of `.wf` files shows no such patterns
+in practice. Also blocked on G18 (union types) — once arms can return
+different types, `if`/`switch` becomes strictly more expressive than ternary.
+
+**Current choice:** A, with C as the intended long-term direction.
 
 Related: G7 (branch arm covariance), G18 (union types).
