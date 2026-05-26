@@ -199,9 +199,11 @@ The original Gap 9 is subsumed by a broader architectural plan targeting
 **Phases:**
 
 1. ~~Decision doc (0011)~~ **DONE**
-2. **Emitter — immediately fixable gaps:**
-   - `forkMap` body `outputSchema` (~2397): wire `elementSchema`.
-   - `fork` parallel branch body `outputSchema` (~2278): compute from terminal node.
+2. ~~**Emitter — immediately fixable gaps:**~~  **DONE**
+   - ~~`forkMap` body `outputSchema` (~2397): wire `elementSchema`.~~
+   - ~~`fork` parallel branch body `outputSchema` (~2278): compute from terminal node.~~
+   - Added `bodyOutputSchema` and `branchOutputSchemas` to `ResolvedTaskSchemas`;
+     typeChecker stores them; emitter reads them.
 3. **G29 resolution — type checker:**
    - `IfStatement`: error if value-producing arms return different types.
    - `SwitchStatement`: same.
