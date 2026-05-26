@@ -889,54 +889,60 @@ The mechanical questions originally raised here have been resolved:
 
 ### Remaining open question — does the syntax earn its keep?
 
-With Q1 enforced and **no union types** in the surface language (G18),
-the cleanly value-producing form of `if`/`else` and `switch` is now
-extremely constrained:
+#### Root cause: statements doing expression work
 
-- All arms must return.
-- All arms must return the *same* type.
-- There is no way to "narrow" the type per-arm because the type system
-  has no unions/nullables to narrow from.
-- Every arm must end in `return <expr>` — and since the DSL is SSA, that
-  `<expr>` is typically just a name bound earlier in the arm.
+`if`/`switch` are **statements** in the DSL, but `return` inside them
+makes them act like **expressions** — they produce a value to the outer
+scope. The DSL is SSA-based and needs every value explicitly bound and
+typed at the node level. That creates a fundamental tension:
 
-Under these constraints, value-producing `if`/`else`/`switch` reduces to:
-"pick one of N same-typed expressions based on a condition." That is
-exactly what **ternary** already does (and what nested ternaries already
-do for the N-way case). The question is whether the statement-level forms
-add enough expressive power to justify:
+- Statement syntax has no implicit value context. The compiler processes
+  each statement in isolation. It cannot see that
+  `if (x) { return r; }` + `return null;` are *meant* to be a single
+  value-producing expression — G30 exists solely because of this gap.
 
-- a second IR lowering path (`branch` node + arm scopes + merge + bind),
-- separate type-checker rules,
-- separate emitter codegen,
-- separate validator rules,
-- and the runtime cost of routing the output through `branch.bind`.
+- The emitter needs a whole separate lowering path (branch node + arm
+  scopes + bind + merge) to produce a value from a statement-level
+  `if`/`switch`. Ternary does the same thing natively as a single
+  expression node with no extra scaffolding.
 
-**Sub-questions to decide:**
+- TypeScript resolves this with whole-function CFG analysis. The DSL
+  has no CFG pass — it is SSA, one statement at a time. So `return`
+  inside a statement-level `if`/`switch` is an expression-level concept
+  dressed in statement clothing, and it keeps creating soundness problems.
 
-1. **Is there a real use case for multi-statement value-producing arms?**
-   I.e. arms that bind several intermediate `const`s before the `return`.
-   If so, ternary is awkward; statement-level branching pulls its weight.
-   If every observed use site is a single-expression arm, ternary suffices.
+**The cleanest long-term resolution**: make `if`/`switch` **pure
+statements** — they never produce values and `return` inside them is a
+type error. All value-producing conditional logic goes through ternary
+(`?:`). G29 and G30 both dissolve. The DSL invariant becomes:
+**expressions produce values, statements produce side effects — no
+overlap.**
 
-2. **Would removing value-producing `if`/`switch` simplify the language
-   surface?** Statement-level `if`/`switch` would remain (for control
-   flow with side effects), but `return` inside them would become a type
-   error. This makes "what produces a value?" trivially clear: only
-   expressions do.
+#### Why not now?
 
-3. **Does G18 (union types) change the calculus?** If unions land, arms
-   could legitimately return different types and `if`/`switch` becomes
-   strictly more expressive than ternary. Until then, the two are
-   equivalent for value production.
+With Q1–Q3 resolved, value-producing `if`/`switch` is constrained to:
+"pick one of N same-typed expressions based on a condition" — exactly
+what ternary already does. The remaining reason to keep the syntax is
+**multi-statement arms**: arms that bind several intermediate `const`s
+before the `return`, where ternary would be awkward. If `.wf` file
+surveys show this pattern is never used, deprecation is straightforward.
+
+#### Decision factors
+
+1. **Multi-statement arms:** Are there real uses that need `const`
+   bindings inside an arm before the `return`? If yes, keep the syntax.
+   If no, remove it.
+2. **G18 (union types):** If unions land, arms could legitimately return
+   different types and `if`/`switch` becomes strictly more expressive
+   than ternary. Until then the two are equivalent for value production
+   and the statement form adds only complexity.
 
 ### Suggested next step
 
-Survey actual `.wf` files for value-producing `if`/`else`/`switch` usage
-patterns. If most/all are single-expression arms, propose deprecating
-value-producing `if`/`switch` (keep statement form for side effects)
-and steering authors to ternary. Defer until G18 is decided — unions
-would flip the answer.
+Survey actual `.wf` files for value-producing `if`/`else`/`switch` usage.
+If most/all are single-expression arms, deprecate value-producing
+`if`/`switch` (keep statement form for side effects) and steer authors
+to ternary. Defer until G18 is decided — unions would flip the answer.
 
 **Raised during:** validator-soundness plan Gap 7 analysis.  Related:
 G7 (branch arm covariance), G18 (union types), G30 (return asymmetry errors).
@@ -986,5 +992,9 @@ if (flag) { const r = task(…); return r; } else { return null; }
 TypeScript-idiomatic early-return style. Deferred; assess after surveying
 `.wf` file patterns and after G18 (union types) is decided.
 
+Note: if G29's open design question resolves toward deprecating
+value-producing `if`/`switch` entirely, Option A becomes moot — the
+early-return pattern would steer to ternary instead.
+
 **Raised during:** validator-soundness enforcement (Phase 5+6, Decision 0011).
-Related: G29 (value-producing if/switch architecture), G18 (union types).
+Related: G29 (statements doing expression work — root cause), G18 (union types).
