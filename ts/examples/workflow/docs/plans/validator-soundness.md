@@ -204,16 +204,16 @@ The original Gap 9 is subsumed by a broader architectural plan targeting
    - ~~`fork` parallel branch body `outputSchema` (~2278): compute from terminal node.~~
    - Added `bodyOutputSchema` and `branchOutputSchemas` to `ResolvedTaskSchemas`;
      typeChecker stores them; emitter reads them.
-3. **G29 resolution — type checker:**
-   - `IfStatement`: error if value-producing arms return different types.
-   - `SwitchStatement`: same.
-   - Partial return in value-producing if/else: type error.
-   - Store result type in `_resolvedSchemas` at `s.loc.offset` / `e.loc.offset`.
-4. **Emitter — branch/arm gaps (unblocked by Phase 3):**
-   - `if/else` and `switch` branch `outputSchema` (lines 603/729).
-   - Ternary branch `outputSchema` (line 1419) and arm `scope.outputSchema`.
-   - Ternary literal identity wrappers (lines 1366/1397).
-   → After Phase 4: **zero `{}` on any bound producer** from the DSL compiler.
+3. ~~**G29 resolution — type checker:**~~  **DONE**
+   - ~~`IfStatement`: error if value-producing arms return different types.~~
+   - ~~`SwitchStatement`: same.~~
+   - ~~Partial return in value-producing if/else: type error.~~
+   - ~~Store result type in `_resolvedSchemas` at `s.loc.offset` / `e.loc.offset`.~~
+4. ~~**Emitter — branch/arm gaps (unblocked by Phase 3):**~~  **DONE**
+   - ~~`if/else` and `switch` branch `outputSchema` (lines 603/729).~~
+   - ~~Ternary branch `outputSchema` (line 1419) and arm `scope.outputSchema`.~~
+   - ~~Ternary literal identity wrappers (lines 1366/1397).~~
+   → **Zero `{}` on any bound producer** from the DSL compiler.
 5. **Validator warnings** (`warnings[]` in `ValidationResult`): deploy and
    confirm DSL-compiled IR produces zero warnings.
 6. **Validator enforcement**: promote warnings to errors. Any IR with a bound
