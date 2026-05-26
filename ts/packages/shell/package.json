@@ -87,7 +87,7 @@
     "typechat-utils": "workspace:*",
     "websocket-channel-server": "workspace:*",
     "websocket-utils": "workspace:*",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
