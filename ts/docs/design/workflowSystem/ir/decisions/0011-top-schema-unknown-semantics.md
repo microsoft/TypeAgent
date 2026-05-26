@@ -4,6 +4,10 @@
 **Supersedes:** The implicit "any" behaviour in the current validator.
 **Related:** ir-v0.1.md §4.1 pass 7; G29 (dsl-v0.1-gap.md); validator-soundness plan.
 
+**End state:** The validator MUST error (not warn) on bound producers with
+`{}` outputSchema. Warnings are an intermediate step while emitter gaps are
+closed. This document records both the principle and the enforcement target.
+
 ---
 
 ## 1. Problem
@@ -35,14 +39,15 @@ Concretely:
    unknown. No change. Continue to skip the check silently.
 
 2. **Assignability FROM `{}` to a typed consumer** (producer is `{}`):
-   the validator **SHOULD warn**, not error. The warning message should name the
-   producer, the consumer, and the path. This is a warning (not an error)
-   because hand-authored IR and partially-typed LLM-generated IR are legitimate
-   escape hatches — the author may know the runtime type even when the schema
-   doesn't capture it.
+   the validator MUST eventually **error**. While emitter gaps remain
+   (i.e. while DSL-compiled IR can still produce `{}` on bound producers due
+   to unresolved G29), the validator emits a **warning** as an intermediate
+   step. Once emitter gaps are closed (Phases 2-4 of the soundness plan), the
+   warning is promoted to an error.
 
 3. **Path access on a `{}` producer** (`resolveSchemaPath({}, ["foo", ...])`):
-   the validator **SHOULD warn**. Path access on unknown is unverifiable.
+   same staged approach — **warning** while emitter gaps exist, **error** once
+   all bound producers carry concrete schemas.
 
 4. **Unbound CFG nodes** (nodes with no `bind`, pure sequencing): their
    `outputSchema: {}` is correct and irrelevant. No warning is needed because
@@ -115,21 +120,41 @@ if (isTopSchema(schema) && path.length > 0) {
 
 ---
 
-## 6. Emitter obligations
+## 6. Emitter obligations and G29 resolution
 
-Before Phase 3 (validator warnings) lands, the emitter should close all sites
-where the type IS statically knowable but is dropped:
+Before Phase 5b (validator errors) can land, the emitter must produce zero `{}`
+on any bound producer. This requires two tracks:
+
+**Track A — immediately fixable (type already known):**
 
 | Site | Fix |
 |------|-----|
 | `forkMap` body `outputSchema` (emitter.ts ~2397) | Wire the already-computed `elementSchema` into `body.outputSchema` |
-| `fork` parallel branch body `outputSchema` (~2278) | Compute terminal node's outputSchema and emit it |
-| Ternary arm identity wrappers (~1366, ~1397) | Infer schema from the literal value passed as `value` input |
-| Ternary `BranchNode.outputSchema` (~1419) | Look up result type from `symbolTypes` at `expr.loc.offset` |
-| `if/else` and `switch` branch/arm schemas (~603, ~729) | Deferred to G29 resolution |
+| `fork` parallel branch body `outputSchema` (~2278) | Compute terminal node's outputSchema; same pattern as forkMap |
 
-The goal: by the time Phase 3 warnings land, the warning set should be small
-enough (only the genuinely unknowable cases) to be actionable rather than noisy.
+**Track B — requires G29 resolution (branch/arm types):**
+
+G29 is resolved prescriptively here:
+
+1. **Same-type enforcement for `if`/`switch` arms.** The type checker must
+   error when value-producing arms return different types (matching ternary).
+2. **Partial return is a type error.** When `resultBind` is set on a branch
+   node, both arms must return a value. `thenOutput ?? null` as a fallback must
+   become unreachable.
+3. **Store result types in `_resolvedSchemas`.** After checking `IfStatement`,
+   `SwitchStatement`, and `TernaryExpr`, store the result type at the node's
+   `loc.offset` — same pattern as `AttemptsNode` (gap 8). The emitter reads it
+   back to set `branch.outputSchema` and `arm.scope.outputSchema`.
+
+Once Track A and B are done:
+
+| Site | Fix |
+|------|-----|
+| `if/else` branch `outputSchema` (~603) | Read from `_resolvedSchemas` at `s.loc.offset` |
+| `switch` branch `outputSchema` (~729) | Same |
+| Ternary branch `outputSchema` (~1419) | Read from `_resolvedSchemas` at `e.loc.offset` |
+| Arm `scope.outputSchema` (via `buildArmScope`) | Pass resolved type instead of `{}` |
+| Ternary literal identity wrappers (~1366, ~1397) | Infer from literal value's JSON Schema type |
 
 ---
 
@@ -140,9 +165,9 @@ enough (only the genuinely unknowable cases) to be actionable rather than noisy.
 > A producer schema of `{}` (the universal top type) is treated as **unknown**
 > for validation purposes. Assignability *to* `{}` is unconditionally satisfied.
 > Assignability *from* `{}` to a typed consumer, or path projection on `{}`,
-> produces a validation **warning** (not an error), because the author may hold
-> runtime knowledge the schema does not capture. Tools MAY surface these
-> warnings; engines MAY ignore them.
+> is a validation **error**. (During the transition period while emitter gaps
+> are being closed, this is a warning; it becomes an error once the DSL
+> compiler no longer emits `{}` on bound producers.)
 
 ---
 
@@ -151,8 +176,9 @@ enough (only the genuinely unknowable cases) to be actionable rather than noisy.
 - **Decision 0001 (bound outputs):** A node without `bind` has no addressable
   output. Its `outputSchema` is required by the IR grammar but is irrelevant to
   consumers. The unknown semantics decision applies only to *bound* producers.
-- **G29 (branch arm output types):** The arm-scope `{}` schemas on if/else and
-  ternary branches are the largest remaining source of `{}` bound producers.
-  G29 resolves the architectural questions that gate fixing those sites.
+- **G29 (branch arm output types):** Resolved prescriptively in §6 above.
+  Same-type enforcement for if/switch arms, partial-return as type error, and
+  result type storage in `_resolvedSchemas` are the three required type-checker
+  changes. G29 is no longer open once §6 Track B is implemented.
 - **G18 (union types):** When `anyOf` is introduced for heterogeneous arm types,
   branch `outputSchema` can be a concrete union instead of `{}`.

@@ -187,30 +187,36 @@ if (
 9. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - superseded
    by the long-term plan below. Do not patch in isolation.
 
-## Long-term plan: `{}` = unknown semantics
+## Long-term plan: `{}` = unknown → full enforcement
 
-The original Gap 9 (add warnings for `isTopSchema` lenient skips) is subsumed
-by a broader architectural decision. See:
+The original Gap 9 is subsumed by a broader architectural plan targeting
+**full enforcement** (errors, not just warnings). See:
 
 - **IR decision 0011** (`ir/decisions/0011-top-schema-unknown-semantics.md`):
-  defines `{}` as `unknown` (not `any`) for bound producers. Establishes the
-  three-tier lattice: `{}` (unknown/top), concrete types, `{ "not": {} }` (never).
-- **Phased implementation plan:**
-  1. Decision doc (0011) — establishes the principle.
-  2. Emitter fixes for knowable-but-dropped `{}` sites:
-     - `forkMap` body `outputSchema` (emitter ~2397): wire `elementSchema`.
-     - `fork` parallel branch body `outputSchema` (~2278): compute from terminal node.
-     - Ternary arm identity wrappers (~1366/1397): infer from literal value.
-     - Ternary `BranchNode.outputSchema` (~1419): look up from `symbolTypes`.
-     - `if/else`/`switch` arm/branch schemas: deferred to G29.
-  3. Validator changes: add `warnings[]` to `ValidationResult`; emit warning
-     (not error) when `isTopSchema(producer) && !isTopSchema(consumer)`, and
-     when path access is attempted on a `{}` producer.
-  4. `if/else`/`switch` arm types: after G29 resolution.
-  5. IR spec update: add unknown-semantics note to §4.1 pass 7.
+  defines `{}` as `unknown` (not `any`) for bound producers. End state is
+  validator **errors** on any bound `{}` producer.
 
-The warning set should be small and actionable by the time Phase 3 lands
-(Phases 1+2 reduce `{}` bound producers to only the genuinely unknowable cases).
+**Phases:**
+
+1. ~~Decision doc (0011)~~ **DONE**
+2. **Emitter — immediately fixable gaps:**
+   - `forkMap` body `outputSchema` (~2397): wire `elementSchema`.
+   - `fork` parallel branch body `outputSchema` (~2278): compute from terminal node.
+3. **G29 resolution — type checker:**
+   - `IfStatement`: error if value-producing arms return different types.
+   - `SwitchStatement`: same.
+   - Partial return in value-producing if/else: type error.
+   - Store result type in `_resolvedSchemas` at `s.loc.offset` / `e.loc.offset`.
+4. **Emitter — branch/arm gaps (unblocked by Phase 3):**
+   - `if/else` and `switch` branch `outputSchema` (lines 603/729).
+   - Ternary branch `outputSchema` (line 1419) and arm `scope.outputSchema`.
+   - Ternary literal identity wrappers (lines 1366/1397).
+   → After Phase 4: **zero `{}` on any bound producer** from the DSL compiler.
+5. **Validator warnings** (`warnings[]` in `ValidationResult`): deploy and
+   confirm DSL-compiled IR produces zero warnings.
+6. **Validator enforcement**: promote warnings to errors. Any IR with a bound
+   `{}` producer is rejected.
+7. **IR spec update**: ir-v0.1.md §4.1 pass 7 note.
 
 ## Testing strategy
 
