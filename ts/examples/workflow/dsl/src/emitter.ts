@@ -1638,6 +1638,14 @@ export class Emitter {
             hasState: true,
         });
 
+        // Resolve the body return type stored by the type checker (Gap 8).
+        const attemptsResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `attempts body type`,
+        );
+        const attemptsBodyOutputSchema = attemptsResolved?.outputSchema ?? {};
+
         // The body output references a name bound only on the success path
         // (the user task's bind). On the error path the branch arms throw or
         // iterate, so the output is never evaluated. Mark optional so the
@@ -1656,7 +1664,7 @@ export class Emitter {
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
                 output: bodyOutput,
-                outputSchema: {},
+                outputSchema: attemptsBodyOutputSchema,
             },
             state,
             continueWhen: {

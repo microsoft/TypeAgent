@@ -1045,6 +1045,14 @@ export class TypeChecker {
                     e.body,
                     scope.child(),
                 );
+                // Store the body return type so the emitter can set an
+                // accurate body.outputSchema on the loop node (Gap 8).
+                if (e.loc.offset !== undefined) {
+                    this._resolvedSchemas.set(e.loc.offset, {
+                        inputSchema: {},
+                        outputSchema: typeInfoToSchema(bodyReturnType),
+                    });
+                }
                 if (e.fallback) {
                     const fbScope = scope.child();
                     const fbParam = e.fallback.param ?? DEFAULT_FALLBACK_PARAM;
