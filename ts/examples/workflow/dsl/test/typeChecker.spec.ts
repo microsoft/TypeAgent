@@ -1785,7 +1785,11 @@ describe("type checker", () => {
     // ---- Break statement ----
 
     test("break statement returns unresolved (no value)", () => {
-        expectNoErrors(`
+        // A switch where some arms use break and others return a value
+        // is now an error (G30 symmetric) — the returning arms' values
+        // would be silently dropped.
+        expectError(
+            `
             workflow test(x: string): string {
                 switch (x) {
                     case "skip":
@@ -1795,7 +1799,9 @@ describe("type checker", () => {
                 }
                 return "done";
             }
-        `);
+        `,
+            "Switch has arms that return a value but not all arms return",
+        );
     });
 
     // ---- G29: value-producing if/else and switch enforcement ----
@@ -1825,8 +1831,6 @@ describe("type checker", () => {
     });
 
     test("then-arm returns value with no else is an error (G30)", () => {
-        // `if (x) { return "a"; }` with no else is the early-return pattern
-        // but silently drops the value — G30 Option C requires explicit else.
         expectError(
             `
             workflow test(x: boolean): string {
@@ -1837,13 +1841,26 @@ describe("type checker", () => {
         );
     });
 
-    test("partial-return if/else where else does not return is accepted", () => {
-        expectNoErrors(`
+    test("then-arm returns but else-arm does not is an error (G30)", () => {
+        expectError(
+            `
             workflow test(x: boolean): string {
                 if (x) { return "a"; } else { const y = "b"; }
                 return "c";
-            }
-        `);
+            }`,
+            "Then-arm returns a value",
+        );
+    });
+
+    test("else-arm returns but then-arm does not is an error (G30)", () => {
+        expectError(
+            `
+            workflow test(x: boolean): string {
+                if (x) { const y = "a"; } else { return "b"; }
+                return "c";
+            }`,
+            "Else-arm returns a value",
+        );
     });
 
     test("value-producing switch with mismatched arm types errors", () => {
@@ -1859,22 +1876,23 @@ describe("type checker", () => {
         );
     });
 
-    test("switch with break arm is accepted (not all arms return)", () => {
-        // `break` in some arms is legal — the switch is not cleanly value-
-        // producing and the type checker leaves it untyped.
-        expectNoErrors(`
+    test("switch with break arm is an error (G30 symmetric)", () => {
+        expectError(
+            `
             workflow test(x: string): string {
                 switch (x) {
                     case "skip": break;
                     default: return x;
                 }
                 return "done";
-            }
-        `);
+            }`,
+            "Switch has arms that return a value but not all arms return",
+        );
     });
 
-    test("switch with non-returning arm is accepted (partial-return)", () => {
-        expectNoErrors(`
+    test("switch with non-returning arm is an error (G30 symmetric)", () => {
+        expectError(
+            `
             workflow test(x: string): string {
                 switch (x) {
                     case "a": return "x";
@@ -1882,8 +1900,9 @@ describe("type checker", () => {
                     default: return "z";
                 }
                 return "done";
-            }
-        `);
+            }`,
+            "Switch has arms that return a value but not all arms return",
+        );
     });
 
     test("value-producing switch with matching arm types is OK", () => {

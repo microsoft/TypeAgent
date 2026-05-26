@@ -776,37 +776,37 @@ export class TypeChecker {
                     ? this.checkStatements(s.else_, scope.child())
                     : UNRESOLVED;
 
-                // G29 Q1+Q3: only when BOTH arms return a value do we treat
-                // the if/else as cleanly value-producing — same-type check
-                // and store the result schema for the emitter.  Partial
-                // return (one arm returns, the other doesn't) is a legal
-                // pattern (early return + fall-through) where the bind is
-                // dead at the workflow level; we leave the type unresolved
-                // and the emitter falls back to {} outputSchema.  G18 (union
-                // types) may revisit this.
-                //
-                // G30: when the then-arm returns a value but there is no
-                // else arm, the implicit fall-through return is the intended
-                // else branch. We cannot fuse them here (no look-ahead), so
-                // emit a diagnostic that guides the author to the explicit
-                // form.  This prevents the silent value-drop bug where the
-                // then-arm's return is discarded and the workflow always
-                // returns the fall-through value.
-                if (
-                    thenType.kind !== "unresolved" &&
-                    (!s.else_ || s.else_.length === 0)
-                ) {
+                // G30: error on any asymmetric value-return across arms.
+                // All arms must either all return a value (value-producing) or
+                // none return a value (statement form). Mixed arms silently
+                // drop the returning arm's value — a correctness bug.
+                const hasElse = !!(s.else_ && s.else_.length > 0);
+                const thenReturns = thenType.kind !== "unresolved";
+                const elseReturns = elseType.kind !== "unresolved";
+                if (thenReturns && !hasElse) {
                     this.addError(
                         `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
                             `Add an explicit else block or use a ternary expression.`,
                         s.loc.line,
                         s.loc.col,
                     );
+                } else if (thenReturns && !elseReturns) {
+                    this.addError(
+                        `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
+                            `Both arms must return a value, or neither should.`,
+                        s.loc.line,
+                        s.loc.col,
+                    );
+                } else if (!thenReturns && elseReturns) {
+                    this.addError(
+                        `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
+                            `Both arms must return a value, or neither should.`,
+                        s.loc.line,
+                        s.loc.col,
+                    );
                 }
-                if (
-                    thenType.kind !== "unresolved" &&
-                    elseType.kind !== "unresolved"
-                ) {
+                // G29 Q1+Q3: store schema when both arms return same type.
+                if (thenReturns && elseReturns) {
                     if (
                         !isAssignableTo(thenType, elseType) ||
                         !isAssignableTo(elseType, thenType)
@@ -836,15 +836,29 @@ export class TypeChecker {
                     ? this.checkStatements(s.default_, scope.child())
                     : UNRESOLVED;
 
-                // G29 Q1+Q3: only when EVERY arm (and default if present)
-                // returns a value do we treat the switch as cleanly value-
-                // producing — same-type check and store schema.  Partial
-                // return is a legal pattern (e.g. `break` in some arms);
-                // emitter falls back to {} in that case.  Note: a switch
-                // without `default` is still a partial-return shape unless
-                // the selector enum is exhaustive — which we don't track.
+                // G30 (symmetric with if): error when any arm returns a value
+                // but not all arms do.  Mixed arms silently drop the returning
+                // arms' values — a correctness bug.
+                const anyArmReturns =
+                    armTypes.some((t) => t.kind !== "unresolved") ||
+                    defType.kind !== "unresolved";
+                const allArmsReturn =
+                    armTypes.every((t) => t.kind !== "unresolved") &&
+                    (s.default_
+                        ? defType.kind !== "unresolved"
+                        : true);
+                if (anyArmReturns && !allArmsReturn) {
+                    this.addError(
+                        `Switch has arms that return a value but not all arms return. ` +
+                            `All arms must return a value, or none should.`,
+                        s.loc.line,
+                        s.loc.col,
+                    );
+                }
+
+                // G29 Q1+Q3: store schema when every arm returns same type.
                 let resultType: TypeInfo = UNRESOLVED;
-                if (s.default_ && armTypes.every((t) => t.kind !== "unresolved") && defType.kind !== "unresolved") {
+                if (allArmsReturn && s.default_ && armTypes.length > 0) {
                     const allTypes = [...armTypes, defType];
                     resultType = allTypes[0]!;
                     for (let i = 1; i < allTypes.length; i++) {
