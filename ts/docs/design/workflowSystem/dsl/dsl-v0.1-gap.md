@@ -43,8 +43,7 @@ new surface area:
 13. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
-14. **G30: Early-return if fusion.** Short term: reject with a diagnostic (Option C).
-    Long term: proper if-return fusion pre-pass (Option A).
+14. ~~**G30: Return asymmetry errors.**~~ **DONE** — hard errors for all mixed-return if/switch patterns.
 
 G1 (sub-workflow calls and cross-file composition) is now resolved; see its
 section below for the landed surface. G24-G28 capture follow-up design
@@ -942,11 +941,11 @@ would flip the answer.
 **Raised during:** validator-soundness plan Gap 7 analysis.  Related:
 G7 (branch arm covariance), G18 (union types), G30 (return asymmetry errors).
 
-## G30: Early-return `if` fuses with subsequent fall-through return incorrectly
+## G30: Return asymmetry in `if`/`switch` arms ✅ Resolved
 
-**Status:** ✅ Resolved (Option C — reject with diagnostic)
+**Resolution:** Option C — hard errors for all mixed-return patterns.
 
-### Problem
+### Problem (historical)
 
 The pattern:
 
