@@ -860,109 +860,43 @@ runtime value is an integer ≥ 1 (the same constraint
   that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
   fork entry with a useful error pointing at the option name.
 
-## G29 + G30: `if`/`switch` as value producers — a structural mismatch
+## G29 + G30: value-producing `if`/`switch` ✅
 
-**G29 status:** Mechanically resolved ✅; open design question remains.
-**G30 status:** ✅ Resolved (hard errors for all mixed-return patterns).
+**Status:** Resolved.
 
-### Root cause
+`if`/`switch` support value production via `return` in all arms. The rules:
 
-`if` and `switch` are **statements** in the DSL. Statements produce side
-effects; they do not produce values to the surrounding scope. But `return`
-inside their arms makes them act like **expressions** — the arm's value
-needs to be bound, typed, and made visible to subsequent nodes in the
-parent scope.
+1. **All arms return, or none do.** Mixing returning and non-returning arms
+   is a hard error — the value from a returning arm would be silently dropped
+   at runtime.
 
-The DSL is SSA-based and processes statements in isolation (no CFG pass,
-no look-ahead). It cannot reason about value flow across statement
-boundaries. This creates two concrete problems:
+2. **All returning arms must return the same type.** A type error is emitted
+   on mismatch.
 
-**G29 — emitter complexity.** To surface a value from a statement-level
-`if`/`switch`, the emitter needs a complete second lowering path: branch
-node + arm scopes + per-arm `scope.outputSchema` + `branch.bind` +
-merge noop. Ternary (`?:`) is an expression; it produces a value
-natively as a single IR node with no scaffolding. Every correctness rule
-the DSL must enforce for value-producing `if`/`switch` (same-type arms,
-no mixed returns, typed arm scopes, typed branch bind) duplicates rules
-that ternary gets for free from the expression grammar.
+3. **Coverage requirement for value-producing switch:**
+   - With `default`: always covered.
+   - Without `default`: the discriminant must be an `EnumType` and every
+     enum value must appear as a literal arm (`isEnumExhaustive`).
 
-**G30 — cross-statement value drop.** Because the compiler has no
-look-ahead, it cannot see that
-`if (x) { return r; }` followed by `return null;`
-are *meant* to be a single value-producing expression
-(`x ? r : null`). Without cross-statement reasoning, the then-arm's
-`return r` is silently dropped and the workflow always returns `null`.
-TypeScript resolves this with whole-function CFG analysis; the DSL
-cannot. The only sound fix under the current architecture is to reject
-the pattern outright (which G30 now does).
+### Error diagnostics
 
-**The common thread:** `return` inside a statement is an expression-level
-concept dressed in statement clothing. Both G29 and G30 are symptoms of
-the same mismatch.
+| Pattern | Error |
+|---------|-------|
+| Then-arm returns, no else arm | `Then-arm returns a value of type X but there is no else-arm.` |
+| Then-arm returns, else does not | `Then-arm returns a value … but the else-arm does not return.` |
+| Else-arm returns, then does not | `Else-arm returns a value … but the then-arm does not return.` |
+| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.` |
+| Switch arms return different types | `switch arms must return the same type: 'X' vs 'Y'` |
 
-### Long-term resolution
+### Open design question
 
-Make `if`/`switch` **pure statements** — `return` inside them is a type
-error. All value-producing conditional logic uses ternary (`?:`). Both
-gaps dissolve. The language invariant becomes clean and teachable:
-**expressions produce values; statements produce side effects — no
-overlap.**
+The clean long-term invariant is: **expressions produce values; statements
+produce side effects — no overlap.** That means `return` inside `if`/`switch`
+becomes a type error, and all value-producing conditional logic migrates to
+ternary (`?:`). Ternary is equivalent for single-expression arms; the only
+gap is **multi-statement arms** (arms that bind intermediate `const`s before
+returning). Survey `.wf` files — if no such pattern exists in practice,
+deprecation is safe. Deferred pending G18 (union types), which would make
+multi-arm `if`/`switch` strictly more expressive than ternary.
 
-### Why not now?
-
-With the mechanical fixes in place, value-producing `if`/`switch` is
-already constrained to "pick one of N same-typed expressions" — exactly
-what ternary does. The remaining justification for keeping the syntax is
-**multi-statement arms**: arms that bind several intermediate `const`s
-before the `return`, where ternary would be awkward. Whether that pattern
-exists in practice is an open empirical question.
-
-### Decision factors
-
-1. **Multi-statement arms in the wild.** Survey `.wf` files. If every
-   observed value-producing arm is a single expression, ternary already
-   covers the space and deprecation is safe.
-
-2. **G18 (union types).** If union types land, arms could legitimately
-   return different types, making `if`/`switch` strictly more expressive
-   than ternary. Until then the two are equivalent for value production.
-
-### Mechanical status (G29 sub-questions)
-
-- **Q1 (same-type arms):** ✅ enforced. Type error when all arms return
-  but types mismatch.
-- **Q2 (mixed-return):** ✅ rejected (G30). Hard error for any arm that
-  returns while another does not — all arms return the same type, or none
-  return.
-- **Q3 (`outputSchema` on arm scopes):** ✅ wired. Type checker stores
-  the result type in `_resolvedSchemas`; emitter threads it through
-  `branch.outputSchema`, arm `scope.outputSchema`, and ternary identity
-  wrappers.
-- **Q4 (exhaustive switch without `default`):** ✅ resolved. `TypeInfo` now
-  includes an `EnumType` variant (`kind: "enum"`, `base`, `values`).
-  `jsonSchemaToTypeInfo` parses JSON Schema `enum` arrays into `EnumType`.
-  The switch checker calls `isEnumExhaustive` — if the discriminant is an
-  `EnumType` and every enum value appears as a literal arm, the switch is
-  treated as exhaustive and value-producing even without `default`.
-
-### G30 diagnostic set (implemented)
-
-The type checker emits hard errors for:
-
-| Pattern | Error message |
-|---------|---------------|
-| Then-arm returns, no else arm | `Then-arm returns a value of type X but there is no else-arm. Add an explicit else block or use a ternary expression.` |
-| Then-arm returns, else arm does not | `Then-arm returns a value … but the else-arm does not return. Both arms must return a value, or neither should.` |
-| Else-arm returns, then arm does not | `Else-arm returns a value … but the then-arm does not return. Both arms must return a value, or neither should.` |
-| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return. All arms must return a value, or none should.` |
-
-### G30 long-term option
-
-**Option A — Pre-pass if-return fusion**: fuse
-`if (cond) { …; return x; }` + `return y;` into a synthetic
-`if … else` before type-checking, allowing the TypeScript-idiomatic
-early-return style. Deferred. Moot if G29 resolves toward deprecating
-value-producing `if`/`switch`.
-
-**Raised during:** validator-soundness plan (Gap 7 / Decision 0011).
 Related: G7 (branch arm covariance), G18 (union types).
