@@ -57,6 +57,7 @@ const dispatcherHandlers: CommandHandlerTable = {
         match: new MatchCommandHandler(),
         translate: new TranslateCommandHandler(),
         reason: new ReasonCommandHandler(),
+        reasoning: new ReasonCommandHandler(),
         explain: new ExplainCommandHandler(),
     },
 };

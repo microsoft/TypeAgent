@@ -116,6 +116,7 @@ There are other short cut commands to exercise specify part of the TypeAgent Dis
 
 - `@translate <request>` - Only do the translation (no follow up explanation )
 - `@explain <request> => <action>` - only do the explanation of the request/action combo
+- `@reasoning [--model claude|copilot|none] <request>` - Invoke the reasoning engine on a request. If `--model` is omitted, the configured default from `@config execution reasoning` is used. Also available as `@reason`.
 
 ### Conversations
 

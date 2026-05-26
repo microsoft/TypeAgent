@@ -2,14 +2,29 @@
 // Licensed under the MIT License.
 
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ParsedCommandParams,
+    SessionContext,
+    CompletionGroups,
+} from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
 import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
 
+const validEngines = ["claude", "copilot", "none"];
+
 export class ReasonCommandHandler implements CommandHandler {
     public readonly description = "Reason about a request";
     public readonly parameters = {
+        flags: {
+            model: {
+                description:
+                    "Reasoning engine to use: claude, copilot, or none",
+                type: "string",
+                default: "",
+            },
+        },
         args: {
             request: {
                 description: "Request to reason about",
@@ -23,10 +38,11 @@ export class ReasonCommandHandler implements CommandHandler {
     ) {
         const request = params.args.request;
 
-        // Get the configured reasoning engine from session config
+        // Use --model flag if provided, otherwise fall back to config
         const systemContext = context.sessionContext.agentContext;
         const config = systemContext.session.getConfig();
-        const engine = config.execution.reasoning;
+        const engine =
+            (params.flags.model as string) || config.execution.reasoning;
 
         const reasoningIcons: Record<string, string> = {
             claude: "🧠",
@@ -56,5 +72,22 @@ export class ReasonCommandHandler implements CommandHandler {
         } finally {
             systemContext.reasoningSourceIcon = undefined;
         }
+    }
+    public async getCompletion(
+        _context: SessionContext<CommandHandlerContext>,
+        _params: ParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        const result: CompletionGroups = { groups: [] };
+        for (const name of names) {
+            if (name === "model") {
+                result.groups.push({
+                    name: "engine",
+                    completions: validEngines,
+                });
+                result.closedSet = true;
+            }
+        }
+        return result;
     }
 }

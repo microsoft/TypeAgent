@@ -505,6 +505,7 @@ Handles `@`-prefixed system commands:
 - `@notify` — Notification management
 - `@construction` — Cache construction management
 - `@explain` — Explanation of cached translations
+- `@reasoning` / `@reason` — Invoke the reasoning engine (Claude or Copilot) with an optional `--model` override
 - `@feedback` — Inspect and export user-feedback entries
   recorded by the chat UI (`list`, `top`, `filter`, `export`, `count`)
 

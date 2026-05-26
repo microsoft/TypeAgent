@@ -455,6 +455,17 @@ Usage: `@dispatcher explain [--concurrency <number>] [--filterReference] [--filt
   - --filterReference : Filter reference words (default: false)  
   - --concurrency    <number> : Number of concurrent requests (default: 5)  
 
+## @dispatcher reason - Reason about a request  
+Usage: `@dispatcher reason [--model <engine>] <request>`  
+### Arguments:  
+  - &lt;request&gt; - Request to reason about (type: string)  
+### Flags:  
+  - --model    &lt;engine&gt; : Reasoning engine to use: claude, copilot, or none. If omitted, uses the configured default from `@config execution reasoning`.  
+
+## @dispatcher reasoning - Reason about a request  
+Usage: `@dispatcher reasoning [--model <engine>] <request>`  
+Alias for `@dispatcher reason`. See above.  
+
 ## @display - Send text to display  
 Usage: `@display [--inline] [--type <string>] [--speak] <text>...`  
    
