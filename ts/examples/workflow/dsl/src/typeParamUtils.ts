@@ -154,6 +154,10 @@ function substituteMarkers(
 export interface ResolvedTaskSchemas {
     inputSchema: JSONSchema;
     outputSchema: JSONSchema;
+    /** For container nodes (e.g. forkMap): the output schema of each body iteration. */
+    bodyOutputSchema?: JSONSchema;
+    /** For fork (parallel) nodes: the output schema of each branch, in order. */
+    branchOutputSchemas?: JSONSchema[];
 }
 
 /**

@@ -1167,6 +1167,12 @@ export class TypeChecker {
                         );
                     }
                 }
+                // Store per-branch output schemas for the emitter.
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: {},
+                    outputSchema: {},
+                    branchOutputSchemas: elemTypes.map(typeInfoToSchema),
+                });
                 return { kind: "tuple", elements: elemTypes };
             }
             case "ParallelMapNode": {
@@ -1190,10 +1196,6 @@ export class TypeChecker {
                 // Store the element schema for the emitter.
                 const pmElemType = bodyScope.get(e.param) ?? UNKNOWN;
                 const pmElemSchema = typeInfoToSchema(pmElemType);
-                this._resolvedSchemas.set(e.loc.offset, {
-                    inputSchema: { type: "array", items: pmElemSchema },
-                    outputSchema: pmElemSchema,
-                });
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
@@ -1202,6 +1204,12 @@ export class TypeChecker {
                     this._symbolTypes.set(e.paramLoc.offset, pmElemType);
                 }
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
+                // Store element schema AND body return schema for the emitter.
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: pmElemSchema },
+                    outputSchema: pmElemSchema,
+                    bodyOutputSchema: typeInfoToSchema(pmReturnType),
+                });
                 if (e.maxConcurrency) {
                     const mcType = this.inferExpr(e.maxConcurrency, scope);
                     if (

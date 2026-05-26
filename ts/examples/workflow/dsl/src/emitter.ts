@@ -2213,6 +2213,12 @@ export class Emitter {
     private emitParallel(expr: ParallelNode, scope: ScopeContext): Template {
         const forkId = this.freshId("parallel");
 
+        const parallelResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `parallel branch types`,
+        );
+
         const branches: ForkNode["branches"] = {};
 
         for (let i = 0; i < expr.bodies.length; i++) {
@@ -2275,7 +2281,8 @@ export class Emitter {
                     entry: branchScope.nodeOrder[0] ?? "",
                     nodes: branchScope.nodes,
                     output: branchOutput,
-                    outputSchema: {},
+                    outputSchema:
+                        parallelResolved?.branchOutputSchemas?.[i] ?? {},
                 },
             };
         }
@@ -2394,7 +2401,7 @@ export class Emitter {
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
                 output: bodyOutput,
-                outputSchema: {},
+                outputSchema: resolved?.bodyOutputSchema ?? {},
             },
             outputSchema: { type: "array" },
             ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
