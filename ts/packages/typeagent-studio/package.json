@@ -1,0 +1,56 @@
+{
+  "name": "typeagent-studio",
+  "displayName": "TypeAgent Studio",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Developer experience for authoring, tuning, and validating TypeAgent agents (compare-and-replay, schema/grammar tuning, trace investigation).",
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/typeagent-studio"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "clean": "rimraf --glob dist dist-pub *.vsix",
+    "compile": "node esbuild.mjs",
+    "deploy:local": "npm run package && code --install-extension dist-pub/typeagent-studio.vsix --force",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/typeagent-studio.vsix",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "typeagent-studio.hello",
+        "title": "Hello (skeleton)",
+        "category": "TypeAgent Studio"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onCommand:typeagent-studio.hello"
+  ],
+  "dependencies": {
+    "@typeagent/core": "workspace:*",
+    "debug": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "mkdirp": "^3.0.1",
+    "rimraf": "^6.0.1"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  }
+}

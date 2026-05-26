@@ -1015,6 +1015,9 @@ importers:
 
   extensions/agr-language:
     dependencies:
+      '@typeagent/core':
+        specifier: workspace:*
+        version: link:../../packages/typeagent-core
       grammar-tools-core:
         specifier: workspace:*
         version: link:../../packages/grammarTools/core
@@ -5207,6 +5210,59 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  packages/typeagent-core:
+    dependencies:
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/typeagent-studio:
+    dependencies:
+      '@typeagent/core':
+        specifier: workspace:*
+        version: link:../typeagent-core
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.0
+        version: 4.1.12
+      '@types/vscode':
+        specifier: ^1.90.0
+        version: 1.100.0
+      '@vscode/vsce':
+        specifier: ^3.2.1
+        version: 3.4.0
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.11
+      mkdirp:
+        specifier: ^3.0.1
+        version: 3.0.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+
   packages/uriHandler:
     dependencies:
       '@typeagent/agent-server-client':
@@ -5403,6 +5459,9 @@ importers:
       '@typeagent/completion-ui':
         specifier: workspace:*
         version: link:../completionUI
+      '@typeagent/core':
+        specifier: workspace:*
+        version: link:../typeagent-core
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
@@ -17669,7 +17728,7 @@ snapshots:
       node-gyp: 12.3.0
       ora: 5.4.1
       read-binary-file-arch: 1.0.6
-      semver: 7.7.4
+      semver: 7.8.0
       tar: 7.5.11
       yargs: 17.7.2
     transitivePeerDependencies:
@@ -18031,7 +18090,7 @@ snapshots:
       '@oclif/plugin-commands': 4.1.21
       '@oclif/plugin-help': 6.2.26
       '@oclif/plugin-not-found': 3.2.65(@types/node@22.15.18)
-      semver: 7.7.4
+      semver: 7.8.0
       table: 6.9.0
     transitivePeerDependencies:
       - '@types/node'
@@ -19536,7 +19595,7 @@ snapshots:
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.13.2
       require-in-the-middle: 7.5.2
-      semver: 7.7.4
+      semver: 7.8.0
       shimmer: 1.2.1
     transitivePeerDependencies:
       - supports-color
@@ -19548,7 +19607,7 @@ snapshots:
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.13.2
       require-in-the-middle: 7.5.2
-      semver: 7.7.4
+      semver: 7.8.0
       shimmer: 1.2.1
     transitivePeerDependencies:
       - supports-color
@@ -19635,7 +19694,7 @@ snapshots:
       '@opentelemetry/propagator-b3': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/propagator-jaeger': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-trace-base': 1.30.1(@opentelemetry/api@1.9.0)
-      semver: 7.7.4
+      semver: 7.8.0
 
   '@opentelemetry/semantic-conventions@1.28.0': {}
 
@@ -19679,7 +19738,7 @@ snapshots:
       extract-zip: 2.0.1
       progress: 2.0.3
       proxy-agent: 6.5.0
-      semver: 7.7.4
+      semver: 7.8.0
       tar-fs: 3.1.1
       yargs: 17.7.2
     transitivePeerDependencies:
@@ -21011,7 +21070,7 @@ snapshots:
       cheerio: 1.1.0
       cockatiel: 3.2.1
       commander: 12.1.0
-      form-data: 4.0.4
+      form-data: 4.0.5
       glob: 11.1.0
       hosted-git-info: 4.1.0
       jsonc-parser: 3.2.1
@@ -21022,7 +21081,7 @@ snapshots:
       parse-semver: 1.1.1
       read: 1.0.7
       secretlint: 9.3.2
-      semver: 7.7.4
+      semver: 7.8.0
       tmp: 0.2.5
       typed-rest-client: 1.8.11
       url-join: 4.0.1
@@ -24032,7 +24091,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.0
       serialize-error: 7.0.1
     optional: true
 
@@ -24068,7 +24127,7 @@ snapshots:
       array-union: 2.1.0
       dir-glob: 3.0.1
       fast-glob: 3.3.3
-      ignore: 5.2.4
+      ignore: 5.3.2
       merge2: 1.4.1
       slash: 3.0.0
 
@@ -24821,7 +24880,7 @@ snapshots:
       '@babel/parser': 7.28.4
       '@istanbuljs/schema': 0.1.3
       istanbul-lib-coverage: 3.2.0
-      semver: 7.7.4
+      semver: 7.8.0
     transitivePeerDependencies:
       - supports-color
 
@@ -25224,7 +25283,7 @@ snapshots:
       jest-util: 29.7.0
       natural-compare: 1.4.0
       pretty-format: 29.7.0
-      semver: 7.7.4
+      semver: 7.8.0
     transitivePeerDependencies:
       - supports-color
 
@@ -25330,7 +25389,7 @@ snapshots:
       decimal.js: 10.5.0
       domexception: 4.0.0
       escodegen: 2.1.0
-      form-data: 4.0.4
+      form-data: 4.0.5
       html-encoding-sniffer: 3.0.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 5.0.1
@@ -25444,7 +25503,7 @@ snapshots:
       lodash.isstring: 4.0.1
       lodash.once: 4.1.1
       ms: 2.1.3
-      semver: 7.7.4
+      semver: 7.8.0
 
   jszip@3.10.1:
     dependencies:
@@ -25799,7 +25858,7 @@ snapshots:
 
   make-dir@4.0.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.0
 
   make-error@1.3.6: {}
 
@@ -26448,11 +26507,11 @@ snapshots:
 
   node-abi@3.77.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.0
 
   node-abi@4.24.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.0
 
   node-addon-api@1.7.2:
     optional: true
@@ -26463,7 +26522,7 @@ snapshots:
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.0
 
   node-domexception@1.0.0: {}
 
@@ -26533,7 +26592,7 @@ snapshots:
   normalize-package-data@6.0.2:
     dependencies:
       hosted-git-info: 7.0.2
-      semver: 7.7.4
+      semver: 7.8.0
       validate-npm-package-license: 3.0.4
 
   normalize-path@3.0.0: {}
@@ -28015,7 +28074,7 @@ snapshots:
 
   simple-update-notifier@2.0.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.0
 
   sisteransi@1.0.5: {}
 

@@ -86,6 +86,7 @@
     "onLanguage:agr"
   ],
   "dependencies": {
+    "@typeagent/core": "workspace:*",
     "grammar-tools-core": "workspace:*",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",

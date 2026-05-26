@@ -1,0 +1,44 @@
+{
+  "name": "@typeagent/core",
+  "version": "0.0.1",
+  "description": "Shared engine library for TypeAgent Studio extensions (sandbox lifecycle, corpus federation, structured event stream, feedback, health, collisions, replay, onboarding bridge).",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/typeagent-core"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./events": "./dist/events/index.js",
+    "./sandbox": "./dist/sandbox/index.js",
+    "./corpus": "./dist/corpus/index.js",
+    "./feedback": "./dist/feedback/index.js",
+    "./health": "./dist/health/index.js",
+    "./collisions": "./dist/collisions/index.js",
+    "./replay": "./dist/replay/index.js",
+    "./onboardingBridge": "./dist/onboardingBridge/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "debug": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
