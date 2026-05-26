@@ -47,7 +47,8 @@ new surface area:
 G1 (sub-workflow calls and cross-file composition) is now resolved; see its
 section below for the landed surface. G24-G28 capture follow-up design
 questions raised during the G1 implementation that have not yet been
-scheduled.
+scheduled. G29 captures architectural questions about branch arm output types
+that must be resolved before the Gap 7 emitter fix can land.
 
 Dependency spine:
 
@@ -853,3 +854,74 @@ runtime value is an integer ≥ 1 (the same constraint
   shape (param ref, const, arithmetic, task call) and a runtime test
   that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
   fork entry with a useful error pointing at the option name.
+
+## G29: Branch arm output type architecture
+
+Several interconnected design questions about how `if`/`else` and `switch`
+produce values need to be resolved before the Gap 7 emitter fix
+(`branch.outputSchema`) can be completed correctly.
+
+**Background:** The DSL is SSA — every name is bound exactly once. Ternary
+(`a ? b : c`) is an expression and is always value-producing; the type checker
+enforces that both arms have the same type. `if`/`else` and `switch` are
+statements, but because of SSA they are also the only way to bind a name to a
+conditionally-produced task result. When an arm body contains a `return`
+statement the emitter sets `branch.bind` and publishes the arm output to the
+parent scope — making the `if`/`else` effectively value-producing.
+
+**Open questions:**
+
+1. **Should `if`/`else` and `switch` arms be required to have the same return
+   type?** Ternary arms already are (type checker error). Inconsistency: `if`
+   arms are not checked. In SSA terms the branch bind is a phi-node, and phi-
+   nodes classically require a common type across all reaching definitions.
+   Aligning `if`/`switch` with ternary would simplify the emitter (just emit
+   the common type as `outputSchema`) and make type errors earlier. The
+   trade-off is a breaking change for any DSL code that returns different types
+   from `if`/`switch` arms today (currently silently accepted).
+
+2. **Partial return (one arm returns, the other doesn't).** When only the
+   `then` arm contains a `return`, the emitter sets the `else` arm's
+   `scope.output = null` (comment: "the other arm's output is `null`"). The
+   branch is still value-producing (`bind` is set). The correct `outputSchema`
+   for this case is `{ anyOf: [T, { type: "null" }] }` — an implicit nullable.
+   - Is this pattern intentional or should it be a type error?
+   - If intentional, how does a caller distinguish "the branch ran but
+     produced null" from "the condition was false and nothing ran"?
+   - The workflow-level output loop takes the *last* statement's output, so a
+     partial-return `if` that is *not* the final statement just feeds `null`
+     silently into whatever consumes the bind name.
+
+3. **`outputSchema: {}` on arm scopes.** Both `buildArmScope` and
+   `buildOutputOnlyArm` always pass `{}` as the arm's `scope.outputSchema`.
+   The Gap 7 plan is to derive the arm's output schema from the type checker
+   (`symbolTypes`) and from the last node's `outputSchema`, but
+   `symbolTypes` only stores name-binding sites — the ternary result type and
+   the if/switch return type are not currently recorded there.
+   - For ternary: both arm types are available from `inferExpr` at emit time;
+     they are guaranteed equal so either can be used.
+   - For `if`/`switch`: the type checker returns `thenType` (first arm) and
+     discards the rest. To emit accurate arm `outputSchema` values the checker
+     would need to record per-arm return types, or the emitter would need to
+     walk the arm's output template and resolve it against the arm's own
+     `inputSchema`.
+
+4. **`switch` exhaustiveness and the default arm.** When a `switch` has no
+   `default` the validator treats the selector as an exhaustive enum. If arms
+   can return different types, the branch `outputSchema` must be their union.
+   If same-type is enforced (question 1), this reduces to a single type — but
+   requires verifying all arms actually return.
+
+**Suggested resolution path:**
+- Decide question 1 first (same-type enforcement). If yes, tighten the type
+  checker for `if`/`switch` to match ternary; the emitter fix becomes trivial.
+- If heterogeneous types are allowed, define how `anyOf` is emitted and how
+  consumers handle it (relates to G18 union types).
+- Address partial return (question 2) as a type-checker warning or error
+  before emitting nullable outputSchema silently.
+- Only after the above decisions, land the Gap 7 emitter change to set
+  accurate `outputSchema` on branch nodes and arm scopes.
+
+**Raised during:** validator-soundness plan Gap 7 analysis (branch
+`outputSchema` currently always `{}`).  Related gaps: G7 (branch arm
+covariance), G18 (union types).
