@@ -624,6 +624,17 @@ function getResolvedVersions(whyData, pkg) {
 
     function walk(node) {
         if (!node || typeof node !== "object") return;
+        // pnpm 10.x `pnpm why -r --json` emits one top-level entry per
+        // resolved version of <pkg> as `{name, version, dependents:[...]}`
+        // (reverse-tree shape, no forward `dependencies` children at the
+        // root). Older pnpm versions emitted forward trees where <pkg>
+        // appeared as a child under `dependencies`/`devDependencies`/
+        // `optionalDependencies`. Handle both: record any node whose
+        // `name` matches <pkg> as a resolved version, AND continue
+        // walking the forward `depKeys` for older shapes.
+        if (node.name === pkg && typeof node.version === "string") {
+            versions.add(node.version);
+        }
         for (const key of depKeys) {
             const deps = node[key];
             if (!deps || typeof deps !== "object") continue;
