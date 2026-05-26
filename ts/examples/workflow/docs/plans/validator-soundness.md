@@ -184,8 +184,33 @@ if (
    TypeChecker stores `bodyReturnType` in `_resolvedSchemas` at `e.loc.offset`.
    Emitter reads it back via `getResolvedSchemas` and sets `body.outputSchema`
    on the loop node (same pattern as map/filter/parallelMap).
-9. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - add `warnings`
-   array to `ValidationResult` and populate it from lenient skips.
+9. **Gaps 2 + remaining 1** (validator warnings for residual `{}`) - superseded
+   by the long-term plan below. Do not patch in isolation.
+
+## Long-term plan: `{}` = unknown semantics
+
+The original Gap 9 (add warnings for `isTopSchema` lenient skips) is subsumed
+by a broader architectural decision. See:
+
+- **IR decision 0011** (`ir/decisions/0011-top-schema-unknown-semantics.md`):
+  defines `{}` as `unknown` (not `any`) for bound producers. Establishes the
+  three-tier lattice: `{}` (unknown/top), concrete types, `{ "not": {} }` (never).
+- **Phased implementation plan:**
+  1. Decision doc (0011) — establishes the principle.
+  2. Emitter fixes for knowable-but-dropped `{}` sites:
+     - `forkMap` body `outputSchema` (emitter ~2397): wire `elementSchema`.
+     - `fork` parallel branch body `outputSchema` (~2278): compute from terminal node.
+     - Ternary arm identity wrappers (~1366/1397): infer from literal value.
+     - Ternary `BranchNode.outputSchema` (~1419): look up from `symbolTypes`.
+     - `if/else`/`switch` arm/branch schemas: deferred to G29.
+  3. Validator changes: add `warnings[]` to `ValidationResult`; emit warning
+     (not error) when `isTopSchema(producer) && !isTopSchema(consumer)`, and
+     when path access is attempted on a `{}` producer.
+  4. `if/else`/`switch` arm types: after G29 resolution.
+  5. IR spec update: add unknown-semantics note to §4.1 pass 7.
+
+The warning set should be small and actionable by the time Phase 3 lands
+(Phases 1+2 reduce `{}` bound producers to only the genuinely unknowable cases).
 
 ## Testing strategy
 
