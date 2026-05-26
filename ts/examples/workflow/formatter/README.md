@@ -42,7 +42,7 @@ wff my.wf
 Check formatting in CI / pre-commit:
 
 ```sh
-wff --check examples/workflow/dsl/examples/*.wf
+wff --check examples/workflow/workflows/dsl/*.wf
 ```
 
 Pipeline: lint -> format -> compile:

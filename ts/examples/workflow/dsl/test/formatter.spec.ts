@@ -3,7 +3,7 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { compile } from "../src/compiler.js";
 import { WorkflowDecl } from "../src/ast.js";
 
@@ -11,7 +11,8 @@ function parse(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens, comments);
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;
@@ -271,6 +272,91 @@ describe("formatter: options", () => {
     });
 });
 
+describe("formatter: keepBlankLines option", () => {
+    test("blank line between statements is preserved when keepBlankLines:true", () => {
+        const src = `workflow w(a: string): string {
+    const x = a;
+
+    return x;
+}`;
+        const out = format(parse(src), { keepBlankLines: true });
+        // There should be a blank line between the const and return.
+        expect(out).toMatch(/const x = a;\n\n\s*return x;/);
+    });
+
+    test("blank line is stripped when keepBlankLines:false", () => {
+        const src = `workflow w(a: string): string {
+    const x = a;
+
+    return x;
+}`;
+        const out = format(parse(src), { keepBlankLines: false });
+        expect(out).not.toMatch(/const x = a;\n\n/);
+    });
+
+    test("multiple blank lines collapse to one", () => {
+        const src = `workflow w(a: string): string {
+    const x = a;
+
+
+
+    return x;
+}`;
+        const out = format(parse(src), { keepBlankLines: true });
+        // Exactly one blank line (not two or three).
+        expect(out).toMatch(/const x = a;\n\n\s*return x;/);
+        expect(out).not.toMatch(/const x = a;\n\n\n/);
+    });
+
+    test("no blank line at start of block even when keepBlankLines:true", () => {
+        const src = `workflow w(a: string): string {
+
+    const x = a;
+    return x;
+}`;
+        const out = format(parse(src), { keepBlankLines: true });
+        // The block should not open with a blank line.
+        expect(out).toMatch(/\{\n\s+const x/);
+    });
+
+    test("blank lines preserved inside nested if block", () => {
+        const src = `workflow w(a: boolean, b: string): string {
+    if (a) {
+        const x = b;
+
+        return x;
+    }
+    return b;
+}`;
+        const out = format(parse(src), { keepBlankLines: true });
+        expect(out).toMatch(/const x = b;\n\n\s*return x;/);
+    });
+
+    test("blank line before statement with leading comment", () => {
+        const src = `workflow w(a: string): string {
+    const x = a;
+
+    // separator
+    return x;
+}`;
+        const out = format(parse(src), { keepBlankLines: true });
+        // Blank line before the comment that leads the return.
+        expect(out).toMatch(/const x = a;\n\n\s*\/\/ separator\n\s*return x;/);
+    });
+
+    test("keepBlankLines round-trips stably", () => {
+        const src = `workflow w(a: string): string {
+    const x = a;
+
+    return x;
+}`;
+        const opts = { keepBlankLines: true };
+        const once = format(parse(src), opts);
+        const twice = format(parse(once), opts);
+        expect(twice).toBe(once);
+    });
+});
+
 describe("formatter: expression edge cases", () => {
     test("nested ternary round-trips and re-parses to same shape", () => {
         const src = `workflow w(a: boolean, b: boolean, c: boolean): string {
@@ -436,7 +522,7 @@ describe("formatter: raw literal round-trip (A2)", () => {
             // Lexer caught it - acceptable.
             return;
         }
-        const { errors } = new Parser(tokens, comments).parseSingle();
+        const { errors } = new Parser(tokens, comments).parseModule();
         const hasBackslashErr = errors.some((e) =>
             /backslash/i.test(e.message),
         );

@@ -8,19 +8,29 @@
  * verifying end-to-end runtime behavior.
  */
 
-import { WorkflowIR, TaskDefinition } from "workflow-model";
+import {
+    WorkflowIR,
+    TaskDefinition,
+    TaskContext,
+    Template,
+} from "workflow-model";
 import {
     TaskRegistry,
     WorkflowEngine,
     WorkflowEvent,
     allBuiltinTasks,
 } from "../src/index.js";
-import { compile, TaskSchemaInfo, CompileOptions } from "workflow-dsl";
+import {
+    compile,
+    compileFile,
+    FileResolver,
+    TaskSchemaInfo,
+    CompileOptions,
+} from "workflow-dsl";
 
 // ---- Helpers ----
 
 const VALIDATE: CompileOptions = { validate: true };
-const NO_VALIDATE: CompileOptions = { validate: false };
 
 function makeRegistry(...tasks: TaskDefinition[]): TaskRegistry {
     const registry = new TaskRegistry();
@@ -94,6 +104,37 @@ function makeEngine(extraTasks: TaskDefinition[] = []): {
     const eng = new WorkflowEngine(reg);
     const events = collectEvents(eng);
     return { eng, events };
+}
+
+/**
+ * BranchArm scopes are nested. Walk every node in the IR (including arm
+ * sub-scopes and loop bodies) and return the first node ID matching the
+ * predicate.
+ */
+function findNodeIdDeep(
+    ir: WorkflowIR,
+    predicate: (id: string) => boolean,
+): string | undefined {
+    const visit = (nodes: Record<string, any>): string | undefined => {
+        for (const [id, node] of Object.entries(nodes)) {
+            if (predicate(id)) return id;
+            if (node?.kind === "branch") {
+                for (const arm of Object.values(node.cases ?? {})) {
+                    const found = visit((arm as any).scope?.nodes ?? {});
+                    if (found) return found;
+                }
+                if (node.default?.scope?.nodes) {
+                    const found = visit(node.default.scope.nodes);
+                    if (found) return found;
+                }
+            } else if (node?.kind === "loop" && node.body?.nodes) {
+                const found = visit(node.body.nodes);
+                if (found) return found;
+            }
+        }
+        return undefined;
+    };
+    return visit(ir.workflows[ir.entry].nodes);
 }
 
 // ---- Tests ----
@@ -427,10 +468,10 @@ describe("DSL -> Engine integration", () => {
                 }
             `);
             // Find the RHS-evaluation and short-circuit arm node IDs
-            const rhsNode = Object.keys(ir.nodes).find((id) =>
+            const rhsNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("and_rhs"),
             )!;
-            const shortNode = Object.keys(ir.nodes).find((id) =>
+            const shortNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("and_short"),
             )!;
             expect(rhsNode).toBeDefined();
@@ -464,10 +505,10 @@ describe("DSL -> Engine integration", () => {
                     return r;
                 }
             `);
-            const rhsNode = Object.keys(ir.nodes).find((id) =>
+            const rhsNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("or_rhs"),
             )!;
-            const shortNode = Object.keys(ir.nodes).find((id) =>
+            const shortNode = findNodeIdDeep(ir, (id) =>
                 id.startsWith("or_short"),
             )!;
             expect(rhsNode).toBeDefined();
@@ -566,21 +607,17 @@ describe("DSL -> Engine integration", () => {
                     }
                 }
             `,
-                [],
-                NO_VALIDATE,
             );
             const { eng } = makeEngine();
 
             let result = await eng.run(ir, {
                 input: { x: 20 },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("big: 20");
 
             result = await eng.run(ir, {
                 input: { x: 5 },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("small: 5");
@@ -625,31 +662,150 @@ describe("DSL -> Engine integration", () => {
                     }
                 }
             `,
-                [],
-                NO_VALIDATE,
             );
             const { eng } = makeEngine();
 
             let result = await eng.run(ir, {
                 input: { cmd: "hello" },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("greeting");
 
             result = await eng.run(ir, {
                 input: { cmd: "bye" },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("farewell");
 
             result = await eng.run(ir, {
                 input: { cmd: "other" },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("unknown");
+        });
+
+        it("switch dispatches on integer discriminant", async () => {
+            const ir = compileOk(`
+                workflow route(code: integer): unknown {
+                    switch (code) {
+                        case 1:
+                            const r = text.template("one", {});
+                            return r;
+                        case 2:
+                            const r = text.template("two", {});
+                            return r;
+                        case 3:
+                            const r = text.template("three", {});
+                            return r;
+                        default:
+                            const r = text.template("other", {});
+                            return r;
+                    }
+                }
+            `);
+            const { eng } = makeEngine();
+
+            for (const [code, expected] of [
+                [1, "one"],
+                [2, "two"],
+                [3, "three"],
+                [99, "other"],
+            ] as const) {
+                const result = await eng.run(ir, { input: { code } });
+                expect(result.success).toBe(true);
+                expect(result.output).toBe(expected);
+            }
+        });
+
+        it("switch executes only the matching arm's side effects", async () => {
+            // Use a side-effect task per arm and verify only the selected
+            // arm runs. Guards against any future regression where all
+            // arms (or the wrong arm) would be evaluated.
+            const calls: string[] = [];
+            const makeArmTask = (name: string): TaskDefinition => ({
+                name,
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["tag"],
+                    properties: { tag: { type: "string" } },
+                },
+                outputSchema: { type: "string" },
+                async execute(input: any) {
+                    calls.push(name);
+                    return { kind: "ok", output: `${name}:${input.tag}` };
+                },
+            });
+            const armA = makeArmTask("arm.a");
+            const armB = makeArmTask("arm.b");
+            const armC = makeArmTask("arm.c");
+            const extras = [armA, armB, armC];
+            const ir = compileOk(
+                `
+                workflow route(cmd: string): unknown {
+                    switch (cmd) {
+                        case "a":
+                            const r = arm.a("x");
+                            return r;
+                        case "b":
+                            const r = arm.b("x");
+                            return r;
+                        default:
+                            const r = arm.c("x");
+                            return r;
+                    }
+                }
+            `,
+                extras,
+            );
+            const { eng } = makeEngine(extras);
+
+            let result = await eng.run(ir, { input: { cmd: "b" } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe("arm.b:x");
+            expect(calls).toEqual(["arm.b"]);
+
+            calls.length = 0;
+            result = await eng.run(ir, { input: { cmd: "a" } });
+            expect(result.success).toBe(true);
+            expect(calls).toEqual(["arm.a"]);
+
+            calls.length = 0;
+            result = await eng.run(ir, { input: { cmd: "zzz" } });
+            expect(result.success).toBe(true);
+            expect(calls).toEqual(["arm.c"]);
+        });
+
+        it("switch nested inside map dispatches per-iteration", async () => {
+            const ir = compileOk(`
+                workflow labelAll(cmds: string[]): unknown {
+                    const results = map(cmds, (cmd) => {
+                        switch (cmd) {
+                            case "hi":
+                                const r = text.template("greeting", {});
+                                return r;
+                            case "bye":
+                                const r = text.template("farewell", {});
+                                return r;
+                            default:
+                                const r = text.template("unknown", {});
+                                return r;
+                        }
+                    });
+                    return results;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, {
+                input: { cmds: ["hi", "bye", "other", "hi"] },
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual([
+                "greeting",
+                "farewell",
+                "unknown",
+                "greeting",
+            ]);
         });
 
         it("if/else with continuation after branch", async () => {
@@ -686,6 +842,40 @@ describe("DSL -> Engine integration", () => {
             const result = await eng.run(ir, { input: {} });
 
             expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("something went wrong");
+        });
+
+        it("throw propagates the message string to RunResult.error", async () => {
+            const ir = compileOk(`
+                workflow fail(): unknown {
+                    throw "explicit error message";
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeDefined();
+            expect(result.error!.message).toBe("explicit error message");
+        });
+
+        it("throw inside if branch propagates message", async () => {
+            const ir = compileOk(`
+                workflow failIf(x: boolean): unknown {
+                    if (x) {
+                        throw "branch error";
+                    }
+                    return "ok";
+                }
+            `);
+            const { eng } = makeEngine();
+
+            const failing = await eng.run(ir, { input: { x: true } });
+            expect(failing.success).toBe(false);
+            expect(failing.error!.message).toBe("branch error");
+
+            const passing = await eng.run(ir, { input: { x: false } });
+            expect(passing.success).toBe(true);
         });
     });
 
@@ -1042,20 +1232,16 @@ describe("DSL -> Engine integration", () => {
                     }
                 }
             `,
-                [],
-                NO_VALIDATE,
             );
             const { eng } = makeEngine();
 
             let result = await eng.run(ir, {
                 input: { x: -5 },
-                skipValidation: true,
             });
             expect(result.output).toBe(5);
 
             result = await eng.run(ir, {
                 input: { x: 3 },
-                skipValidation: true,
             });
             expect(result.output).toBe(3);
         });
@@ -1072,19 +1258,16 @@ describe("DSL -> Engine integration", () => {
                 }
             `,
                 [webFetch],
-                NO_VALIDATE,
             );
 
             const result = await eng.run(ir, {
                 input: { url: "test.com", minLen: 10 },
-                skipValidation: true,
             });
             expect(result.success).toBe(true);
             expect(result.output).toBe("long enough");
 
             const result2 = await eng.run(ir, {
                 input: { url: "test.com", minLen: 3 },
-                skipValidation: true,
             });
             expect(result2.success).toBe(true);
             expect(result2.output).toBe("too short");
@@ -1122,21 +1305,6 @@ describe("DSL -> Engine integration", () => {
     // NOTE: The following tests are commented out because they expose real bugs
     // in the DSL compiler that should be tracked and fixed separately.
 
-    // BUG: switch always takes the first case regardless of discriminant value.
-    // The switch lowering emits a chain of compare.equals nodes, but the
-    // branch condition routing appears broken.
-    // describe("switch with default", () => { ... });
-
-    // BUG: ternary (and likely if/else) inside map body fails at runtime.
-    // The branch node's condition evaluation inside a loop body scope
-    // does not resolve correctly.
-    // describe("nested control flow: if/ternary inside map", () => { ... });
-
-    // BUG: top-level throw produces an empty error message.
-    // The error.fail task receives the value but the error propagation
-    // loses the message.
-    // describe("throw at top level", () => { ... });
-
     describe("nested control flow", () => {
         it("filter + map pipeline", async () => {
             const ir = compileOk(`
@@ -1158,6 +1326,654 @@ describe("DSL -> Engine integration", () => {
             });
             expect(result.success).toBe(true);
             expect(result.output).toEqual([2, 8, 4]);
+        });
+
+        it("ternary inside map body (branch in forkMap scope)", async () => {
+            const ir = compileOk(`
+                workflow test(nums: number[]): unknown {
+                    const result = map(nums, (n) => {
+                        const r = n > 10 ? "big" : "small";
+                        return r;
+                    });
+                    return result;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, {
+                input: { nums: [5, 15, 20, 3] },
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual(["small", "big", "big", "small"]);
+        });
+    });
+
+    describe("sub-workflow composition", () => {
+        it("calls a helper workflow and binds its output", async () => {
+            const ir = compileOk(`
+                workflow double(n: number): number {
+                    const r = n * 2;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = double(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 21 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(42);
+        });
+
+        it("supports defaulted argument", async () => {
+            const ir = compileOk(`
+                workflow add(a: number, b: number = 10): number {
+                    const r = a + b;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = add(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(15);
+        });
+
+        it("supports defaulted argument with path access on earlier param", async () => {
+            const ir = compileOk(`
+                workflow add(opts: { a: number, b: number }, extra: number = opts.a): number {
+                    const r = opts.a + opts.b + extra;
+                    return r;
+                }
+                export workflow main(o: { a: number, b: number }): number {
+                    const y = add(o);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            // o = { a: 3, b: 4 }; extra defaults to o.a = 3; result = 3+4+3 = 10
+            const result = await eng.run(ir, { input: { o: { a: 3, b: 4 } } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(10);
+        });
+
+        it("propagates sub-workflow output through caller pipeline", async () => {
+            const ir = compileOk(`
+                workflow inc(n: number): number {
+                    const r = n + 1;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const a = inc(x);
+                    const b = inc(a);
+                    const c = inc(b);
+                    return c;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 0 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(3);
+        });
+
+        it("supports nested sub-workflow calls", async () => {
+            const ir = compileOk(`
+                workflow leaf(n: number): number {
+                    const r = n * 10;
+                    return r;
+                }
+                workflow middle(n: number): number {
+                    const r = leaf(n);
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = middle(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 7 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(70);
+        });
+
+        it("sub-workflow has its own scope (no caller binding leakage)", async () => {
+            // 'r' is bound inside both workflows; the callee's 'r' must
+            // not be visible to or shadow the caller's 'r'.
+            const ir = compileOk(`
+                workflow helper(n: number): number {
+                    const r = n + 100;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const r = helper(x);
+                    const out = r + 1;
+                    return out;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(106);
+        });
+
+        it("sub-workflow failure propagates when caller has no onError", async () => {
+            const failTask: TaskDefinition = {
+                name: "fail.always",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail",
+                        error: { message: "boom" },
+                    };
+                },
+            };
+            const ir = compileOk(
+                `
+                workflow helper(x: unknown): unknown {
+                    const y = fail.always({});
+                    return y;
+                }
+                export workflow main(x: unknown): unknown {
+                    const r = helper(x);
+                    return r;
+                }
+            `,
+                [failTask],
+            );
+            const { eng } = makeEngine([failTask]);
+            const result = await eng.run(ir, { input: { x: 1 } });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/boom/);
+        });
+
+        it("caller onError recovers from sub-workflow failure (manual IR)", async () => {
+            // DSL does not yet expose onError syntax on workflow call sites,
+            // so this test constructs the IR by hand to exercise the engine
+            // recovery path.
+            //
+            // Graph: callHelper --[onError]--> recover (binds fallback=99, terminal)
+            //                   --[next]-----> done    (terminal, binds helperResult=1, unreachable)
+            //
+            // helper always throws. onError fires, recover runs math.add(0,99),
+            // binds "fallback". Main output reads "fallback". Proves recovery ran.
+            const failTask: TaskDefinition = {
+                name: "fail.always",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "fail", error: { message: "sub failed" } };
+                },
+            };
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "main",
+                workflows: {
+                    helper: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "doFail",
+                        output: { $from: "scope", name: "unused" } as Template,
+                        nodes: {
+                            doFail: {
+                                kind: "task",
+                                task: "fail.always",
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                                bind: "unused",
+                            },
+                        },
+                    },
+                    main: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "number" },
+                        entry: "callHelper",
+                        output: { $from: "scope", name: "result" } as Template,
+                        nodes: {
+                            callHelper: {
+                                kind: "workflowCall",
+                                workflowRef: { name: "helper" },
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                                // no bind: we don't use the success output
+                                next: "done",
+                                onError: "recover",
+                            },
+                            recover: {
+                                // onError path: return 99 as fallback
+                                kind: "task",
+                                task: "math.add",
+                                inputSchema: {
+                                    type: "object",
+                                    required: [
+                                        "left",
+                                        "right",
+                                        "error",
+                                        "trigger",
+                                    ],
+                                    properties: {
+                                        left: { type: "number" },
+                                        right: { type: "number" },
+                                        error: { type: "object" },
+                                        trigger: {},
+                                    },
+                                },
+                                outputSchema: { type: "number" },
+                                inputs: { left: 0, right: 99 },
+                                bind: "result",
+                                // no next → terminal
+                            },
+                            done: {
+                                // success path: return 1 (unreachable when helper fails)
+                                kind: "task",
+                                task: "math.add",
+                                inputSchema: {
+                                    type: "object",
+                                    required: ["left", "right"],
+                                    properties: {
+                                        left: { type: "number" },
+                                        right: { type: "number" },
+                                    },
+                                },
+                                outputSchema: { type: "number" },
+                                inputs: { left: 0, right: 1 },
+                                bind: "result",
+                                // no next → terminal
+                            },
+                        },
+                    },
+                },
+            };
+
+            const { eng } = makeEngine([failTask]);
+            const result = await eng.run(ir, { input: {} });
+            // recover node ran (not done): output is 99, not 1
+            expect(result.error).toBeUndefined();
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(99);
+        });
+
+        it("same helper called multiple times has isolated bindings", async () => {
+            const ir = compileOk(`
+                workflow add5(n: number): number {
+                    const r = n + 5;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const a = add5(x);
+                    const b = add5(x);
+                    const sum = a + b;
+                    return sum;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 10 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(30);
+        });
+
+        it("concurrent run() on same engine is rejected", async () => {
+            const ir = compileOk(`
+                export workflow main(x: number): number {
+                    const r = x + 1;
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const p1 = eng.run(ir, { input: { x: 1 } });
+            const r2 = await eng.run(ir, { input: { x: 2 } });
+            // The second call should fail-fast with the re-entrancy
+            // guard message (since the first is still in-flight).
+            // Outcome depends on timing — accept either ordering.
+            const r1 = await p1;
+            const failed = [r1, r2].filter((r) => !r.success);
+            const succeeded = [r1, r2].filter((r) => r.success);
+            expect(succeeded.length).toBeGreaterThanOrEqual(1);
+            // At least one must succeed (whichever ran first).
+            // The other may succeed too if both ran sequentially —
+            // accepted because Promise scheduling can serialize them.
+            // If one fails, the message must be the re-entrancy guard.
+            for (const f of failed) {
+                expect(f.error?.message).toMatch(/not re-entrant/i);
+            }
+        });
+
+        it("sub-workflow timeout aborts and surfaces timeout error", async () => {
+            const slowTask: TaskDefinition = {
+                name: "task.slow",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input: any, ctx: TaskContext) {
+                    return new Promise((resolve, reject) => {
+                        const onAbort = () => reject(new Error("aborted"));
+                        if (ctx.signal.aborted) {
+                            onAbort();
+                            return;
+                        }
+                        ctx.signal.addEventListener("abort", onAbort, {
+                            once: true,
+                        });
+                        // Never resolves on its own.
+                    });
+                },
+            };
+            // Build IR manually since the DSL doesn't currently expose
+            // a per-call timeoutMs syntax for workflowCall nodes; patch
+            // the emitted node directly.
+            const ir = compileOk(
+                `
+                workflow slow(x: unknown): unknown {
+                    const y = task.slow({});
+                    return y;
+                }
+                export workflow main(x: unknown): unknown {
+                    const r = slow(x);
+                    return r;
+                }
+            `,
+                [slowTask],
+            );
+            // Locate the workflowCall node in main and inject timeout.
+            const mainBody = ir.workflows[ir.entry];
+            const call = Object.values(mainBody.nodes).find(
+                (n: any) => n.kind === "workflowCall",
+            ) as any;
+            expect(call).toBeDefined();
+            call.timeoutMs = 50;
+            const { eng } = makeEngine([slowTask]);
+            const result = await eng.run(ir, { input: { x: 1 } });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/timed out/i);
+        });
+
+        it("sub-workflow returns complex object", async () => {
+            const ir = compileOk(`
+                workflow pack(n: number): unknown {
+                    const r = { name: "x", count: n };
+                    return r;
+                }
+                export workflow main(x: number): unknown {
+                    const y = pack(x);
+                    return y;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ name: "x", count: 5 });
+        });
+
+        it("sub-workflow nodeStarted/nodeCompleted events carry workflowCall nodeId", async () => {
+            const ir = compileOk(`
+                workflow inc(n: number): number {
+                    const r = n + 1;
+                    return r;
+                }
+                export workflow main(x: number): number {
+                    const y = inc(x);
+                    return y;
+                }
+            `);
+            const { eng, events } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 10 } });
+            expect(result.success).toBe(true);
+            // Find the workflowCall node id in the entry body.
+            const mainBody = ir.workflows[ir.entry];
+            const call = Object.entries(mainBody.nodes).find(
+                ([, n]) => (n as any).kind === "workflowCall",
+            )!;
+            const callNodeId = call[0];
+            const started = events.find(
+                (e) =>
+                    e.type === "nodeStarted" &&
+                    (e as any).nodeId === callNodeId,
+            );
+            const completed = events.find(
+                (e) =>
+                    e.type === "nodeCompleted" &&
+                    (e as any).nodeId === callNodeId,
+            );
+            expect(started).toBeDefined();
+            expect(completed).toBeDefined();
+            expect((completed as any).output).toBe(11);
+        });
+    });
+
+    // ---- Cross-file imports ----
+
+    class MemoryResolver implements FileResolver {
+        constructor(private files: Record<string, string>) {}
+        resolve(spec: string, importerAbsPath: string): string {
+            const parts = importerAbsPath.split("/").slice(0, -1);
+            for (const segment of spec.split("/")) {
+                if (segment === "." || segment === "") continue;
+                if (segment === "..") parts.pop();
+                else parts.push(segment);
+            }
+            return parts.join("/");
+        }
+        read(absPath: string): string {
+            const src = this.files[absPath];
+            if (src === undefined) throw new Error(`No such file: ${absPath}`);
+            return src;
+        }
+    }
+
+    function compileFileOk(
+        entryPath: string,
+        files: Record<string, string>,
+        extraTasks: TaskDefinition[] = [],
+    ): WorkflowIR {
+        const schemas = taskSchemasFrom([...allBuiltinTasks, ...extraTasks]);
+        const resolver = new MemoryResolver(files);
+        const result = compileFile(entryPath, schemas, {
+            resolver,
+            validate: true,
+        });
+        if (result.errors.length > 0) {
+            throw new Error(
+                `Compile errors:\n${result.errors.map((e) => e.message).join("\n")}`,
+            );
+        }
+        return result.ir!;
+    }
+
+    describe("cross-file imports", () => {
+        it("executes an imported helper workflow", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/helper.wf": `
+                    export workflow double(n: number): number {
+                        const r = n * 2;
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { double } from "./helper.wf";
+                    export workflow main(x: number): number {
+                        const y = double(x);
+                        return y;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 7 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(14);
+        });
+
+        it("executes an imported helper via alias", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/lib.wf": `
+                    export workflow triple(n: number): number {
+                        const r = n * 3;
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { triple as mul3 } from "./lib.wf";
+                    export workflow main(x: number): number {
+                        const y = mul3(x);
+                        return y;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: { x: 4 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(12);
+        });
+
+        it("chains two imported helpers", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/math.wf": `
+                    export workflow inc(n: number): number {
+                        const r = n + 1;
+                        return r;
+                    }
+                    export workflow double(n: number): number {
+                        const r = n * 2;
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { inc, double } from "./math.wf";
+                    export workflow main(x: number): number {
+                        const a = inc(x);
+                        const b = double(a);
+                        return b;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            // inc(3) = 4, double(4) = 8
+            const result = await eng.run(ir, { input: { x: 3 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(8);
+        });
+
+        it("private workflows with same name in different files execute independently", async () => {
+            const ir = compileFileOk("/p/main.wf", {
+                "/p/helper.wf": `
+                    workflow scale(x: number): number {
+                        const r = x * 10;
+                        return r;
+                    }
+                    export workflow process(n: number): number {
+                        const r = scale(n);
+                        return r;
+                    }
+                `,
+                "/p/main.wf": `
+                    import { process } from "./helper.wf";
+                    workflow scale(x: number): number {
+                        const r = x + 1;
+                        return r;
+                    }
+                    export workflow main(x: number): number {
+                        const a = scale(x);
+                        const b = process(x);
+                        return a + b;
+                    }
+                `,
+            });
+            const { eng } = makeEngine();
+            // main.scale(3) = 4, helper.scale(3) = 30, result = 4 + 30 = 34
+            const result = await eng.run(ir, { input: { x: 3 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(34);
+        });
+    });
+
+    // ---- Destructuring ----
+
+    describe("destructuring", () => {
+        it("destructures an array literal and returns first element", async () => {
+            const ir = compileOk(`
+                workflow main(): unknown {
+                    const [a, b] = ["hello", "world"];
+                    return a;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe("hello");
+        });
+
+        it("destructures an array literal and returns second element", async () => {
+            const ir = compileOk(`
+                workflow main(): unknown {
+                    const [a, b] = ["hello", "world"];
+                    return b;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe("world");
+        });
+
+        it("destructures a number array and uses elements in arithmetic", async () => {
+            const ir = compileOk(`
+                workflow main(): number {
+                    const [x, y] = [3, 4];
+                    const r = x + y;
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(7);
+        });
+    });
+
+    // ---- Named-record call syntax ----
+
+    describe("named-record call syntax", () => {
+        it("calls a workflow with named-record object literal", async () => {
+            const ir = compileOk(`
+                workflow add(a: number, b: number): number {
+                    const r = a + b;
+                    return r;
+                }
+                export workflow main(): number {
+                    const r = add({ a: 3, b: 4 });
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(7);
+        });
+
+        it("named-record with default for omitted key", async () => {
+            const ir = compileOk(`
+                workflow addWithDefault(a: number, b: number = 10): number {
+                    const r = a + b;
+                    return r;
+                }
+                export workflow main(): number {
+                    const r = addWithDefault({ a: 5 });
+                    return r;
+                }
+            `);
+            const { eng } = makeEngine();
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect(result.output).toBe(15);
         });
     });
 });

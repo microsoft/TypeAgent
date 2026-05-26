@@ -5,7 +5,7 @@
  * Generates a self-contained HTML page that visualizes a workflow
  * DSL file as a node graph using SVG.
  *
- * Usage: node dist/visualize.js examples/d1-standup-prep.wf > out.html
+ * Usage: node dist/visualize.js ../workflows/dsl/d1-standup-prep.wf > out.html
  */
 
 import * as fs from "fs";
@@ -13,6 +13,7 @@ import * as path from "path";
 import { lex } from "./lexer.js";
 import { Parser } from "./parser.js";
 import { extractGraph, GraphModel } from "./graphExtractor.js";
+import { WorkflowDecl } from "./ast.js";
 
 function parseWf(filePath: string): GraphModel {
     const source = fs.readFileSync(filePath, "utf-8");
@@ -23,13 +24,37 @@ function parseWf(filePath: string): GraphModel {
         );
     }
     const parser = new Parser(tokens, comments);
-    const { ast, errors: parseErrors } = parser.parseSingle();
-    if (!ast || parseErrors.length > 0) {
+    const { module, errors: parseErrors } = parser.parseModule();
+    if (parseErrors.length > 0 || module.workflows.length === 0) {
         throw new Error(
             `Parse errors: ${parseErrors.map((e) => e.message).join(", ")}`,
         );
     }
+    // The visualizer renders a single workflow. Mirror the compiler's
+    // selectEntry semantics (without --entry support): a single declared
+    // workflow is the entry; otherwise the unique `export`ed workflow is.
+    // Anything else is ambiguous and we refuse to guess.
+    const ast = selectVisualizeEntry(module.workflows, filePath);
     return extractGraph(ast);
+}
+
+function selectVisualizeEntry(
+    workflows: WorkflowDecl[],
+    filePath: string,
+): WorkflowDecl {
+    if (workflows.length === 1) return workflows[0];
+    const exported = workflows.filter((w) => w.exported);
+    if (exported.length === 1) return exported[0];
+    if (exported.length === 0) {
+        throw new Error(
+            `${filePath}: multiple workflows declared but none marked 'export'; cannot pick an entry to visualize`,
+        );
+    }
+    throw new Error(
+        `${filePath}: multiple workflows marked 'export' (${exported
+            .map((w) => w.name)
+            .join(", ")}); cannot pick an entry to visualize`,
+    );
 }
 
 // ---- Layout engine (simple top-down, left-to-right) ----

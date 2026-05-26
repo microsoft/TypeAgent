@@ -57,12 +57,16 @@ export async function clearRecordedActions(): Promise<void> {
 }
 
 /**
- * Gets settings from storage
- * @returns The settings
+ * Gets settings from storage.
+ *
+ * `agentServerHost` is the URL of the agent-server's discovery /
+ * dispatcher endpoint (default `ws://localhost:8999/`). The browser
+ * agent's actual WebSocket port is discovered dynamically through
+ * that endpoint — we deliberately do NOT cache or expose a per-agent
+ * port here, because the registrar may assign different ports across
+ * restarts of the host process.
  */
 export async function getSettings(): Promise<Record<string, string>> {
-    const settings = await chrome.storage.sync.get({
-        websocketHost: "ws://localhost:8081/",
-    });
+    const settings = await chrome.storage.sync.get(["agentServerHost"]);
     return settings;
 }

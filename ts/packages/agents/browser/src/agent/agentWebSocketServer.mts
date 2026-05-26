@@ -3,6 +3,8 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
+import { AddressInfo } from "net";
+import { isAllowedAgentOrigin } from "./originAllowlist.mjs";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -38,19 +40,115 @@ interface SessionHandlers {
     getPreferredClientType?: () => "extension" | "electron" | undefined;
     onClientConnected?: (client: BrowserClient) => void;
     onClientDisconnected?: (client: BrowserClient) => void;
+    /**
+     * Fired after the {@link clients} map mutation completes for any
+     * connect / disconnect affecting this session, with the post-
+     * mutation total of tracked clients for the session. Used by the
+     * agent to push counts up through `SessionContext.notifyClientCountChanged`
+     * so `@system ports` can surface them. Off-by-one safe: the new
+     * count is computed AFTER the connect / disconnect is reflected in
+     * the map.
+     */
+    onClientCountChanged?: (count: number) => void;
     onWebAgentMessage?: (client: BrowserClient, data: any) => void;
     activeClientId: string | null;
 }
 
 export class AgentWebSocketServer {
-    private server: WebSocketServer;
     private clients = new Map<string, Map<string, BrowserClient>>();
     private sessionHandlers = new Map<string, SessionHandlers>();
 
-    constructor(port: number = 8081) {
-        this.server = new WebSocketServer({ port });
+    /**
+     * @param server The underlying ws server, already bound and listening.
+     * @param port   The actually bound port (OS-assigned when the caller
+     *               passed 0).
+     *
+     * Construction is private — use {@link AgentWebSocketServer.start}
+     * so callers always get a server that is guaranteed to be bound
+     * before they read {@link port} or pass it to the registrar.
+     */
+    private constructor(
+        private readonly server: WebSocketServer,
+        public readonly port: number,
+    ) {
         this.setupHandlers();
-        debug(`Agent WebSocket server started on port ${port}`);
+        debug(`Agent WebSocket server listening on port ${port}`);
+    }
+
+    /**
+     * Bind a new server on `port`. Resolves only after the
+     * `listening` event so callers can synchronously read
+     * {@link port}; rejects on the first `error` event so bind
+     * failures (EADDRINUSE under fixed-port overrides) surface
+     * loudly instead of being swallowed by an attached error
+     * handler.
+     *
+     * Pass `0` to let the OS pick a free ephemeral port; the
+     * actual port is then available via {@link port}.
+     *
+     * Origin allowlist is enforced via `verifyClient`: see
+     * `isAllowedAgentOrigin` for the policy. Connections from
+     * disallowed Origins are rejected with HTTP 403 before any
+     * `connection` event fires.
+     */
+    public static start(port: number = 0): Promise<AgentWebSocketServer> {
+        return new Promise((resolve, reject) => {
+            const server = new WebSocketServer({
+                port,
+                verifyClient: (info, cb) => {
+                    // `info.req.headers.origin` is `string | string[] |
+                    // undefined`; coerce arrays to the first element so
+                    // `isAllowedAgentOrigin` (which calls `startsWith` /
+                    // `new URL`) only ever sees a string.
+                    const rawOrigin = info.origin || info.req.headers.origin;
+                    const origin = Array.isArray(rawOrigin)
+                        ? rawOrigin[0]
+                        : rawOrigin;
+                    if (isAllowedAgentOrigin(origin)) {
+                        cb(true);
+                    } else {
+                        debug(
+                            `Rejecting WebSocket upgrade from disallowed Origin: ${origin}`,
+                        );
+                        cb(false, 403, "Origin not allowed");
+                    }
+                },
+            });
+            let settled = false;
+            const onError = (error: Error) => {
+                if (settled) {
+                    debug("Server error after listening:", error);
+                    return;
+                }
+                settled = true;
+                server.removeListener("listening", onListening);
+                debug("Server bind error:", error);
+                reject(error);
+            };
+            const onListening = () => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("error", onError);
+                const address = server.address() as AddressInfo | null;
+                if (!address || typeof address === "string") {
+                    server.close();
+                    reject(
+                        new Error(
+                            "ws server.address() did not return an AddressInfo",
+                        ),
+                    );
+                    return;
+                }
+                // Re-attach a permanent error handler so post-listen errors
+                // are logged rather than crashing the process.
+                server.on("error", (error) => {
+                    debug("Server error:", error);
+                });
+                resolve(new AgentWebSocketServer(server, address.port));
+            };
+            server.once("error", onError);
+            server.once("listening", onListening);
+        });
     }
 
     /**
@@ -109,6 +207,12 @@ export class AgentWebSocketServer {
                     handlers.onClientConnected(client);
                 }
             }
+
+            // Push the initial count up now that the session knows
+            // about its pre-connected clients.
+            if (handlers.onClientCountChanged) {
+                handlers.onClientCountChanged(preConnected.size);
+            }
         }
 
         debug(`Session registered: ${sessionId}`);
@@ -143,10 +247,6 @@ export class AgentWebSocketServer {
     private setupHandlers(): void {
         this.server.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             this.handleNewConnection(ws, req);
-        });
-
-        this.server.on("error", (error) => {
-            console.error(`Agent WebSocket server error:`, error);
         });
     }
 
@@ -247,6 +347,11 @@ export class AgentWebSocketServer {
             session.onClientConnected(client);
         }
 
+        // Off-by-one safe: fired AFTER the sessionMap mutation above.
+        if (session?.onClientCountChanged) {
+            session.onClientCountChanged(sessionMap.size);
+        }
+
         ws.on("message", (message: string) => {
             client.lastActivity = new Date();
 
@@ -291,9 +396,16 @@ export class AgentWebSocketServer {
             }
 
             const sm = this.clients.get(client.sessionId);
+            let postCount = 0;
             if (sm) {
                 sm.delete(clientId);
+                postCount = sm.size;
                 if (sm.size === 0) this.clients.delete(client.sessionId);
+            }
+
+            // Off-by-one safe: fired AFTER the sessionMap delete.
+            if (s?.onClientCountChanged) {
+                s.onClientCountChanged(postCount);
             }
 
             if (s && s.activeClientId === clientId) {
@@ -469,8 +581,37 @@ export class AgentWebSocketServer {
         return false;
     }
 
-    public stop(): void {
-        this.server.close();
-        debug("Agent WebSocket server stopped");
+    /**
+     * Close all client connections and the underlying server.
+     * Resolves when the server has fully released its port — important
+     * for a rapid disable→enable cycle under a fixed-port override
+     * (`BROWSER_WEBSOCKET_PORT`), where a synchronous return would race
+     * the new bind into EADDRINUSE.
+     *
+     * Iterates every session's client map and closes each `WebSocket`
+     * before awaiting `server.close()`. Without this, a client whose
+     * session was never registered (connected before `registerSession`
+     * could fire) would survive `server.close()` waiting on the underlying
+     * socket.
+     */
+    public close(): Promise<void> {
+        debug("Closing AgentWebSocketServer");
+        for (const sessionMap of this.clients.values()) {
+            for (const client of sessionMap.values()) {
+                if (client.channelProvider) {
+                    client.channelProvider.notifyDisconnected();
+                }
+                try {
+                    client.socket.close();
+                } catch {
+                    // Already closed or never opened.
+                }
+            }
+        }
+        this.clients.clear();
+        this.sessionHandlers.clear();
+        return new Promise((resolve) => {
+            this.server.close(() => resolve());
+        });
     }
 }

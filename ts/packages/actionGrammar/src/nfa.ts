@@ -23,8 +23,24 @@ export type NFATransitionType = "token" | "epsilon" | "wildcard" | "phraseSet";
 export interface NFATransition {
     type: NFATransitionType;
 
-    // For token transitions: the token to match (can have multiple alternatives)
+    // For token transitions: the token to match (can have multiple alternatives).
+    // Stored normalized (lowercase + trailing-punctuation stripped) so they
+    // compare directly against normalized input tokens.
     tokens?: string[] | undefined;
+
+    // Original (display) form of `tokens`, before normalization.  Used by
+    // completion to surface keywords as written in the grammar (e.g.
+    // `hello,` not `hello`) while preserving normalized matching.  Aligned
+    // index-wise with `tokens`.  Optional: when absent, completion falls
+    // back to `tokens` (which is the normalized form).
+    displayTokens?: string[] | undefined;
+
+    // The rule's spacing mode at this transition's grammar position
+    // (one of "required" | "optional" | "none" | undefined-for-auto).
+    // Used by completion to emit per-group `separatorMode` matching the
+    // canonical's `spacingModeToSeparatorMode` (grammarCompletion.ts:636).
+    // Absent on epsilon/wildcard transitions or where it doesn't apply.
+    spacingMode?: import("./grammarTypes.js").CompiledSpacingMode | undefined;
 
     // For phraseSet transitions: name of the phrase-set matcher to consult at match time
     matcherName?: string | undefined;
@@ -206,6 +222,8 @@ export class NFABuilder {
         from: number,
         to: number,
         tokens: string[],
+        displayTokens?: string[],
+        spacingMode?: import("./grammarTypes.js").CompiledSpacingMode,
         slotIndex?: number,
         slotValue?: string,
     ): void {
@@ -228,6 +246,12 @@ export class NFABuilder {
             undefined, // propertyPath
             slotValue,
         );
+        const state = this.states[from];
+        const lastTrans = state.transitions[state.transitions.length - 1];
+        if (lastTrans) {
+            if (displayTokens) lastTrans.displayTokens = displayTokens;
+            if (spacingMode !== undefined) lastTrans.spacingMode = spacingMode;
+        }
     }
 
     addEpsilonTransition(from: number, to: number): void {

@@ -10,14 +10,71 @@
  */
 
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+import { compileFile as compileDslFile, TaskSchemaInfo } from "workflow-dsl";
+import { allBuiltinTasks } from "workflow-engine";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI = resolve(__dirname, "../cli.js");
-const WORKFLOWS = resolve(__dirname, "../../../workflows");
+const WORKFLOWS_IR = resolve(__dirname, "../../../workflows/ir");
+const WORKFLOWS_DSL = resolve(__dirname, "../../../workflows/dsl");
+
+// Compile .wf sources into a tmp dir so tests don't depend on the
+// workflow-examples build having been run.
+let WORKFLOWS_BUILT: string;
+
+beforeAll(() => {
+    WORKFLOWS_BUILT = mkdtempSync(join(tmpdir(), "wf-built-"));
+    const schemas: TaskSchemaInfo[] = allBuiltinTasks.map((t) => ({
+        name: t.name,
+        inputSchema: t.inputSchema,
+        outputSchema: t.outputSchema,
+    }));
+    for (const f of readdirSync(WORKFLOWS_DSL)) {
+        if (!f.endsWith(".wf")) continue;
+        // Skip library files (only consumed via cross-file import).
+        if (f === "writing.wf") continue;
+        const res = compileDslFile(join(WORKFLOWS_DSL, f), schemas, {
+            validate: true,
+        });
+        if (res.errors.length > 0 || !res.ir) {
+            const msg = res.errors
+                .map((e) => `${e.line}:${e.col} ${e.message}`)
+                .join("\n");
+            throw new Error(`Failed to compile ${f}:\n${msg}`);
+        }
+        writeFileSync(
+            join(WORKFLOWS_BUILT, f.replace(/\.wf$/, ".json")),
+            JSON.stringify(res.ir, null, 2),
+        );
+    }
+});
+
+afterAll(() => {
+    if (WORKFLOWS_BUILT) {
+        rmSync(WORKFLOWS_BUILT, { recursive: true, force: true });
+    }
+});
+
+const WORKFLOW_SOURCE: Record<string, "ir" | "built"> = {
+    "d1-standup-prep.json": "built",
+    "d4-commit-summary.json": "ir",
+    "d5-code-review-prep.json": "ir",
+    "d8-summarize-url.json": "built",
+};
+function workflowPath(name: string): string {
+    const source = WORKFLOW_SOURCE[name];
+    if (!source) {
+        throw new Error(
+            `Unknown workflow '${name}'. Add it to WORKFLOW_SOURCE.`,
+        );
+    }
+    const dir = source === "built" ? WORKFLOWS_BUILT : WORKFLOWS_IR;
+    return join(dir, name);
+}
 
 /** Run the CLI and return { stdout, stderr, code }. */
 function runCli(
@@ -55,7 +112,7 @@ describe("CLI integration", () => {
         it("validates d1-standup-prep.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
-                join(WORKFLOWS, "d1-standup-prep.json"),
+                workflowPath("d1-standup-prep.json"),
             ]);
             expect(code).toBe(0);
             expect(stdout).toContain("Valid");
@@ -64,7 +121,7 @@ describe("CLI integration", () => {
         it("validates d4-commit-summary.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
-                join(WORKFLOWS, "d4-commit-summary.json"),
+                workflowPath("d4-commit-summary.json"),
             ]);
             expect(code).toBe(0);
             expect(stdout).toContain("Valid");
@@ -73,7 +130,7 @@ describe("CLI integration", () => {
         it("validates d5-code-review-prep.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
-                join(WORKFLOWS, "d5-code-review-prep.json"),
+                workflowPath("d5-code-review-prep.json"),
             ]);
             expect(code).toBe(0);
             expect(stdout).toContain("Valid");
@@ -82,7 +139,7 @@ describe("CLI integration", () => {
         it("validates d8-summarize-url.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
-                join(WORKFLOWS, "d8-summarize-url.json"),
+                workflowPath("d8-summarize-url.json"),
             ]);
             expect(code).toBe(0);
             expect(stdout).toContain("Valid");
@@ -95,22 +152,27 @@ describe("CLI integration", () => {
                 bad,
                 JSON.stringify({
                     kind: "workflow",
-                    name: "bad",
                     version: "1",
-                    inputSchema: { type: "object" },
-                    outputSchema: { type: "object" },
-                    nodes: {
-                        step: {
-                            kind: "task",
-                            task: "nonexistent.task",
+                    entry: "bad",
+                    workflows: {
+                        bad: {
                             inputSchema: { type: "object" },
                             outputSchema: { type: "object" },
                             inputs: {},
-                            bind: "r",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "nonexistent.task",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                    bind: "r",
+                                },
+                            },
+                            entry: "step",
+                            output: { $from: "scope", name: "r" },
                         },
                     },
-                    entry: "step",
-                    output: { $from: "scope", name: "r" },
                 }),
             );
 
@@ -130,7 +192,7 @@ describe("CLI integration", () => {
             });
             const { stderr, code } = await runCli([
                 "run",
-                join(WORKFLOWS, "d1-standup-prep.json"),
+                workflowPath("d1-standup-prep.json"),
                 "--input",
                 input,
                 "--dry-run",
@@ -143,7 +205,7 @@ describe("CLI integration", () => {
             const input = JSON.stringify({ repoPath: "/tmp/fake" });
             const { stderr, code } = await runCli([
                 "run",
-                join(WORKFLOWS, "d4-commit-summary.json"),
+                workflowPath("d4-commit-summary.json"),
                 "--input",
                 input,
                 "--dry-run",
@@ -159,7 +221,7 @@ describe("CLI integration", () => {
             });
             const { stderr, code } = await runCli([
                 "run",
-                join(WORKFLOWS, "d8-summarize-url.json"),
+                workflowPath("d8-summarize-url.json"),
                 "--input",
                 input,
                 "--dry-run",
@@ -205,7 +267,7 @@ describe("CLI integration", () => {
             });
             const { stdout, code } = await runCli([
                 "run",
-                join(WORKFLOWS, "d1-standup-prep.json"),
+                workflowPath("d1-standup-prep.json"),
                 "--input",
                 input,
                 "--allow-all",

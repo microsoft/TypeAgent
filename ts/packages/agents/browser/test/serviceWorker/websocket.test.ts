@@ -4,9 +4,26 @@
 jest.mock("../../src/extension/serviceWorker/storage", () => ({
     getSettings: jest.fn().mockImplementation(() =>
         Promise.resolve({
-            websocketHost: "ws://localhost:8080/",
+            // Empty agentServerHost → service worker uses
+            // AGENT_SERVER_DEFAULT_URL (ws://localhost:8999/) for the
+            // discovery channel, then dials the discovered port for the
+            // actual browser-agent connection.
+            agentServerHost: "",
         }),
     ),
+}));
+
+// `discoverPort` lives in @typeagent/agent-server-client/discovery and
+// transitively pulls in isomorphic-ws / Node WebSocket — neither of
+// which loads cleanly under jsdom. Mock the helper to a synchronous
+// stub so the websocket module under test can use it without spinning
+// a real network call.
+jest.mock("@typeagent/agent-server-client/discovery", () => ({
+    discoverPort: jest
+        .fn()
+        .mockImplementation(() =>
+            Promise.resolve({ kind: "found", port: 8080 }),
+        ),
 }));
 
 jest.mock("../../src/extension/serviceWorker/ui", () => ({
@@ -45,7 +62,7 @@ describe("WebSocket Module", () => {
     });
 
     describe("createWebSocket", () => {
-        it("should create a WebSocket connection", async () => {
+        it("should create a WebSocket connection on the discovered port", async () => {
             const createWebSocket = websocketModule.createWebSocket;
             jest.useRealTimers();
             const socket = await createWebSocket();
@@ -71,18 +88,29 @@ describe("WebSocket Module", () => {
 
     describe("reconnectWebSocket", () => {
         it("should set up a reconnection interval", () => {
-            // Make sure setInterval is properly mocked
             jest.spyOn(global, "setInterval");
 
             const reconnectWebSocket = websocketModule.reconnectWebSocket;
             reconnectWebSocket();
 
-            // Verify setInterval was called
             expect(setInterval).toHaveBeenCalled();
 
-            // Test if the callback works correctly
-            // by advancing timers and checking what happens
             jest.advanceTimersByTime(5000);
+        });
+
+        it("should not schedule a second interval when called twice (singleton)", () => {
+            const setIntervalSpy = jest.spyOn(global, "setInterval");
+
+            const reconnectWebSocket = websocketModule.reconnectWebSocket;
+            reconnectWebSocket();
+            reconnectWebSocket();
+            reconnectWebSocket();
+
+            // Only the first call should have scheduled an interval —
+            // the singleton guard short-circuits the rest. This is the
+            // bug we fixed in PR 3 (was creating a fresh interval on
+            // every onclose).
+            expect(setIntervalSpy).toHaveBeenCalledTimes(1);
         });
     });
 

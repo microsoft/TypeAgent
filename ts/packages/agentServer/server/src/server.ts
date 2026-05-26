@@ -25,8 +25,9 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
     AGENT_SERVER_DISCOVERY_NAME,
     DiscoveryChannelName,
-    DiscoveryInvokeFunctions,
+    createDiscoveryHandlers,
     DispatcherConnectOptions,
+    JoinConversationResult,
     UserIdentity,
     getDispatcherChannelName,
     getClientIOChannelName,
@@ -346,13 +347,17 @@ async function main() {
                             connectionId: result.connectionId,
                         });
 
-                        return {
+                        const joinResult: JoinConversationResult = {
                             connectionId: result.connectionId,
                             conversationId,
                             name: result.name,
                             pendingInteractions:
                                 result.pendingInteractions ?? [],
                         };
+                        if (result.queueSnapshot !== undefined) {
+                            joinResult.queueSnapshot = result.queueSnapshot;
+                        }
+                        return joinResult;
                     } catch (e) {
                         channelProvider.deleteChannel(
                             getClientIOChannelName(conversationId),
@@ -368,13 +373,9 @@ async function main() {
                             `Not joined to conversation: ${conversationId}`,
                         );
                     }
-                    channelProvider.deleteChannel(
-                        getDispatcherChannelName(conversationId),
-                    );
-                    channelProvider.deleteChannel(
-                        getClientIOChannelName(conversationId),
-                    );
-                    joinedConversations.delete(conversationId);
+                    // Channel cleanup runs in the closeFn passed to
+                    // sharedDispatcher.join() via dispatcher.close(); don't
+                    // double-delete here.
                     await conversationManager.leaveConversation(
                         conversationId,
                         entry.connectionId,
@@ -400,18 +401,10 @@ async function main() {
                 },
 
                 deleteConversation: async (conversationId: string) => {
-                    // If this client is in the conversation being deleted,
-                    // clean up local channels first
-                    const entry = joinedConversations.get(conversationId);
-                    if (entry !== undefined) {
-                        channelProvider.deleteChannel(
-                            getDispatcherChannelName(conversationId),
-                        );
-                        channelProvider.deleteChannel(
-                            getClientIOChannelName(conversationId),
-                        );
-                        joinedConversations.delete(conversationId);
-                    }
+                    // Channel cleanup for any joined client of this conversation
+                    // runs in the closeFn passed to sharedDispatcher.join() via
+                    // sharedDispatcher.close() → closeAllClients() →
+                    // dispatcher.close(); don't double-delete here.
                     return conversationManager.deleteConversation(
                         conversationId,
                     );
@@ -448,23 +441,15 @@ async function main() {
             // on the same WS as agent-server so clients only need one
             // connection. Mutations to the registrar are NOT exposed
             // here — only agents themselves can register, via the
-            // in-process SessionContext.registerPort.
-            const discoveryFunctions: DiscoveryInvokeFunctions = {
-                lookupPort: async ({ agentName, role }) => {
-                    // The agent-server's own port is registered as a
-                    // real allocation under AGENT_SERVER_DISCOVERY_NAME
-                    // / DEFAULT_ROLE (see registerSelfPort below), so
-                    // no special-case is needed here — the lookup just
-                    // works for both well-known and agent-defined
-                    // names.
-                    const port = portRegistrar.lookup(agentName, role);
-                    return { port: port ?? null };
-                },
-            };
+            // in-process SessionContext.registerPort. The handler
+            // factory is shared with the standalone Electron shell so
+            // both hosts speak the same protocol byte-for-byte.
             createRpc(
                 "agent-server:discovery",
                 channelProvider.createChannel(DiscoveryChannelName),
-                discoveryFunctions,
+                createDiscoveryHandlers((agentName, role) =>
+                    portRegistrar.lookup(agentName, role),
+                ),
             );
         },
     );

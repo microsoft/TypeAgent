@@ -8,13 +8,16 @@ import type {
 } from "@typeagent/agent-sdk";
 import type {
     AgentSchemaInfo,
+    CancelResult,
     CommandCompletionResult,
     CommandResult,
     DisplayLogEntry,
     DispatcherStatus,
     ProcessCommandOptions,
     PendingInteractionResponse,
+    QueueSnapshot,
     RequestId,
+    SubmitResult,
     UserFeedbackCategory,
     UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
@@ -26,7 +29,26 @@ export type DispatcherInvokeFunctions = {
         clientRequestId?: unknown,
         attachments?: string[],
         options?: ProcessCommandOptions,
+        requestId?: string,
     ): Promise<CommandResult | undefined>;
+
+    submitCommand(
+        command: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
+
+    interrupt(
+        text: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
+
+    cancelCommand(requestId: string): Promise<CancelResult>;
+
+    getQueueSnapshot(): Promise<QueueSnapshot>;
 
     getDynamicDisplay(
         appAgentName: string,
@@ -88,7 +110,6 @@ export type DispatcherInvokeFunctions = {
 };
 
 export type DispatcherCallFunctions = {
-    cancelCommand(requestId: string): void;
     cancelCommandByClientId(clientRequestId: unknown): void;
     cancelInteraction(interactionId: string): void;
 };

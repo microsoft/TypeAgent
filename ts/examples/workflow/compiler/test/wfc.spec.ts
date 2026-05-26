@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WFC = resolve(__dirname, "../wfc.js");
-const DSL_EXAMPLES = resolve(__dirname, "../../../dsl/examples");
+const DSL_EXAMPLES = resolve(__dirname, "../../../workflows/dsl");
 
 interface CliResult {
     stdout: string;
@@ -71,8 +71,10 @@ describe("wfc CLI", () => {
         expect(typeof ir).toBe("object");
         expect(ir).not.toBeNull();
         expect(ir.kind).toBe("workflow");
-        expect(typeof ir.nodes).toBe("object");
-        expect(Object.keys(ir.nodes).length).toBeGreaterThan(0);
+        expect(typeof ir.workflows).toBe("object");
+        const entryBody = ir.workflows[ir.entry];
+        expect(typeof entryBody.nodes).toBe("object");
+        expect(Object.keys(entryBody.nodes).length).toBeGreaterThan(0);
     });
 
     test("writes IR to stdout when -o - is used", async () => {
@@ -81,7 +83,35 @@ describe("wfc CLI", () => {
         expect(result.code).toBe(0);
         const ir = JSON.parse(result.stdout);
         expect(ir.kind).toBe("workflow");
-        expect(typeof ir.nodes).toBe("object");
+        expect(typeof ir.workflows).toBe("object");
+        expect(typeof ir.workflows[ir.entry].nodes).toBe("object");
+    });
+
+    test("--entry selects a non-default entry workflow", async () => {
+        const input = join(tmp, "multi-entry.wf");
+        writeFileSync(
+            input,
+            `workflow alpha(x: number): number {
+                const r = x + 1;
+                return r;
+            }
+            workflow beta(x: number): number {
+                const r = x * 2;
+                return r;
+            }
+            `,
+            "utf8",
+        );
+        // Without --entry, the compiler should fail because no
+        // workflow is exported and more than one exists.
+        const noEntry = await runWfc([input, "-o", "-"]);
+        expect(noEntry.code).toBe(1);
+
+        // With --entry, the selected workflow is the IR entry.
+        const withEntry = await runWfc([input, "--entry", "beta", "-o", "-"]);
+        expect(withEntry.code).toBe(0);
+        const ir = JSON.parse(withEntry.stdout);
+        expect(ir.entry).toBe("beta");
     });
 
     test("reports parse errors with file:line:col [phase] format and exits 1", async () => {

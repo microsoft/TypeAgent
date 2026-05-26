@@ -102,6 +102,10 @@ import {
     fromJSONParsedActionSchema,
     ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
+import { RequestQueue } from "../queue/requestQueue.js";
+import type { QueueExecutionContext } from "../queue/requestQueue.js";
+import { createSnapshotCoalescer } from "../queue/snapshotCoalescer.js";
+import { processCommand as runProcessCommand } from "../command/command.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -174,6 +178,7 @@ export type CommandHandlerContext = {
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
     displayLog: DisplayLog;
+    requestQueue: RequestQueue;
 
     batchMode: boolean;
     pendingChoiceRoutes: Map<
@@ -654,7 +659,71 @@ export async function initializeCommandHandlerContext(
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,
+            // Replaced below; the queue's broadcaster needs `context` to be
+            // available so it can route through `context.clientIO`.
+            requestQueue: undefined as unknown as RequestQueue,
         };
+
+        const snapshotCoalescer = createSnapshotCoalescer((snapshot) => {
+            context.clientIO.queueStateChanged?.(snapshot);
+        });
+        context.requestQueue = new RequestQueue(
+            async (qctx: QueueExecutionContext) => {
+                const reqId: RequestId = {
+                    connectionId: qctx.originatorConnectionId || undefined,
+                    requestId: qctx.requestId,
+                    clientRequestId: qctx.clientRequestId,
+                };
+                const result = await runProcessCommand(
+                    qctx.text,
+                    context,
+                    reqId,
+                    qctx.attachments,
+                    qctx.options,
+                );
+                try {
+                    context.displayLog.logCommandResult(
+                        reqId,
+                        result?.metrics,
+                        result?.tokenUsage,
+                    );
+                    context.displayLog.saveQueued();
+                } catch {
+                    // best-effort
+                }
+                try {
+                    context.clientIO.notify(
+                        reqId,
+                        "commandComplete",
+                        { result: result ?? null },
+                        "system",
+                    );
+                } catch {
+                    // best-effort
+                }
+                return result;
+            },
+            {
+                requestQueued: (entry, version) => {
+                    context.clientIO.requestQueued?.(entry, version);
+                },
+                requestStarted: (entry, version) => {
+                    context.clientIO.requestStarted?.(entry, version);
+                },
+                requestCancelled: (rid, reason, version) => {
+                    context.clientIO.requestCancelled?.(rid, reason, version);
+                },
+                queueStateChanged: (snapshot) => {
+                    snapshotCoalescer.schedule(snapshot);
+                },
+            },
+            context.logger
+                ? {
+                      logEvent: (name, data) =>
+                          context.logger?.logEvent(name, data as any),
+                  }
+                : undefined,
+        );
 
         await initializeMemory(context, sessionDirPath);
         await addAppAgentProviders(context, options?.appAgentProviders);
@@ -927,6 +996,12 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
+    // Drain in-flight/queued entries before tearing down agents.
+    try {
+        await context.requestQueue.drainAndStop();
+    } catch {
+        // best-effort
+    }
     // Save the session because the token count is in it.
     context.session.save();
     await context.agents.close();

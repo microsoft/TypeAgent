@@ -43,13 +43,26 @@ export interface TaskNode {
     timeoutMs?: number;
 }
 
+export interface BranchArm {
+    inputs: Record<string, Template>;
+    scope: WorkflowScope;
+}
+
 export interface BranchNode {
     kind: "branch";
     selector: Template;
     selectorSchema: JSONSchema;
-    cases: Record<string, string>;
     /**
-     * Target when selector matches no case.
+     * Each case maps a discriminant value to a `BranchArm`: an
+     * `inputs` template wiring outer-scope values into the arm and a
+     * `scope` (`WorkflowScope`) that runs in isolation. Identical in
+     * shape to `ForkBranch` (ir-v0.2 §2.1). Arms are full sub-scopes
+     * — not bare node IDs — so a branch composes exactly like
+     * fork/forkMap/loop body.
+     */
+    cases: Record<string, BranchArm>;
+    /**
+     * Arm taken when the selector matches no case.
      *
      * If omitted, the branch must be **exhaustive**: `selectorSchema` must
      * declare an `enum` and every value in the enum must have a matching
@@ -57,7 +70,25 @@ export interface BranchNode {
      * narrowed to a subset of the enum. The static validator rejects
      * non-exhaustive branches that omit `default`.
      */
-    default?: string;
+    default?: BranchArm;
+    /**
+     * Type of the branch's output value (the selected arm's
+     * `scope.output`). Required iff `bind` is declared. Every arm's
+     * `scope.outputSchema` must be a structural subtype of this. MUST
+     * NOT be declared without `bind` (an unbound branch is pure
+     * control flow and has no outer-visible value to type).
+     */
+    outputSchema?: JSONSchema;
+    next?: string;
+    /**
+     * Recovery target for arm-scope failure. Selector resolution is
+     * statically unreachable (exhaustiveness + dominator passes) and
+     * does not contribute to onError.
+     */
+    onError?: string;
+    /** Hide-by-default per §8.15; publishes the branch's output value
+     *  under this name in the enclosing scope. Requires `outputSchema`. */
+    bind?: string;
 }
 
 export interface LoopStateVar {
@@ -96,6 +127,15 @@ export interface LoopNode {
     body: WorkflowScope;
     state: Record<string, LoopStateVar>;
     iterateState: Record<string, Template>;
+    /**
+     * Termination predicate. Resolved in the body's binding context at
+     * body natural completion (i.e., after a body node with `next:
+     * null` runs). When the resolved value is `true`, `iterateState`
+     * is evaluated and the loop iterates; when `false`, the loop
+     * exits with `body.output` as its output value. Must be
+     * boolean-typed.
+     */
+    continueWhen: Template;
     maxIterations?: number;
     next?: string;
     onError?: string;
@@ -133,12 +173,52 @@ export interface ForkMapNode {
     bind?: string;
 }
 
+// ---- Workflow call (sub-workflow invocation) ----
+
+/**
+ * Reference to a workflow. Cross-file imports are resolved at compile time
+ * by the fileLoader into the artifact bundle; all IR references therefore use
+ * `source: "bundle"`.
+ */
+export interface WorkflowRef {
+    /** Name of the referenced workflow (key in `WorkflowIR.workflows`). */
+    name: string;
+    /**
+     * Resolution source. `"bundle"` means the referenced workflow lives in the
+     * same artifact's `workflows` table. Omitted defaults to `"bundle"`.
+     */
+    source?: "bundle";
+}
+
+/**
+ * A node that invokes another workflow as a sub-workflow.
+ *
+ * Note: the discriminant is `"workflowCall"`, not `"workflow"`, to avoid
+ * confusion with the artifact-level `kind: "workflow"` discriminant.
+ *
+ * The `inputSchema` and `outputSchema` mirror the referenced workflow's body
+ * and are authoritatively populated by the emitter; the validator verifies they
+ * match the resolved body's schemas.
+ */
+export interface WorkflowCallNode {
+    kind: "workflowCall";
+    workflowRef: WorkflowRef;
+    inputSchema: JSONSchema;
+    outputSchema: JSONSchema;
+    inputs: Record<string, Template>;
+    next?: string;
+    onError?: string;
+    bind?: string;
+    timeoutMs?: number;
+}
+
 export type WorkflowNode =
     | TaskNode
     | BranchNode
     | LoopNode
     | ForkNode
-    | ForkMapNode;
+    | ForkMapNode
+    | WorkflowCallNode;
 
 // ---- Top-level IR ----
 
@@ -147,11 +227,31 @@ export interface ConstantDef {
     value: unknown;
 }
 
-export interface WorkflowIR extends WorkflowScope {
+/**
+ * Body of a single workflow: structurally identical to a loop body / fork
+ * branch scope, but used as a top-level entry in `WorkflowIR.workflows`.
+ *
+ * Currently aliased to `WorkflowScope`; kept as a distinct named type so the
+ * workflows-table semantics are visible at the API surface.
+ */
+export type WorkflowBody = WorkflowScope;
+
+/**
+ * Top-level workflow artifact.
+ *
+ * Multiple workflows live in the `workflows` table keyed by name. The `entry`
+ * field names the workflow that runs when this artifact is invoked at the top
+ * level. Other workflows in the table are reachable via `WorkflowCallNode`
+ * (the call graph is required to be acyclic).
+ */
+export interface WorkflowIR {
     kind: "workflow";
-    name: string;
-    description?: string;
     version: string;
+    description?: string;
     types?: Record<string, JSONSchema>;
     constants?: Record<string, ConstantDef>;
+    /** Name of the entry workflow (must be a key in `workflows`). */
+    entry: string;
+    /** Workflow definitions, keyed by name. */
+    workflows: Record<string, WorkflowBody>;
 }

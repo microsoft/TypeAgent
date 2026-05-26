@@ -13,6 +13,9 @@ import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
 export enum TokenKind {
     // Keywords
     Workflow = "workflow",
+    Export = "export",
+    Import = "import",
+    From = "from",
     Const = "const",
     If = "if",
     Else = "else",
@@ -107,10 +110,14 @@ export interface LexError {
     line: number;
     col: number;
     offset: number;
+    length: number;
 }
 
 const KEYWORDS = new Map<string, TokenKind>([
     ["workflow", TokenKind.Workflow],
+    ["export", TokenKind.Export],
+    ["import", TokenKind.Import],
+    ["from", TokenKind.From],
     ["const", TokenKind.Const],
     ["if", TokenKind.If],
     ["else", TokenKind.Else],
@@ -226,6 +233,7 @@ export function lex(source: string): {
             line: l,
             col: c,
             offset: rawStartOffset + offsetInRaw,
+            length: 1,
         });
     }
 
@@ -348,6 +356,7 @@ export function lex(source: string): {
             line: spanLine,
             col: spanCol,
             offset: spanOffset,
+            length: pos - spanOffset,
         });
     }
 
@@ -400,6 +409,7 @@ export function lex(source: string): {
                     line: startLine,
                     col: startCol,
                     offset: startOffset,
+                    length: pos - startOffset,
                 });
             }
             comments.push({
@@ -435,6 +445,7 @@ export function lex(source: string): {
                         line: startLine,
                         col: startCol,
                         offset: startOffset,
+                        length: pos - startOffset,
                     });
                     unterminated = true;
                     break;
@@ -455,6 +466,7 @@ export function lex(source: string): {
                     line: startLine,
                     col: startCol,
                     offset: startOffset,
+                    length: pos - startOffset,
                 });
             }
             // Validate escapes inside the raw slice: invalid sequences
@@ -701,6 +713,7 @@ export function lex(source: string): {
                             line: startLine,
                             col: startCol,
                             offset: startOffset,
+                            length: 2,
                         });
                     }
                 } else if (peek() === ">") {
@@ -748,6 +761,7 @@ export function lex(source: string): {
                             line: startLine,
                             col: startCol,
                             offset: startOffset,
+                            length: 2,
                         });
                     }
                 } else {
@@ -831,6 +845,7 @@ export function lex(source: string): {
                         line: startLine,
                         col: startCol,
                         offset: startOffset,
+                        length: 1,
                     });
                 }
                 continue;
@@ -853,6 +868,7 @@ export function lex(source: string): {
                         line: startLine,
                         col: startCol,
                         offset: startOffset,
+                        length: 1,
                     });
                 }
                 continue;
@@ -961,6 +977,7 @@ export function lex(source: string): {
             line: startLine,
             col: startCol,
             offset: startOffset,
+            length: 1,
         });
         advance();
     }

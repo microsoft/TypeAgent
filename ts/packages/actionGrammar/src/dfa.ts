@@ -96,8 +96,13 @@ export interface DFAExecutionContext {
  * - postOps: Operations from epsilon closure AFTER consuming the token
  */
 export interface DFATransition {
-    /** Specific token that triggers this transition */
+    /** Specific token that triggers this transition (normalized form) */
     token: string;
+
+    /** Original grammar form of the token (preserves case + punctuation).
+     * Used by completion to surface keywords as authored.  Optional;
+     * completion falls back to `token` when absent. */
+    displayToken?: string;
 
     /** Destination DFA state ID */
     to: number;
@@ -390,6 +395,7 @@ export class DFABuilder {
         to: number,
         preOps?: DFASlotOperation[],
         postOps?: DFASlotOperation[],
+        displayToken?: string,
     ): void {
         const state = this.states[from];
         if (!state) {
@@ -397,6 +403,9 @@ export class DFABuilder {
         }
 
         const transition: DFATransition = { token, to };
+        if (displayToken !== undefined && displayToken !== token) {
+            transition.displayToken = displayToken;
+        }
         if (preOps && preOps.length > 0) {
             transition.preOps = preOps;
         }

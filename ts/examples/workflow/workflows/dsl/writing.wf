@@ -1,0 +1,13 @@
+// Writing helpers used by pipeline.wf via cross-file import.
+// `trim` is a private helper (no `export`); only `summarize` is
+// importable across files.
+
+workflow trim(text: string): string {
+    return text;
+}
+
+export workflow summarize(text: string): string {
+    const cleaned = trim(text);
+    const joined = string.join([cleaned, "[summary]"], " ");
+    return joined;
+}

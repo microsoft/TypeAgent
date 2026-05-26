@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WFF = resolve(__dirname, "../wff.js");
-const DSL_EXAMPLES = resolve(__dirname, "../../../dsl/examples");
+const DSL_EXAMPLES = resolve(__dirname, "../../../workflows/dsl");
 
 interface CliResult {
     stdout: string;
@@ -174,6 +174,26 @@ describe("wff CLI", () => {
         expect(result.code).toBe(1);
         expect(result.stdout).toMatch(/^--- /m);
         expect(result.stdout).toMatch(/^\+\+\+ /m);
+    });
+
+    test("formats a multi-workflow file with imports (round-trip)", async () => {
+        // The CLI now goes through parseModule/formatModule so imports
+        // and multiple top-level `workflow` declarations are preserved.
+        const src =
+            'import { helper } from "./lib.wf";\n' +
+            "\n" +
+            "workflow a(x: string): string {\n" +
+            "    return x;\n" +
+            "}\n" +
+            "\n" +
+            "export workflow b(x: string): string {\n" +
+            "    const r = helper(x);\n" +
+            "    return r;\n" +
+            "}\n";
+        const result = await runWff([], src);
+        expect(result.code).toBe(0);
+        // Already-formatted input round-trips byte-for-byte.
+        expect(result.stdout).toBe(src);
     });
 
     test("stdin -> stdout pipeline", async () => {

@@ -26,10 +26,13 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "start": "node --disable-warning=DEP0190 dist/server.js",
     "stop": "node dist/stop.js",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\" --passWithNoTests",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -47,11 +50,14 @@
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "websocket-channel-server": "workspace:*",
-    "ws": "^8.17.1"
+    "ws": "^8.20.1"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

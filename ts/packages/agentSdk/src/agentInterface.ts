@@ -311,6 +311,41 @@ export interface SessionContext<T = unknown> {
     // The dispatcher will call getDynamicSchema/getDynamicGrammar to get the updated content.
     reloadAgentSchema(): Promise<void>;
 
+    // Notify the dispatcher that this agent's readiness state may have
+    // changed due to an external event (e.g. an extension client just
+    // connected, an OAuth token was refreshed). The dispatcher re-runs
+    // the agent's `checkReadiness` and updates its cache so the next
+    // pre-flight gate sees the fresh state — without the user having to
+    // run `@config agent refresh <name>`.
+    //
+    // No-op for agents that don't implement `checkReadiness`. Best
+    // effort: errors are swallowed so a transient probe failure doesn't
+    // surface in the trigger path (the next refresh will retry).
+    notifyReadinessChanged(): Promise<void>;
+
+    /**
+     * Notify the dispatcher that the number of clients currently
+     * connected to one of this agent's registered listeners has
+     * changed. Surfaced by the `@system ports` diagnostic command.
+     *
+     * `role` must match a role this agent previously passed to
+     * {@link registerPort}; writes for which no live registration
+     * exists are dropped silently (defends against late notifications
+     * arriving after the agent's session context has closed).
+     *
+     * `count` is the current total of connected clients for the
+     * `(agent, role, this session)` tuple, **after** the connect /
+     * disconnect that triggered this call has been applied to the
+     * agent's internal tracking. Pass `0` when the last client goes
+     * away so the column doesn't show a stale positive count.
+     *
+     * Best-effort: errors are swallowed (and debug-logged) so an
+     * event-driven trigger (e.g. WebSocket onClose) never throws into
+     * the event-emitter path. Agents that don't open ports never need
+     * to call this.
+     */
+    notifyClientCountChanged(role: string, count: number): Promise<void>;
+
     /**
      * Register a port this agent has just bound (typically with
      * `bind(0)` so the OS picks a free ephemeral port). The dispatcher
