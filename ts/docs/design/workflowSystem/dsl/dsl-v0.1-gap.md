@@ -50,10 +50,11 @@ G1 (sub-workflow calls and cross-file composition) is now resolved; see its
 section below for the landed surface. G24-G28 capture follow-up design
 questions raised during the G1 implementation that have not yet been
 scheduled. G29's mechanical questions (Q1/Q2/Q3) are resolved by the
-validator-soundness phases 3+4; the remaining open question is whether
-value-producing `if`/`switch` earns its keep alongside ternary given the
-current SSA + no-union-types constraints. G30 captures an early-return
-fusion gap uncovered during validator-soundness enforcement.
+validator-soundness phases 3+4 and G30 enforcement; the remaining open
+question is whether value-producing `if`/`switch` earns its keep alongside
+ternary given the current SSA + no-union-types constraints. G30's Option C
+(reject mixed-return patterns with diagnostics) is now implemented; Option A
+(pre-pass if-return fusion) is deferred pending a `.wf` file survey and G18.
 
 Dependency spine:
 
@@ -862,29 +863,30 @@ runtime value is an integer ≥ 1 (the same constraint
 
 ## G29: Branch arm output type architecture
 
-### Status update (post phases 3+4)
+### Status: Mechanically resolved ✅ (design question remains)
 
 The mechanical questions originally raised here have been resolved:
 
 - **Q1 (same-type arms):** ✅ enforced. `IfStatement` and `SwitchStatement`
-  now error when ALL arms return and types mismatch (parity with ternary).
-- **Q2 (partial return):** ⚠ relaxed. Originally proposed as a hard error,
-  but partial-return is a common legal pattern: early-return inside `if`
-  then fall-through, or `break` in some `switch` arms. The type checker
-  now silently accepts partial-return; the emitter falls back to `{}`
-  on the branch `outputSchema` for that case. Phase 5 validator warnings
-  will surface the residual `{}` so we can revisit. G18 (union types)
-  may eventually let us emit nullable types instead.
+  now error when all arms return and types mismatch (parity with ternary).
+- **Q2 (partial return):** ✅ rejected (G30 Option C). All mixed-return
+  patterns are now hard errors:
+  - Then-arm returns, no else arm.
+  - Then-arm returns, else arm does not.
+  - Else-arm returns, then arm does not.
+  - Any switch arm returns but not all arms (including default) return.
+  Authors must write the fully explicit form: all arms return the same
+  type (value-producing) or none return (statement form).
 - **Q3 (`outputSchema: {}` on arm scopes):** ✅ wired when all arms return.
   The type checker stores the result type in `_resolvedSchemas` at the
   statement/expression offset; the emitter threads it through
   `branch.outputSchema`, arm `scope.outputSchema`, and ternary identity
-  wrappers. When not all arms return, storage is skipped and the
-  emitter falls back to `{}` (see Q2).
-- **Q4 (`switch` exhaustiveness):** still open in the loose form — a
-  `switch` without `default` whose selector enum is exhaustive should
-  also be value-producing, but the type checker doesn't track enum
-  exhaustiveness yet.
+  wrappers. Mixed-return branches are now caught at Q2 before reaching
+  the emitter.
+- **Q4 (`switch` exhaustiveness):** still open — a `switch` without
+  `default` whose selector enum is exhaustive should also be
+  value-producing, but the type checker doesn't track enum exhaustiveness
+  yet. Currently such switches are treated as statement-form (no bind).
 
 ### Remaining open question — does the syntax earn its keep?
 
@@ -924,11 +926,7 @@ add enough expressive power to justify:
    error. This makes "what produces a value?" trivially clear: only
    expressions do.
 
-3. **If we keep both, are the diagnostics good enough?** A user writing
-   `if (x) { return a } else { return b }` should get a clear hint
-   ("consider ternary `x ? a : b`") when both arms are single-expression.
-
-4. **Does G18 (union types) change the calculus?** If unions land, arms
+3. **Does G18 (union types) change the calculus?** If unions land, arms
    could legitimately return different types and `if`/`switch` becomes
    strictly more expressive than ternary. Until then, the two are
    equivalent for value production.
@@ -942,11 +940,11 @@ and steering authors to ternary. Defer until G18 is decided — unions
 would flip the answer.
 
 **Raised during:** validator-soundness plan Gap 7 analysis.  Related:
-G7 (branch arm covariance), G18 (union types).
+G7 (branch arm covariance), G18 (union types), G30 (return asymmetry errors).
 
 ## G30: Early-return `if` fuses with subsequent fall-through return incorrectly
 
-**Status:** Open
+**Status:** ✅ Resolved (Option C — reject with diagnostic)
 
 ### Problem
 
@@ -957,93 +955,37 @@ if (flag) { const r = task(…); return r; }
 return null;
 ```
 
-is idiomatic TypeScript/JavaScript early-return style. The programmer's intent
-is a complete value-producing branch: `flag ? r : null`. But the DSL compiler
-currently lowers it as two independent statements:
+was idiomatic TypeScript/JavaScript early-return style. The DSL compiler
+previously lowered it as two independent statements, silently dropping the
+`return r` inside the then-arm — the workflow always returned `null`.
 
-1. `IfStatement` with only a `then` arm (no `else`). The type checker sees only
-   one returning arm → Q2 relaxation → `resultSchema = {}` → emitter does **not**
-   bind the branch → the `return r` inside the `then` arm is silently dropped.
-2. `return null` → `outputTemplate = null`.
+### Resolution (Option C)
 
-**Effect:** the workflow always returns `null`. The conditional task still
-executes (the branch arm runs the task as a side-effect), but its output is
-never surfaced. This is a silent correctness bug — no error, no warning.
+The type checker now emits hard errors for all mixed-return patterns in
+`if`/`else` and `switch`. Authors must write the fully explicit form.
 
-### Root cause
+**If errors:**
+- Then-arm returns, no else arm: `Then-arm returns a value of type X but there is no else-arm. Add an explicit else block or use a ternary expression.`
+- Then-arm returns, else does not (or vice versa): `Then-arm/Else-arm returns a value ... but the else/then-arm does not return. Both arms must return a value, or neither should.`
 
-The type checker and emitter treat the `IfStatement` AST node in isolation.
-Neither looks ahead at the next statement to recognize that a bare `return`
-immediately following a `then`-only `if { return }` is the implicit else
-arm — the fusion that a TypeScript compiler would perform during control-flow
-analysis.
+**Switch error:**
+- Any arm returns but not all: `Switch has arms that return a value but not all arms return. All arms must return a value, or none should.`
 
-### Possible resolutions
+### Correct form
 
-**Option A — Pre-pass: if-return fusion**
-
-A dedicated pre-pass (or CFG builder) walks the statement list and, for each
-`if (cond) { …; return x; }` followed immediately by `return y;`, rewrites the
-pair into a synthetic `if (cond) { …; return x; } else { return y; }` before
-type-checking and emission. This is the cleanest fix: the type checker then sees
-a fully formed two-arm branch, Q1 enforcement applies, and a concrete
-`resultSchema` is stored.
-
-Complexity: medium. The rewrite must handle the case where the `then` arm has
-additional statements before its `return`, and where the fall-through `return`
-is not the immediately next statement (e.g. multiple such `if-return` patterns
-in sequence, each consuming the following fall-through).
-
-**Option B — Type-checker look-ahead**
-
-`checkStatements` gets a "next-statement" argument. When it encounters an
-`IfStatement` whose `then` arm returns but that has no `else` arm, it peeks at
-the next statement. If that statement is a `ReturnStatement`, it synthesizes a
-virtual else arm with that return type and performs the same-type check.
-
-Complexity: medium. The virtual else arm is never emitted; it only informs the
-type info stored in `_resolvedSchemas` for that `IfStatement`.
-
-**Option C — Reject the pattern at the type-checker level**
-
-When an `IfStatement` has no `else` arm and its `then` arm returns a non-void
-value, emit a type error:
-
-> "If the then-arm returns a value, an else-arm (or explicit fall-through
-> return) must follow immediately and return the same type. Use an explicit
-> else block or ternary instead."
-
-This forces the author to write the fully explicit form, at the cost of being
-less permissive than TypeScript. However it makes the semantic gap visible
-rather than silently wrong.
-
-Complexity: low. One extra check in `checkStatement` for `IfStatement`.
-
-**Option D — Defer to G29 resolution**
-
-If G29 decides to deprecate value-producing `if`/`switch` in favor of ternary
-(post-G18), this gap becomes irrelevant — users would be steered toward
-`flag ? r : null` which the emitter handles correctly today.
-
-### Recommended approach
-
-Short term: **Option C** — reject the partial-return-with-implicit-else pattern
-with a clear diagnostic. This surfaces the bug to authors immediately and avoids
-the silent drop. The diagnostic message can suggest the explicit else or ternary
-alternative.
-
-Long term: **Option A** — proper if-return fusion as part of a fuller CFG
-pass, if the survey of `.wf` files shows this pattern is common.
-
-### Current workaround
-
-Write the explicit else arm:
+Write the explicit else arm or use ternary:
 
 ```
 if (flag) { const r = task(…); return r; } else { return null; }
-// or equivalently:
-return flag ? (const r = task(…); r) : null;  // ternary form
 ```
+
+### Remaining long-term option
+
+**Option A — Pre-pass if-return fusion**: walk the statement list and fuse
+`if (cond) { …; return x; }` followed by `return y;` into a synthetic
+`if … else` before type-checking. This would let authors write the
+TypeScript-idiomatic early-return style. Deferred; assess after surveying
+`.wf` file patterns and after G18 (union types) is decided.
 
 **Raised during:** validator-soundness enforcement (Phase 5+6, Decision 0011).
 Related: G29 (value-producing if/switch architecture), G18 (union types).
