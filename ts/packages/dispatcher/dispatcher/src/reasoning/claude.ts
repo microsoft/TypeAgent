@@ -16,6 +16,7 @@ import {
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import registerDebug from "debug";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +59,27 @@ function resolveReasoningDisplayMode(
 ): DisplayAppendMode {
     const config = context.sessionContext.agentContext.session.getConfig();
     return config.execution.reasoningDisplay === "inline" ? "step" : "block";
+}
+
+/**
+ * Resolve the path to the SDK's JS-based CLI (assistant.mjs).
+ * We use this instead of the default native binary (claude.exe) because
+ * the native binary sends a hardcoded `context-1m-2025-08-07` beta header
+ * that the API rejects for accounts without the 1M-context entitlement.
+ * The JS-based CLI has been patched (via postinstall or manual edit) to
+ * remove that beta.
+ */
+function getClaudeCodeJsCliPath(): string {
+    // Use createRequire (works in both Node and Electron) instead of
+    // import.meta.resolve which may not be available in Electron's main process.
+    const require = createRequire(import.meta.url);
+    const sdkEntry = require.resolve("@anthropic-ai/claude-agent-sdk");
+    const sdkDir = path.dirname(sdkEntry);
+    const cliPath = path.join(sdkDir, "assistant.mjs");
+    debug(
+        `[claude-cli] sdkEntry=${sdkEntry} sdkDir=${sdkDir} cliPath=${cliPath} exists=${fs.existsSync(cliPath)}`,
+    );
+    return cliPath;
 }
 
 const mcpServerName = "action-executor";
@@ -430,6 +452,14 @@ function getClaudeOptions(
         maxTurns: 20,
         thinking: { type: "adaptive" },
         effort: "max",
+        // Suppress the context-1m-2025-08-07 beta header that the SDK's
+        // bundled native binary sends by default.  The API rejects it for
+        // accounts without the 1M-context entitlement.  We bypass the native
+        // binary (claude.exe) and use the patched JS CLI (assistant.mjs)
+        // which has the beta removed.
+        executable: "node",
+        pathToClaudeCodeExecutable: getClaudeCodeJsCliPath(),
+        stderr: (data: string) => debug(`[claude-stderr] ${data}`),
         systemPrompt: customSystemPrompt ?? {
             type: "preset",
             preset: "claude_code",
@@ -985,16 +1015,6 @@ async function executeReasoningWithoutPlanning(
         }
     }
 
-    // A success result with zero tool calls means the model replied with text
-    // only (e.g. described the change in prose) without executing anything.
-    // Nothing was actually modified — surface as a failure instead of letting
-    // the text be reported as a successful action.
-    if (finalResult && toolUseCount === 0) {
-        throw new Error(
-            "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
-        );
-    }
-
     return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
 }
 
@@ -1185,15 +1205,6 @@ async function executeReasoningWithTracing(
                     throw new Error(errorMessage);
                 }
             }
-        }
-
-        // A success result with zero tool calls means the model replied with
-        // text only (e.g. described the change in prose) without executing
-        // anything. Nothing was actually modified — surface as a failure.
-        if (finalResult && toolUseCount === 0) {
-            throw new Error(
-                "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
-            );
         }
 
         // Mark trace as successful

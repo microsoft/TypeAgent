@@ -28,22 +28,33 @@ export class ReasonCommandHandler implements CommandHandler {
         const config = systemContext.session.getConfig();
         const engine = config.execution.reasoning;
 
-        // Route to the appropriate reasoning engine
-        switch (engine) {
-            case "claude":
-                return executeClaudeReasoning(request, context, {
-                    engine: "claude",
-                });
-            case "copilot":
-                return executeCopilotReasoning(request, context, {
-                    engine: "copilot",
-                });
-            case "none":
-                throw new Error(
-                    "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
-                );
-            default:
-                throw new Error(`Unknown reasoning engine: ${engine}`);
+        const reasoningIcons: Record<string, string> = {
+            claude: "🧠",
+            copilot: "✨",
+        };
+        systemContext.reasoningSourceIcon =
+            reasoningIcons[engine] ?? undefined;
+
+        try {
+            // Route to the appropriate reasoning engine
+            switch (engine) {
+                case "claude":
+                    return await executeClaudeReasoning(request, context, {
+                        engine: "claude",
+                    });
+                case "copilot":
+                    return await executeCopilotReasoning(request, context, {
+                        engine: "copilot",
+                    });
+                case "none":
+                    throw new Error(
+                        "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
+                    );
+                default:
+                    throw new Error(`Unknown reasoning engine: ${engine}`);
+            }
+        } finally {
+            systemContext.reasoningSourceIcon = undefined;
         }
     }
 }

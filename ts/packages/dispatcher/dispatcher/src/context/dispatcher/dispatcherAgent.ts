@@ -99,14 +99,24 @@ async function executeDispatcherAction(
                             const engine =
                                 systemContext.session.getConfig().execution
                                     .reasoning;
+                            const reasoningIcons: Record<string, string> = {
+                                claude: "🧠",
+                                copilot: "✨",
+                            };
+                            systemContext.reasoningSourceIcon =
+                                reasoningIcons[engine] ?? undefined;
                             const reason =
                                 engine === "copilot"
                                     ? executeCopilotReasoning
                                     : executeClaudeReasoning;
-                            return reason(
-                                action.parameters.originalRequest,
-                                context,
-                            );
+                            try {
+                                return await reason(
+                                    action.parameters.originalRequest,
+                                    context,
+                                );
+                            } finally {
+                                systemContext.reasoningSourceIcon = undefined;
+                            }
                         }
                     }
                     return lookupResult;
@@ -154,19 +164,38 @@ async function executeDispatcherAction(
             break;
         case "dispatcher.reasoning":
             if (action.actionName === "reasoningAction") {
-                const config =
-                    context.sessionContext.agentContext.session.getConfig();
+                const systemContext = context.sessionContext.agentContext;
+                const config = systemContext.session.getConfig();
                 const engine = config.execution.reasoning;
 
-                switch (engine) {
-                    case "claude":
-                        return executeClaudeReasoningAction(action, context);
-                    case "copilot":
-                        return executeCopilotReasoningAction(action, context);
-                    default:
-                        throw new Error(
-                            `Unsupported reasoning engine: ${engine}`,
-                        );
+                // Map reasoning engine to a display icon so reasoning
+                // bubbles show the engine brand instead of the dispatcher 🤖.
+                const reasoningIcons: Record<string, string> = {
+                    claude: "🧠",
+                    copilot: "✨",
+                };
+                systemContext.reasoningSourceIcon =
+                    reasoningIcons[engine] ?? undefined;
+
+                try {
+                    switch (engine) {
+                        case "claude":
+                            return await executeClaudeReasoningAction(
+                                action,
+                                context,
+                            );
+                        case "copilot":
+                            return await executeCopilotReasoningAction(
+                                action,
+                                context,
+                            );
+                        default:
+                            throw new Error(
+                                `Unsupported reasoning engine: ${engine}`,
+                            );
+                    }
+                } finally {
+                    systemContext.reasoningSourceIcon = undefined;
                 }
             }
             break;

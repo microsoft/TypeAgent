@@ -170,6 +170,7 @@ export type CommandHandlerContext = {
     activeRequestsByClientId: Map<unknown, AbortController>;
     noReasoning: boolean;
     isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
+    reasoningSourceIcon?: string | undefined; // engine-specific icon override while inside a reasoning loop
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -616,6 +617,7 @@ export async function initializeCommandHandlerContext(
             activeRequestsByClientId: new Map<unknown, AbortController>(),
             noReasoning: false,
             isInsideReasoningLoop: false,
+            reasoningSourceIcon: undefined,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,

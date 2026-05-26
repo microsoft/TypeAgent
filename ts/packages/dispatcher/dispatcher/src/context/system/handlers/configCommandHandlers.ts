@@ -1730,6 +1730,22 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
             );
         }
     }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "engine") {
+                completions.push({
+                    name,
+                    completions: ["claude", "copilot", "none"],
+                });
+            }
+        }
+        return { groups: completions };
+    }
 }
 
 class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {

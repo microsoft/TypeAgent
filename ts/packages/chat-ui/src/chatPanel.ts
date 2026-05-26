@@ -1312,9 +1312,9 @@ export class ChatPanel {
             // Detach the existing container for this request (if any) so
             // getOrCreateAgentContainer will spin up a fresh one.
             if (requestId) {
-                this.agentContainersByRequestId.delete(requestId);
+                const threadId = this.resolveThreadId(requestId);
+                this.threadContainers.delete(threadId);
             }
-            this.currentAgentContainer = undefined;
         }
 
         const container = this.getOrCreateAgentContainer(

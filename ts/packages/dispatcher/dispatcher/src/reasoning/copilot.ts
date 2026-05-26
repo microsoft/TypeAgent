@@ -16,8 +16,9 @@ import {
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
-import { execSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
+import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
@@ -159,24 +160,53 @@ function getRepoRoot(): string {
 }
 
 /**
- * Find the copilot CLI executable path
- * Uses 'where' on Windows or 'which' on Unix
+ * Locate the platform-specific native copilot binary bundled by the SDK.
+ * Navigates pnpm's virtual store: resolve @github/copilot-sdk, find the
+ * @github/copilot sibling directory, follow its symlink to the real path,
+ * then locate the platform binary (@github/copilot-<platform>-<arch>)
+ * among the real copilot package's siblings.
  */
-function findCopilotPath(): string {
+function findBundledNativeCli(): string | undefined {
+    const binaryName =
+        process.platform === "win32" ? "copilot.exe" : "copilot";
     try {
-        const isWindows = process.platform === "win32";
-        const command = isWindows ? "where copilot" : "which copilot";
-        const result = execSync(command, { encoding: "utf8" }).trim();
+        // 1. Resolve @github/copilot-sdk (our direct dependency)
+        const sdkEntry = fileURLToPath(
+            import.meta.resolve("@github/copilot-sdk"),
+        );
+        // sdkEntry is like: .../@github/copilot-sdk/dist/index.js
+        // Navigate to the @github/ directory that contains copilot-sdk
+        const githubDir = path.resolve(path.dirname(sdkEntry), "../..");
 
-        // On Windows, 'where' may return multiple lines; take the first one
-        const path = result.split("\n")[0].trim();
-        debug(`Found copilot CLI at: ${path}`);
-        return path;
-    } catch (error) {
-        debug("Could not find copilot CLI in PATH");
-        // Fallback to just "copilot" and let the SDK handle the error
-        return "copilot";
+        // 2. @github/copilot should be a sibling (pnpm hoists deps here)
+        const copilotDir = path.join(githubDir, "copilot");
+        if (!existsSync(copilotDir)) {
+            debug(`@github/copilot not found at: ${copilotDir}`);
+            return undefined;
+        }
+
+        // 3. Follow the pnpm symlink to the real package location
+        const realCopilotDir = realpathSync(copilotDir);
+        // realCopilotDir is like: .../.pnpm/@github+copilot@VER/node_modules/@github/copilot
+        // The platform binary package is a sibling in the real location
+        const realGithubDir = path.dirname(realCopilotDir);
+        const candidate = path.join(
+            realGithubDir,
+            `copilot-${process.platform}-${process.arch}`,
+            binaryName,
+        );
+        if (existsSync(candidate)) {
+            debug(`Found bundled native CLI: ${candidate}`);
+            return candidate;
+        }
+        debug(`Platform binary not found at: ${candidate}`);
+    } catch (err) {
+        debug(
+            `Could not resolve bundled native CLI for ${process.platform}-${process.arch}:`,
+            err,
+        );
     }
+    return undefined;
 }
 
 /**
@@ -190,12 +220,39 @@ async function getCopilotClient(
 
     if (!client) {
         debug("Creating new Copilot client");
-        const cliPath = findCopilotPath();
         const repoRoot = getRepoRoot();
         debug(`Repo root: ${repoRoot}`);
         debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
+
+        // When running inside Electron, process.execPath is the Electron
+        // binary — not node. The SDK's default getBundledCliPath() resolves
+        // to a .js entry point which the SDK then spawns via
+        // process.execPath, causing the CLI to exit immediately. To avoid
+        // this, resolve the platform-specific native binary from the
+        // bundled @github/copilot-<platform> package and pass it as
+        // cliPath so the SDK spawns it directly (no node needed).
+        const cliPath = findBundledNativeCli();
+        debug(`Using copilot CLI at: ${cliPath ?? "(SDK default)"}`);
+
+        // Isolate the CLI from the user's ~/.claude/settings.json.
+        // The Copilot CLI binary internally uses the Anthropic API and
+        // reads Claude Code's settings file.  If that file contains a
+        // model value with a "[1m]" suffix (e.g. "opus[1m]"), the CLI
+        // adds a "context-1m-2025-08-07" beta header that the API
+        // rejects for accounts without the 1M-context entitlement.
+        // Pointing CLAUDE_CONFIG_DIR at an empty temp directory prevents
+        // the CLI from reading those settings while still allowing it
+        // to use its own default configuration.
+        const isolatedConfigDir = mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-copilot-"),
+        );
+
         client = new CopilotClient({
-            cliPath,
+            ...(cliPath ? { cliPath } : {}),
+            env: {
+                ...process.env,
+                CLAUDE_CONFIG_DIR: isolatedConfigDir,
+            },
             cliArgs: [
                 "--add-dir",
                 repoRoot,
