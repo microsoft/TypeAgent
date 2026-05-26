@@ -7768,4 +7768,249 @@ describe("validateWorkflowIR", () => {
             });
         });
     });
+
+    // ---- Decision 0011: bound `{}` producer enforcement ----
+    //
+    // A bound producer (any node with `bind` set) must declare a concrete
+    // `outputSchema`. An empty schema `{}` is treated as `unknown` (not `any`)
+    // and is rejected. These tests pin the enforcement at every node kind
+    // that can carry `bind` + `outputSchema`.
+
+    describe("Decision 0011: bound `{}` producer rejection", () => {
+        it("rejects bound task with outputSchema {}", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        bind: "out",
+                        outputSchema: {},
+                    }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bound producer") &&
+                        e.message.includes("out") &&
+                        e.message.includes("outputSchema {}"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects bound branch with outputSchema {}", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: { $literal: "yes" } as unknown as Template,
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: makeSimpleArm("yesStep"),
+                        },
+                        default: makeSimpleArm("defaultStep"),
+                        bind: "out",
+                        outputSchema: {},
+                    } as BranchNode,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bound branch") &&
+                        e.message.includes("out") &&
+                        e.message.includes("outputSchema {}"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects bound loop with body.outputSchema {}", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeLoopNode(
+                        { bind: "out" },
+                        { outputSchema: {} },
+                    ),
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bound loop") &&
+                        e.message.includes("out") &&
+                        e.message.includes("body.outputSchema {}"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects bound fork with outputSchema {}", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "b_step",
+                                    nodes: {
+                                        b_step: makeTaskNode({ bind: "bOut" }),
+                                    },
+                                    output: { $from: "scope", name: "bOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: {},
+                        bind: "out",
+                    } as ForkNode,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bound fork") &&
+                        e.message.includes("out") &&
+                        e.message.includes("outputSchema {}"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects bound forkMap with outputSchema {}", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {},
+                        bind: "out",
+                    } as ForkMapNode,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bound forkMap") &&
+                        e.message.includes("out") &&
+                        e.message.includes("outputSchema {}"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects bound workflowCall with outputSchema {}", () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "main",
+                workflows: {
+                    main: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callHelper",
+                        nodes: {
+                            callHelper: {
+                                kind: "workflowCall",
+                                workflowRef: { name: "helper" },
+                                inputSchema: { type: "object" },
+                                outputSchema: {},
+                                inputs: {},
+                                bind: "result",
+                            },
+                        },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    helper: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "step",
+                        nodes: {
+                            step: makeTaskNode({ bind: "out" }),
+                        },
+                        output: { $from: "scope", name: "out" },
+                    },
+                },
+            };
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Bound workflowCall") &&
+                        e.message.includes("result") &&
+                        e.message.includes("outputSchema {}"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts unbound task with outputSchema {} (no bind → no enforcement)", () => {
+            // Unbound nodes may legally retain {} since their output is
+            // not addressable by name in any template.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        outputSchema: {},
+                        next: "end",
+                    }),
+                    end: makeTaskNode({
+                        bind: "out",
+                        outputSchema: { type: "object" },
+                    }),
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            // Should not produce any "Bound producer" error.
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("Bound producer"),
+                ),
+            ).toBe(false);
+        });
+    });
 });
