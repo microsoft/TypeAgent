@@ -392,6 +392,11 @@ export class GrammarStoreImpl implements GrammarStore {
                 ) {
                     const { schemaName } = splitSchemaNamespaceKey(name);
                     for (const p of dfaCompResult.properties) {
+                        // Skip properties with no actionName (plain-object
+                        // grammars).  createExecutableAction needs one; for
+                        // non-action grammars the DFA's property entry isn't
+                        // surfaced as a typed action.
+                        if (p.actionName === undefined) continue;
                         properties.push({
                             actions: [
                                 createExecutableAction(

@@ -919,6 +919,14 @@ function setPathValue(
     value: any,
 ): void {
     const parts = path.split(".");
+    // Reject path segments that would mutate Object.prototype or other
+    // built-in chains.  Grammar property paths come from compiled grammar
+    // (not user input) so this is defense-in-depth.
+    for (const p of parts) {
+        if (p === "__proto__" || p === "constructor" || p === "prototype") {
+            return;
+        }
+    }
     let cursor: Record<string, any> = obj;
     for (let i = 0; i < parts.length - 1; i++) {
         const k = parts[i];

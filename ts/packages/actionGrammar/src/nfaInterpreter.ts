@@ -122,13 +122,28 @@ function inputRawHonorsDisplayPunct(
     localTokens: string[] | undefined,
 ): boolean {
     if (!displayToken || !inputCtx || localTokens) return true;
-    const trailingPunctMatch = displayToken.match(/[.,;:!?]+$/);
-    if (!trailingPunctMatch) return true;
+    // Linear scan from end for trailing sentence punct — equivalent to
+    // /[.,;:!?]+$/ without the polynomial-backtracking risk.
+    let punctStart = displayToken.length;
+    while (punctStart > 0) {
+        const c = displayToken[punctStart - 1];
+        if (
+            c === "." ||
+            c === "," ||
+            c === ";" ||
+            c === ":" ||
+            c === "!" ||
+            c === "?"
+        ) {
+            punctStart--;
+        } else break;
+    }
+    if (punctStart === displayToken.length) return true;
     const start = inputCtx.starts[tokenIndex];
     const end = inputCtx.ends[tokenIndex];
     if (start === undefined || end === undefined) return true;
     const raw = inputCtx.request.substring(start, end).toLowerCase();
-    return raw.endsWith(trailingPunctMatch[0].toLowerCase());
+    return raw.endsWith(displayToken.substring(punctStart).toLowerCase());
 }
 
 /**
