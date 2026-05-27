@@ -1,0 +1,77 @@
+# ============================================================
+# Montage v3 — Memory-forward personal agent
+# Opening segment + music/code morning setup
+# ============================================================
+
+@defaults timeout=30s on-timeout=warn type-speed=32 type-jitter=12 voice="Microsoft Aria Natural"
+@focus "Windows Terminal"
+@setup setup\montage-setup.ps1
+
+# ------------------------------------------------------------
+# Phase 1 — Pre-roll. Settle the recording before we start.
+# ------------------------------------------------------------
+
+@record-start
+@sleep 2s
+
+@say-block "Hi, I'm going to show you our personal agent, TypeAgent. The thing that makes this agent different from a chat assistant is persistent memory. Watch."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 2 — Memory hook. Months-old query.
+# ------------------------------------------------------------
+
+what was the restaurant Adrian and I talked about going to in March?
+@expect "Osteria" timeout=45s on-timeout=warn
+
+@say-block "That was pulled from a conversation that happened weeks ago. Let me show you what memory looks like as a structure."
+
+@pause
+
+show me the entity graph for that conversation
+@wait-completion timeout=20s on-timeout=continue
+
+@say "We can zoom from a global overview down to a single neighborhood and back."
+@sleep 5s
+
+# ------------------------------------------------------------
+# Phase 3 — Music + Code morning setup.
+# ------------------------------------------------------------
+
+@pause
+
+@say "Now let's get the workday started."
+
+please launch spotify
+@expect "Spotify" timeout=15s on-timeout=warn
+
+set playback device to kibo
+@expect "kibo" timeout=10s on-timeout=continue
+
+play Nocturne by Chopin
+@wait-completion timeout=20s on-timeout=continue
+
+set the music volume to 30
+
+@pause
+
+@say "Time to set up the dev environment."
+
+switch to vscode window
+@expect "Code" timeout=10s on-timeout=exit
+
+change my vscode color theme to monokai
+@expect "Monokai" timeout=15s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 4 — Stop the recording, then teardown.
+# ------------------------------------------------------------
+
+@say-block "That covers the first segment. Memory threads through every domain — and in the next segment we'll show how the same agent works in the browser and with productivity apps."
+
+@sleep 1s
+@record-stop
+@teardown teardown\montage-teardown.ps1

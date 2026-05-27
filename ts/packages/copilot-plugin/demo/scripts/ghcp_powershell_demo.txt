@@ -1,0 +1,153 @@
+# ============================================================
+# GHCP-PowerShell demo — TypeAgent in Copilot CLI + ScriptFlow
+#
+# Reproduces the demo from GHCP-PowerShell-04-09-26.mp4 (~6 min).
+# Two parts: direct vs MCP mode comparison, then ScriptFlow for
+# PowerShell with learn-on-demand.
+# ============================================================
+
+@defaults timeout=30s on-timeout=warn type-speed=30 type-jitter=10 voice="Microsoft Aria Natural"
+@focus "Windows Terminal"
+@setup setup\macros-setup.ps1
+
+# ------------------------------------------------------------
+# Pre-roll
+# ------------------------------------------------------------
+
+@record-start
+@sleep 2s
+
+# ------------------------------------------------------------
+# Intro
+# ------------------------------------------------------------
+
+@say-block "This demo shows TypeAgent integrated into the Copilot CLI. We did this with about 34 lines of change to the GitHub code, and there are a few gaps we're working through with the GitHub team. Second half I'll show how we generate reusable PowerShell workflows on the fly."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 1 — Direct mode
+# ------------------------------------------------------------
+
+@say "We have two integration modes. Let me start with direct mode."
+
+@typeagent mode direct
+@wait-completion timeout=10s on-timeout=warn
+
+@say "In direct mode, our hook intercepts the user prompt, routes it to TypeAgent, and returns the response straight to the user. No LLM round-trip."
+
+show the currently playing song
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Nothing playing. Let me fix that."
+
+play Nocturne by Chopin
+@wait-completion timeout=15s on-timeout=warn
+
+show the currently playing song
+@wait-completion timeout=10s on-timeout=continue
+
+@say "Quick response. That's direct mode."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 2 — MCP mode
+# ------------------------------------------------------------
+
+@say "The other integration is through MCP."
+
+@typeagent mode mcp
+@wait-completion timeout=10s on-timeout=warn
+
+@say "In MCP mode, the LLM decides when to call TypeAgent as a tool. It gets the response back and formats it for the user."
+
+show the currently playing song
+@wait-completion timeout=30s on-timeout=warn
+
+@say-block "There's the selection. Then the tool returns content. Then the LLM takes a few seconds to format. That's the latency tradeoff. The win with MCP is the tool can post progress notifications during long-running work, so the user sees activity. Hooks can't do that."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 3 — ScriptFlow with a saved workflow
+# ------------------------------------------------------------
+
+@say "OK, switching gears. Now let me show reusable workflow actions."
+
+list files in my video folder
+@wait-completion timeout=30s on-timeout=warn
+
+@say "That triggered a ScriptFlow, which is what we call our saved workflows. Response was quick, but it still took a moment for the LLM to format the output."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 4 — Direct mode shortcut
+# ------------------------------------------------------------
+
+@say "I can go direct on that same action and skip the formatting."
+
+@typeagent run list files in my video folder
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Faster. And I can use a shortcut too."
+
+@typeagent run ls
+@wait-completion timeout=10s on-timeout=warn
+
+@say "LS works because the workflow has a grammar registered for it. So the agent can match it like any other action."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 5 — Learning a new workflow
+# ------------------------------------------------------------
+
+@say "The user can also ask for something the agent doesn't know yet. To handle that we added a learn keyword."
+
+@typeagent mode mcp
+@wait-completion timeout=10s on-timeout=continue
+
+learn show running processes
+@wait-completion timeout=60s on-timeout=warn
+
+@say-block "That routed to the reasoning agent. You can see it's thinking. The agent's instructions say if this is a system action, write it in PowerShell, make it reusable, follow some rules, and register it as a workflow."
+
+@pause
+
+@say-block "It listed the existing script flows, decided it needed a new one, wrote a script, and ran a test. Now it's registering the workflow with a grammar so the user can launch it by name. The response shows the natural language phrasings that will trigger this workflow."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 6 — Invoke the new workflow
+# ------------------------------------------------------------
+
+@say "Now let me run it."
+
+show running processes
+@wait-completion timeout=30s on-timeout=warn
+
+@say "Took a moment to get routed. Once it routed, the script ran immediately."
+
+@pause
+
+@say "Same action in direct mode should be much faster."
+
+@typeagent run list processes
+@wait-completion timeout=10s on-timeout=warn
+
+@say "Way quicker. No LLM formatting in the loop."
+
+@pause
+
+# ------------------------------------------------------------
+# Recap
+# ------------------------------------------------------------
+
+@say-block "To recap. TypeAgent is integrated into the Copilot console. The user gets a set of fast, reliable actions. We also showed ScriptFlow, which extends what TypeAgent can run by compiling reasoning steps into saved workflows. The developer doesn't have to write anything. The saved workflows grow on demand to match what the user actually asks for, the same way our user utterance cache does, so over time more requests get faster and more reliable."
+
+@sleep 1s
+@record-stop
+@teardown teardown\macros-teardown.ps1
