@@ -14,7 +14,7 @@ import {
     BranchNode,
     BranchArm,
     Template,
-    TemplateFromRef,
+
     JSONSchema,
     ConstantDef,
     LoopStateVar,
@@ -1192,6 +1192,8 @@ function validateOnErrorRules(
 
     // Rule 5: $from "recovery" refs must only appear in onError target nodes,
     // and only "error" and "trigger" are valid names in that namespace.
+    // Path existence is checked by walkTemplateAndComputeType during the
+    // normal per-node validation pass.
     const VALID_RECOVERY_NAMES = new Set(["error", "trigger"]);
     for (const [id, node] of Object.entries(nodes)) {
         if (!hasInputs(node)) continue;
@@ -1220,7 +1222,8 @@ function validateOnErrorRules(
                         `"error" and "trigger" are valid recovery names.`,
                 });
             } else if (ref.name === "trigger") {
-                // Resolve the trigger's schema from the node that declared onError.
+                // Validate that the trigger node kind supports the "trigger" ref.
+                // Path existence is checked by the template walk.
                 const triggerId = onErrorTargetToTrigger.get(id);
                 const triggerNode = triggerId ? nodes[triggerId] : undefined;
                 const schema = triggerNode
@@ -1239,27 +1242,7 @@ function validateOnErrorRules(
                             `available when the trigger is a task, ` +
                             `workflowCall, loop, or forkMap.`,
                     });
-                } else if (ref.path && ref.path.length > 0) {
-                    checkSchemaCompat(
-                        schema,
-                        ref.path,
-                        ref.templatePath,
-                        `${ref.templatePath} ($from "recovery", name "trigger")`,
-                        errors,
-                    );
                 }
-            } else if (
-                ref.name === "error" &&
-                ref.path &&
-                ref.path.length > 0
-            ) {
-                checkSchemaCompat(
-                    RECOVERY_ERROR_SCHEMA,
-                    ref.path,
-                    ref.templatePath,
-                    `${ref.templatePath} ($from "recovery", name "error")`,
-                    errors,
-                );
             }
         }
     }
@@ -1345,61 +1328,8 @@ function checkStateSoundness(
         }
     }
 
-    // Check $from: "state" refs in body nodes reference declared state vars
-    // and that the state variable's schema type is compatible with the
-    // consumer's expected type at that input position.
-    for (const [id, node] of Object.entries(loopNode.body.nodes)) {
-        if (!hasInputs(node)) continue;
-
-        const stateRefs = collectTemplateRefs(
-            node.inputs,
-            `${prefix}.body.nodes.${id}.inputs`,
-            "state",
-        );
-        const inputsPrefix = `${prefix}.body.nodes.${id}.inputs.`;
-        for (const ref of stateRefs) {
-            if (!stateNames.has(ref.name)) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "state", name "${ref.name}": no state ` +
-                        `variable "${ref.name}" is declared on this loop.`,
-                });
-            } else {
-                const stateSchema = loopNode.state[ref.name].schema;
-                // Path validation: verify path is navigable in state schema.
-                if (ref.path && ref.path.length > 0) {
-                    checkSchemaCompat(
-                        stateSchema,
-                        ref.path,
-                        ref.templatePath,
-                        `${ref.templatePath} ($from "state", name "${ref.name}")`,
-                        errors,
-                    );
-                }
-                const consumerPropSchema = resolveConsumerPropertySchema(
-                    ref.templatePath,
-                    inputsPrefix,
-                    nodeInputSchema(node),
-                );
-                if (
-                    stateSchema.type &&
-                    consumerPropSchema?.type &&
-                    !typeSetsOverlap(stateSchema.type, consumerPropSchema.type)
-                ) {
-                    errors.push({
-                        path: ref.templatePath,
-                        message:
-                            `$from "state", name "${ref.name}": type ` +
-                            `mismatch: state variable declares ` +
-                            `${JSON.stringify(stateSchema.type)} but ` +
-                            `consumer expects ` +
-                            `${JSON.stringify(consumerPropSchema.type)}.`,
-                    });
-                }
-            }
-        }
-    }
+    // Body-node state ref name/path/type checks are now handled by
+    // walkTemplateAndComputeType when validateScope processes the loop body.
 }
 
 /**
@@ -1441,15 +1371,6 @@ function validateBranchArm(
             path: `${armPath}.inputs`,
             message: `Branch arm "inputs" must be an object template.`,
         });
-    } else {
-        // Reserved-key check for arm inputs (was in validateBranchArmTemplates).
-        for (const [fieldName, tmpl] of Object.entries(armObj.inputs)) {
-            checkReservedTemplateKeys(
-                tmpl,
-                `${armPath}.inputs.${fieldName}`,
-                errors,
-            );
-        }
     }
     const scope = armObj.scope;
     if (!scope || typeof scope !== "object") {
@@ -1569,131 +1490,79 @@ function validateScopeNodes(
         }
         typeCtx.recoveryTriggerInputSchema =
             recoveryTriggerSchemas.get(id) ?? undefined;
-        validateNodeInputTemplates(node, path, typeCtx, ctx, errors);
+        validateNodeInputTemplates(node, path, typeCtx, errors);
     }
 }
 
 /**
- * Per-node template checks (reserved-key, type-compat, input/constant refs)
- * for a single node. Sub-scope recursion is NOT done here — it happens via
- * the per-node structural validators calling validateScope for sub-scopes.
+ * Per-node template checks for a single node using the single-pass walk.
+ * For each template expression the walk simultaneously validates syntax,
+ * checks $from ref name and path existence, and computes the type.
+ * If the computed type is available after the walk, it is compared to the
+ * declared consumer schema (after-walk schema validation).
+ *
+ * Sub-scope recursion is NOT done here — it happens via the per-node
+ * structural validators calling validateScope for sub-scopes.
+ *
+ * Loop-body templates (continueWhen, iterateState) need the body-scope
+ * TypeResolutionContext and are handled in validateLoopNode after the body
+ * scope is established.
  */
 function validateNodeInputTemplates(
     node: WorkflowNode,
     path: string,
     typeCtx: TypeResolutionContext,
-    ctx: ScopeValidationContext,
     errors: ValidationError[],
 ): void {
-    // ---- Reserved-key checks (from validateScopeTemplates, no recursion) ----
-    switch (node.kind) {
-        case "task":
-        case "workflowCall":
-            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.inputs.${fieldName}`,
-                    errors,
-                );
-            }
-            break;
-        case "branch":
-            checkReservedTemplateKeys(
-                node.selector,
-                `${path}.selector`,
-                errors,
-            );
-            // arm.inputs reserved-key checks are done in validateBranchArm.
-            // arm.scope.output reserved-key checks are done by validateScope.
-            break;
-        case "loop":
-            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.inputs.${fieldName}`,
-                    errors,
-                );
-            }
-            // node.body.output reserved-key check is done by validateScope for body.
-            for (const [name, tmpl] of Object.entries(node.iterateState)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.iterateState.${name}`,
-                    errors,
-                );
-            }
-            break;
-        case "fork":
-            for (const [bName, branch] of Object.entries(node.branches)) {
-                for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
-                    checkReservedTemplateKeys(
-                        tmpl,
-                        `${path}.branches.${bName}.inputs.${fieldName}`,
-                        errors,
-                    );
-                }
-                // branch.scope.output reserved-key check done by validateScope.
-            }
-            break;
-        case "forkMap":
-            checkReservedTemplateKeys(
-                node.collection,
-                `${path}.collection`,
-                errors,
-            );
-            if (node.inputs) {
-                for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                    checkReservedTemplateKeys(
-                        tmpl,
-                        `${path}.inputs.${fieldName}`,
-                        errors,
-                    );
-                }
-            }
-            // node.body.output reserved-key check is done by validateScope for body.
-            break;
-        default:
-            assertNever(node);
-    }
-
-    // ---- Input type compatibility (from validateTypeCompatibility, no recursion) ----
+    // ---- Input fields: walk + after-walk type comparison ----
     if (hasInputs(node)) {
-        const inputs = node.inputs;
         const inputProps = nodeInputSchema(node).properties ?? {};
-        for (const [fieldName, templateValue] of Object.entries(inputs)) {
-            const resolved = resolveTemplateType(templateValue, typeCtx);
-            if (!resolved) continue;
-            const consumerPropDef = inputProps[fieldName];
-            if (!consumerPropDef || typeof consumerPropDef === "boolean") {
-                continue;
-            }
+        for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
             const fieldPath = `${path}.inputs.${fieldName}`;
-            if (
-                checkUnknownAssignability(
-                    resolved,
-                    consumerPropDef,
-                    fieldPath,
-                    errors,
-                    "Resolved input",
-                    "expected",
-                )
-            ) {
-                continue;
-            }
-            checkStructuralSubtype(
-                resolved,
-                consumerPropDef,
+            const computed = walkTemplateAndComputeType(
+                tmpl,
                 fieldPath,
+                typeCtx,
                 errors,
-                "Resolved input",
-                "expected",
             );
+            if (computed !== undefined) {
+                const consumerPropDef = inputProps[fieldName];
+                if (
+                    consumerPropDef &&
+                    typeof consumerPropDef !== "boolean"
+                ) {
+                    if (
+                        !checkUnknownAssignability(
+                            computed,
+                            consumerPropDef,
+                            fieldPath,
+                            errors,
+                            "Resolved input",
+                            "expected",
+                        )
+                    ) {
+                        checkStructuralSubtype(
+                            computed,
+                            consumerPropDef,
+                            fieldPath,
+                            errors,
+                            "Resolved input",
+                            "expected",
+                        );
+                    }
+                }
+            }
         }
     }
 
+    // ---- Branch selector: walk + after-walk checks ----
     if (node.kind === "branch") {
-        // Check selector template resolved type vs selectorSchema.
-        const selectorType = resolveTemplateType(node.selector, typeCtx);
+        const selectorType = walkTemplateAndComputeType(
+            node.selector,
+            `${path}.selector`,
+            typeCtx,
+            errors,
+        );
         if (selectorType) {
             if (selectorType.type) {
                 const resolvedTypes = normalizeTypeSet(selectorType.type);
@@ -1804,58 +1673,58 @@ function validateNodeInputTemplates(
                 }
             }
         }
-    }
 
-    // ---- Input/constant ref checks (from validateInputConstantRefs, no recursion) ----
-    if (hasInputs(node)) {
-        checkInputConstantRefsInTemplate(
-            node.inputs,
-            `${path}.inputs`,
-            typeCtx.inputSchema,
-            ctx.constants,
-            errors,
-        );
-    }
-
-    if (node.kind === "branch") {
-        checkInputConstantRefsInTemplate(
-            node.selector,
-            `${path}.selector`,
-            typeCtx.inputSchema,
-            ctx.constants,
-            errors,
-        );
-    }
-
-    if (node.kind === "loop") {
-        checkInputConstantRefsInTemplate(
-            node.continueWhen,
-            `${path}.continueWhen`,
-            typeCtx.inputSchema,
-            ctx.constants,
-            errors,
-        );
-        for (const [stateName, stateTemplate] of Object.entries(
-            node.iterateState,
-        )) {
-            checkInputConstantRefsInTemplate(
-                stateTemplate,
-                `${path}.iterateState.${stateName}`,
-                typeCtx.inputSchema,
-                ctx.constants,
-                errors,
-            );
+        // Walk arm.inputs with the outer typeCtx so $from refs are validated.
+        const arms: Array<[string, BranchArm]> = [
+            ...Object.entries(node.cases),
+            ...(node.default
+                ? [["default", node.default] as [string, BranchArm]]
+                : []),
+        ];
+        for (const [armKey, arm] of arms) {
+            for (const [fieldName, tmpl] of Object.entries(arm.inputs ?? {})) {
+                walkTemplateAndComputeType(
+                    tmpl,
+                    `${path}.cases.${armKey}.inputs.${fieldName}`,
+                    typeCtx,
+                    errors,
+                );
+            }
         }
     }
 
+    // ---- Fork branch inputs: walk with outer typeCtx ----
+    if (node.kind === "fork") {
+        for (const [bName, branch] of Object.entries(node.branches)) {
+            for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
+                walkTemplateAndComputeType(
+                    tmpl,
+                    `${path}.branches.${bName}.inputs.${fieldName}`,
+                    typeCtx,
+                    errors,
+                );
+            }
+        }
+    }
+
+    // ---- ForkMap collection and optional inputs ----
     if (node.kind === "forkMap") {
-        checkInputConstantRefsInTemplate(
+        walkTemplateAndComputeType(
             node.collection,
             `${path}.collection`,
-            typeCtx.inputSchema,
-            ctx.constants,
+            typeCtx,
             errors,
         );
+        if (node.inputs) {
+            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
+                walkTemplateAndComputeType(
+                    tmpl,
+                    `${path}.inputs.${fieldName}`,
+                    typeCtx,
+                    errors,
+                );
+            }
+        }
     }
 }
 
@@ -2039,6 +1908,17 @@ function validateLoopNode(
         errors,
     );
 
+    // Build a body-scope TypeResolutionContext for templates evaluated in the
+    // body context (continueWhen, iterateState). These templates reference body
+    // bindings for $from:"scope" and body.inputSchema for $from:"input".
+    const bodyTypeCtx: TypeResolutionContext = {
+        bindings: bodyBindings,
+        inputSchema: node.body.inputSchema,
+        stateVars: node.state,
+        constants: ctx.constants,
+        recoveryTriggerInputSchema: undefined,
+    };
+
     // continueWhen is required; loop body natural completion triggers evaluation.
     if (node.continueWhen === undefined) {
         errors.push({
@@ -2049,40 +1929,26 @@ function validateLoopNode(
                 `natural completion).`,
         });
     } else {
-        // $from:scope refs in continueWhen must resolve to names bound
-        // in the body scope.
-        const cwScopeRefs = collectTemplateRefs(
+        // Single-pass walk: validates syntax, name/path existence, and
+        // computes the type — using the body scope context.
+        walkTemplateAndComputeType(
             node.continueWhen,
             `${path}.continueWhen`,
-            "scope",
+            bodyTypeCtx,
+            errors,
         );
-        for (const ref of cwScopeRefs) {
-            if (!bodyBindings.has(ref.name)) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "scope", name "${ref.name}": no node ` +
-                        `in the loop body binds "${ref.name}".`,
-                });
-            }
-        }
-        // $from:state refs in continueWhen must resolve to declared state vars.
-        const stateNames = new Set(Object.keys(node.state ?? {}));
-        const cwStateRefs = collectTemplateRefs(
-            node.continueWhen,
-            `${path}.continueWhen`,
-            "state",
+    }
+
+    // iterateState templates are evaluated in the body scope.
+    for (const [stateName, stateTemplate] of Object.entries(
+        node.iterateState,
+    )) {
+        walkTemplateAndComputeType(
+            stateTemplate,
+            `${path}.iterateState.${stateName}`,
+            bodyTypeCtx,
+            errors,
         );
-        for (const ref of cwStateRefs) {
-            if (!stateNames.has(ref.name)) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "state", name "${ref.name}": no state ` +
-                        `variable "${ref.name}" is declared on this loop.`,
-                });
-            }
-        }
     }
 
     checkPositiveIntegerField(
@@ -2300,58 +2166,6 @@ function resolveSchemaPath(
     return current;
 }
 
-/**
- * Check that a producer schema at a given path is type-compatible with
- * what the consumer expects. Returns an error message or undefined.
- *
- * This is a lightweight structural check: it verifies that the producer
- * declares the path exists and that the leaf types are compatible.
- */
-/**
- * Verify that a producer's `outputSchema` declares the path that a
- * consumer references, and that the resolved types are compatible.
- * Pushes one error to `errors` per failure.
- *
- * `errorPath` is the JSON path attributed to the error (typically the
- * consumer's template path). `refDesc` is the human-readable prefix
- * embedded in error messages (e.g. `${templatePath} ($from "scope",
- * name "x")`).
- */
-function checkSchemaCompat(
-    producerSchema: JSONSchema,
-    path: (string | number)[] | undefined,
-    errorPath: string,
-    refDesc: string,
-    errors: ValidationError[],
-    consumerType?: string | string[],
-): void {
-    if (!path || path.length === 0) {
-        // Reference to the whole output; compatible by definition
-        // (consumer will validate at their end).
-        return;
-    }
-    const resolved = resolveSchemaPath(producerSchema, path);
-    if (resolved === undefined) {
-        errors.push({
-            path: errorPath,
-            message: `${refDesc}: path ${JSON.stringify(path)} not declared in producer outputSchema`,
-        });
-        return;
-    }
-    // Type compatibility check: if the consumer declares a type and the
-    // producer declares a type, verify they overlap.
-    const normalizedResolved = inferSchemaType(resolved);
-    if (consumerType && normalizedResolved.type) {
-        if (!typeSetsOverlap(normalizedResolved.type, consumerType)) {
-            errors.push({
-                path: errorPath,
-                message:
-                    `${refDesc}: type mismatch: producer declares ` +
-                    `${JSON.stringify(normalizedResolved.type)} but consumer expects ${JSON.stringify(consumerType)}`,
-            });
-        }
-    }
-}
 
 /** Normalize a JSON Schema type (string or array) to an array of type strings. */
 function normalizeTypeSet(type: unknown): string[] {
@@ -2368,15 +2182,6 @@ function typeAssignableTo(a: string, b: string): boolean {
     return a === b || (a === "integer" && b === "number");
 }
 
-/**
- * True when the type sets overlap: at least one type in `aTypes` is
- * assignable to at least one type in `bTypes`.
- */
-function typeSetsOverlap(aType: unknown, bType: unknown): boolean {
-    const aTypes = normalizeTypeSet(aType);
-    const bTypes = normalizeTypeSet(bType);
-    return aTypes.some((a) => bTypes.some((b) => typeAssignableTo(a, b)));
-}
 
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
 function isBindableNode(
@@ -2535,7 +2340,6 @@ function validateScope(
         recoveryTriggerSchemas,
         errors,
     );
-    validateSchemaCompat(scope.nodes, prefix, errors, bindings);
     validateScopeCFG(
         scope.nodes,
         scope.entry,
@@ -2545,72 +2349,36 @@ function validateScope(
         `${basePath}.output`,
     );
 
-    // Scope-level output template checks.
+    // Scope-level output template: single-pass walk (syntax + ref checks + type),
+    // then after-walk comparison against declared outputSchema.
     if (scope.output) {
-        checkReservedTemplateKeys(scope.output, `${basePath}.output`, errors);
-
-        // Scope refs in output: name resolution + schema compat.
-        const outputRefs = collectTemplateRefs(
+        const outputResolved = walkTemplateAndComputeType(
             scope.output,
             `${basePath}.output`,
-            "scope",
+            typeCtx,
+            errors,
         );
-        for (const ref of outputRefs) {
-            if (!bindings.has(ref.name)) {
-                if (!ref.optional) {
-                    errors.push({
-                        path: ref.templatePath,
-                        message:
-                            `$from "scope", name "${ref.name}": no node in ` +
-                            `this scope binds that name.`,
-                    });
-                }
-            } else {
-                const producerSchema = bindings.get(ref.name)!;
-                checkSchemaCompat(
-                    producerSchema,
-                    ref.path,
-                    ref.templatePath,
-                    `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+        if (outputResolved && scope.outputSchema && !isEmptySchema(scope.outputSchema)) {
+            if (
+                !checkUnknownAssignability(
+                    outputResolved,
+                    scope.outputSchema,
+                    `${basePath}.output`,
                     errors,
+                    "Output resolved type",
+                    "outputSchema",
+                )
+            ) {
+                checkStructuralSubtype(
+                    outputResolved,
+                    scope.outputSchema,
+                    `${basePath}.output`,
+                    errors,
+                    "Output resolved type",
+                    "outputSchema",
                 );
             }
         }
-
-        // Output type vs outputSchema.
-        if (scope.outputSchema && !isEmptySchema(scope.outputSchema)) {
-            const outputResolved = resolveTemplateType(scope.output, typeCtx);
-            if (outputResolved) {
-                if (
-                    !checkUnknownAssignability(
-                        outputResolved,
-                        scope.outputSchema,
-                        `${basePath}.output`,
-                        errors,
-                        "Output resolved type",
-                        "outputSchema",
-                    )
-                ) {
-                    checkStructuralSubtype(
-                        outputResolved,
-                        scope.outputSchema,
-                        `${basePath}.output`,
-                        errors,
-                        "Output resolved type",
-                        "outputSchema",
-                    );
-                }
-            }
-        }
-
-        // Input/constant refs in output template.
-        checkInputConstantRefsInTemplate(
-            scope.output,
-            `${basePath}.output`,
-            scope.inputSchema,
-            ctx.constants,
-            errors,
-        );
     }
 
     return bindings;
@@ -2753,27 +2521,6 @@ function canonicalStringify(value: unknown): string {
     );
 }
 
-/**
- * Look up the consumer's expected schema for an input field given a
- * template path. Returns undefined for nested paths (containing "." or
- * "[" after the inputs prefix) since those can't be directly mapped to
- * an inputSchema property.
- */
-function resolveConsumerPropertySchema(
-    templatePath: string,
-    inputsPrefix: string,
-    inputSchema: JSONSchema,
-): JSONSchema | undefined {
-    if (!templatePath.startsWith(inputsPrefix)) return undefined;
-    const fieldName = templatePath.slice(inputsPrefix.length);
-    if (!fieldName || fieldName.includes(".") || fieldName.includes("[")) {
-        return undefined;
-    }
-    const propDef = inputSchema.properties?.[fieldName];
-    if (!propDef || typeof propDef === "boolean") return undefined;
-    return propDef;
-}
-
 // ---- Pass 7: Type compatibility ----
 
 /** Context threaded through validateScope for template validation passes. */
@@ -2792,25 +2539,6 @@ interface TypeResolutionContext {
     constants: Record<string, ConstantDef> | undefined;
     /** When resolving inside an onError target, the trigger's inputSchema. */
     recoveryTriggerInputSchema: JSONSchema | undefined;
-}
-
-function isFromTemplateRef(value: Template): value is TemplateFromRef {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return false;
-    }
-    if (
-        typeof value.$from !== "string" ||
-        !FROM_NAMESPACES.includes(value.$from as FromNamespace)
-    ) {
-        return false;
-    }
-    if (typeof value.name !== "string") {
-        return false;
-    }
-    if (value.path !== undefined && !Array.isArray(value.path)) {
-        return false;
-    }
-    return true;
 }
 
 /** Derive a JSON Schema from a literal JSON value. */
@@ -2843,13 +2571,31 @@ function jsonValueToSchema(value: unknown): JSONSchema {
     return {};
 }
 
+const KNOWN_DOLLAR_KEYS = new Set(["$from", "$literal"]);
+
 /**
- * Compute the JSON Schema type that a template expression resolves to.
- * Returns undefined if the type cannot be determined (e.g. unknown ref).
+ * Single-pass template walk: validates syntax, checks $from ref name and path
+ * existence, and computes the resolved JSON Schema type.
+ *
+ * This fuses what were previously four separate passes:
+ *   1. Reserved $-key syntax check (§3.4)
+ *   2. $from namespace validity
+ *   3. Name existence + path validity for input/constant/scope/state refs
+ *   4. Type computation
+ *
+ * Recovery refs (name validity, path checks) are handled separately by
+ * validateOnErrorRules, which has the structural context to know whether
+ * a node is an onError target. The walk here only computes the type for
+ * recovery refs without re-checking their structural rules.
+ *
+ * @returns The computed JSON Schema, or undefined if the type cannot be
+ *          determined (unresolvable ref or earlier error in this walk).
  */
-function resolveTemplateType(
+function walkTemplateAndComputeType(
     template: Template,
-    ctx: TypeResolutionContext,
+    templatePath: string,
+    typeCtx: TypeResolutionContext,
+    errors: ValidationError[],
 ): JSONSchema | undefined {
     if (template === null) return { type: "null" };
     if (typeof template === "string")
@@ -2861,72 +2607,175 @@ function resolveTemplateType(
     }
     if (typeof template === "boolean")
         return { type: "boolean", const: template };
+
     if (Array.isArray(template)) {
-        const elemSchemas = template
-            .map((e) => resolveTemplateType(e, ctx))
-            .filter((s): s is JSONSchema => s !== undefined);
+        const elemSchemas: JSONSchema[] = [];
+        for (let i = 0; i < template.length; i++) {
+            const elem = walkTemplateAndComputeType(
+                template[i],
+                `${templatePath}[${i}]`,
+                typeCtx,
+                errors,
+            );
+            if (elem !== undefined) elemSchemas.push(elem);
+        }
         return buildArraySchema(elemSchemas);
     }
 
-    if (isFromTemplateRef(template)) {
-        const from = template.$from;
-        const name = template.name;
-        const path = template.path;
+    const obj = template as Record<string, unknown>;
+
+    // ---- Syntax: reserved $-key check (§3.4) ----
+    for (const key of Object.keys(obj)) {
+        if (key.startsWith("$") && !KNOWN_DOLLAR_KEYS.has(key)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $-prefixed key "${key}" in template. ` +
+                    `Only "$from" and "$literal" are recognized by the engine; ` +
+                    `all other $-prefixed keys are reserved (§3.4).`,
+            });
+            return undefined;
+        }
+    }
+
+    // ---- $from reference ----
+    if ("$from" in obj) {
+        const from = obj["$from"];
+        if (typeof from !== "string" || !VALID_FROM_NAMESPACES.has(from)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $from namespace "${from}". ` +
+                    `Valid namespaces are: input, constant, scope, state, recovery.`,
+            });
+            return undefined;
+        }
+
+        const name = obj["name"] as string;
+        const path = obj["path"] as (string | number)[] | undefined;
+        const optional = obj["optional"] === true;
 
         let baseSchema: JSONSchema | undefined;
-        switch (from) {
-            case "scope":
-                baseSchema = ctx.bindings.get(name);
-                break;
-            case "input":
-                if (ctx.inputSchema?.properties) {
-                    const prop = ctx.inputSchema.properties[name];
-                    if (prop && typeof prop !== "boolean") {
-                        baseSchema = prop;
+
+        switch (from as FromNamespace) {
+            case "input": {
+                // Empty name is the emitter convention for "entire scope input".
+                if (name === "") break;
+                const inputProps = typeCtx.inputSchema?.properties;
+                if (!inputProps || !(name in inputProps)) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "input", name "${name}": ` +
+                                `not declared in scope inputSchema.`,
+                        });
                     }
+                    return undefined;
+                }
+                const prop = inputProps[name];
+                if (typeof prop !== "boolean") baseSchema = prop;
+                break;
+            }
+            case "constant": {
+                if (!typeCtx.constants || !(name in typeCtx.constants)) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "constant", name "${name}": ` +
+                                `not declared in ir.constants.`,
+                        });
+                    }
+                    return undefined;
+                }
+                baseSchema = typeCtx.constants[name]?.schema;
+                break;
+            }
+            case "scope": {
+                baseSchema = typeCtx.bindings.get(name);
+                if (!baseSchema) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "scope", name "${name}": no node in ` +
+                                `this scope binds that name.`,
+                        });
+                    }
+                    return undefined;
                 }
                 break;
-            case "state":
-                baseSchema = ctx.stateVars?.[name]?.schema;
+            }
+            case "state": {
+                if (!typeCtx.stateVars) {
+                    // Not in a loop-body context; $from:"state" is structurally
+                    // invalid here. The caller (e.g. validateBranchArm) reports
+                    // the appropriate structural error; the walk returns undefined
+                    // to avoid a redundant generic message.
+                    return undefined;
+                }
+                if (!(name in typeCtx.stateVars)) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "state", name "${name}": no state ` +
+                                `variable "${name}" is declared on this loop.`,
+                        });
+                    }
+                    return undefined;
+                }
+                baseSchema = typeCtx.stateVars[name].schema;
                 break;
-            case "constant":
-                baseSchema = ctx.constants?.[name]?.schema;
-                break;
-            case "recovery":
-                // Recovery refs are engine-injected values available only on
-                // onError targets. Rule 5 validates name/domain legality.
+            }
+            case "recovery": {
+                // Name validity and "must be onError target" are checked by
+                // validateOnErrorRules; here we just resolve the type.
                 if (name === "error") {
                     baseSchema = RECOVERY_ERROR_SCHEMA;
                 } else if (name === "trigger") {
-                    // The resolved inputs of the failed task. undefined
-                    // when the trigger is fork/branch (no inputs object).
-                    baseSchema = ctx.recoveryTriggerInputSchema;
+                    baseSchema = typeCtx.recoveryTriggerInputSchema;
                 }
                 break;
+            }
             default:
-                assertNever(from);
+                assertNever(from as never);
         }
-        // Unresolvable ref (bad name, missing binding, etc.). Earlier
-        // passes already reported the root cause; skip type checking.
+
         if (!baseSchema) return undefined;
+
+        // ---- Path existence + type projection ----
         if (path && path.length > 0) {
-            // Path segment not declared in schema; earlier passes
-            // (checkSchemaCompat) already reported this.
-            return resolveSchemaPath(baseSchema, path);
+            const resolved = resolveSchemaPath(baseSchema, path);
+            if (resolved === undefined) {
+                errors.push({
+                    path: templatePath,
+                    message: `${templatePath} ($from "${from}", name "${name}"): path ${JSON.stringify(path)} not declared in producer outputSchema`,
+                });
+                return undefined;
+            }
+            return resolved;
         }
         return baseSchema;
     }
 
-    if ("$literal" in template) {
-        return jsonValueToSchema(template["$literal"]);
+    // ---- $literal ----
+    if ("$literal" in obj) {
+        return jsonValueToSchema(obj["$literal"]);
     }
 
-    // Plain object: property-wise composition
+    // ---- Plain object: property-wise composition ----
     const properties: Record<string, JSONSchema> = {};
     const required: string[] = [];
-    for (const [key, value] of Object.entries(template)) {
-        const propType = resolveTemplateType(value, ctx);
-        if (propType) {
+    for (const [key, value] of Object.entries(obj)) {
+        const propType = walkTemplateAndComputeType(
+            value as Template,
+            `${templatePath}.${key}`,
+            typeCtx,
+            errors,
+        );
+        if (propType !== undefined) {
             properties[key] = propType;
             required.push(key);
         }
@@ -3671,63 +3520,7 @@ function schemasEqual(a: unknown, b: unknown): boolean {
     return true;
 }
 
-// ---- Pass: Reserved $-key check (§3.4) ----
-
-const KNOWN_DOLLAR_KEYS = new Set(["$from", "$literal"]);
-
-/**
- * Walk a template recursively and report any object that contains an
- * unrecognised $-prefixed key. Per §3.4, only "$from" and "$literal"
- * are legal; every other $-prefixed key is reserved for future engine use
- * and MUST be rejected.
- */
-function checkReservedTemplateKeys(
-    template: Template,
-    templatePath: string,
-    errors: ValidationError[],
-): void {
-    if (template === null || typeof template !== "object") return;
-    if (Array.isArray(template)) {
-        for (let i = 0; i < template.length; i++) {
-            checkReservedTemplateKeys(
-                template[i],
-                `${templatePath}[${i}]`,
-                errors,
-            );
-        }
-        return;
-    }
-    const obj = template as Record<string, unknown>;
-    for (const key of Object.keys(obj)) {
-        if (key.startsWith("$") && !KNOWN_DOLLAR_KEYS.has(key)) {
-            errors.push({
-                path: templatePath,
-                message:
-                    `Unknown $-prefixed key "${key}" in template. ` +
-                    `Only "$from" and "$literal" are recognized by the engine; ` +
-                    `all other $-prefixed keys are reserved (§3.4).`,
-            });
-            return; // one error per object is sufficient
-        }
-    }
-    // Don't recurse into $from or $literal — they have their own semantics.
-    if ("$from" in obj) {
-        const from = obj["$from"];
-        if (typeof from !== "string" || !VALID_FROM_NAMESPACES.has(from)) {
-            errors.push({
-                path: templatePath,
-                message:
-                    `Unknown $from namespace "${from}". ` +
-                    `Valid namespaces are: input, constant, scope, state, recovery.`,
-            });
-        }
-        return;
-    }
-    if ("$literal" in obj) return;
-    for (const value of Object.values(obj)) {
-        checkReservedTemplateKeys(value as Template, templatePath, errors);
-    }
-}
+// ---- Template ref collection (used by CFG and recovery-rule passes) ----
 
 /**
  * A reference extracted from a template expression (e.g. $from: "scope"
@@ -3791,177 +3584,3 @@ function collectTemplateRefs(
     return refs;
 }
 
-/**
- * Check scope refs in a template against a binding map, pushing
- * schema compatibility errors.
- */
-function checkScopeRefsAgainstBindings(
-    template: Template,
-    templatePath: string,
-    bindings: Map<string, JSONSchema>,
-    errors: ValidationError[],
-): void {
-    const refs = collectTemplateRefs(template, templatePath, "scope");
-    for (const ref of refs) {
-        const producerSchema = bindings.get(ref.name);
-        if (!producerSchema) continue;
-        checkSchemaCompat(
-            producerSchema,
-            ref.path,
-            ref.templatePath,
-            `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-            errors,
-        );
-    }
-}
-
-/**
- * Validate schema compatibility within a scope: for each node that
- * references a scope binding, verify that the binding's producer
- * outputSchema declares the referenced path.
- */
-function validateSchemaCompat(
-    nodes: Record<string, WorkflowNode>,
-    prefix: string,
-    errors: ValidationError[],
-    bindings: Map<string, JSONSchema>,
-): void {
-    const bindingMap = bindings;
-
-    for (const [id, node] of Object.entries(nodes)) {
-        const path = `${prefix}.${id}`;
-
-        // For loop nodes, check iterateState and output templates
-        // against body-scope bindings.
-        if (node.kind === "loop") {
-            const bodyBindings = buildBindingMap(node.body.nodes);
-            for (const [stateName, stateTemplate] of Object.entries(
-                node.iterateState,
-            )) {
-                checkScopeRefsAgainstBindings(
-                    stateTemplate,
-                    `${path}.iterateState.${stateName}`,
-                    bodyBindings,
-                    errors,
-                );
-            }
-            checkScopeRefsAgainstBindings(
-                node.body.output,
-                `${path}.body.output`,
-                bodyBindings,
-                errors,
-            );
-        }
-
-        if (!hasInputs(node)) continue;
-
-        const inputsPrefix = `${path}.inputs.`;
-        const refs = collectTemplateRefs(
-            node.inputs,
-            `${path}.inputs`,
-            "scope",
-        );
-        for (const ref of refs) {
-            const producerSchema = bindingMap.get(ref.name);
-            if (!producerSchema) {
-                if (!ref.optional) {
-                    errors.push({
-                        path: ref.templatePath,
-                        message:
-                            `$from "scope", name "${ref.name}": no node in ` +
-                            `this scope binds that name.`,
-                    });
-                }
-                continue;
-            }
-            const consumerType = resolveConsumerPropertySchema(
-                ref.templatePath,
-                inputsPrefix,
-                nodeInputSchema(node),
-            )?.type;
-            checkSchemaCompat(
-                producerSchema,
-                ref.path,
-                ref.templatePath,
-                `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-                errors,
-                consumerType,
-            );
-        }
-    }
-}
-
-/**
- * Check all `$from "input"` and `$from "constant"` refs within a single
- * template expression for name existence and path validity.
- */
-function checkInputConstantRefsInTemplate(
-    template: Template,
-    templatePath: string,
-    scopeInputSchema: JSONSchema | undefined,
-    constants: Record<string, ConstantDef> | undefined,
-    errors: ValidationError[],
-): void {
-    // Check $from "input" refs.
-    const inputRefs = collectTemplateRefs(template, templatePath, "input");
-    for (const ref of inputRefs) {
-        // Empty name is the emitter convention for "entire scope input";
-        // not a property lookup - skip.
-        if (ref.name === "") continue;
-        const inputProps = scopeInputSchema?.properties;
-        if (!inputProps || !(ref.name in inputProps)) {
-            if (!ref.optional) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "input", name "${ref.name}": ` +
-                        `not declared in scope inputSchema.`,
-                });
-            }
-            continue;
-        }
-        const prop = inputProps[ref.name];
-        if (typeof prop === "boolean") continue;
-        // Path validation (gap 5): verify path is navigable.
-        if (ref.path && ref.path.length > 0) {
-            checkSchemaCompat(
-                prop,
-                ref.path,
-                ref.templatePath,
-                `${ref.templatePath} ($from "input", name "${ref.name}")`,
-                errors,
-            );
-        }
-    }
-
-    // Check $from "constant" refs.
-    const constantRefs = collectTemplateRefs(
-        template,
-        templatePath,
-        "constant",
-    );
-    for (const ref of constantRefs) {
-        if (!constants || !(ref.name in constants)) {
-            if (!ref.optional) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "constant", name "${ref.name}": ` +
-                        `not declared in ir.constants.`,
-                });
-            }
-            continue;
-        }
-        const constDef = constants[ref.name];
-        // Path validation (gap 5): verify path is navigable.
-        if (ref.path && ref.path.length > 0 && constDef.schema) {
-            checkSchemaCompat(
-                constDef.schema,
-                ref.path,
-                ref.templatePath,
-                `${ref.templatePath} ($from "constant", name "${ref.name}")`,
-                errors,
-            );
-        }
-    }
-}

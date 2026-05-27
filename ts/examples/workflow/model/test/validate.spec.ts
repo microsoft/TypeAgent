@@ -497,7 +497,7 @@ describe("validateWorkflowIR", () => {
         const result = validateWorkflowIR(ir, taskMap("noop"));
         expect(result.valid).toBe(false);
         expect(
-            result.errors.some((e) => e.message.includes("type mismatch")),
+            result.errors.some((e) => e.message.includes("not assignable")),
         ).toBe(true);
         expect(result.errors.some((e) => e.message.includes("string"))).toBe(
             true,
@@ -587,7 +587,7 @@ describe("validateWorkflowIR", () => {
         const result = validateWorkflowIR(ir, taskMap("noop"));
         expect(result.valid).toBe(false);
         expect(
-            result.errors.some((e) => e.message.includes("type mismatch")),
+            result.errors.some((e) => e.message.includes("not assignable")),
         ).toBe(true);
     });
 
@@ -3409,7 +3409,7 @@ describe("validateWorkflowIR", () => {
             expect(
                 result.errors.some(
                     (e) =>
-                        e.message.includes("type mismatch") &&
+                        e.message.includes("not assignable") &&
                         e.message.includes("integer") &&
                         e.message.includes("string"),
                 ),
@@ -6516,7 +6516,7 @@ describe("validateWorkflowIR", () => {
             const result = validateWorkflowIR(ir, taskMap("noop"));
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) => e.message.includes("type mismatch")),
+                result.errors.some((e) => e.message.includes("not assignable")),
             ).toBe(true);
         });
     });
