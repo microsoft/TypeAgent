@@ -461,6 +461,18 @@ class CollisionOptimizeValidateCommandHandler implements CommandHandler {
                 type: "string",
                 optional: true,
             },
+            winners: {
+                description:
+                    "Comma-separated attemptIds to include. Stacks ONLY these winners. Mutually exclusive with --leave-one-out.",
+                type: "string",
+                optional: true,
+            },
+            "leave-one-out": {
+                description:
+                    "Comma-separated attemptIds to EXCLUDE. Stacks every winner except these. Useful for ablation — drop a suspected harmful winner and see whether the global numbers improve.",
+                type: "string",
+                optional: true,
+            },
         },
     } as const;
 
@@ -471,6 +483,18 @@ class CollisionOptimizeValidateCommandHandler implements CommandHandler {
         initBuiltInLevers();
         const systemContext = context.sessionContext.agentContext;
         const workdir = resolveWorkdir(systemContext, params.flags.workdir);
+
+        const includeWinners = parseCsvList(params.flags.winners);
+        const excludeWinners = parseCsvList(
+            params.flags["leave-one-out"],
+        );
+        if (includeWinners && excludeWinners) {
+            displayWarn(
+                `--winners and --leave-one-out are mutually exclusive.`,
+                context,
+            );
+            return;
+        }
 
         const onProgress = (label: string) =>
             displayStatus(`Validate · ${label}`, context);
@@ -486,20 +510,30 @@ class CollisionOptimizeValidateCommandHandler implements CommandHandler {
                     ...(params.flags.baseline && {
                         baselinePathOverride: params.flags.baseline,
                     }),
+                    ...(includeWinners && { includeWinners }),
+                    ...(excludeWinners && { excludeWinners }),
                     sourceProvider: systemContext.agents,
                     context,
                     onProgress,
                 });
                 const t = result.impact.transitions;
                 const flagged = result.impact.winners.filter(
-                    (w) => w.crossNeighborhoodRegression,
+                    (w) => w.causedRegression,
                 ).length;
+                const winnersStacked = result.impact.winners.length;
                 const text = [
                     `Validate written: ${result.impactJsonPath}`,
                     `  HTML: ${result.impactHtmlPath}`,
+                    `  winners stacked: ${winnersStacked}${
+                        includeWinners
+                            ? ` (filter: --winners ${includeWinners.join(",")})`
+                            : excludeWinners
+                              ? ` (filter: --leave-one-out ${excludeWinners.join(",")})`
+                              : ""
+                    }`,
                     `  rescued: ${t.rescued} · regressed: ${t.regressed} · total: ${t.total}`,
                     flagged > 0
-                        ? `  ⚠ ${flagged} winner(s) flagged with cross-neighborhood regression — review before applying`
+                        ? `  ⚠ ${flagged} winner(s) flagged: causedRegressions > localRescues. See HTML for details.`
                         : "",
                 ].filter((l) => l.length > 0);
                 context.actionIO.appendDisplay({

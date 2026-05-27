@@ -11,6 +11,7 @@
 // stacked state reproduces byte-for-byte across runs. Apply errors fail
 // loud (the operator gets a meaningful message about which winner broke).
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -90,6 +91,23 @@ export async function stackWinners(
                     `Has initBuiltInLevers() been called?`,
             );
         }
+        // Recompute checksums against the CURRENT sandbox files. We
+        // can't reuse cr.case.originalChecksum here: that was captured
+        // when the case was analyzed, against the pristine `.original/`
+        // snapshot. By the time we get to the Nth winner, prior
+        // winners' applies have already mutated some files in
+        // sandbox/agents/. Each lever's verifyChecksum reads the
+        // current file and would 400 on a stale snapshot value.
+        //
+        // The checksum still serves a real purpose during stacking:
+        // it catches the case where the sandbox was tampered with
+        // OUTSIDE the stack loop (a parallel process, an operator
+        // editing the file by hand). The check fires if any party
+        // modified the file between this read and the lever's apply.
+        const freshChecksums = computeChecksumsForMembers(
+            cr.case.members.map((m) => m.schemaName),
+            opts.sandboxDir,
+        );
         const applyCtx: ApplyContext = {
             originalProvider: opts.sourceProvider,
             sandboxDir: opts.sandboxDir,
@@ -105,7 +123,7 @@ export async function stackWinners(
                     manifestPath: path.join(schemaDir, "manifest.json"),
                 };
             },
-            checksums: cr.case.originalChecksum,
+            checksums: freshChecksums,
         };
         let applyResult;
         try {
@@ -135,4 +153,41 @@ export async function stackWinners(
         JSON.stringify(journal, undefined, 2),
     );
     return journal;
+}
+
+/**
+ * Build a fresh `checksums` map for a case's member schemas against the
+ * CURRENT sandbox file state. Used during winner stacking, where prior
+ * applies in the same loop have already mutated some files and the
+ * snapshot-time checksums no longer match.
+ *
+ * Returns SHA-1 keyed by `${schemaName}:schema` for `.ts` / `.pas.json`
+ * (whichever exists) and `${schemaName}:manifest` for manifest.json.
+ * Silently skips members whose files don't exist.
+ */
+function computeChecksumsForMembers(
+    schemaNames: string[],
+    sandboxDir: string,
+): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const schemaName of schemaNames) {
+        const schemaDir = path.join(sandboxDir, "agents", schemaName);
+        for (const basename of ["schema.ts", "schema.pas.json"]) {
+            const full = path.join(schemaDir, basename);
+            if (fs.existsSync(full)) {
+                out[`${schemaName}:schema`] = sha1OfFile(full);
+                break;
+            }
+        }
+        const manifestPath = path.join(schemaDir, "manifest.json");
+        if (fs.existsSync(manifestPath)) {
+            out[`${schemaName}:manifest`] = sha1OfFile(manifestPath);
+        }
+    }
+    return out;
+}
+
+function sha1OfFile(filePath: string): string {
+    const content = fs.readFileSync(filePath);
+    return crypto.createHash("sha1").update(content).digest("hex");
 }

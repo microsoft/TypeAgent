@@ -57,7 +57,25 @@ export interface ImpactSchemaSummary {
     regressed: number;
 }
 
-/** Per-winner attribution. */
+/** Per-winner attribution. Two complementary perspectives:
+ *
+ *   - **Expected-side**: phrases whose `expectedSchema` is in this
+ *     winner's `schemasTouched`. The winner's neighborhood "owns" these
+ *     phrases. localRescues = baseline misrouted → now CLEAN;
+ *     localRegressions = baseline CLEAN → now misrouted.
+ *   - **Caused-side**: regressions where the CANDIDATE's `chosenSchema`
+ *     is in this winner's `schemasTouched`. The winner's edit pulled
+ *     phrases that previously routed correctly into the wrong target.
+ *     This is the more accurate "this winner caused that regression"
+ *     signal.
+ *
+ *  The OLD `crossNeighborhoodRegressions` heuristic (count regressions
+ *  whose expectedSchema is NOT in schemasTouched) shared blame across
+ *  every winner whose neighborhood didn't include the regression's
+ *  expected — meaning with N winners stacked, every winner appeared to
+ *  cause ~(total regressions × (N-1)/N). Useless for triage.
+ *  `causedRegressions` replaces it.
+ */
 export interface WinnerImpact {
     /** Canonical attempt id (e.g. `h02-jsdoc`). */
     attemptId: string;
@@ -68,13 +86,23 @@ export interface WinnerImpact {
     localRescues: number;
     /** Regressions on phrases whose expectedSchema is in `schemasTouched`. */
     localRegressions: number;
-    /** Regressions on phrases whose expectedSchema is NOT in `schemasTouched`. */
-    crossNeighborhoodRegressions: number;
-    /** Local net contribution: localRescues - localRegressions. */
+    /** Regressions where the CANDIDATE routed to a schema in
+     *  `schemasTouched`. Strongest signal that this winner's edit
+     *  pulled phrases it shouldn't have. */
+    causedRegressions: number;
+    /** Local net contribution: localRescues − localRegressions −
+     *  causedRegressions. Negative means this winner is net-harmful
+     *  even before considering shared regressions. */
     localNet: number;
-    /** Whether this winner contributes more crossNeighborhoodRegressions
-     *  than localRescues. Flagged in the viz so the operator knows to
-     *  inspect before applying. */
+    /** Flagged when `causedRegressions > localRescues`. The winner
+     *  pulled in more wrong-target phrases than it rescued. Reviewer
+     *  should consider dropping. */
+    causedRegression: boolean;
+    /** @deprecated The old shared-blame metric. Retained as 0 in v2
+     *  for backward compatibility with prior `optimization-impact.json`
+     *  readers. Will be removed in a future revision. */
+    crossNeighborhoodRegressions: number;
+    /** @deprecated Always false in v2; use `causedRegression`. */
     crossNeighborhoodRegression: boolean;
 }
 
@@ -264,16 +292,26 @@ export function classifyTransition(
 // =============================================================================
 
 /**
- * Heuristic attribution: each winner is the result of editing schemas
- * touched by its case's members. Rescues and regressions on phrases
- * whose expectedSchema is in that set are "local"; regressions on
- * phrases whose expectedSchema is outside are "cross-neighborhood."
+ * Per-winner attribution. Two attribution paths:
  *
- * In a stacked re-probe we can't directly attribute a rescue/regression
- * to a specific winner — multiple winners are active simultaneously.
- * The heuristic assumes each schema is touched by at most one winner
- * (true in v1 because no two winners come from the same case, and v1
- * lever set doesn't share schemas across cases in practice).
+ *   Expected-side (legacy): phrases whose `expectedSchema` is in the
+ *   winner's `schemasTouched`. These count toward `localRescues` /
+ *   `localRegressions` — phrases the neighborhood "owns."
+ *
+ *   Caused-side (new): regressions where the CANDIDATE'S `chosenSchema`
+ *   is in the winner's `schemasTouched`. These count toward
+ *   `causedRegressions` — the winner's edit pulled the phrase into a
+ *   wrong target. This is the meaningful "this winner is responsible"
+ *   signal.
+ *
+ * Multiple winners can touch overlapping schemas; in that case caused-
+ * side attribution will count the same regression for each implicated
+ * winner. That's intentional shared blame for actually-overlapping
+ * causes (rare in v1 because each case targets disjoint schemas).
+ *
+ * The legacy `crossNeighborhoodRegressions` field is set to 0 in the
+ * output for backward compatibility — old readers see zero rather
+ * than the bogus inflated value the prior heuristic produced.
  */
 function attributeToWinners(
     caseResults: CaseResult[],
@@ -287,25 +325,37 @@ function attributeToWinners(
         );
         let localRescues = 0;
         let localRegressions = 0;
-        let crossRegressions = 0;
+        let causedRegressions = 0;
         for (const row of rows) {
-            const isLocal = schemas.has(row.expectedSchema);
-            if (row.transitionClass === "rescue" && isLocal) localRescues++;
-            else if (row.transitionClass === "regression") {
-                if (isLocal) localRegressions++;
-                else crossRegressions++;
+            const expectedIsLocal = schemas.has(row.expectedSchema);
+            if (row.transitionClass === "rescue" && expectedIsLocal) {
+                localRescues++;
+                continue;
+            }
+            if (row.transitionClass === "regression") {
+                if (expectedIsLocal) {
+                    localRegressions++;
+                }
+                const candidateChose = row.candidate.chosenSchema;
+                if (candidateChose && schemas.has(candidateChose)) {
+                    causedRegressions++;
+                }
             }
         }
-        const localNet = localRescues - localRegressions;
+        const localNet =
+            localRescues - localRegressions - causedRegressions;
         out.push({
             attemptId: caseResult.winner.hypothesis.id,
             caseId: caseResult.case.neighborhoodId,
             schemasTouched: [...schemas].sort(),
             localRescues,
             localRegressions,
-            crossNeighborhoodRegressions: crossRegressions,
+            causedRegressions,
             localNet,
-            crossNeighborhoodRegression: crossRegressions > localRescues,
+            causedRegression: causedRegressions > localRescues,
+            // Backward-compat zeros — old readers see neutral values.
+            crossNeighborhoodRegressions: 0,
+            crossNeighborhoodRegression: false,
         });
     }
     return out;

@@ -15,7 +15,7 @@ import type {
 export function buildImpactHTML(payload: ImpactPayload): string {
     const t = payload.transitions;
     const winners = payload.winners;
-    const flagged = winners.filter((w) => w.crossNeighborhoodRegression);
+    const flagged = winners.filter((w) => w.causedRegression);
 
     return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -71,25 +71,33 @@ function renderWinnersTable(winners: WinnerImpact[]): string {
     if (winners.length === 0) {
         return `<div class="sub">No winners — every case produced no positive-score hypothesis within the depth budget.</div>`;
     }
-    const rows = winners
+    // Sort by localNet desc so the most useful (or least harmful)
+    // winners surface at the top.
+    const sorted = [...winners].sort((a, b) => b.localNet - a.localNet);
+    const rows = sorted
         .map(
             (w) =>
-                `<tr${w.crossNeighborhoodRegression ? ` class="flagged"` : ""}>` +
+                `<tr${w.causedRegression ? ` class="flagged"` : ""}>` +
                 `<td>${esc(w.attemptId)}</td>` +
                 `<td>${esc(w.caseId)}</td>` +
                 `<td>${esc(w.schemasTouched.join(", "))}</td>` +
                 `<td class="rescue">+${w.localRescues}</td>` +
                 `<td class="regress">-${w.localRegressions}</td>` +
+                `<td class="regress">-${w.causedRegressions}</td>` +
                 `<td>${w.localNet >= 0 ? "+" : ""}${w.localNet}</td>` +
-                `<td class="regress">${w.crossNeighborhoodRegressions}</td>` +
-                `<td>${w.crossNeighborhoodRegression ? `<span class="flag">REVIEW</span>` : ""}</td>` +
+                `<td>${w.causedRegression ? `<span class="flag">REVIEW</span>` : ""}</td>` +
                 `</tr>`,
         )
         .join("");
     return `<table>
-      <thead><tr><th>attemptId</th><th>caseId</th><th>schemas</th><th>local rescues</th><th>local regressions</th><th>local net</th><th>cross-nbh regressions</th><th></th></tr></thead>
+      <thead><tr><th>attemptId</th><th>caseId</th><th>schemas</th><th>local rescues</th><th>local regressions</th><th>caused regressions</th><th>local net</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    <div class="sub" style="font-size:10px; margin-top:4px;">
+      <b>local rescues/regressions</b> = phrases whose expectedSchema is in this winner's schemas.<br>
+      <b>caused regressions</b> = regressions where the candidate routed to one of this winner's schemas — the strongest "this winner pulled the phrase into the wrong target" signal.<br>
+      <b>local net</b> = localRescues − localRegressions − causedRegressions. Sort order. Negative = net-harmful.
+    </div>`;
 }
 
 function renderTransitionMatrix(payload: ImpactPayload): string {

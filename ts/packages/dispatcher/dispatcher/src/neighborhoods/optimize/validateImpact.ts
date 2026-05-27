@@ -48,6 +48,13 @@ export interface ValidateImpactOpts {
      *  expectedAction matches the named neighborhood. Faster iteration
      *  for cross-validating a single case. */
     neighborhoodFilter?: string;
+    /** Only stack winners whose `hypothesis.id` matches one of these.
+     *  Mutually exclusive with `excludeWinners`. Useful for verifying a
+     *  short list of presumed-safe winners in isolation. */
+    includeWinners?: string[];
+    /** Stack all winners EXCEPT these. Useful for "leave-one-out"
+     *  ablation — see what changes when a specific winner is dropped. */
+    excludeWinners?: string[];
     sourceProvider: ActionConfigProvider;
     context: ActionContext<CommandHandlerContext>;
     onProgress?: (label: string) => void;
@@ -80,13 +87,28 @@ export async function runValidate(
         fs.readFileSync(baselinePath, "utf-8"),
     ) as TranslationProbeFile;
 
+    // Apply the winner filter, if any. Cases whose winner doesn't pass
+    // the filter retain their CaseResult but have winner nulled, which
+    // stackWinners handles (records as skipped, doesn't apply).
+    const filteredCases = applyWinnerFilter(run.cases, {
+        ...(opts.includeWinners && { include: opts.includeWinners }),
+        ...(opts.excludeWinners && { exclude: opts.excludeWinners }),
+    });
+    const droppedByFilter = run.cases.length - filteredCases.filter(
+        (c) => c.winner !== null,
+    ).length;
+
     // Stack all winners. This reverts sandbox to .original/ then applies
     // each winner via its lever. Fails loud on apply errors.
-    opts.onProgress?.(`stacking winners…`);
+    opts.onProgress?.(
+        `stacking winners${
+            droppedByFilter > 0 ? ` (filter dropped ${droppedByFilter})` : ""
+        }…`,
+    );
     await stackWinners({
         sandboxDir: run.sandboxRoot,
         runId: run.runId,
-        caseResults: run.cases,
+        caseResults: filteredCases,
         sourceProvider: opts.sourceProvider,
     });
 
@@ -120,7 +142,7 @@ export async function runValidate(
         candidate,
         baselinePath,
         candidatePath: `${runRoot}/sandbox`,
-        caseResults: run.cases,
+        caseResults: filteredCases,
     });
 
     const impactJsonPath = path.join(runRoot, "optimization-impact.json");
@@ -142,6 +164,38 @@ export async function runValidate(
 // =============================================================================
 // Helpers
 // =============================================================================
+
+interface WinnerFilter {
+    include?: string[];
+    exclude?: string[];
+}
+
+/**
+ * Apply an include/exclude filter to the case list's winners. Cases
+ * whose winner doesn't pass the filter keep their CaseResult but have
+ * `winner` set to null — stackWinners records them as filter-skipped.
+ * Cases that already had no winner pass through untouched.
+ */
+function applyWinnerFilter(
+    cases: CaseResult[],
+    filter: WinnerFilter,
+): CaseResult[] {
+    if (!filter.include && !filter.exclude) return cases;
+    const includeSet = filter.include
+        ? new Set(filter.include)
+        : undefined;
+    const excludeSet = filter.exclude
+        ? new Set(filter.exclude)
+        : undefined;
+    return cases.map((c) => {
+        if (!c.winner) return c;
+        const id = c.winner.hypothesis.id;
+        const passesInclude = !includeSet || includeSet.has(id);
+        const passesExclude = !excludeSet || !excludeSet.has(id);
+        if (passesInclude && passesExclude) return c;
+        return { ...c, winner: null };
+    });
+}
 
 function resolveRunRoot(workdir: string, runId?: string): string {
     if (runId) {

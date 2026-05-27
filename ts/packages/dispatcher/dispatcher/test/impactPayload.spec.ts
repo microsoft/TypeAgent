@@ -260,7 +260,7 @@ describe("buildImpactPayload", () => {
         expect(result.transitionMatrix.CLEAN.MISROUTE).toBe(1);
     });
 
-    it("attributes rescues + regressions to winners by schemasTouched", () => {
+    it("attributes rescues + regressions via expected-side + caused-side", () => {
         const baseline = probeFile([
             // Local rescue for player winner.
             row({
@@ -274,8 +274,8 @@ describe("buildImpactPayload", () => {
                 phraseText: "b",
                 outcome: "CLEAN",
             }),
-            // Cross-neighborhood regression for player winner (expected
-            // schema is email, not in player's schemas).
+            // Caused regression for player winner — candidate pulls to
+            // player even though expected was email.
             row({
                 expectedSchema: "email",
                 phraseText: "c",
@@ -319,14 +319,19 @@ describe("buildImpactPayload", () => {
         expect(w.schemasTouched).toEqual(["player"]);
         expect(w.localRescues).toBe(1);
         expect(w.localRegressions).toBe(1);
-        expect(w.crossNeighborhoodRegressions).toBe(1);
-        expect(w.localNet).toBe(0);
-        // crossRegressions (1) > localRescues (1)? No, they're equal,
-        // and the flag is "> localRescues" strict. So not flagged here.
+        // Phrase "c" regressed and candidate chose player (which IS in
+        // schemasTouched). That's a caused regression.
+        expect(w.causedRegressions).toBe(1);
+        // localNet = 1 - 1 - 1 = -1
+        expect(w.localNet).toBe(-1);
+        // causedRegressions (1) > localRescues (1)? No (equal). Flag off.
+        expect(w.causedRegression).toBe(false);
+        // Backward-compat fields zeroed out.
+        expect(w.crossNeighborhoodRegressions).toBe(0);
         expect(w.crossNeighborhoodRegression).toBe(false);
     });
 
-    it("flags crossNeighborhoodRegression when cross > local rescues", () => {
+    it("flags causedRegression when candidate pulls more wrong-targets than it rescues", () => {
         const baseline = probeFile([
             row({
                 expectedSchema: "email",
@@ -369,8 +374,44 @@ describe("buildImpactPayload", () => {
         });
         const w = result.winners[0]!;
         expect(w.localRescues).toBe(0);
-        expect(w.crossNeighborhoodRegressions).toBe(2);
-        expect(w.crossNeighborhoodRegression).toBe(true);
+        expect(w.causedRegressions).toBe(2);
+        expect(w.causedRegression).toBe(true);
+    });
+
+    it("ignores regressions where the candidate routed AWAY from the winner's schemas", () => {
+        // Phrase expected on player, baseline routed to player (clean),
+        // candidate routed to "other" (regression). The winner touches
+        // player, but the regression's candidate did NOT route to
+        // player — so it doesn't count as "caused" by this winner.
+        const baseline = probeFile([
+            row({
+                expectedSchema: "player",
+                phraseText: "x",
+                outcome: "CLEAN",
+                chosenSchema: "player",
+                chosenAction: "playTrack",
+            }),
+        ]);
+        const candidate = probeFile([
+            row({
+                expectedSchema: "player",
+                phraseText: "x",
+                outcome: "MISROUTE",
+                chosenSchema: "elsewhere",
+                chosenAction: "doThing",
+            }),
+        ]);
+        const playerCase = caseWithWinner(["player"], "h01-jsdoc", "nbh-p");
+        const result = buildImpactPayload({
+            baseline,
+            candidate,
+            baselinePath: "/b",
+            candidatePath: "/c",
+            caseResults: [playerCase],
+        });
+        const w = result.winners[0]!;
+        expect(w.localRegressions).toBe(1); // expected-side hit
+        expect(w.causedRegressions).toBe(0); // candidate didn't pull TO player
     });
 
     it("skips cases without winners", () => {

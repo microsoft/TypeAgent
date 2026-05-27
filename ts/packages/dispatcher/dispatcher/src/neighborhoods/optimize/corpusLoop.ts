@@ -113,14 +113,58 @@ export async function runCorpusLoop(
     );
     const translationResults = readTranslationResults(opts.baselinePath);
 
-    // ---- Pick top-N cases by gravity + severity filter ----
+    // ---- Probe which schemas are buildable BEFORE ranking ----
+    // Otherwise `--top 50` ranks then drops every case whose members
+    // include a non-materializable schema (e.g. `system`, dynamic
+    // sub-actions registered at runtime), leaving zero runnable cases.
+    // Probing first lets ranking pick the top-N from the FILTERED set
+    // — cases that can actually be optimized.
+    opts.onProgress?.(`probing buildable schemas…`);
+    const allSchemas = uniqueSchemas(neighborhoods);
+    const unbuildableSchemas = new Set<string>();
+    for (const schemaName of allSchemas) {
+        if (!isSchemaBuildable(opts.sourceProvider, schemaName)) {
+            unbuildableSchemas.add(schemaName);
+        }
+    }
+
+    // Filter neighborhoods whose ANY member is unbuildable. Recording
+    // the dropped ones so we can surface them in coverage.
+    const buildableNeighborhoods: Neighborhood[] = [];
+    const skippedCases: { neighborhoodId: string; reason: string }[] = [];
+    for (const n of neighborhoods) {
+        const unbuildable = n.members.filter((m) =>
+            unbuildableSchemas.has(m.schemaName),
+        );
+        if (unbuildable.length > 0) {
+            skippedCases.push({
+                neighborhoodId: n.id,
+                reason: `schema(s) not materializable in sandbox: ${unbuildable
+                    .map((m) => m.schemaName)
+                    .join(", ")}`,
+            });
+            continue;
+        }
+        buildableNeighborhoods.push(n);
+    }
+
+    // ---- Now rank ONLY the buildable set ----
     const severities = new Set<"blocker" | "leaky" | "minor">(
         opts.severities ?? ["blocker", "leaky"],
     );
-    const ranked = rankNeighborhoods(neighborhoods, gravity, severities);
+    const ranked = rankNeighborhoods(
+        buildableNeighborhoods,
+        gravity,
+        severities,
+    );
     const top = ranked.slice(0, opts.top ?? 5);
+    if (top.length === 0) {
+        opts.onProgress?.(
+            `no buildable cases after schema probe (${skippedCases.length} skipped, ${ranked.length} ranked, top=${opts.top ?? 5})`,
+        );
+    }
 
-    // ---- Build + snapshot sandbox ----
+    // ---- Build + snapshot sandbox for the surviving top-N ----
     opts.onProgress?.(`building sandbox for ${top.length} case(s)…`);
     const sandboxDir = path.join(runRoot, "sandbox");
     ensureDir(sandboxDir);
@@ -132,26 +176,20 @@ export async function runCorpusLoop(
     });
     snapshotSandboxOriginal(sandboxDir);
 
-    // ---- Filter cases whose schemas aren't all materializable ----
-    // Dynamic sub-actions (e.g. taskflow flows registered at runtime)
-    // can appear as neighborhood members but lack a buildable
-    // ActionConfig — the live provider returns undefined for
-    // `tryGetActionConfig("taskflow.dailyAgendaEmail")`. Letting these
-    // through means the lever crashes at apply time with a missing-
-    // checksum error. Skip them up front and surface in coverage.
-    const skippedSchemaSet = new Set(
+    // Second-pass filter: if anything still failed to build despite
+    // the pre-probe (e.g. transient I/O), drop that case too.
+    const stillUnbuildable = new Set(
         buildResult.skipped.map((s) => s.schemaName),
     );
     const runnableNeighborhoods: Neighborhood[] = [];
-    const skippedCases: { neighborhoodId: string; reason: string }[] = [];
     for (const n of top) {
         const unbuildable = n.members.filter((m) =>
-            skippedSchemaSet.has(m.schemaName),
+            stillUnbuildable.has(m.schemaName),
         );
         if (unbuildable.length > 0) {
             skippedCases.push({
                 neighborhoodId: n.id,
-                reason: `schema(s) not materializable in sandbox: ${unbuildable
+                reason: `schema(s) failed materialization at build time: ${unbuildable
                     .map((m) => m.schemaName)
                     .join(", ")}`,
             });
@@ -161,7 +199,7 @@ export async function runCorpusLoop(
     }
     if (skippedCases.length > 0) {
         opts.onProgress?.(
-            `skipping ${skippedCases.length} case(s) with non-materializable schemas (e.g. dynamic sub-actions)`,
+            `${skippedCases.length} case(s) skipped (non-materializable schemas)`,
         );
     }
 
@@ -346,18 +384,36 @@ function buildProposeCtx(caseDir: string, runRoot: string): ProposeContext {
  * The choice is cached per logical endpoint name so subsequent calls
  * skip the probe.
  */
-const tokenParamCache = new Map<string, "modern" | "legacy">();
+interface TokenParamChoice {
+    param: "max_completion_tokens" | "max_tokens";
+    cap: number;
+}
+const tokenParamCache = new Map<string, TokenParamChoice>();
 
 function createProposeModel(
     endpointName: string,
-    cap: number,
+    preferredCap: number,
 ): ChatModel {
-    const buildModel = (param: "modern" | "legacy") =>
+    // The right (param, cap) pair varies by deployment:
+    //   - GPT-5 / reasoning models: max_completion_tokens up to 16k+
+    //   - GPT-4 / GPT-4o family: max_tokens (or its alias) capped at
+    //     4096 output tokens
+    //   - Some endpoints reject max_tokens outright (must use the
+    //     newer parameter name); others accept either name but enforce
+    //     a small per-response cap.
+    //
+    // The wrapper below tries the preferred (param, cap) first, then
+    // retries with progressively more conservative choices when the
+    // endpoint signals which constraint it's enforcing. The working
+    // pair is cached per endpoint name so subsequent calls in the
+    // same run skip the probe.
+
+    const buildModel = (choice: TokenParamChoice) =>
         openai.createChatModel(
             endpointName,
-            param === "modern"
-                ? { max_completion_tokens: cap }
-                : { max_tokens: cap },
+            choice.param === "max_completion_tokens"
+                ? { max_completion_tokens: choice.cap }
+                : { max_tokens: choice.cap },
         );
 
     const cached = tokenParamCache.get(endpointName);
@@ -365,37 +421,94 @@ function createProposeModel(
         return buildModel(cached);
     }
 
-    // First call for this endpoint — probe via a wrapper that retries
-    // on the specific 400 signature ("Setting 'max_tokens'" /
-    // "max_completion_tokens" in the error message). On success, cache
-    // the working param for the rest of the run.
-    const modernModel = buildModel("modern");
-    const originalComplete = modernModel.complete.bind(modernModel);
+    const preferred: TokenParamChoice = {
+        param: "max_completion_tokens",
+        cap: preferredCap,
+    };
+    const model = buildModel(preferred);
+    const originalComplete = model.complete.bind(model);
     const wrapped: ChatModel = {
-        ...modernModel,
+        ...model,
         complete: async (...args: Parameters<typeof originalComplete>) => {
             const result = await originalComplete(...args);
             if (result.success) {
-                tokenParamCache.set(endpointName, "modern");
+                tokenParamCache.set(endpointName, preferred);
                 return result;
             }
-            const msg = result.message ?? "";
-            const looksLikeParamRejection =
-                /400/.test(msg) &&
-                (/max_completion_tokens/i.test(msg) ||
-                    /unsupported parameter/i.test(msg) ||
-                    /unknown parameter/i.test(msg));
-            if (!looksLikeParamRejection) {
+            const fallback = decideFallback(result.message ?? "", preferred);
+            if (!fallback) {
                 return result;
             }
-            // Endpoint doesn't accept max_completion_tokens. Retry
-            // with max_tokens, cache the legacy choice.
-            tokenParamCache.set(endpointName, "legacy");
-            const legacy = buildModel("legacy");
-            return legacy.complete(...args);
+            tokenParamCache.set(endpointName, fallback);
+            const retry = buildModel(fallback);
+            return retry.complete(...args);
         },
     };
     return wrapped;
+}
+
+/**
+ * Inspect a 400 message and decide whether to retry with a different
+ * (param, cap) choice. Returns the new choice on a match, undefined
+ * when the error isn't recognized as a token-cap issue.
+ *
+ * Three patterns we know about:
+ *   - "max_tokens is too large: X. This model supports at most N":
+ *     the endpoint accepted the param but the value exceeds its cap.
+ *     Retry with cap = N (or 4096 fallback).
+ *   - "Setting 'max_tokens' is not supported" / "unsupported parameter
+ *     'max_tokens'": GPT-5/reasoning model rejects the legacy name.
+ *     Retry with max_completion_tokens.
+ *   - "Setting 'max_completion_tokens'" / "unknown parameter
+ *     'max_completion_tokens'": legacy model rejects the modern name.
+ *     Retry with max_tokens at a conservative cap.
+ */
+function decideFallback(
+    message: string,
+    previous: TokenParamChoice,
+): TokenParamChoice | undefined {
+    if (!/400/.test(message)) return undefined;
+
+    // Value-too-large — endpoint enforces a per-response cap.
+    const tooLarge = message.match(
+        /supports? at most (\d+) (?:completion )?tokens/i,
+    );
+    if (tooLarge) {
+        const reportedCap = parseInt(tooLarge[1]!, 10);
+        if (
+            Number.isFinite(reportedCap) &&
+            reportedCap > 0 &&
+            reportedCap < previous.cap
+        ) {
+            return { param: previous.param, cap: reportedCap };
+        }
+        // Reported cap is missing or not smaller — fall through to a
+        // conservative 4096.
+        return { param: previous.param, cap: 4096 };
+    }
+
+    // Param-name rejection.
+    const rejectsMaxCompletionTokens =
+        /max_completion_tokens/i.test(message) &&
+        (/unsupported parameter/i.test(message) ||
+            /unknown parameter/i.test(message) ||
+            /not supported/i.test(message));
+    if (
+        rejectsMaxCompletionTokens &&
+        previous.param === "max_completion_tokens"
+    ) {
+        return { param: "max_tokens", cap: 4096 };
+    }
+    const rejectsMaxTokens =
+        /max_tokens/i.test(message) &&
+        (/unsupported parameter/i.test(message) ||
+            /unknown parameter/i.test(message) ||
+            /not supported/i.test(message)) &&
+        !/max_completion_tokens/i.test(message);
+    if (rejectsMaxTokens && previous.param === "max_tokens") {
+        return { param: "max_completion_tokens", cap: previous.cap };
+    }
+    return undefined;
 }
 
 function buildApplyCtx(
@@ -528,6 +641,41 @@ function uniqueSchemas(neighborhoods: Neighborhood[]): string[] {
         for (const m of n.members) set.add(m.schemaName);
     }
     return [...set];
+}
+
+/**
+ * Returns true if `sandboxBuilder` would successfully materialize this
+ * schema. Used by the corpus loop to filter neighborhoods BEFORE
+ * ranking, so `--top N` selects from the materializable set rather than
+ * silently dropping everything.
+ *
+ * Two checks:
+ *   1. `tryGetActionConfig` returns a config (the live provider knows
+ *      about this schema name). Returns false for internal schemas like
+ *      `system` that aren't part of the agent set, and for dynamic
+ *      sub-actions that aren't statically registered.
+ *   2. `getSchemaContent` successfully loads the schema file. Catches
+ *      cases where the manifest points at a path that doesn't exist on
+ *      disk (e.g. an agent built in a different deployment).
+ */
+function isSchemaBuildable(
+    provider: ActionConfigProvider,
+    schemaName: string,
+): boolean {
+    const config = provider.tryGetActionConfig(schemaName);
+    if (!config) return false;
+    try {
+        // Force the lazy loader by reading the content. If the file
+        // path is unresolvable, this throws.
+        const content = (() => {
+            const sf = config.schemaFile;
+            if (typeof sf === "function") return sf();
+            return sf;
+        })();
+        return content !== undefined && content.content.length > 0;
+    } catch {
+        return false;
+    }
 }
 
 function pickSeverity(

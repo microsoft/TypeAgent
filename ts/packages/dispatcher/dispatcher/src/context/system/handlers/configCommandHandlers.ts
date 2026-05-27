@@ -2565,8 +2565,6 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             },
 
             collision: getCollisionCommandHandlers(),
-
-            ports: new ConfigPortsCommandHandler(),
         },
     };
 }

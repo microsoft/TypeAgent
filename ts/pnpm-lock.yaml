@@ -3215,6 +3215,31 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/vampire:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/video:
     dependencies:
       '@typeagent/agent-sdk':
@@ -4073,8 +4098,8 @@ importers:
         specifier: ^1.26.0
         version: 1.26.0(zod@4.1.13)
       '@modelcontextprotocol/server-filesystem':
-        specifier: 2025.8.21
-        version: 2025.8.21(zod@4.1.13)
+        specifier: 2026.1.14
+        version: 2026.1.14(zod@4.1.13)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -4216,6 +4241,9 @@ importers:
       utility-typeagent:
         specifier: workspace:*
         version: link:../agents/utility
+      vampire-agent:
+        specifier: workspace:*
+        version: link:../agents/vampire
       video-agent:
         specifier: workspace:*
         version: link:../agents/video
@@ -4343,6 +4371,9 @@ importers:
       glob:
         specifier: ^13.0.0
         version: 13.0.6
+      grammar-tools-core:
+        specifier: workspace:*
+        version: link:../../grammarTools/core
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -4515,6 +4546,9 @@ importers:
 
   packages/grammarTools/cli:
     dependencies:
+      action-grammar:
+        specifier: workspace:*
+        version: link:../../actionGrammar
       grammar-tools-core:
         specifier: workspace:*
         version: link:../core
@@ -8179,8 +8213,8 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@modelcontextprotocol/server-filesystem@2025.8.21':
-    resolution: {integrity: sha512-Kk+E+lAuAQPLhrJlrsboEdwTBxWU0DYfsuELIuP3Nvfn8Kvd72BU6KVjhEa5EjbC4YckQDCxH9VJK47x6psxow==}
+  '@modelcontextprotocol/server-filesystem@2026.1.14':
+    resolution: {integrity: sha512-bGAfu3fWRVeF10NxvPhFBDlRen6ExSx6YkKJzoVgQMNrbdVVV4okfGGQ3KBRu9ygXYfw5/N9ermHAJXA0uys+g==}
     hasBin: true
 
   '@mongodb-js/saslprep@1.2.2':
@@ -16571,11 +16605,6 @@ packages:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
 
-  zod-to-json-schema@3.24.5:
-    resolution: {integrity: sha512-/AuWwMP+YqiPbsJx5D6TfgRTc4kTLjsh5SOcd4bLsfUg2RcEXrFMJl1DGgdHy2aCfsIA/cr/1JM0xcB2GZji8g==}
-    peerDependencies:
-      zod: ^3.24.1
-
   zod-to-json-schema@3.25.1:
     resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
     peerDependencies:
@@ -20025,13 +20054,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-filesystem@2025.8.21(zod@4.1.13)':
+  '@modelcontextprotocol/server-filesystem@2026.1.14(zod@4.1.13)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.1.13)
       diff: 5.2.2
       glob: 10.5.0
       minimatch: 10.2.4
-      zod-to-json-schema: 3.24.5(zod@4.1.13)
+      zod-to-json-schema: 3.25.1(zod@4.1.13)
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
@@ -30776,10 +30805,6 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.5.2
-
-  zod-to-json-schema@3.24.5(zod@4.1.13):
-    dependencies:
-      zod: 4.1.13
 
   zod-to-json-schema@3.25.1(zod@3.25.76):
     dependencies:
